@@ -1,0 +1,45 @@
+================
+Empty
+================
+---
+
+(block (return (integer_literal)))
+
+================
+Empty, Whitespace
+================
+    
+ 
+
+---
+
+(block (return (integer_literal)))
+
+================
+Empty, Expression Separators
+================
+;,,,;,,;,,,,,,,;,;,,,,,
+;;;,,;
+---
+
+(block (return (integer_literal)))
+
+================
+Return Literal Number
+================
+
+49;
+
+---
+
+(block (return (integer_literal)))
+
+================
+Return Literal Number, Explicit
+================
+
+return 49;
+
+---
+
+(block (return (integer_literal)))

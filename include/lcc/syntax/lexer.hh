@@ -21,22 +21,25 @@ class CharacterRange {
     /// lexer already stores the file and the context,
     /// but 16 extra bytes per lexer instance is fine,
     /// I’d say.
-    Context* const ctx;
-    File* const f;
 
     const char* curr;
     const char* const end;
+    const char* const begin;
 
 public:
-    CharacterRange(Context* ctx, File* f)
-        : ctx(ctx),
-          f(f),
-          curr(f->data()),
-          end(f->data() + f->size()) {}
+    CharacterRange(File* f)
+        : curr(f->data()),
+          end(f->data() + f->size()),
+          begin(f->data()) {}
+
+    CharacterRange(std::string_view s)
+        : curr(s.data()),
+          end(s.data() + s.size()),
+          begin(s.data()) {}
 
     /// Get the current offset in the file.
     auto current_offset() const -> u32 {
-        return u32(curr - f->data()) - 1;
+        return u32(curr - begin) - 1;
     }
 
     /// Get the next character.
@@ -46,11 +49,8 @@ public:
 
         /// Stray null.
         if (c == 0) {
-            Diag::Error(
-                ctx,
-                Location{(u32) current_offset(), (u16) 1, (u16) f->file_id()},
-                "Lexer encountered NUL byte within source file."
-            );
+            fmt::print("ERROR: Lexer encountered NUL byte within source file.");
+            return 0;
         }
 
         /// Handle line endings nonsene.
@@ -73,29 +73,23 @@ public:
         return c;
     }
 };
-}
+} // namespace detail
 
 template <typename TToken>
-class Lexer {
-    File* file;
+struct Lexer {
     detail::CharacterRange chars;
-
-protected:
     TToken tok{};
     Context* context{};
     char lastc = ' ';
 
-    Lexer(Context* context, File* file)
-        : file(file),
-          chars(context, file),
-          context(context) { NextChar(); }
-
-    auto FileId() const { return file->file_id(); }
+    Lexer(detail::CharacterRange chs) : chars(chs) {}
+    Lexer(Context* ctx, detail::CharacterRange chs)
+        : chars(chs), context(ctx) {}
 
     auto CurrentOffset() const -> u32 { return chars.current_offset(); }
 
-    auto CurrentLocation() const {
-        return Location{CurrentOffset(), (u16) 1, (u16) file->file_id()};
+    void NextChar() {
+        lastc = chars.next();
     }
 
     template <typename... Args>
@@ -108,15 +102,48 @@ protected:
         return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
     }
 
-    void NextChar() {
-        lastc = chars.next();
-    }
-
     static bool IsSpace(char c) { return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\f' or c == '\v'; }
     static bool IsAlpha(char c) { return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z'); }
     static bool IsDigit(char c) { return c >= '0' and c <= '9'; }
     static bool IsHexDigit(char c) { return (c >= '0' and c <= '9') or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F'); }
     static bool IsAlphaNumeric(char c) { return IsAlpha(c) or IsDigit(c); }
+};
+
+template <typename TToken>
+class SpanLexer : public Lexer<TToken> {
+    std::string_view source;
+
+protected:
+    SpanLexer(Context* context, std::string_view source)
+        : Lexer<TToken>(context, source),
+          source(source) {
+        this->NextChar();
+    }
+
+    // FIXME: These necessary?
+    using Lexer<TToken>::Error;
+    using Lexer<TToken>::Warning;
+};
+
+template <typename TToken>
+class FileLexer : public Lexer<TToken> {
+    File* file;
+
+protected:
+    FileLexer(Context* context, File* file)
+        : Lexer<TToken>(context, file),
+          file(file) {
+        this->NextChar();
+    }
+
+    using Lexer<TToken>::Error;
+    using Lexer<TToken>::Warning;
+
+    auto FileId() const { return file->file_id(); }
+
+    auto CurrentLocation() const {
+        return Location{Lexer<TToken>::CurrentOffset(), (u16) 1, (u16) file->file_id()};
+    }
 };
 } // namespace lcc::syntax
 

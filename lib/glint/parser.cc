@@ -243,17 +243,36 @@ constexpr lcc::isz TypeQualifierPrecedence(intc::TokenKind t) {
 
 bool intc::Parser::AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
 
+auto intc::Parser::Parse(Context* context, std::string_view source) -> std::unique_ptr<Module> {
+    Parser parser(context, source);
+
+    /// Parse preamble. This also creates the module.
+    if (not parser.ParsePreamble(nullptr)) return {};
+
+    /// Parse Glint source.
+    parser.ParseTopLevel();
+
+    /// Return nullptr on error.
+    if (context->has_error())
+        return std::unique_ptr<Module>{};
+
+    return std::move(parser.mod);
+}
+
 auto intc::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
     Parser parser(context, &file);
 
     /// Parse preamble. This also creates the module.
-    if (not parser.ParsePreamble(file)) return {};
+    if (not parser.ParsePreamble(nullptr)) return {};
 
-    /// Parse file.
+    /// Parse Glint source.
     parser.ParseTopLevel();
 
     /// Return nullptr on error.
-    return context->has_error() ? std::unique_ptr<Module>{} : std::move(parser.mod);
+    if (context->has_error())
+        return std::unique_ptr<Module>{};
+
+    return std::move(parser.mod);
 }
 
 /// Creates a new scope and parses a block in that scope.
@@ -1099,18 +1118,18 @@ auto intc::Parser::ParseIfExpr() -> Result<IfExpr*> {
     return new (*mod) IfExpr(cond.value(), then.value(), else_.value(), loc);
 }
 
-auto intc::Parser::ParsePreamble(File& f) -> Result<void> {
+auto intc::Parser::ParsePreamble(File* f) -> Result<void> {
     /// Parse module name and create the module.
     if (At(Tk::Ident) and tok.text == "module" and not tok.artificial) {
         NextToken(); /// Yeet "module".
         if (not At(Tk::Ident)) return Error("Expected module name");
-        mod = std::make_unique<Module>(&f, tok.text, true);
+        mod = std::make_unique<Module>(f, tok.text, true);
         NextToken(); /// Yeet module name.
     }
 
     /// Create an executable module instead.
     else {
-        mod = std::make_unique<Module>(&f, "", false);
+        mod = std::make_unique<Module>(f, "", false);
     }
 
     while (At(Tk::Semicolon)) NextToken();

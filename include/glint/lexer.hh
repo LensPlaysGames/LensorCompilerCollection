@@ -57,6 +57,8 @@ class Lexer : public syntax::Lexer<GlintToken> {
     void HandleMacroDefinition();
 
 protected:
+    Lexer(Context* context, std::string_view source)
+        : syntax::Lexer<Token>(context, source) { NextToken(); }
     Lexer(Context* context, File* file)
         : syntax::Lexer<Token>(context, file) { NextToken(); }
 

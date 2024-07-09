@@ -25,6 +25,7 @@ class Parser : public Lexer {
     FuncDecl* curr_func;
 
 public:
+    static std::unique_ptr<Module> Parse(Context* context, std::string_view source);
     static std::unique_ptr<Module> Parse(Context* context, File& file);
 
 private:
@@ -62,6 +63,7 @@ private:
     };
 
     Parser(Context* context, File* file) : Lexer(context, file) {}
+    Parser(Context* context, std::string_view source) : Lexer(context, source) {}
 
     /// Check if we’re at one of a set of tokens.
     [[nodiscard]] static bool Is(GlintToken* tk, auto... tks) { return ((tk->kind == tks) or ...); }
@@ -127,7 +129,7 @@ private:
     auto ParseFuncSig(Type* return_type) -> Result<FuncType*>;
     auto ParseIdentExpr() -> Result<Expr*>;
     auto ParseIfExpr() -> Result<IfExpr*>;
-    auto ParsePreamble(File& f) -> Result<void>;
+    auto ParsePreamble(File* f) -> Result<void>;
     auto ParseStructType() -> Result<StructType*>;
     void ParseTopLevel();
     auto ParseType(isz current_precedence = 0) -> Result<Type*>;
@@ -144,6 +146,7 @@ private:
     friend ScopeRAII;
     friend Lexer;
 };
+
 } // namespace lcc::glint
 
 #endif // GLINT_PARSER_HH
