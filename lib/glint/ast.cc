@@ -120,8 +120,8 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
         case Kind::Reference:
             return ctx->target()->align_of_pointer;
 
-        // TODO: align as if struct of pointer, int, int
-        case Kind::DynamicArray: return 24;
+        case Kind::DynamicArray:
+            return as<DynamicArrayType>(this)->size(ctx);
 
         case Kind::Array: return elem()->align(ctx);
         case Kind::Struct: return as<StructType>(this)->alignment();
@@ -283,9 +283,8 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
         case Kind::Reference:
             return ctx->target()->size_of_pointer;
 
-        // TODO: Add size of pointer, size of int, size of int (data, size, capacity)
         case Kind::DynamicArray:
-            return 24;
+            return Type::VoidPtr->size(ctx) + DynamicArrayType::IntegerWidth * 2;
 
         case Kind::Array:
             return as<ArrayType>(this)->dimension() * elem()->size(ctx);

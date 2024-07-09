@@ -828,6 +828,8 @@ class DynamicArrayType : public TypeWithOneElement {
     StructType* _cached_struct{nullptr};
 
 public:
+    static constexpr int IntegerWidth = 32;
+
     DynamicArrayType(Type* element_type, Expr* size, Location location = {})
         : TypeWithOneElement(Kind::DynamicArray, location, element_type), _initial_size(size) {}
 
@@ -839,8 +841,8 @@ public:
             _cached_struct = new (mod) StructType(
                 mod.global_scope(),
                 {{"data", new (mod) PointerType(element_type()), {}},
-                 {"size", new (mod) IntegerType(32, false, {}), {}},
-                 {"capacity", new (mod) IntegerType(32, false, {}), {}}},
+                 {"size", new (mod) IntegerType(IntegerWidth, false, {}), {}},
+                 {"capacity", new (mod) IntegerType(IntegerWidth, false, {}), {}}},
                 location()
             );
             _cached_struct->members().at(0).type->set_sema_done();
