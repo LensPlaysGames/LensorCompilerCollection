@@ -8,12 +8,13 @@ external fclose: void(handle: void.ptr);
 external ftell: clong(handle: void.ptr);
 external fseek: cint(handle: void.ptr, offset: clong, origin: cint) discardable;
 
-external SEEK_SET: cint;
-external SEEK_CUR: cint;
-external SEEK_END: cint;
+export gstd_read: [Byte](path: [Byte]) {
+    handle :: fopen path.data, "rb"[0];
 
-read: [Byte](path: [Byte]) {
-    handle :: fopen path.data[0], "rb"[0];
+    ;; These are C macros, because of course they are.
+    SEEK_SET: cint 0;
+    SEEK_CUR: cint 1;
+    SEEK_END: cint 2;
 
     fseek handle 0 SEEK_END;
     size :: ftell handle;
@@ -21,16 +22,17 @@ read: [Byte](path: [Byte]) {
 
     contents : [Byte size];
 
-    fread contents.data[0] 1 (cint size) handle;
+    nread :: fread contents.data 1 (cint size) handle;
+    contents.size := (u32 nread);
 
     fclose handle;
 
     return contents;
 };
 
-write: Bool(path: [Byte], contents: [Byte]) discardable {
-    handle :: fopen path.data[0] "wb"[0];
-    fwrite contents.data[0] 1 (cint contents.size) handle;
+export gstd_write: Bool(path: [Byte], contents: [Byte]) discardable {
+    handle :: fopen path.data "wb"[0];
+    fwrite contents.data 1 (cint contents.size) handle;
     fclose handle;
 
     return true;
