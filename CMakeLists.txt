@@ -276,24 +276,6 @@ target_include_directories(intercept PUBLIC include)
 target_link_libraries(intercept PRIVATE options)
 target_link_libraries(intercept PRIVATE object)
 
-# Laye language library (will remove soon)
-add_library(
-  laye STATIC
-  include/laye/ast.hh
-  include/laye/ir_gen.hh
-  include/laye/lexer.hh
-  include/laye/parser.hh
-  include/laye/sema.hh
-  lib/laye/ast.cc
-  lib/laye/context.cc
-  lib/laye/ir_gen.cc
-  lib/laye/lexer.cc
-  lib/laye/parser.cc
-  lib/laye/sema.cc
-)
-target_include_directories(laye PUBLIC include)
-target_link_libraries(laye PRIVATE options)
-
 # Generic object library (convertible to ELF and COFF, currently)
 add_library(
   object STATIC
@@ -376,7 +358,6 @@ target_link_libraries(liblcc PUBLIC object)
 target_link_libraries(liblcc PUBLIC glint)
 target_link_libraries(liblcc PUBLIC lcc-cc)
 target_link_libraries(liblcc PUBLIC intercept)
-target_link_libraries(liblcc PUBLIC laye)
 
 # Add the driver.
 add_executable(lcc "${PROJECT_SOURCE_DIR}/src/lcc.cc")

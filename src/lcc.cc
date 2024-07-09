@@ -9,9 +9,6 @@
 #include <intercept/ir_gen.hh>
 #include <intercept/parser.hh>
 #include <intercept/sema.hh>
-#include <laye/ir_gen.hh>
-#include <laye/parser.hh>
-#include <laye/sema.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/format.hh>
@@ -424,37 +421,6 @@ int main(int argc, const char** argv) {
             if (options.stopat_sema) return;
 
             return EmitModule(lcc::intercept::IRGen::Generate(&context, *mod), path_str, output_file_path);
-        }
-
-        /// Laye.
-        else if (specified_language == "laye" or (specified_language == "default" and path_str.ends_with(".laye"))) {
-            auto laye_context = new lcc::laye::LayeContext{&context};
-
-            /// Parse the file.
-            auto mod = laye_context->get_or_load_module(file);
-            if (context.has_error()) return; // the error condition is handled by the caller already
-            if (options.ast) laye_context->print_modules();
-            // stop processing this file, but DO continue to process other files passed in
-            if (options.stopat_syntax) return;
-
-            /// Perform semantic analysis.
-            lcc::laye::Sema::Analyse(laye_context, mod, true);
-            if (context.has_error()) return; // the error condition is handled by the caller already
-            if (options.ast) {
-                laye_context->print_modules();
-                return;
-            }
-
-            /// Stop after sema if requested.
-            if (options.stopat_sema) return;
-
-            for (auto module : laye_context->modules()) {
-                std::string input_file_path = module->file()->path().string();
-                std::string module_output_file_path = ConvertFileExtensionToOutputFormat(module->file()->path().string());
-                EmitModule(lcc::laye::IRGen::Generate(laye_context, module), input_file_path, module_output_file_path);
-            }
-
-            // TODO(local): after generating all of the modules separate, THEN obey the `output_file_path` when linking
         }
 
         /// C.

@@ -1,6 +1,5 @@
 #include <glint/ast.hh>
 #include <intercept/ast.hh>
-#include <laye/ast.hh>
 #include <lcc/context.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
@@ -26,11 +25,6 @@ lcc::glint::Type* lcc::glint::Type::Unknown;
 lcc::glint::Type* lcc::glint::Type::Void;
 lcc::glint::Type* lcc::glint::Type::VoidPtr;
 lcc::glint::Type* lcc::glint::Type::OverloadSet;
-
-lcc::laye::Type* lcc::laye::Type::Bool;
-lcc::laye::Type* lcc::laye::Type::Int;
-lcc::laye::Type* lcc::laye::Type::UInt;
-lcc::laye::Type* lcc::laye::Type::OverloadSet;
 
 void lcc::Context::InitialiseLCCData() {
     /// Initialise builtin IR types.
@@ -112,15 +106,4 @@ void lcc::Context::InitialiseLCCData() {
     lcc::glint::Type::Void = &glint_ty_void;
     lcc::glint::Type::OverloadSet = &glint_ty_os;
     lcc::glint::Type::VoidPtr = &glint_ty_void_ptr;
-
-    /// Initialise default instances of builtin Laye types.
-    static constinit lcc::laye::BoolType laye_ty_bool = {{}, 0, true};
-    static constinit lcc::laye::IntType laye_ty_int = {{}, true, 0, true};
-    static constinit lcc::laye::IntType laye_ty_uint = {{}, false, 0, true};
-    static constinit lcc::laye::OverloadSetType laye_ty_os = {{}};
-
-    lcc::laye::Type::Bool = &laye_ty_bool;
-    lcc::laye::Type::Int = &laye_ty_int;
-    lcc::laye::Type::UInt = &laye_ty_uint;
-    lcc::laye::Type::OverloadSet = &laye_ty_os;
 }
