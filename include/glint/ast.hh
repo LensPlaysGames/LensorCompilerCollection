@@ -949,6 +949,8 @@ public:
     /// \return Whether evaluation succeeded.
     bool evaluate(const Context* ctx, EvalResult& out, bool required);
 
+    std::vector<lcc::glint::Expr*> children() const;
+
     Kind kind() const { return _kind; }
 
     /// Check if this is an lvalue. Only lvalues can have their

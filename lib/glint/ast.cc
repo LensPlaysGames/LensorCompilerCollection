@@ -401,6 +401,101 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
     LCC_ASSERT(false, "TODO: Clone expressions");
 }
 
+std::vector<lcc::glint::Expr*> lcc::glint::Expr::children() const {
+    switch (kind()) {
+        case Kind::FuncDecl:
+        case Kind::OverloadSet:
+        case Kind::EvaluatedConstant:
+        case Kind::TypeDecl:
+        case Kind::TypeAliasDecl:
+        case Kind::EnumeratorDecl:
+        case Kind::IntegerLiteral:
+        case Kind::StringLiteral:
+        case Kind::IntrinsicCall:
+        case Kind::Module:
+        case Kind::Type:
+            return {};
+
+        case Kind::While: {
+            auto w = as<lcc::glint::WhileExpr>(this);
+            return {w->condition(), w->body()};
+        } break;
+
+        case Kind::For: {
+            auto f = as<lcc::glint::ForExpr>(this);
+            return {f->init(), f->condition(), f->increment(), f->body()};
+        } break;
+
+        case Kind::If: {
+            auto i = as<lcc::glint::IfExpr>(this);
+            if (i->otherwise())
+                return {i->condition(), i->then(), i->otherwise()};
+            else return {i->condition(), i->then()};
+        } break;
+
+        case Kind::Return: {
+            auto ret = as<lcc::glint::ReturnExpr>(this);
+            if (ret->value()) return {ret->value()};
+            return {};
+        } break;
+
+        case Kind::MemberAccess: {
+            return {as<lcc::glint::MemberAccessExpr>(this)->object()};
+        } break;
+
+        // here here herehere
+        case Kind::CompoundLiteral:
+            return as<lcc::glint::CompoundLiteral>(this)->values();
+            break;
+
+        case Kind::Cast: {
+            return {as<lcc::glint::CastExpr>(this)->operand()};
+        } break;
+
+        case Kind::Call: {
+            auto c = as<lcc::glint::CallExpr>(this);
+            std::vector<lcc::glint::Expr*> children{c->callee()};
+            children.insert(children.end(), c->args().begin(), c->args().end());
+            return children;
+        } break;
+
+        case Kind::Sizeof:
+            return {as<lcc::glint::SizeofExpr>(this)->expr()};
+
+        case Kind::Alignof:
+            return {as<lcc::glint::AlignofExpr>(this)->expr()};
+
+        case Kind::VarDecl: {
+            auto v = as<lcc::glint::VarDecl>(this);
+            if (v->init()) return {v->init()};
+            return {};
+        } break;
+
+        case Kind::NameRef: {
+            auto n = as<lcc::glint::NameRefExpr>(this);
+            if (n->target())
+                return {n->target()};
+            return {};
+        }
+
+        case Kind::Block: {
+            auto b = as<BlockExpr>(this);
+            return b->children();
+        }
+
+        case Kind::Unary: {
+            auto u = as<UnaryExpr>(this);
+            return {u->operand()};
+        }
+
+        case Kind::Binary: {
+            auto b = as<BinaryExpr>(this);
+            return {b->lhs(), b->rhs()};
+        }
+    }
+    LCC_UNREACHABLE();
+}
+
 auto lcc::glint::EnumeratorDecl::value() const -> aint {
     LCC_ASSERT(ok(), "value() can only be used if the enumerator was analysed successfully");
     return is<ConstantExpr>(init())
@@ -599,116 +694,19 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
     void PrintNodeChildren(const lcc::glint::Expr* e, std::string leading_text = "") {
         if (not print_children_of_children) return;
 
-        /// Print the children of a node.
-        using K = lcc::glint::Expr::Kind;
-        switch (e->kind()) {
-            /// We only print function bodies at the top level.
-            case K::FuncDecl: break;
+        // Only print function bodies at the top level.
+        if (e->kind() == lcc::glint::Expr::Kind::FuncDecl) return;
 
-            case K::Binary: {
-                auto b = as<lcc::glint::BinaryExpr>(e);
-                lcc::glint::Expr* children[] = {b->lhs(), b->rhs()};
-                PrintChildren(children, leading_text);
-            } break;
-
-            case K::NameRef: {
-                auto n = as<lcc::glint::NameRefExpr>(e);
-                if (n->target()) {
-                    tempset print_children_of_children = false;
-                    lcc::glint::Expr* children[] = {n->target()};
-                    PrintChildren(children, leading_text);
-                }
-            } break;
-
-            case K::VarDecl: {
-                auto v = as<lcc::glint::VarDecl>(e);
-                if (v->init()) {
-                    lcc::glint::Expr* children[] = {v->init()};
-                    PrintChildren(children, leading_text);
-                }
-            } break;
-
-            case K::Unary: {
-                auto u = as<lcc::glint::UnaryExpr>(e);
-                lcc::glint::Expr* children[] = {u->operand()};
-                PrintChildren(children, leading_text);
-            } break;
-
-            case K::Call: {
-                auto c = as<lcc::glint::CallExpr>(e);
-                std::vector<lcc::glint::Expr*> children{c->callee()};
-                children.insert(children.end(), c->args().begin(), c->args().end());
-                PrintChildren(children, leading_text);
-            } break;
-
-            case K::Cast: {
-                lcc::glint::Expr* children[] = {as<lcc::glint::CastExpr>(e)->operand()};
-                PrintChildren(children, leading_text);
-            } break;
-
-            case K::CompoundLiteral:
-                PrintChildren(as<lcc::glint::CompoundLiteral>(e)->values(), leading_text);
-                break;
-
-            case K::While: {
-                auto w = as<lcc::glint::WhileExpr>(e);
-                lcc::glint::Expr* children[] = {w->condition(), w->body()};
-                PrintChildren(children, leading_text);
-            } break;
-
-            case K::For: {
-                auto f = as<lcc::glint::ForExpr>(e);
-                lcc::glint::Expr* children[] = {f->init(), f->condition(), f->increment(), f->body()};
-                PrintChildren(children, leading_text);
-            } break;
-
-            case K::If: {
-                auto i = as<lcc::glint::IfExpr>(e);
-                if (i->otherwise()) {
-                    lcc::glint::Expr* children[] = {i->condition(), i->then(), i->otherwise()};
-                    PrintChildren(children, leading_text);
-                } else {
-                    lcc::glint::Expr* children[] = {i->condition(), i->then()};
-                    PrintChildren(children, leading_text);
-                }
-            } break;
-
-            case K::Block:
-                PrintChildren(as<lcc::glint::BlockExpr>(e)->children(), leading_text);
-                break;
-
-            case K::Return: {
-                auto ret = as<lcc::glint::ReturnExpr>(e);
-                if (ret->value()) PrintChildren({ret->value()}, leading_text);
-            } break;
-
-            case K::Sizeof: {
-                auto sizeof_expr = as<lcc::glint::SizeofExpr>(e);
-                PrintChildren({sizeof_expr->expr()}, leading_text);
-            } break;
-
-            case K::Alignof: {
-                auto align_expr = as<lcc::glint::AlignofExpr>(e);
-                PrintChildren({align_expr->expr()}, leading_text);
-            } break;
-
-            case K::MemberAccess: {
-                auto member_access_expr = as<lcc::glint::MemberAccessExpr>(e);
-                PrintChildren({member_access_expr->object()}, leading_text);
-            } break;
-
-            case K::OverloadSet:
-            case K::EvaluatedConstant:
-            case K::TypeDecl:
-            case K::TypeAliasDecl:
-            case K::EnumeratorDecl:
-            case K::IntegerLiteral:
-            case K::StringLiteral:
-            case K::IntrinsicCall:
-            case K::Module:
-            case K::Type:
-                break;
+        if (auto n = cast<lcc::glint::NameRefExpr>(e)) {
+            // TODO: Get rid of tempset if we don't need it here.
+            tempset print_children_of_children = false;
+            PrintChildren({n->target()}, leading_text);
         }
+
+        /// Print the children of a node.
+        PrintChildren(e->children(), leading_text);
+
+        return;
     }
 
     /// Print a top-level node.
