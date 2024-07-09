@@ -6,8 +6,7 @@ Now written in C++, LCC started as a compiler written in C for just one hobby la
 
 ** Implemented Languages
 
-- Intercept (WIP)
-- Laye (WIP)
+- Glint
 
 In the future, we hope to support
 
@@ -20,7 +19,7 @@ For convenience purposes, there is a single executable, ~lcc~, that can delegate
 
 Running the driver executable with no arguments will display a usage message that contains compiler flags and options as well as command layout.
 
-The driver, by default, uses file extension to determine which compiler to pass the source code to. ~lcc ./tst/intercept/byte.int~ will invoke the ~Intercept~ compiler, while ~lcc ./tst/laye/exit_code.laye~ will invoke the ~Laye~ compiler, for example. You can use ~-x LANG~ to treat source files as a particular language, regardless of extension.
+The driver, by default, uses file extension to determine which compiler to pass the source code to. ~lcc examples/glint/SimpleFile.g~ will treat the contents as ~Glint~ source, while ~lcc tst/ir/roundtrip.ir~ will treat the contents as LCC's Intermediate Representation, for example . You can use ~-x LANG~ to treat source files as a particular language, regardless of extension.
 
 ** Building
 
