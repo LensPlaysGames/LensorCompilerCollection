@@ -160,6 +160,7 @@ void parse_matchtree(std::span<char> contents, const size_t fsize, size_t& i, Ma
 struct Test {
     std::string_view name;
     std::string_view source;
+    std::string_view ir;
     MatchTree matcher;
 };
 
@@ -226,7 +227,7 @@ bool parse_test(std::span<char> contents, const size_t fsize, size_t& i, Test& t
             contents.begin() + lcc::isz(i)};
     }
 
-    { // Parse test expected
+    { // Parse test expected AST
 
         // Skip until start of expectation
         while (i < fsize and contents[i] != '(')
@@ -238,10 +239,53 @@ bool parse_test(std::span<char> contents, const size_t fsize, size_t& i, Test& t
         }
 
         parse_matchtree(contents, fsize, i, test.matcher);
-
-        // Skip to beginning of next test or end of input.
-        while (i < fsize and contents[i] != '=') ++i;
     }
+
+    // `---` following the expected AST matcher means there may be expected
+    // LCC IR.
+
+    { // Parse test expected IR
+        // NOTE: Optional
+
+        // Skip until start of expectation, or start of another test.
+        bool bol{true};
+        while (i < fsize and not(bol and contents[i] == '-') and not(bol and contents[i] == '=')) {
+            bol = contents[i] == '\n';
+            ++i;
+        }
+        // If NOT at start of another test
+        if (contents[i] != '=') {
+            // Skip `---` line
+            while (i < fsize and contents[i] != '\n') ++i;
+            // Eat newline
+            ++i;
+            // If there is more to parse that isn't just whitespace before an equals,
+            // then it is LCC IR.
+            if (i < fsize) {
+                // Skip whitespace
+                while (i < fsize and isspace(contents[i])) ++i;
+                if (i < fsize and contents[i] != '=') {
+                    // Found LCC IR
+                    size_t lcc_ir_begin = i;
+                    size_t lcc_ir_end = i;
+                    // While in bounds and not at start of test...
+
+                    bol = true;
+                    while (i < fsize and not(bol and contents[i] == '=')) {
+                        if (not isspace(contents[i])) lcc_ir_end = i;
+                        bol = contents[i] == '\n';
+                        ++i;
+                    }
+                    test.ir = {
+                        contents.begin() + lcc::isz(lcc_ir_begin),
+                        contents.begin() + lcc::isz(lcc_ir_end) + 1};
+                }
+            }
+        }
+    }
+
+    // Skip to beginning of next test or end of input.
+    while (i < fsize and contents[i] != '=') ++i;
 
     return true;
 }
