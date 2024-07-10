@@ -135,6 +135,12 @@ void Module::emit(std::filesystem::path output_file_path) {
     switch (_ctx->format()->format()) {
         case Format::INVALID: LCC_UNREACHABLE();
 
+        case Format::LCC_IR: {
+            // FIXME: Whoever made this only work on stdout is dumb.
+            fmt::print("; We are currently stupid about things and can only print IR to stdout (sorry)\n");
+            print_ir(false);
+        } break;
+
         case Format::LLVM_TEXTUAL_IR: {
             auto llvm_ir = llvm();
             if (output_file_path.empty() || output_file_path == "-")

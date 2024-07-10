@@ -1,6 +1,9 @@
 #ifndef LCC_FORMAT_HH
 #define LCC_FORMAT_HH
 
+// NOTE: I don't know why in the fuck some idiot made this so ass-
+// backwards complicated just for an enum.
+
 namespace lcc {
 
 // Forward decl; see bottom of file for real one.
@@ -8,12 +11,16 @@ namespace detail {
 struct Formats;
 }
 
-
 class Format {
 public:
     enum _Format {
         INVALID = 0,
 
+        // Lensor Compiler Collection Intermediate Representation.
+        // Emits `.lcc` files.
+        LCC_IR,
+
+        // NOTE: No longer maintained.
         // LLVM's Textual IR (as of LLVM 16.0.4)
         LLVM_TEXTUAL_IR,
 
@@ -36,6 +43,7 @@ private:
 public:
     enum _Format format() const { return _format; }
 
+    static const Format* const lcc_ir;
     static const Format* const llvm_textual_ir;
     static const Format* const gnu_as_att_assembly;
     static const Format* const elf_object;
@@ -44,6 +52,12 @@ public:
 
 namespace detail {
 struct Formats {
+    static constexpr Format lcc_ir = [] {
+        auto f = Format();
+        f._format = Format::LCC_IR;
+        return f;
+    }();
+
     static constexpr Format llvm_textual_ir = [] {
         auto f = Format();
         f._format = Format::LLVM_TEXTUAL_IR;
@@ -70,6 +84,7 @@ struct Formats {
 };
 } // namespace detail
 
+constexpr inline const Format* const Format::lcc_ir = &detail::Formats::lcc_ir;
 constexpr inline const Format* const Format::llvm_textual_ir = &detail::Formats::llvm_textual_ir;
 constinit inline const Format* const Format::gnu_as_att_assembly = &detail::Formats::gnu_as_att_assembly;
 constinit inline const Format* const Format::elf_object = &detail::Formats::elf_object;

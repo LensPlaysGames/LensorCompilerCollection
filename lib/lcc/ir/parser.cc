@@ -308,6 +308,7 @@ void lcc::parser::Parser::NextToken() {
             NextChar();
             break;
 
+        // LINE COMMENT
         case ';':
             while (lastc != 0 and lastc != '\n') NextChar();
             if (lastc != 0) NextChar();

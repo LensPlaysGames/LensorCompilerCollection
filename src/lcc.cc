@@ -233,6 +233,7 @@ int main(int argc, const char** argv) {
                 format != "asm" and format != "gnu-as-att"
                 and format != "obj" and format != "elf"
                 and format != "coff" and format != "llvm"
+                and format != "ir"
             ) {
                 fmt::print("CLI ERROR: Invalid format {}\n", format);
                 exit(1);
@@ -273,8 +274,10 @@ int main(int argc, const char** argv) {
     /// Compile the file.
     // TODO: Get target from "-t" or "--target" command line option.
     auto* format = detail::default_format;
-    if (options.format == "llvm") {
-        format = lcc::Format::llvm_textual_ir;
+    if (options.format == "default") {
+        ;
+    } else if (options.format == "ir") {
+        format = lcc::Format::lcc_ir;
     } else if (options.format == "asm" || options.format == "gnu-as-att") {
         format = lcc::Format::gnu_as_att_assembly;
     } else if (options.format == "obj") {
@@ -287,7 +290,9 @@ int main(int argc, const char** argv) {
         format = lcc::Format::elf_object;
     } else if (options.format == "coff") {
         format = lcc::Format::coff_object;
-    }
+    } else if (options.format == "llvm") {
+        format = lcc::Format::llvm_textual_ir;
+    } else LCC_ASSERT(false, "Unhandled format");
 
     lcc::Context context{
         detail::default_target,
