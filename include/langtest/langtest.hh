@@ -124,15 +124,20 @@ void parse_matchtree(std::span<char> contents, const size_t fsize, size_t& i, Ma
         return;
     }
 
-    // Eat list closing symbol
-    if (contents[i] == ')') {
-        ++i;
-        return;
-    }
+    while (contents[i] != ')') {
+        // Parse match children, if necessary
+        match.children.push_back({});
+        parse_matchtree(contents, fsize, i, match.children.back());
 
-    // Parse match children, if necessary
-    match.children.push_back({});
-    parse_matchtree(contents, fsize, i, match.children.back());
+        // Skip whitespace
+        while (i < fsize and isspace(contents[i])) ++i;
+        if (i >= fsize or contents[i] == '=') {
+            fmt::print("ERROR expected list closing symbol but got end of input");
+            return;
+        }
+    }
+    // Eat list closing symbol
+    ++i;
 }
 
 struct Test {
