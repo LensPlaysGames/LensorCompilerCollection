@@ -92,6 +92,12 @@ public:
         NextToken();
     }
 
+    Parser(Context* context, std::string_view source)
+        : syntax::Lexer<Token>(context, source) {
+        mod = std::make_unique<Module>(context);
+        NextToken();
+    }
+
     auto ParseModule() -> Result<void>;
 
 private:
@@ -988,6 +994,12 @@ void lcc::parser::Parser::SetBlock(Inst* parent, lcc::Block*& val, lcc::parser::
     } else {
         block_fixups[std::get<Temporary>(v).data].emplace_back(parent, &val);
     }
+}
+
+auto lcc::Module::Parse(Context* ctx, std::string_view source) -> std::unique_ptr<Module> {
+    parser::Parser p{ctx, source};
+    if (not p.ParseModule()) return nullptr;
+    return std::move(p.mod);
 }
 
 auto lcc::Module::Parse(Context* ctx, File& file) -> std::unique_ptr<Module> {

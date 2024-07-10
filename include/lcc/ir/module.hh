@@ -67,6 +67,8 @@ public:
         return _virtual_register++;
     }
 
+    /// Parse a module from a source span.
+    static auto Parse(Context* ctx, std::string_view source) -> std::unique_ptr<Module>;
     /// Parse a module from a file.
     static auto Parse(Context* ctx, File& file) -> std::unique_ptr<Module>;
 };
