@@ -73,11 +73,12 @@ struct GlintTest : Test {
                                 return candidate->name() == expected_func->name();
                             });
                             if (got_func_in_ir == got_ir->code().end()) {
+                                ir_matches = false;
+
                                 fmt::print(
                                     "IR MISMATCH: Expected function {} to be in IR, but didn't find it\n",
                                     expected_func->name()
                                 );
-                                ir_matches = false;
                                 // Stop iterating IR functions since they already don't match.
                                 break;
                             }
@@ -88,11 +89,12 @@ struct GlintTest : Test {
                             // think.
 
                             if (expected_func->blocks().size() != got_func->blocks().size()) {
+                                ir_matches = false;
+
                                 fmt::print(
                                     "IR MISMATCH: Block count in function {}\n",
                                     expected_func->name()
                                 );
-                                ir_matches = false;
                                 // Stop iterating IR functions since they already don't match.
                                 break;
                             }
@@ -102,21 +104,26 @@ struct GlintTest : Test {
                                 auto got_block = got_func->blocks().at(block_i);
 
                                 if (expected_func->blocks().size() != got_func->blocks().size()) {
+                                    ir_matches = false;
+
                                     fmt::print(
                                         "IR MISMATCH: Instruction count in block {} in function {}\n",
                                         expected_block->name(),
                                         expected_func->name()
                                     );
-                                    ir_matches = false;
                                     // Stop iterating IR functions since they already don't match.
                                     break;
                                 }
 
+                                std::unordered_map<lcc::Inst*, lcc::Inst*> expected_to_got{};
                                 for (size_t inst_i = 0; inst_i < expected_block->instructions().size(); ++inst_i) {
                                     auto expected_inst = expected_block->instructions().at(inst_i);
                                     auto got_inst = got_block->instructions().at(inst_i);
+                                    expected_to_got[expected_inst] = got_inst;
 
                                     if (expected_inst->kind() != got_inst->kind()) {
+                                        ir_matches = false;
+
                                         // TODO: Maybe have this behind a "--verbose-ir" CLI flag or something
                                         // fmt::print("\nExpected IR:\n");
                                         // expected_func->print();
@@ -136,6 +143,47 @@ struct GlintTest : Test {
                                             expected_block->name(),
                                             expected_func->name()
                                         );
+
+                                        break;
+                                    }
+
+                                    // Compare instruction children and ensure they point to equivalent
+                                    // places (i.e. got_inst->child[0] == expected_inst->child[0], but not
+                                    // literally equals, just equals the one that represents. Basically, we
+                                    // will need a map of expected_inst to got_inst so we can do this
+                                    // comparison properly).
+                                    auto expected_children = expected_inst->children();
+                                    auto got_children = got_inst->children();
+
+                                    size_t child_i = 0;
+                                    while (expected_children.begin() != expected_children.end() and got_children.begin() != got_children.end()) {
+                                        auto expected_child = *expected_children.begin();
+                                        auto got_child = *got_children.begin();
+                                        if (auto expected_child_inst = cast<lcc::Inst>(expected_child)) {
+                                            if (expected_to_got[expected_child_inst] != got_child) {
+                                                ir_matches = false;
+
+                                                fmt::print(
+                                                    "IR MISMATCH: Expected operand {} (zero-based) of instruction (1) to reference (2), but it instead references (3)\n",
+                                                    child_i
+                                                );
+                                                fmt::print("(1): ");
+                                                got_inst->print();
+                                                fmt::print("{}\n", C(lcc::utils::Colour::Reset));
+
+                                                fmt::print("(2): ");
+                                                expected_child_inst->print();
+                                                fmt::print("{}\n", C(lcc::utils::Colour::Reset));
+
+                                                fmt::print("(3): ");
+                                                expected_to_got[expected_child_inst]->print();
+                                                fmt::print("{}\n", C(lcc::utils::Colour::Reset));
+                                            }
+                                        }
+                                        // Advance iterators
+                                        ++expected_children.begin();
+                                        ++got_children.begin();
+                                        ++child_i;
                                     }
                                 }
                             }
