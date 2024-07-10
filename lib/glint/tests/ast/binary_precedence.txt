@@ -1,0 +1,54 @@
+================
+Multiplication before Addition
+================
+
+;; (2 + 2) * 2 = 8
+;; 2 + (2 * 2) = 6
+2 + 2 * 2;
+
+---
+
+(block
+ (return
+  (binary
+   (integer_literal)
+   (binary
+    (integer_literal)
+    (integer_literal)))))
+
+================
+Explicit Addition before Multiplication w/ Parens
+================
+
+;; (2 + 2) * 2 = 8  (wrong)
+;; 2 + (2 * 2) = 6
+(2 + 2) * 2;
+
+---
+
+(block
+ (return
+  (binary
+   (binary
+    (integer_literal)
+    (integer_literal))
+   (integer_literal))))
+
+================
+Addition before Equality
+================
+
+;; (2 = 2) + 2  (wrong)
+;; 2 = (2 + 2)
+2 = 2 + 2;
+
+---
+
+(block
+ (return
+  (cast
+   (binary
+    (integer_literal)
+    (binary
+     (integer_literal)
+     (integer_literal))))))
