@@ -130,6 +130,12 @@ struct GlintTest : Test {
                                         // fmt::print("Got IR:\n");
                                         // got_func->print();
 
+                                        fmt::print(
+                                            "IR MISMATCH: Expected instruction (1) but got instruction (2) in block {} in function {}\n",
+                                            expected_block->name(),
+                                            expected_func->name()
+                                        );
+
                                         fmt::print("(1): ");
                                         expected_inst->print();
                                         fmt::print("{}\n", C(lcc::utils::Colour::Reset));
@@ -137,12 +143,6 @@ struct GlintTest : Test {
                                         fmt::print("(2): ");
                                         got_inst->print();
                                         fmt::print("{}\n", C(lcc::utils::Colour::Reset));
-
-                                        fmt::print(
-                                            "IR MISMATCH: Expected instruction (1) but got instruction (2) in block {} in function {}\n",
-                                            expected_block->name(),
-                                            expected_func->name()
-                                        );
 
                                         break;
                                     }
@@ -156,7 +156,10 @@ struct GlintTest : Test {
                                     auto got_children = got_inst->children();
 
                                     size_t child_i = 0;
-                                    while (expected_children.begin() != expected_children.end() and got_children.begin() != got_children.end()) {
+                                    while (
+                                        expected_children.begin() != expected_children.end()
+                                        and got_children.begin() != got_children.end()
+                                    ) {
                                         auto expected_child = *expected_children.begin();
                                         auto got_child = *got_children.begin();
                                         if (auto expected_child_inst = cast<lcc::Inst>(expected_child)) {
@@ -167,6 +170,7 @@ struct GlintTest : Test {
                                                     "IR MISMATCH: Expected operand {} (zero-based) of instruction (1) to reference (2), but it instead references (3)\n",
                                                     child_i
                                                 );
+
                                                 fmt::print("(1): ");
                                                 got_inst->print();
                                                 fmt::print("{}\n", C(lcc::utils::Colour::Reset));
