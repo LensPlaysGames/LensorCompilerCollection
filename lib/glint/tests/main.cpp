@@ -62,8 +62,32 @@ struct GlintTest : Test {
         if (not matches or failed_parse or failed_check) {
             fmt::print("{}FAIL{}\n", C(Colour::Red), C(Colour::Reset));
             if (not matches) {
-                fmt::print("EXPECTED: {}\n", matcher.print());
-                fmt::print("GOT:      {}\n", print_node<lcc::glint::Expr>(mod->top_level_func()->body()));
+                std::string expected = matcher.print();
+                std::string got = print_node<lcc::glint::Expr>(mod->top_level_func()->body());
+
+                // find_different_from_begin()
+                size_t diff_begin{0};
+                for (; diff_begin < expected.size() and diff_begin < got.size(); ++diff_begin)
+                    if (expected.at(diff_begin) != got.at(diff_begin)) break;
+
+                auto expected_color = C(lcc::utils::Colour::Green);
+                expected.insert(
+                    expected.begin() + lcc::isz(diff_begin),
+                    expected_color.begin(),
+                    expected_color.end()
+                );
+                expected += C(lcc::utils::Colour::Reset);
+
+                auto got_color = C(lcc::utils::Colour::Red);
+                got.insert(
+                    got.begin() + lcc::isz(diff_begin),
+                    got_color.begin(),
+                    got_color.end()
+                );
+                got += C(lcc::utils::Colour::Reset);
+
+                fmt::print("EXPECTED: {}\n", expected);
+                fmt::print("GOT:      {}\n", got);
             }
         } else fmt::print("{}PASS{}\n", C(Colour::Green), C(Colour::Reset));
     }
