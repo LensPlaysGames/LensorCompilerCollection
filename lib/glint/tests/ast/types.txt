@@ -41,7 +41,7 @@ void :[int 8];
 0;
 ---
 (block
- (cast (t_fixarray))
+ (cast (t_fixarray (evaluated_constant)))
  (return (integer_literal)))
 
 
@@ -53,6 +53,18 @@ void :[int];
 ---
 (block
  (cast (t_dynarray))
+ (return (integer_literal)))
+
+
+================
+Dynamic Array Initial Size
+================
+size :: 69;
+void :[Byte size];
+0;
+---
+(block
+ (cast (t_dynarray (name (variable_declaration (integer_literal)))))
  (return (integer_literal)))
 
 

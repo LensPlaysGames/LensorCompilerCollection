@@ -530,6 +530,12 @@ std::vector<lcc::glint::Expr*> lcc::glint::Expr::children() const {
         case Kind::IntrinsicCall:
         case Kind::Module:
         case Kind::Type:
+            if (auto t_dynarray = cast<DynamicArrayType>(type())) {
+                if (t_dynarray->initial_size())
+                    return {t_dynarray->initial_size()};
+            }
+            if (auto t_fixarray = cast<ArrayType>(type()))
+                return {t_fixarray->size()};
             return {};
 
         case Kind::While: {
