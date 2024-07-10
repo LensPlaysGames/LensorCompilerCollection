@@ -52,3 +52,18 @@ Addition before Equality
     (binary_add
      (integer_literal)
      (integer_literal))))))
+
+---
+
+main : i64(i32 %0, ptr %1, ptr %2):
+  bb0:
+    %3 = alloca i32
+    store i32 %0 into %3
+    %4 = alloca ptr
+    store ptr %1 into %4
+    %5 = alloca ptr
+    store ptr %2 into %5
+    %6 = add i64 2, 2
+    %7 = eq i64 2, %6
+    %8 = zext i1 %7 to i64
+    return i64 %8

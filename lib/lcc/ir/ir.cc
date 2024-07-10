@@ -6,6 +6,7 @@
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
+#include <lcc/utils.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/utils/rtti.hh>
 #include <string>
@@ -1186,13 +1187,21 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         } else {
             p.Print("{}", p.Val(v, true));
         }
-        fmt::print("{}", p.Output());
+        fmt::print(
+            "{}{}",
+            p.Output(),
+            lcc::utils::Colours{use_colour}(lcc::utils::Colour::Reset)
+        );
     }
 };
 } // namespace
 
 void Module::print_ir(bool use_colour) {
-    fmt::print("{}", LCCIRPrinter::Print(this, use_colour));
+    fmt::print(
+        "{}{}",
+        LCCIRPrinter::Print(this, use_colour),
+        lcc::utils::Colours{use_colour}(lcc::utils::Colour::Reset)
+    );
 }
 
 void Value::print() const {
