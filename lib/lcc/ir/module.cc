@@ -117,7 +117,7 @@ void Module::lower() {
                             auto store = as<StoreInst>(instruction);
 
                             // Less than or equal to 8 bytes; nothing to change.
-                            if (store->type()->bits() <= 64) continue;
+                            if (store->val()->type()->bits() <= 64) continue;
 
                             LCC_ASSERT(false, "TODO: Handle store > 8 bytes lowering");
                         } break;
