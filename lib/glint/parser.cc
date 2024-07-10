@@ -1252,6 +1252,11 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
             NextToken();
             break;
 
+        case Tk::UInt:
+            ty = BuiltinType::UInt(*mod, tok.location);
+            NextToken();
+            break;
+
         case Tk::Byte:
             ty = BuiltinType::Byte(*mod, tok.location);
             NextToken();

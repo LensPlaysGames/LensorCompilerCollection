@@ -848,9 +848,14 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
         if (e->kind() == lcc::glint::Expr::Kind::FuncDecl) return;
 
         if (auto n = cast<lcc::glint::NameRefExpr>(e)) {
-            // TODO: Get rid of tempset if we don't need it here.
-            tempset print_children_of_children = false;
-            PrintChildren({n->target()}, leading_text);
+            // If NameRefExpr has nullptr target, that most likely just means we
+            // haven't yet done type-checking (semantic analysis).
+            if (n->target()) {
+                // TODO: Get rid of tempset if we don't need it here.
+                tempset print_children_of_children = false;
+
+                PrintChildren({n->target()}, leading_text);
+            }
         }
 
         /// Print the children of a node.
