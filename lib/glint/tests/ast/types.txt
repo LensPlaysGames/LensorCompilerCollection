@@ -64,6 +64,7 @@ void :[Byte size];
 0;
 ---
 (block
+ (variable_declaration (integer_literal))
  (cast (t_dynarray (name (variable_declaration (integer_literal)))))
  (return (integer_literal)))
 
