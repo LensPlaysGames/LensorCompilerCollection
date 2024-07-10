@@ -547,6 +547,11 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             generate_expression(cast->operand());
 
             lcc::Type* t_to = Convert(ctx, cast->type());
+
+            // Doesn't matter what we are casting from, we don't do anything to cast
+            // it to the void.
+            if (t_to->is_void()) return;
+
             lcc::Type* t_from = generated_ir[cast->operand()]->type();
 
             /// No-op.
