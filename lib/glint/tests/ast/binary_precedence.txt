@@ -10,9 +10,9 @@ Multiplication before Addition
 
 (block
  (return
-  (binary
+  (binary_add
    (integer_literal)
-   (binary
+   (binary_multiply
     (integer_literal)
     (integer_literal)))))
 
@@ -28,8 +28,8 @@ Explicit Addition before Multiplication w/ Parens
 
 (block
  (return
-  (binary
-   (binary
+  (binary_multiply
+   (binary_add
     (integer_literal)
     (integer_literal))
    (integer_literal))))
@@ -47,8 +47,8 @@ Addition before Equality
 (block
  (return
   (cast
-   (binary
+   (binary_equal
     (integer_literal)
-    (binary
+    (binary_add
      (integer_literal)
      (integer_literal))))))

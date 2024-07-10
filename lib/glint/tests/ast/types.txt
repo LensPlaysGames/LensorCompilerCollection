@@ -1,0 +1,34 @@
+================
+Type Expression, Primitives
+================
+void :int;
+0;
+---
+(block
+ (cast (t_int))
+ (return (integer_literal)))
+
+
+================
+Type Expression, FFI
+================
+void :cshort;
+void :cushort;
+void :cint;
+void :cuint;
+void :clong;
+void :culong;
+void :clonglong;
+void :culonglong;
+0;
+---
+(block
+ (cast (t_ffi))
+ (cast (t_ffi))
+ (cast (t_ffi))
+ (cast (t_ffi))
+ (cast (t_ffi))
+ (cast (t_ffi))
+ (cast (t_ffi))
+ (cast (t_ffi))
+ (return (integer_literal)))

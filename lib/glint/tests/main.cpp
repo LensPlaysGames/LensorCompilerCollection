@@ -63,7 +63,7 @@ struct GlintTest : Test {
             fmt::print("{}FAIL{}\n", C(Colour::Red), C(Colour::Reset));
             if (not matches) {
                 fmt::print("EXPECTED: {}\n", matcher.print());
-                fmt::print("GOT: {}\n", print_node(mod->top_level_func()->body()));
+                fmt::print("GOT:      {}\n", print_node(mod->top_level_func()->body()));
             }
         } else fmt::print("{}PASS{}\n", C(Colour::Green), C(Colour::Reset));
     }
@@ -73,11 +73,12 @@ int main(int argc, const char** argv) {
     for (int i = 1; i < argc; ++i)
         LCC_ASSERT(false, "No command line options are accepted at the moment");
 
-    for (auto entry : std::filesystem::directory_iterator("ast"))
+    for (auto entry : std::filesystem::directory_iterator("ast")) {
         if (entry.is_regular_file()) {
             fmt::print("{}:\n", entry.path().lexically_normal().filename().string());
             process_ast_test_file<GlintTest>(entry.path());
         }
+    }
 
     return 0;
 }

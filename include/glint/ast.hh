@@ -949,6 +949,7 @@ public:
     /// \return Whether evaluation succeeded.
     bool evaluate(const Context* ctx, EvalResult& out, bool required);
 
+    std::string name() const;
     std::vector<lcc::glint::Expr*> children() const;
 
     Kind kind() const { return _kind; }

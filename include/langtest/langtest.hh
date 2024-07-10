@@ -47,7 +47,7 @@ struct MatchTree {
 [[nodiscard]]
 std::string print_node(lcc::glint::Expr* e) {
     std::string out{};
-    out += fmt::format("({}", ToString(e->kind()));
+    out += fmt::format("({}", e->name());
     auto children = e->children();
     for (auto* child : children) {
         out += ' ';
@@ -58,7 +58,7 @@ std::string print_node(lcc::glint::Expr* e) {
 }
 
 bool perform_match(lcc::glint::Expr* e, MatchTree& t) {
-    auto name = ToString(e->kind());
+    auto name = e->name();
     if (name != t.name) {
         // TODO: Record test failure, somewhere/somehow
         fmt::print("\nMISMATCH: node name\n");
