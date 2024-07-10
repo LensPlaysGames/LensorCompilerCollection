@@ -8,16 +8,21 @@ include(Platform/${CMAKE_SYSTEM_NAME}-Determine-Glint OPTIONAL)
 include(Platform/${CMAKE_SYSTEM_NAME}-Glint OPTIONAL)
 
 if(NOT CMAKE_Glint_COMPILER)
-  find_program(
-    CMAKE_Glint_COMPILER
-    lcc
-    DOC "Lensor Compiler Collection"
-  )
+  if (DEFINED ENV{GLINTC})
+    set (CMAKE_Glint_COMPILER $ENV{GLINTC})
+  else()
+    find_program(
+      CMAKE_Glint_COMPILER
+      lcc
+      DOC "Lensor Compiler Collection"
+    )
+  endif()
 endif()
+
+set(CMAKE_Glint_COMPILER_ENV_VAR "GLINTC")
 
 configure_file(
   ${CMAKE_CURRENT_LIST_DIR}/CMakeGlintCompiler.cmake.in
   ${CMAKE_PLATFORM_INFO_DIR}/CMakeGlintCompiler.cmake
   @ONLY
 )
-set(CMAKE_Glint_COMPILER_ENV_VAR "GLINTC")
