@@ -1,5 +1,5 @@
 ================
-Type Expression, Primitives
+Primitives
 ================
 void :int;
 0;
@@ -10,7 +10,7 @@ void :int;
 
 
 ================
-Type Expression, FFI
+FFI
 ================
 void :cshort;
 void :cushort;
@@ -35,7 +35,7 @@ void :culonglong;
 
 
 ================
-Type Expression, Fixed Array
+Fixed Array
 ================
 void :[int 8];
 0;
@@ -46,11 +46,99 @@ void :[int 8];
 
 
 ================
-Type Expression, Dynamic Array
+Dynamic Array
 ================
 void :[int];
 0;
 ---
 (block
  (cast (t_dynarray))
+ (return (integer_literal)))
+
+
+================
+Function :int()
+================
+void :int();
+0;
+---
+(block
+ (cast (t_function))
+ (return (integer_literal)))
+
+
+================
+Function, Named Parameter
+================
+void :int(s:int);
+0;
+---
+(block
+ (cast (t_function))
+ (return (integer_literal)))
+
+
+================
+Function, Named Parameter, Trailing Comma
+================
+void :int(s:int,);
+0;
+---
+(block
+ (cast (t_function))
+ (return (integer_literal)))
+
+
+================
+Function, Unnamed Parameter
+================
+void :int(:int);
+0;
+---
+(block
+ (cast (t_function))
+ (return (integer_literal)))
+
+
+================
+Function, Multiple Named Parameters
+================
+void :int(x:int y:int);
+0;
+---
+(block
+ (cast (t_function))
+ (return (integer_literal)))
+
+
+================
+Function, Multiple Named Comma-separated Parameters
+================
+void :int(x:int, y:int);
+0;
+---
+(block
+ (cast (t_function))
+ (return (integer_literal)))
+
+
+================
+Function, Multiple Unnamed Parameters
+================
+void :int(:int :int);
+0;
+---
+(block
+ (cast (t_function))
+ (return (integer_literal)))
+
+
+================
+Function, Multiple Unnamed Comma-separated Parameters
+================
+void :int(:int, :int);
+0;
+---
+(block
+ (cast (t_function))
  (return (integer_literal)))
