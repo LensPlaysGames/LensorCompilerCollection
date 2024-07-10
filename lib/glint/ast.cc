@@ -535,38 +535,34 @@ std::vector<lcc::glint::Expr*> lcc::glint::Expr::children() const {
         case Kind::While: {
             auto w = as<lcc::glint::WhileExpr>(this);
             return {w->condition(), w->body()};
-        } break;
+        }
 
         case Kind::For: {
             auto f = as<lcc::glint::ForExpr>(this);
             return {f->init(), f->condition(), f->increment(), f->body()};
-        } break;
+        }
 
         case Kind::If: {
             auto i = as<lcc::glint::IfExpr>(this);
             if (i->otherwise())
                 return {i->condition(), i->then(), i->otherwise()};
             else return {i->condition(), i->then()};
-        } break;
+        }
 
         case Kind::Return: {
             auto ret = as<lcc::glint::ReturnExpr>(this);
             if (ret->value()) return {ret->value()};
             return {};
-        } break;
+        }
 
-        case Kind::MemberAccess: {
+        case Kind::MemberAccess:
             return {as<lcc::glint::MemberAccessExpr>(this)->object()};
-        } break;
 
-        // here here herehere
         case Kind::CompoundLiteral:
             return as<lcc::glint::CompoundLiteral>(this)->values();
-            break;
 
-        case Kind::Cast: {
+        case Kind::Cast:
             return {as<lcc::glint::CastExpr>(this)->operand()};
-        } break;
 
         case Kind::Call: {
             auto c = as<lcc::glint::CallExpr>(this);

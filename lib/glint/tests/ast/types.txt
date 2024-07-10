@@ -32,3 +32,25 @@ void :culonglong;
  (cast (t_ffi))
  (cast (t_ffi))
  (return (integer_literal)))
+
+
+================
+Type Expression, Fixed Array
+================
+void :[int 8];
+0;
+---
+(block
+ (cast (t_fixarray))
+ (return (integer_literal)))
+
+
+================
+Type Expression, Dynamic Array
+================
+void :[int];
+0;
+---
+(block
+ (cast (t_dynarray))
+ (return (integer_literal)))
