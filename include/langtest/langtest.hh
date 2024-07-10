@@ -4,6 +4,7 @@
 #include <lcc/utils.hh>
 
 #include <filesystem>
+#include <type_traits>
 
 // TODO: Use something like this for stat-trak language testing framework
 class TestContext {
@@ -38,9 +39,25 @@ struct MatchTree {
     }
 };
 
+template <typename T>
+concept langtest_node_has_name = requires (T node) {
+    // FIXME: Constrain return value to std::vector<T*>
+    node.name();
+    std::is_same<std::vector<T*>, typeof node.name()>();
+};
+template <typename T>
+concept langtest_node_has_children = requires (T node) {
+    node.children();
+    std::is_same<std::vector<T*>, typeof node.children()>();
+};
+template <typename T>
+concept langtest_node_requirements
+    = langtest_node_has_name<T> && langtest_node_has_children<T>;
+
 /// NOTE: print_node() constructs a matcher from a given AST; may be good to
 /// utilise this functionality to create initial expected output of test.
 template <typename TNode>
+requires langtest_node_requirements<TNode>
 [[nodiscard]]
 std::string print_node(TNode* e) {
     std::string out{};
@@ -55,6 +72,8 @@ std::string print_node(TNode* e) {
 }
 
 template <typename TNode>
+requires langtest_node_requirements<TNode>
+[[nodiscard]]
 bool perform_match(TNode* e, MatchTree& t) {
     auto name = e->name();
     if (name != t.name) {

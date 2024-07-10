@@ -54,7 +54,7 @@ struct GlintTest : Test {
                 // decorated as expected to fail.
 
                 auto* root = mod->top_level_func()->body();
-                matches = perform_match(root, matcher);
+                matches = perform_match<lcc::glint::Expr>(root, matcher);
             } else failed_check = true;
         } else failed_parse = true;
 
@@ -63,7 +63,7 @@ struct GlintTest : Test {
             fmt::print("{}FAIL{}\n", C(Colour::Red), C(Colour::Reset));
             if (not matches) {
                 fmt::print("EXPECTED: {}\n", matcher.print());
-                fmt::print("GOT:      {}\n", print_node(mod->top_level_func()->body()));
+                fmt::print("GOT:      {}\n", print_node<lcc::glint::Expr>(mod->top_level_func()->body()));
             }
         } else fmt::print("{}PASS{}\n", C(Colour::Green), C(Colour::Reset));
     }
