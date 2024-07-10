@@ -3,10 +3,6 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 
-#include <glint/ast.hh>
-#include <glint/parser.hh>
-#include <glint/sema.hh>
-
 #include <filesystem>
 
 // TODO: Use something like this for stat-trak language testing framework
@@ -44,20 +40,22 @@ struct MatchTree {
 
 /// NOTE: print_node() constructs a matcher from a given AST; may be good to
 /// utilise this functionality to create initial expected output of test.
+template <typename TNode>
 [[nodiscard]]
-std::string print_node(lcc::glint::Expr* e) {
+std::string print_node(TNode* e) {
     std::string out{};
     out += fmt::format("({}", e->name());
     auto children = e->children();
     for (auto* child : children) {
         out += ' ';
-        out += print_node(child);
+        out += print_node<TNode>(child);
     }
     out += ')';
     return out;
 }
 
-bool perform_match(lcc::glint::Expr* e, MatchTree& t) {
+template <typename TNode>
+bool perform_match(TNode* e, MatchTree& t) {
     auto name = e->name();
     if (name != t.name) {
         // TODO: Record test failure, somewhere/somehow
@@ -79,7 +77,7 @@ bool perform_match(lcc::glint::Expr* e, MatchTree& t) {
 
     bool children_match{true};
     for (size_t i = 0; i < children.size(); ++i) {
-        if (not perform_match(children.at(i), t.children.at(i)))
+        if (not perform_match<TNode>(children.at(i), t.children.at(i)))
             children_match = false;
     }
 
