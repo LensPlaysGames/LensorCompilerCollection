@@ -43,3 +43,69 @@ return 49;
 ---
 
 (block (return (integer_literal)))
+
+================
+Declaration, Primitive
+================
+
+x :int 42;
+
+---
+
+(block (return (cast (variable_declaration (integer_literal)))))
+
+================
+Function Declaration, Immediate Expression
+================
+
+x :int() 42;
+x;
+
+---
+
+(block
+ (function_declaration
+  (return (integer_literal)))
+ (return (call (name))))
+
+================
+Function Declaration, Block Expression
+================
+
+x :int() { 42; };
+x;
+
+---
+
+(block
+ (function_declaration
+  (block (return (integer_literal))))
+ (return (call (name))))
+
+================
+Function Declaration, Block Expression w/ Explicit Return
+================
+
+x :int() { return 42; };
+x;
+
+---
+
+(block
+ (function_declaration
+  (block (return (integer_literal))))
+ (return (call (name))))
+
+================
+Declaration, Function
+================
+
+x :int() 42;
+x;
+
+---
+
+(block
+ (function_declaration
+  (return (integer_literal)))
+ (return (call (name))))

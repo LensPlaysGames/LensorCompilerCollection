@@ -614,6 +614,18 @@ std::vector<lcc::glint::Expr*> lcc::glint::Expr::children() const {
     LCC_UNREACHABLE();
 }
 
+std::string lcc::glint::Expr::langtest_name() const {
+    return name();
+}
+std::vector<lcc::glint::Expr*> lcc::glint::Expr::langtest_children() const {
+    // Return function body as child of function declaration.
+    if (auto* func_decl = cast<FuncDecl>(this))
+        return {func_decl->body()};
+    // Do not follow NameRefExpr when testing (lots of duplicate variable declarations).
+    if (is<NameRefExpr>(this)) return {};
+    return children();
+}
+
 auto lcc::glint::EnumeratorDecl::value() const -> aint {
     LCC_ASSERT(ok(), "value() can only be used if the enumerator was analysed successfully");
     return is<ConstantExpr>(init())

@@ -16,6 +16,7 @@ Multiplication before Addition
     (integer_literal)
     (integer_literal)))))
 
+
 ================
 Explicit Addition before Multiplication w/ Parens
 ================
@@ -33,6 +34,7 @@ Explicit Addition before Multiplication w/ Parens
     (integer_literal)
     (integer_literal))
    (integer_literal))))
+
 
 ================
 Addition before Equality
@@ -63,6 +65,7 @@ main : i64(i32 %0, ptr %1, ptr %2):
     store ptr %1 into %4
     %5 = alloca ptr
     store ptr %2 into %5
+    ;; The important part
     %6 = add i64 2, 2
     %7 = eq i64 2, %6
     %8 = zext i1 %7 to i64

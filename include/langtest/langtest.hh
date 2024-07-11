@@ -3,6 +3,7 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 
+#include <concepts>
 #include <filesystem>
 #include <type_traits>
 
@@ -41,14 +42,13 @@ struct MatchTree {
 
 template <typename T>
 concept langtest_node_has_name = requires (T node) {
-    // FIXME: Constrain return value to std::vector<T*>
-    node.name();
-    std::is_same<std::vector<T*>, typeof node.name()>();
+    node.langtest_name();
+    requires std::convertible_to<decltype(node.langtest_name()), std::string>;
 };
 template <typename T>
 concept langtest_node_has_children = requires (T node) {
-    node.children();
-    std::is_same<std::vector<T*>, typeof node.children()>();
+    node.langtest_children();
+    requires std::convertible_to<decltype(node.langtest_children()), std::vector<T*>>;
 };
 template <typename T>
 concept langtest_node_requirements
@@ -61,8 +61,8 @@ requires langtest_node_requirements<TNode>
 [[nodiscard]]
 std::string print_node(TNode* e) {
     std::string out{};
-    out += fmt::format("({}", e->name());
-    auto children = e->children();
+    out += fmt::format("({}", e->langtest_name());
+    auto children = e->langtest_children();
     for (auto* child : children) {
         out += ' ';
         out += print_node<TNode>(child);
@@ -75,7 +75,7 @@ template <typename TNode>
 requires langtest_node_requirements<TNode>
 [[nodiscard]]
 bool perform_match(TNode* e, MatchTree& t) {
-    auto name = e->name();
+    auto name = e->langtest_name();
     if (name != t.name) {
         // TODO: Record test failure, somewhere/somehow
         fmt::print("\nMISMATCH: node name\n");
@@ -83,7 +83,7 @@ bool perform_match(TNode* e, MatchTree& t) {
         return false;
     }
 
-    auto children = e->children();
+    auto children = e->langtest_children();
     if (children.size() != t.children.size()) {
         fmt::print("\nMISMATCH: child count\n");
         return false;

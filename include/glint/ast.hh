@@ -952,6 +952,9 @@ public:
     std::string name() const;
     std::vector<lcc::glint::Expr*> children() const;
 
+    std::string langtest_name() const;
+    std::vector<lcc::glint::Expr*> langtest_children() const;
+
     Kind kind() const { return _kind; }
 
     /// Check if this is an lvalue. Only lvalues can have their
@@ -1115,6 +1118,7 @@ public:
     }
 
     auto body() -> Expr*& { return _body; }
+    auto body() const -> Expr* { return _body; }
 
     auto call_conv() const -> CallConv { return _cc; }
 

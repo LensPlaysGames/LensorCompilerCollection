@@ -65,7 +65,7 @@ void :[Byte size];
 ---
 (block
  (variable_declaration (integer_literal))
- (cast (t_dynarray (name (variable_declaration (integer_literal)))))
+ (cast (t_dynarray (name)))
  (return (integer_literal)))
 
 

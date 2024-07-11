@@ -286,7 +286,10 @@ auto intc::Parser::ParseBlock(
     [[maybe_unused]] ScopeRAII sc
 ) -> Result<BlockExpr*> {
     auto loc = tok.location;
-    LCC_ASSERT(Consume(Tk::LBrace), "ParseBlock called while not at '{{'");
+    LCC_ASSERT(
+        Consume(Tk::LBrace),
+        "ParseBlock called while not at '{{'"
+    );
 
     /// Parse expressions.
     std::vector<Expr*> exprs;
@@ -1027,11 +1030,11 @@ auto intc::Parser::ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scop
     /// followed by an expression.
     auto scope = sc.scope;
     auto expr = ExprResult::Null();
-    if (Consume(Tk::Eq)) expr = ParseExpr();
-    else if (At(Tk::LBrace)) expr = ParseBlock(std::move(sc));
 
-    /// If the body isn't followed by either, it's not a valid function declaration
-    else Error("Function declaration should be followed by `=` and an expression or a block");
+    // Eat '=', if present.
+    Consume(Tk::Eq);
+    if (At(Tk::LBrace)) expr = ParseBlock(std::move(sc));
+    else expr = ParseExpr();
 
     if (expr.is_diag()) return expr.diag();
     return std::pair{*expr, scope};
