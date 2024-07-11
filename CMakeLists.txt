@@ -208,9 +208,6 @@ if (NOT WIN32)
   target_link_libraries(options INTERFACE m)
 endif()
 
-# Precompile utils.hh.
-target_precompile_headers(options INTERFACE "${PROJECT_SOURCE_DIR}/include/lcc/utils.hh")
-
 # ============================================================================
 #  Executables and libraries.
 # ============================================================================
@@ -356,7 +353,7 @@ set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
 target_link_libraries(liblcc PUBLIC object)
 
 # Add the driver.
-add_executable(lcc "${PROJECT_SOURCE_DIR}/src/lcc.cc")
+add_executable(lcc src/lcc.cc)
 
 # Link lcc driver with language libraries.
 target_link_libraries(lcc PUBLIC glint)
