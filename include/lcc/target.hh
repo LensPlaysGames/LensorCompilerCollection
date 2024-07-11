@@ -70,17 +70,25 @@ public:
     usz size_of_pointer;
     usz align_of_pointer;
 
-    bool is_linux() const {
+    bool is_platform_linux() const {
         return this == x86_64_linux;
     }
 
-    bool is_windows() const {
+    bool is_platform_windows() const {
         return this == x86_64_windows;
     }
 
-    bool is_x64() const {
+    bool is_arch_x86_64() const {
         return this == x86_64_windows
             or this == x86_64_linux;
+    }
+
+    bool is_cconv_sysv() const {
+        return this == x86_64_linux;
+    }
+
+    bool is_cconv_ms() const {
+        return this == x86_64_windows;
     }
 };
 

@@ -88,7 +88,7 @@ void select_instructions(Module* mod, MFunction& function) {
     // Don't selection instructions for empty functions.
     if (function.blocks().empty()) return;
 
-    if (mod->context()->target()->is_x64()) {
+    if (mod->context()->target()->is_arch_x86_64()) {
         function = lcc::isel::x86_64::AllPatterns::rewrite(mod, function);
 
         // In-code instruction selection. Ideally, we wouldn't have to do this at
@@ -161,7 +161,7 @@ void select_instructions(Module* mod, MFunction& function) {
                 }
             }
         }
-    }
+    } else LCC_ASSERT(false, "Unhandled architecture in instruction selection");
 
     calculate_defining_uses(function);
 }

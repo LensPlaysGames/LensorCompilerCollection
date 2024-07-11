@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <fmt/format.h>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
@@ -16,20 +15,129 @@
 #include <lcc/utils/ir_printer.hh>
 #include <object/generic.hh>
 
+#include <algorithm>
+
 // NOTE: See module_mir.cc for Machine Instruction Representation (MIR)
 // generation.
 
 namespace lcc {
 
 void Module::lower() {
-    if (_ctx->target()->is_x64()) {
+    if (_ctx->target()->is_arch_x86_64()) {
         for (auto function : code()) {
             FunctionType* function_type = as<FunctionType>(function->type());
+
+            // Memory parameters need their type changed to pointer type.
+            //
+            // Also cache pointer to local for later use in storing from this
+            // pointer into local that represents "actual parameter".
+            //
+            // foo : internal glintcc void(@__struct_0 %0):
+            //   bb0:
+            //     %1 = alloca @__struct_0
+            //     store @__struct_0 %0 into %1
+            //     %2 = gmp @__struct_0 from %1 at i64 0
+            //     return
+            //
+            // SHOULD TURN INTO
+            //
+            // foo : internal glintcc void(ptr %0):
+            //   bb0:
+            //     %1 = alloca ptr
+            //     store ptr %0 into %1
+            //     %2 = load ptr from %1
+            //     %3 = gmp @__struct_0 from %2 at i64 0
+            //     return
+            //
+            // Basically, we need to change type of alloca and store->val() to ptr,
+            // and add `load ptr from alloca` before every use, and replace the use
+            // with that load...
+            //
+            // In C syntax:
+            // int foo(big_struct _x) {
+            //     big_struct x = _x;
+            //     return x.a + x.b;
+            // }
+            //
+            // SHOULD TURN INTO
+            //
+            // int foo(big_struct* _x) {
+            //     big_struct* xptr = _x;
+            //     return (*xptr).a + (*xptr).b;
+            // }
+            //
+            // TODO: We still don't handle sysv memory parameters "properly
+            // properly" (although we are on our way), since the alloca for the
+            // original parameter is at the call site AND the pointer to it ISN'T
+            // passed in a register like normal. This means that the fixed up "store
+            // ptr %0 into %1" can't just treat the parameter like a register but
+            // instead has to treat it like a very custom local that is in the parent
+            // stack frame (with a positive offset from the base pointer). In MIR,
+            // this could just be `mov local(0)+24`, or whatever. This would become
+            // two instructions, one to load either the source or destination pointer
+            // and one to store the value. I believe we could handle this fixup later,
+            // during MIR generation.
+            //
+            for (size_t param_i{0}; param_i < function_type->params().size(); ++param_i) {
+                auto*& param = function_type->params().at(param_i);
+                // TODO: Calling convention here /may/ be affected by function calling
+                // convention (maybe `function->call_conv()`).
+                bool sysv_memory_param = _ctx->target()->is_cconv_sysv() and param->bytes() > 16;
+                bool x64_memory_param = _ctx->target()->is_cconv_ms() and param->bytes() >= 8;
+                if (sysv_memory_param or x64_memory_param) {
+                    param = Type::PtrTy;
+                    auto* parameter = function->param(param_i);
+                    for (auto* user : parameter->users()) {
+                        if (auto store = cast<StoreInst>(user)) {
+                            LCC_ASSERT(
+                                is<Parameter>(store->val()),
+                                "Use of memory parameter in destination pointer of store instruction: we don't yet support this, sorry"
+                            );
+
+                            store->val(new (*this) Parameter(Type::PtrTy, parameter->index()));
+
+                            LCC_ASSERT(
+                                is<AllocaInst>(store->ptr()),
+                                "We only support storing memory parameter into pointer returned by AllocaInst, sorry"
+                            );
+
+                            // TODO: We could "just" alter the type of the alloca instruction, rather
+                            // than replacing the whole instruction. Right now, this is easier.
+                            auto alloca = as<AllocaInst>(store->ptr());
+                            auto new_alloca = new (*this) AllocaInst(Type::PtrTy, alloca->location());
+
+                            // Store parameter pointer into local.
+                            store->ptr(new_alloca);
+
+                            // Every user of the old alloca is expecting a pointer to the parameter,
+                            // but the new alloca now returns a pointer to the pointer to the
+                            // parameter; this adds the level of indirection needed.
+                            for (auto pointer_user : alloca->users()) {
+                                auto load = new (*this) LoadInst(Type::PtrTy, new_alloca);
+
+                                // Insert load just before use instruction.
+                                LCC_ASSERT(pointer_user->block(), "IR instruction has no block reference");
+                                pointer_user->block()->insert_before(load, pointer_user);
+
+                                // Replace use of alloca with use of newly-inserted load.
+                                pointer_user->replace_children([&](Value* v) -> Value* {
+                                    if (v == alloca) return load;
+                                    return nullptr;
+                                });
+                            }
+
+                            // Replace allocation of parameter type with an allocation of pointer type.
+                            alloca->replace_with(new_alloca);
+
+                        } else LCC_ASSERT(false, "Unhandled instruction type in replacement of users of memory parameter");
+                    }
+                }
+            }
 
             // Add parameter for over-large return types (in-memory ones that alter
             // function signature).
             // SysV is able to return objects <= 16 bytes in two registers.
-            bool ret_t_tworeg = _ctx->target()->is_linux() and function_type->ret()->bytes() > 8 and function_type->ret()->bytes() <= 16;
+            bool ret_t_tworeg = _ctx->target()->is_cconv_sysv() and function_type->ret()->bytes() > 8 and function_type->ret()->bytes() <= 16;
             bool ret_t_large = function_type->ret()->bytes() > 8;
             Value* ret_v_large{nullptr};
             if (not ret_t_tworeg and ret_t_large) {
@@ -119,8 +227,29 @@ void Module::lower() {
 
                             // Less than or equal to 8 bytes; nothing to change.
                             if (store->val()->type()->bits() <= 64) continue;
+                            auto byte_count = store->val()->type()->bytes();
 
-                            LCC_ASSERT(false, "TODO: Handle store > 8 bytes lowering");
+                            // Change type of val to pointer, if it isn't already.
+                            // TODO: Does this apply to values other than Parameter? Does it need to?
+                            if (auto param = cast<Parameter>(store->val()))
+                                store->val(new (*this) Parameter(Type::PtrTy, param->index()));
+
+                            LCC_ASSERT(
+                                store->val()->type() == Type::PtrTy,
+                                "Cannot lower store to memcpy when value is not of pointer type"
+                            );
+
+                            // Generate builtin memcpy
+                            std::vector<Value*> memcpy_operands{
+                                store->ptr(),
+                                // The value should have already been lowered to a pointer.
+                                store->val(),
+                                new (*this) IntegerConstant(
+                                    IntegerType::Get(context(), 64),
+                                    byte_count
+                                )};
+                            auto memcpy_inst = new (*this) IntrinsicInst(IntrinsicKind::MemCopy, memcpy_operands, store->location());
+                            store->replace_with(memcpy_inst);
                         } break;
                         default: break;
                     }
@@ -162,7 +291,7 @@ void Module::emit(std::filesystem::path output_file_path) {
 
             if (_ctx->should_print_mir()) {
                 fmt::print("\nAfter ISel\n");
-                if (_ctx->target()->is_x64()) {
+                if (_ctx->target()->is_arch_x86_64()) {
                     for (auto& f : machine_ir)
                         fmt::print("{}", PrintMFunctionImpl(f, x86_64::opcode_to_string));
                 } else {
@@ -175,9 +304,9 @@ void Module::emit(std::filesystem::path output_file_path) {
 
             // Register Allocation
             MachineDescription desc{};
-            if (_ctx->target()->is_x64()) {
+            if (_ctx->target()->is_arch_x86_64()) {
                 desc.return_register_to_replace = +x86_64::RegisterId::RETURN;
-                if (_ctx->target()->is_windows()) {
+                if (_ctx->target()->is_cconv_ms()) {
                     desc.return_register = +x86_64::RegisterId::RAX;
                     // Just the volatile registers
                     desc.registers = {
@@ -211,7 +340,7 @@ void Module::emit(std::filesystem::path output_file_path) {
 
             if (_ctx->should_print_mir()) {
                 fmt::print("\nAfter RA\n");
-                if (_ctx->target()->is_x64()) {
+                if (_ctx->target()->is_arch_x86_64()) {
                     for (auto& f : machine_ir)
                         fmt::print("{}", PrintMFunctionImpl(f, x86_64::opcode_to_string));
                 } else {
@@ -225,12 +354,12 @@ void Module::emit(std::filesystem::path output_file_path) {
             if (_ctx->stopat_mir()) std::exit(0);
 
             if (_ctx->format()->format() == Format::GNU_AS_ATT_ASSEMBLY) {
-                if (_ctx->target()->is_x64())
+                if (_ctx->target()->is_arch_x86_64())
                     x86_64::emit_gnu_att_assembly(output_file_path, this, desc, machine_ir);
                 else LCC_ASSERT(false, "Unhandled code emission target, sorry");
             } else if (_ctx->format()->format() == Format::ELF_OBJECT) {
                 GenericObject gobj{};
-                if (_ctx->target()->is_x64())
+                if (_ctx->target()->is_arch_x86_64())
                     gobj = x86_64::emit_mcode_gobj(this, desc, machine_ir);
                 else LCC_ASSERT(false, "Unhandled code emission target, sorry");
 

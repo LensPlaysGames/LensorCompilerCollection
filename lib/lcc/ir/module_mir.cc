@@ -269,8 +269,8 @@ auto Module::mir() -> std::vector<MFunction> {
                 // specific cases where we want to handle over-large values, we will.
                 // Otherwise, this will handle the general case of single-register
                 // parameters and memory parameters being referenced.
-                if (_ctx->target()->is_x64()) {
-                    if (_ctx->target()->is_windows()) {
+                if (_ctx->target()->is_arch_x86_64()) {
+                    if (_ctx->target()->is_platform_windows()) {
                         if (param->type()->bytes() <= 8 and param->index() < 4) {
                             static constexpr x86_64::RegisterId reg_by_param_index[4]{
                                 x86_64::RegisterId::RCX,
@@ -282,7 +282,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                 uint(param->type()->bits())
                             );
                         } else LCC_ASSERT(false, "TODO: Handle x64cc memory parameter");
-                    } else if (_ctx->target()->is_linux()) {
+                    } else if (_ctx->target()->is_cconv_sysv()) {
                         usz sysv_registers_used = 0;
                         for (usz i = 0; i < param->index(); ++i) {
                             auto p = f_ir->param(i);
@@ -310,7 +310,15 @@ auto Module::mir() -> std::vector<MFunction> {
                         // Multiple register parameter
                         else if (param->type()->bytes() <= 16 and sysv_registers_used < 5)
                             LCC_ASSERT(false, "Cannot handle multiple register parameter in this way");
-                        else LCC_ASSERT(false, "TODO: SysV lowering of memory parameter");
+                        else {
+                            LCC_ASSERT(false, "TODO: SysV lowering of memory parameter");
+
+                            // TODO: Return Local with positive offset into parent stack frame.
+                            // To get the actual offset, we need to know how many memory parameters
+                            // come before this parameter, as well as their size (and alignment?).
+                            auto offset = 24;
+                            return MOperandLocal(0, offset);
+                        }
                     }
                 }
                 LCC_UNREACHABLE();
@@ -435,8 +443,8 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Call: {
                         auto call_ir = as<CallInst>(instruction);
 
-                        if (_ctx->target()->is_x64()) {
-                            if (_ctx->target()->is_windows()) {
+                        if (_ctx->target()->is_arch_x86_64()) {
+                            if (_ctx->target()->is_platform_windows()) {
                                 std::vector<usz> arg_regs = {
                                     +x86_64::RegisterId::RCX,
                                     +x86_64::RegisterId::RDX,
@@ -450,11 +458,20 @@ auto Module::mir() -> std::vector<MFunction> {
                                         copy.add_operand(MOperandValueReference(function, f, arg));
                                         bb.add_instruction(copy);
                                     } else {
+                                        // Basically, if an argument is over-large, we allocate a copy on the
+                                        // stack (that way the caller can modify without doing bad bad), and then
+                                        // pass the pointer to the stack address in the regular place the argument
+                                        // would have gone (either the register the argument would have fit in, or
+                                        // on the stack).
+                                        // "Structs or unions (larger than 64 bits) are passed as a pointer to
+                                        // memory allocated by the caller. For these aggregate types passed as a
+                                        // pointer, including __m128, the caller-allocated temporary memory must
+                                        // be 16-byte aligned."
                                         LCC_ASSERT(false, "Handle gMIR lowering of x64 memory arguments");
                                     }
                                 }
 
-                            } else if (_ctx->target()->is_linux()) {
+                            } else if (_ctx->target()->is_cconv_sysv()) {
                                 std::vector<usz> arg_regs = {
                                     +x86_64::RegisterId::RDI,
                                     +x86_64::RegisterId::RSI,
@@ -509,6 +526,8 @@ auto Module::mir() -> std::vector<MFunction> {
                                         bb.add_instruction(load_a);
                                         bb.add_instruction(load_b);
                                     } else {
+                                        // Basically just allocate a temporary on the stack, memcpy (or similar)
+                                        // into that.
                                         LCC_ASSERT(false, "Handle gMIR lowering of SysV memory argument");
                                     }
                                 }
@@ -527,14 +546,14 @@ auto Module::mir() -> std::vector<MFunction> {
                                 LCC_ASSERT(intrinsic->operands().size() == 3, "Invalid number of operands to memcpy intrinsic");
 
                                 std::vector<usz> arg_regs{};
-                                if (_ctx->target()->is_windows()) {
+                                if (_ctx->target()->is_platform_windows()) {
                                     arg_regs = {
                                         +x86_64::RegisterId::RCX,
                                         +x86_64::RegisterId::RDX,
                                         +x86_64::RegisterId::R8,
                                         +x86_64::RegisterId::R9,
                                     };
-                                } else if (_ctx->target()->is_linux()) {
+                                } else if (_ctx->target()->is_cconv_sysv()) {
                                     arg_regs = {
                                         +x86_64::RegisterId::RDI,
                                         +x86_64::RegisterId::RSI,
@@ -691,7 +710,7 @@ auto Module::mir() -> std::vector<MFunction> {
                             // to, to make more efficient-like.
                             // FIXME: What does f.calling_convention() (C, Glint) have to do
                             // with any of this?
-                            if (_ctx->target()->is_x64() and _ctx->target()->is_linux()) {
+                            if (_ctx->target()->is_arch_x86_64() and _ctx->target()->is_cconv_sysv()) {
                                 usz sysv_registers_used = 0;
                                 for (usz i = 0; i < param->index(); ++i) {
                                     auto p = function->param(i);
@@ -765,8 +784,8 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto ret_type_bytes = func_type->ret()->bytes();
 
                         // SysV return in two registers
-                        if (_ctx->target()->is_linux() and ret_ir->has_value() and ret_type_bytes > 8 and ret_type_bytes <= 16) {
-                            if (_ctx->target()->is_x64()) {
+                        if (_ctx->target()->is_cconv_sysv() and ret_ir->has_value() and ret_type_bytes > 8 and ret_type_bytes <= 16) {
+                            if (_ctx->target()->is_arch_x86_64()) {
                                 // Add eight bytes to pointer to load from next.
                                 // Copy pointer
                                 auto copy_b = MInst(MInst::Kind::Copy, {next_vreg(), 64});
