@@ -54,7 +54,8 @@ void Module::lower() {
             }
 
             for (auto block : function->blocks()) {
-                for (auto [index, instruction] : vws::enumerate(block->instructions())) {
+                for (size_t inst_i = 0; inst_i < block->instructions().size(); ++inst_i) {
+                    auto*& instruction = block->instructions().at(inst_i);
                     switch (instruction->kind()) {
                         case Value::Kind::Return: {
                             auto ret = as<ReturnInst>(instruction);

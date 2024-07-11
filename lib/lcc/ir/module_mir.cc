@@ -341,6 +341,26 @@ auto Module::mir() -> std::vector<MFunction> {
         return MOperandRegister{virts[v], uint(regsize)};
     };
 
+    // NOTE: We cannot add functions to the IR while iterating over them (use-
+    // after-free nightmare), so, please, do not alter the IR in the main loop
+    // that generates MIR, for here there be dragons.
+
+    // TODO: if memcpy already in module, use that
+    auto memcpy_ty = FunctionType::Get(
+        _ctx,
+        Type::VoidTy,
+        {Type::PtrTy,
+         Type::PtrTy,
+         IntegerType::Get(_ctx, 32)}
+    );
+    auto memcpy_function = new (*this) Function(
+        this,
+        "memcpy",
+        memcpy_ty,
+        Linkage::Imported,
+        CallConv::C
+    );
+
     // To avoid iterator invalidation when any of these vectors are resizing,
     // we "pre-construct" functions and blocks.
     for (auto& function : code()) {
@@ -535,14 +555,6 @@ auto Module::mir() -> std::vector<MFunction> {
                                 }
 
                                 auto call = MInst(MInst::Kind::Call, {0, 0});
-                                auto memcpy_ty = FunctionType::Get(
-                                    _ctx,
-                                    Type::VoidTy,
-                                    {Type::PtrTy,
-                                     Type::PtrTy,
-                                     IntegerType::Get(_ctx, 32)}
-                                );
-                                auto memcpy_function = new (*this) Function(this, "memcpy", memcpy_ty, Linkage::Imported, CallConv::C);
                                 call.add_operand(memcpy_function);
                                 bb.add_instruction(call);
                             } break;
