@@ -142,10 +142,10 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::Int:
         case Tk::UInt:
         case Tk::Void:
-            return true;
-
         case Tk::Struct:
         case Tk::Enum:
+            return true;
+
         case Tk::Invalid:
         case Tk::Eof:
         case Tk::RParen:
@@ -1173,7 +1173,9 @@ auto intc::Parser::ParseStructType() -> Result<StructType*> {
 
         /// Add the member to the list.
         members.emplace_back(std::move(name), *type, Location{start, type->location()});
-        Consume(Tk::Semicolon);
+
+        // Optionally eat soft or hard separator
+        Consume(Tk::Semicolon) or Consume(Tk::Comma);
     }
 
     /// Yeet '}'.

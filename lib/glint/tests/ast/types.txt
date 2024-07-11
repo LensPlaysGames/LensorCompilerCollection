@@ -70,6 +70,84 @@ void :[Byte size];
 
 
 ================
+Struct, Empty
+================
+void struct {};
+0;
+---
+(block
+ (cast (t_struct))
+ (return (integer_literal)))
+
+
+================
+Struct, Single Member
+================
+void struct { x: int };
+0;
+---
+(block
+ (cast (t_struct))
+ (return (integer_literal)))
+
+
+================
+Struct, Two Members
+================
+void struct {
+    x: int
+    y:int
+};
+0;
+---
+(block
+ (cast (t_struct))
+ (return (integer_literal)))
+
+
+================
+Struct, Two Comma-separated Members
+================
+void struct {
+    x: int,
+    y:int
+};
+0;
+---
+(block
+ (cast (t_struct))
+ (return (integer_literal)))
+
+
+================
+Struct, Two Comma-separated Members w/ Trailing
+================
+void struct {
+    x: int,
+    y:int,
+};
+0;
+---
+(block
+ (cast (t_struct))
+ (return (integer_literal)))
+
+
+================
+Struct, Two Semicolon-separated Members
+================
+void struct {
+    x: int;
+    y:int;
+};
+0;
+---
+(block
+ (cast (t_struct))
+ (return (integer_literal)))
+
+
+================
 Function :int()
 ================
 void :int();
