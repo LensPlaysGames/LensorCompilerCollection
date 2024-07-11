@@ -20,7 +20,11 @@ auto PrintMOperand(const MOperand& op) -> std::string {
     }
     if (std::holds_alternative<MOperandLocal>(op)) {
         auto l = std::get<MOperandLocal>(op);
-        return fmt::format("local({}){:+}", l.index, l.offset);
+        std::string index_string;
+        if (l.index == MOperandLocal::absolute_index)
+            index_string = "abs";
+        else index_string = fmt::format("{}", l.index);
+        return fmt::format("local({}){:+}", index_string, l.offset);
     }
     if (std::holds_alternative<MOperandGlobal>(op))
         return fmt::format("global({})", std::get<MOperandGlobal>(op)->name());

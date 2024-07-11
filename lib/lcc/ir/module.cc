@@ -66,18 +66,6 @@ void Module::lower() {
             //     return (*xptr).a + (*xptr).b;
             // }
             //
-            // TODO: We still don't handle sysv memory parameters "properly
-            // properly" (although we are on our way), since the alloca for the
-            // original parameter is at the call site AND the pointer to it ISN'T
-            // passed in a register like normal. This means that the fixed up "store
-            // ptr %0 into %1" can't just treat the parameter like a register but
-            // instead has to treat it like a very custom local that is in the parent
-            // stack frame (with a positive offset from the base pointer). In MIR,
-            // this could just be `mov local(0)+24`, or whatever. This would become
-            // two instructions, one to load either the source or destination pointer
-            // and one to store the value. I believe we could handle this fixup later,
-            // during MIR generation.
-            //
             for (size_t param_i{0}; param_i < function_type->params().size(); ++param_i) {
                 auto*& param = function_type->params().at(param_i);
                 // TODO: Calling convention here /may/ be affected by function calling
@@ -94,40 +82,31 @@ void Module::lower() {
                                 "Use of memory parameter in destination pointer of store instruction: we don't yet support this, sorry"
                             );
 
-                            store->val(new (*this) Parameter(Type::PtrTy, parameter->index()));
-
                             LCC_ASSERT(
                                 is<AllocaInst>(store->ptr()),
                                 "We only support storing memory parameter into pointer returned by AllocaInst, sorry"
                             );
 
-                            // TODO: We could "just" alter the type of the alloca instruction, rather
-                            // than replacing the whole instruction. Right now, this is easier.
+                            // Replace uses of store->ptr() with (a copy of) store->val()
                             auto alloca = as<AllocaInst>(store->ptr());
-                            auto new_alloca = new (*this) AllocaInst(Type::PtrTy, alloca->location());
-
-                            // Store parameter pointer into local.
-                            store->ptr(new_alloca);
-
-                            // Every user of the old alloca is expecting a pointer to the parameter,
-                            // but the new alloca now returns a pointer to the pointer to the
-                            // parameter; this adds the level of indirection needed.
                             for (auto pointer_user : alloca->users()) {
-                                auto load = new (*this) LoadInst(Type::PtrTy, new_alloca);
+                                if (pointer_user == store) continue;
 
-                                // Insert load just before use instruction.
-                                LCC_ASSERT(pointer_user->block(), "IR instruction has no block reference");
-                                pointer_user->block()->insert_before(load, pointer_user);
+                                auto copy = new (*this) Parameter(parameter->type(), parameter->index());
 
-                                // Replace use of alloca with use of newly-inserted load.
+                                // Insert copy just before use instruction.
+                                // LCC_ASSERT(pointer_user->block(), "IR instruction has no block reference");
+                                // pointer_user->block()->insert_before(copy, pointer_user);
+
+                                // Replace use of alloca with use of newly-inserted instruction.
                                 pointer_user->replace_children([&](Value* v) -> Value* {
-                                    if (v == alloca) return load;
+                                    if (v == alloca) return copy;
                                     return nullptr;
                                 });
                             }
-
-                            // Replace allocation of parameter type with an allocation of pointer type.
-                            alloca->replace_with(new_alloca);
+                            // Erase store
+                            store->erase();
+                            alloca->erase();
 
                         } else LCC_ASSERT(false, "Unhandled instruction type in replacement of users of memory parameter");
                     }
@@ -191,6 +170,12 @@ void Module::lower() {
 
                             // Less than or equal to 8 bytes; nothing to change.
                             if (load->type()->bits() <= 64) continue;
+
+                            // If this is an over-large load but it is used by a call, assume the
+                            // calling convention allows for it and it will be handled in MIR.
+                            // NOTE: Taken advantage of by SysV (see both parameter handling above as
+                            // well as argument handling in MIR generation).
+                            if (load->users().size() and is<CallInst>(load->users().at(0))) continue;
 
                             auto users = load->users();
                             if (users.size() == 1 and users[0]->kind() == Value::Kind::Store) {

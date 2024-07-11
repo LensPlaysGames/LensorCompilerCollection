@@ -36,7 +36,6 @@ enum struct OperandKind {
 
     Register,
     // For use in the output of patterns when a temporary register is needed.
-    // Use like Operand<OK::NewVirtual, v<0>> and so-on.
     NewVirtual,
     // References an input register operand but changes the size.
     // Takes an index of a register operand from the input to copy the value
@@ -405,7 +404,8 @@ struct Inst {
                 auto offset = get_operand<typename operand::offset>(mod, function, input, new_virtuals);
                 LCC_ASSERT(std::holds_alternative<MOperandLocal>(local), "OffsetLocal operand requires Local as first operand");
                 LCC_ASSERT(std::holds_alternative<MOperandImmediate>(offset), "OffsetLocal operand requires Immediate as second operand");
-                return MOperandLocal(std::get<MOperandLocal>(local).index, i32(std::get<MOperandImmediate>(offset).value));
+                auto local_op = std::get<MOperandLocal>(local);
+                return MOperandLocal(local_op.index, local_op.offset + i32(std::get<MOperandImmediate>(offset).value));
             }
 
             case OperandKind::Global:

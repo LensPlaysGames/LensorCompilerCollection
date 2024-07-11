@@ -23,7 +23,13 @@ struct Immediate {
 };
 
 struct LocalOp {
-    u32 index{u32(-1)}; // if you have more locals than this, /you/ fucked up.
+    // Local operand is invalid if index field is set to this value.
+    static constexpr u32 bad_index = u32(-1);
+    // Local operand's index field, when set to this value, is /not/ used as
+    // an index into the function's locals and, instead, the offset is used
+    // directly from the base pointer. Allows access of parent stackframe.
+    static constexpr u32 absolute_index = u32(-2);
+    u32 index{bad_index}; // if you have more locals than this, /you/ fucked up.
     i32 offset{0};
 };
 
@@ -334,11 +340,20 @@ public:
     // this local.
     // <local_offset(index)>(%rbp), basically
     isz INTERNAL_local_offset(usz needle) const {
+        LCC_ASSERT(
+            needle != MOperandLocal::bad_index,
+            "Getting offset of local with invalid index"
+        );
+
+        // Absolute local operand (see definition of MOperand's base type).
+        if (needle == MOperandLocal::absolute_index) return 0;
+
         isz offset = 0;
         for (usz index = 0; index <= needle; ++index)
             offset -= isz(_locals.at(index)->allocated_type()->bytes());
         return offset;
     }
+
     // <local_offset(index)+offset>(%rbp), basically
     isz local_offset(MOperandLocal local) const {
         return INTERNAL_local_offset(local.index) + local.offset;

@@ -286,12 +286,15 @@ auto Module::mir() -> std::vector<MFunction> {
                         } else LCC_ASSERT(false, "TODO: Handle x64cc memory parameter");
                     } else if (_ctx->target()->is_cconv_sysv()) {
                         usz sysv_registers_used = 0;
+                        i32 sysv_memory_parameter_offset = 0;
                         for (usz i = 0; i < param->index(); ++i) {
                             auto p = f_ir->param(i);
                             if (p->type()->bytes() <= 8 and sysv_registers_used < 6)
                                 ++sysv_registers_used;
                             else if (p->type()->bytes() <= 16 and sysv_registers_used < 5)
                                 sysv_registers_used += 2;
+                            // TODO: Take alignment into consideration.
+                            else sysv_memory_parameter_offset += i32(p->type()->bytes());
                         }
 
                         static constexpr x86_64::RegisterId reg_by_param_index[6]{
@@ -313,13 +316,16 @@ auto Module::mir() -> std::vector<MFunction> {
                         else if (param->type()->bytes() <= 16 and sysv_registers_used < 5)
                             LCC_ASSERT(false, "Cannot handle multiple register parameter in this way");
                         else {
-                            LCC_ASSERT(false, "TODO: SysV lowering of memory parameter");
-
-                            // TODO: Return Local with positive offset into parent stack frame.
+                            // Return Local with positive offset into parent stack frame.
                             // To get the actual offset, we need to know how many memory parameters
-                            // come before this parameter, as well as their size (and alignment?).
-                            auto offset = 24;
-                            return MOperandLocal(0, offset);
+                            // come before this parameter, as well as their size (and alignment, I'd
+                            // think).
+                            i32 offset = 16;
+                            offset += sysv_memory_parameter_offset;
+                            return MOperandLocal(
+                                MOperandLocal::absolute_index,
+                                offset
+                            );
                         }
                     }
                 }
@@ -445,6 +451,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Call: {
                         auto call_ir = as<CallInst>(instruction);
 
+                        usz arg_stack_bytes_used = 0;
                         if (_ctx->target()->is_arch_x86_64()) {
                             if (_ctx->target()->is_platform_windows()) {
                                 std::vector<usz> arg_regs = {
@@ -484,7 +491,77 @@ auto Module::mir() -> std::vector<MFunction> {
                                 };
 
                                 const usz arg_reg_total = arg_regs.size();
+
+                                // Hande all arguments that are passed in memory first, before register arguments.
                                 usz arg_regs_used = 0;
+                                for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
+                                    if (arg_regs_used < arg_reg_total and arg->type()->bytes() <= 8)
+                                        ++arg_regs_used;
+                                    else if (arg_regs_used < arg_reg_total - 1 and arg->type()->bytes() <= 16)
+                                        arg_regs_used += 2;
+                                    else {
+                                        // Memory parameter
+                                        // Basically just allocate a temporary on the stack, memcpy (or similar)
+                                        // into that. CURRENT ISSUE: Alloca gets folded into one `sub` at the top
+                                        // of each function, but we need the stack pointer set explicitly...
+
+                                        // Remove the original argument; we will be building it by hand.
+                                        auto arg_mir = MOperandValueReference(function, f, arg);
+                                        LCC_ASSERT(std::holds_alternative<MOperandRegister>(arg_mir));
+                                        auto arg_reg = std::get<MOperandRegister>(arg_mir);
+                                        bb.remove_inst_by_reg(arg_reg.value);
+
+                                        // Get a reference to a pointer to the argument.
+                                        Value* arg_ptr{nullptr};
+                                        if (auto load = cast<LoadInst>(arg))
+                                            arg_ptr = load->ptr();
+                                        else if (auto alloca = cast<AllocaInst>(arg))
+                                            arg_ptr = alloca;
+                                        else LCC_ASSERT(
+                                            false,
+                                            "Memory argument must be prepared such that MIR generation may fetch the pointer (i.e. a LoadInst or AllocaInst).\n"
+                                            "This allows us to copy from the pointer (load operand) onto the stack."
+                                        );
+
+                                        auto byte_count = arg->type()->bytes();
+
+                                        // sub $<size>, %rsp
+                                        auto stack_pointer_reg = Register{usz(x86_64::RegisterId::RSP), 64};
+                                        auto sub = MInst(MInst::Kind::Sub, stack_pointer_reg);
+                                        sub.add_operand(stack_pointer_reg);
+                                        sub.add_operand(MOperandImmediate(byte_count));
+                                        bb.add_instruction(sub);
+
+                                        // Record stack subtraction so we can undo it after the call
+                                        arg_stack_bytes_used += byte_count;
+
+                                        // Copy from arg into stack pointer
+
+                                        // TODO: If memcpy sets return register we may end up having a bad time.
+
+                                        { // Destination argument (stack pointer)
+                                            auto copy = MInst(MInst::Kind::Copy, {arg_regs[0], 64});
+                                            copy.add_operand(stack_pointer_reg);
+                                            bb.add_instruction(copy);
+                                        }
+                                        { // Source argument
+                                            auto copy = MInst(MInst::Kind::Copy, {arg_regs[1], 64});
+                                            copy.add_operand(MOperandValueReference(function, f, arg_ptr));
+                                            bb.add_instruction(copy);
+                                        }
+                                        { // Size argument
+                                            auto copy = MInst(MInst::Kind::Copy, {arg_regs[2], 64});
+                                            copy.add_operand(MOperandImmediate(byte_count));
+                                            bb.add_instruction(copy);
+                                        }
+
+                                        auto call = MInst(MInst::Kind::Call, {usz(x86_64::RegisterId::RETURN), 0});
+                                        call.add_operand(memcpy_function);
+                                        bb.add_instruction(call);
+                                    }
+                                }
+
+                                arg_regs_used = 0;
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
                                     if (arg_regs_used < arg_reg_total and arg->type()->bytes() <= 8) {
                                         // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
@@ -527,10 +604,6 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                         bb.add_instruction(load_a);
                                         bb.add_instruction(load_b);
-                                    } else {
-                                        // Basically just allocate a temporary on the stack, memcpy (or similar)
-                                        // into that.
-                                        LCC_ASSERT(false, "Handle gMIR lowering of SysV memory argument");
                                     }
                                 }
                             }
@@ -539,6 +612,14 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto call = MInst(MInst::Kind::Call, {virts[instruction], uint(call_ir->function_type()->ret()->bits())});
                         call.add_operand(MOperandValueReference(function, f, call_ir->callee()));
                         bb.add_instruction(call);
+
+                        if (arg_stack_bytes_used) {
+                            LCC_ASSERT(_ctx->target()->is_arch_x86_64(), "Handle architecture when resetting stack after a call");
+                            auto stack_fixup = MInst(usz(x86_64::Opcode::Add), {usz(x86_64::RegisterId::RSP), 64});
+                            stack_fixup.add_operand(MOperandImmediate(arg_stack_bytes_used));
+                            stack_fixup.add_operand(Register{usz(x86_64::RegisterId::RSP), 64});
+                            bb.add_instruction(stack_fixup);
+                        }
                     } break;
 
                     case Value::Kind::Intrinsic: {
@@ -761,7 +842,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                         break; // Value::Kind::Store
                                     }
                                     LCC_UNREACHABLE();
-                                } else LCC_ASSERT(false, "Handle SysV memory parameter");
+                                }
                             }
                         }
 
