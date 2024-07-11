@@ -31,6 +31,8 @@ protected:
     explicit Type(Kind kind) : kind(kind) {}
 
 public:
+    virtual ~Type() = default;
+
     /// Builtin and cached types.
     ///
     /// When adding a type here, don’t forget to initialise

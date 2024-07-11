@@ -294,6 +294,8 @@ protected:
     }
 
 public:
+    virtual ~Inst() = default;
+
     /// Get the parent block.
     auto block() const -> Block* { return parent; }
 
