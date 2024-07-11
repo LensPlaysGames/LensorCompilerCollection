@@ -4,6 +4,8 @@
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
+#include <lcc/utils.hh>
+
 #include <unordered_map>
 #include <vector>
 
@@ -759,7 +761,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                         break; // Value::Kind::Store
                                     }
                                     LCC_UNREACHABLE();
-                                }
+                                } else LCC_ASSERT(false, "Handle SysV memory parameter");
                             }
                         }
 
