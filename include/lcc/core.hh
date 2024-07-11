@@ -1,6 +1,8 @@
 #ifndef LCC_CORE_HH
 #define LCC_CORE_HH
 
+#include <lcc/utils.hh>
+
 namespace lcc {
 enum struct Linkage {
     /// Local variable.
