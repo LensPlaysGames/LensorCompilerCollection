@@ -51,6 +51,9 @@ class Lexer : public syntax::Lexer<GlintToken> {
     void NextIdentifier();
     void HandleIdentifier();
     void NextString();
+
+    // NOTE: If you make this 0-9, a-f, A-F, or x, /you're gonna have a bad time/.
+    static constexpr u32 DigitSeparator = '\'';
     void NextNumber();
 
     void ExpandMacro(Macro& m);

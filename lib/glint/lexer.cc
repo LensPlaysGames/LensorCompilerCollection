@@ -488,25 +488,32 @@ void lcc::glint::Lexer::NextNumber() {
     static const auto IsBinary = [](char c) { return c == '0' || c == '1'; };
     static const auto IsOctal = [](char c) { return IsDigit(c) and c < '8'; };
 
-    /// Helper that actually parses the number.
+    LCC_ASSERT(
+        lastc != DigitSeparator,
+        "A number must not begin with the digit separator ({})",
+        DigitSeparator
+    );
+
+    // Helper that actually parses the number.
     const auto ParseNumber = [&](std::string_view name, auto&& IsValidDigit, int base) {
-        /// Yeet prefix.
+        // Yeet prefix.
         if (base != 10) NextChar();
 
-        /// Lex digits.
-        while (IsValidDigit(lastc)) {
-            tok.text += lastc;
+        // Lex digits.
+        while (IsValidDigit(lastc) or lastc == DigitSeparator) {
+            if (lastc != DigitSeparator)
+                tok.text += lastc;
             NextChar();
         }
 
-        /// We need at least one digit.
+        // We need at least one digit.
         tok.location.len = (u16) (CurrentOffset() - tok.location.pos);
         if (tok.text.empty()) Error("Expected at least one {} digit", name);
 
-        /// Actually parse the number.
+        // Actually parse the number.
         const char* cstr = tok.text.c_str();
 
-        /// Convert the number.
+        // Convert the number.
         char* end;
         errno = 0;
         tok.integer_value = (u64) std::strtoull(cstr, &end, base);
@@ -514,31 +521,31 @@ void lcc::glint::Lexer::NextNumber() {
         if (end != cstr + tok.text.size()) Error("Invalid integer literal");
     };
 
-    /// Record the start of the number.
+    // Record the start of the number.
     tok.text.clear();
 
     tok.integer_value = 0;
     tok.kind = TokenKind::Number;
 
-    /// At least one leading zero.
+    // At least one leading zero.
     if (lastc == '0') {
-        /// Discard the zero.
+        // Discard the zero.
         NextChar();
 
-        /// Another zero is an error.
+        // Another zero is an error.
         if (lastc == '0') Error("Leading zeroes are not allowed in decimal literals. Use 0o/0O for octal literals.");
         else if (lastc == 'b' or lastc == 'B') ParseNumber("binary", IsBinary, 2);
         else if (lastc == 'o' or lastc == 'O') ParseNumber("octal", IsOctal, 8);
         else if (lastc == 'x' or lastc == 'X') ParseNumber("hexadecimal", IsHexDigit, 16);
 
-        /// If the next character is a space or delimiter, then this is a literal 0.
+        // If the next character is a space or delimiter, then this is a literal 0.
         if (IsSpace(lastc) or !IsAlpha(lastc)) return;
 
-        /// Anything else is an error.
+        // Anything else is an error.
         Error("Invalid integer literal");
     }
 
-    /// Any other digit means we have a decimal number.
+    // Any other digit means we have a decimal number.
     ParseNumber("decimal", IsDigit, 10);
 }
 

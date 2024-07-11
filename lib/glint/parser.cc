@@ -1043,7 +1043,7 @@ auto intc::Parser::ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scop
 auto intc::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
     LCC_ASSERT(Consume(Tk::LParen), "ParseFunctionSignature called while not at '('");
 
-    /// Parse the parameter declarations.
+    // Parse parameters.
     std::vector<FuncType::Param> parameters;
     while (not At(Tk::RParen)) {
         /// If we’re at a colon, this parameter is unnamed.
@@ -1054,7 +1054,8 @@ auto intc::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
 
         }
 
-        /// Otherwise, we have a comma-separated list of names.
+        // Otherwise, we have a (maybe comma-separated) list of names followed by
+        // a type.
         else {
             usz idx = parameters.size();
             if (not At(Tk::Ident)) return Error("Expected identifier or ':' in parameter declaration");

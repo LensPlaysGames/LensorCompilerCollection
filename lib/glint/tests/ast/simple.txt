@@ -45,6 +45,57 @@ return 49;
 (block (return (integer_literal)))
 
 ================
+Return Literal Number w/ Digit Separator
+================
+
+6'9;
+
+---
+
+(block (return (integer_literal)))
+
+================
+Return Literal Number, Binary
+================
+
+0b01000101;
+
+---
+
+(block (return (integer_literal)))
+
+================
+Return Literal Number, Octal
+================
+
+0o105;
+
+---
+
+(block (return (integer_literal)))
+
+================
+Return Literal Number, Hexadecimal
+================
+
+0x45;
+
+---
+
+(block (return (integer_literal)))
+
+
+================
+Return Literal Number, Binary w/ Digit Separators
+================
+
+0b'01'00'01'01;
+
+---
+
+(block (return (integer_literal)))
+
+================
 Declaration, Primitive
 ================
 
