@@ -70,9 +70,15 @@ void Module::lower() {
                 auto*& param = function_type->params().at(param_i);
                 // TODO: Calling convention here /may/ be affected by function calling
                 // convention (maybe `function->call_conv()`).
+                // TODO: This isn't a proper check of whether or not a parameter should go
+                // in memory or not. We need to make sure there are registers left, even
+                // if it would fit.
                 bool sysv_memory_param = _ctx->target()->is_cconv_sysv() and param->bytes() > 16;
                 bool x64_memory_param = _ctx->target()->is_cconv_ms() and param->bytes() >= 8;
-                if (sysv_memory_param or x64_memory_param) {
+
+                // TODO: x64 will also use this style lowering when actually passing stack
+                // parameters, not memory parameters.
+                if (sysv_memory_param) {
                     param = Type::PtrTy;
                     auto* parameter = function->param(param_i);
                     for (auto* user : parameter->users()) {
@@ -81,7 +87,6 @@ void Module::lower() {
                                 is<Parameter>(store->val()),
                                 "Use of memory parameter in destination pointer of store instruction: we don't yet support this, sorry"
                             );
-
                             LCC_ASSERT(
                                 is<AllocaInst>(store->ptr()),
                                 "We only support storing memory parameter into pointer returned by AllocaInst, sorry"
@@ -90,15 +95,13 @@ void Module::lower() {
                             // Replace uses of store->ptr() with (a copy of) store->val()
                             auto alloca = as<AllocaInst>(store->ptr());
                             for (auto pointer_user : alloca->users()) {
+                                // Alloca fetched with store->val() is (obviously) used by the store, but
+                                // we don't want to replace the alloca in the store because we are going
+                                // to be removing the store anyway..
                                 if (pointer_user == store) continue;
 
+                                // Replace use of Alloca.
                                 auto copy = new (*this) Parameter(parameter->type(), parameter->index());
-
-                                // Insert copy just before use instruction.
-                                // LCC_ASSERT(pointer_user->block(), "IR instruction has no block reference");
-                                // pointer_user->block()->insert_before(copy, pointer_user);
-
-                                // Replace use of alloca with use of newly-inserted instruction.
                                 pointer_user->replace_children([&](Value* v) -> Value* {
                                     if (v == alloca) return copy;
                                     return nullptr;
@@ -107,6 +110,27 @@ void Module::lower() {
                             // Erase store
                             store->erase();
                             alloca->erase();
+
+                        } else LCC_ASSERT(false, "Unhandled instruction type in replacement of users of memory parameter");
+                    }
+                }
+                // TODO: This lowering should only ever apply to memory parameters that
+                // have their pointer passed in a register.
+                else if (x64_memory_param) {
+                    param = Type::PtrTy;
+                    auto* parameter = function->param(param_i);
+                    for (auto* user : parameter->users()) {
+                        if (auto store = cast<StoreInst>(user)) {
+                            LCC_ASSERT(
+                                is<Parameter>(store->val()),
+                                "Use of memory parameter in destination pointer of store instruction: we don't yet support this, sorry"
+                            );
+                            LCC_ASSERT(
+                                is<AllocaInst>(store->ptr()),
+                                "We only support storing memory parameter into pointer returned by AllocaInst, sorry"
+                            );
+
+                            LCC_ASSERT(false, "TODO: MSx64 calling convention memory parameter (change alloca to ptr type, insert load before uses of alloca)");
 
                         } else LCC_ASSERT(false, "Unhandled instruction type in replacement of users of memory parameter");
                     }
