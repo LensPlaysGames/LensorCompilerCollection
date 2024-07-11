@@ -1,0 +1,71 @@
+* The Steps of Compilation
+
+DATA REPRESENTATIONS:
+- INPUT CODE
+- TOKENS
+- SYNTAX TREE (unchecked)
+- SYNTAX TREE (checked)
+- INTERMEDIATE REPRESENTATION
+- INTERMEDIATE REPRESENTATION (optimised)
+- INTERMEDIATE REPRESENTATION (lowered)
+- MACHINE INSTRUCTION REPRESENTATION (general)
+- MACHINE INSTRUCTION REPRESENTATION (lowered)
+- MACHINE INSTRUCTION REPRESENTATION
+- OUTPUT CODE
+
+Each step listed below is a data transformation between two of the above data representations.
+
+** Language ("frontend")
+
+*** 1. Syntactic Analysis
+Source Code -> unchecked Syntax Tree
+
+A lexer and parser work hand in hand to produce a (probably tree-like) structure that represents the input program.
+
+*** 2. Semantic Analysis
+unchecked Syntax Tree -> checked Syntax Tree
+
+A type-checker validates the produced structure is as expected, whatever that may mean for a given language.
+
+*** 3. IR Generation
+checked Syntax Tree -> LCC IR
+
+In order to hand off the code to the compiler true, we must first convert our proprietary language code format into the code format of the compiler---the intermediate representation.
+
+** Compiler Middle
+
+This is the actual compiler. It (sort of) doesn't care what code format or target anything is, or what source it came from, etc. This is why it requires it's own data  representation of the code, agnostic from both input and output formats: this is called the intermediate representation.
+
+*** 4. Optimisation (optional)
+IR -> optimised IR
+
+Now that the input code is in an agnostic format, we apply transformations that attempt to increase code performance, while maintaining the invariants of the program. Fancy words for "make fast, don't change".
+
+*** 5. IR Lowering (target dependent)
+optimised IR -> lowered IR
+
+A lot of times architectures have quirky ways of doing certain things, and that is why IR lowering exists. For example, if you wanted to replace all multiplications with repeated addition before generating MIR and then using instruction selection to "properly form" the output, you would do that here. Some parts of calling conventions are handled in this stage, as well (like function parameters).
+
+*** 6. MIR Generation
+lowered IR -> MIR
+
+Machine instructions are very different from IR instructions, so we convert the IR into a format that is better suited toward this. This provides a uniform data representation to every backend, rather than making each one roll their own (or do their own register allocation, yeesh).
+
+Some parts of callling conventions are handled in this stage, as well (like function arguments).
+
+** Compiler Back
+
+*** 7. Instruction Selection
+general MIR -> lowered MIR
+
+Convert general MIR (often abbreviated gMIR) instructions into lowered MIR (lMIR) instructions, which directly represent machine instructions that will be emitted for the target architecture. This is mostly done through declarative pattern-matching, but some things must be are handled in code.
+
+*** 8. Register Allocation
+lowered MIR with virtual registers -> MIR (without virtual registers)
+
+Basically, now that we know what temporaries we will need (where /temporaries/ refers to values that must store the result of an instruction or be used as an operand in an instruction), we may attempt to assign real places in the hardware where these temporaries may be stored.
+
+*** 9. Code Emission (format specific)
+MIR -> CODE
+
+This takes the "perfect" MIR that has been built and simply emits it in whatever format requested.
