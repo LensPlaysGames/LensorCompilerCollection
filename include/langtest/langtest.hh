@@ -5,6 +5,8 @@
 
 #include <concepts>
 #include <filesystem>
+#include <string>
+#include <string_view>
 #include <type_traits>
 
 // TODO: Would be cool to have >= syntax to start a "continuation" test
