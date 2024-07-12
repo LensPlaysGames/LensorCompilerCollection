@@ -1,0 +1,99 @@
+* LCC Language Testing Framework
+
+You have to write a parser, and you probably made a mistake; we all do. Even if you are generating one, you may make a mistake in the grammar. That is why it is important to ensure the parser you have works the way you think it does. Instead of making you do that entirely yourself, LCC has given you the grace of a simple testing framework that you can build your language test program around.
+
+** Writing Tests
+
+First, we name the test.
+#+begin_example
+================
+Named Example Test
+================
+#+end_example
+
+As you can see, the name goes between two lines that have === /in the first column/, and (currently) must be on a single line.
+
+After the name of a test, write the source code of your language.
+
+#+begin_example
+================
+Named Example Test
+================
+
+foo;
+#+end_example
+
+Once you have finished the code you would like to make sure "works correctly", you then write the expected output from your parser after a line beginning with =---=.
+
+#+begin_example
+================
+Named Example Test
+================
+
+foo;
+
+---
+
+(foo)
+#+end_example
+
+Note the syntax of the AST matcher is LISP-like, but only in structure. i.e. =(foo)= just matches a single node named =foo=, with no children.
+
+There you go, that's a simple test. But, there are more capabilities that LangTest has to offer, if you'd like to keep learning.
+
+*** Multiple Source Tests
+NOTE: Not yet implemented.
+
+#+begin_example
+================
+Named Example Test
+================
+
+foo;
+
+>===============
+Another Equivalent Example
+================
+
+*(&foo);
+
+---
+
+(foo)
+#+end_example
+
+As you can see, by starting the line with a =>==, we may define another named test that uses the same AST matcher as another. This is useful for asserting that two constructs in a language fold down to the same thing.
+
+*** IR Matcher
+
+Assuming our example language was a little more complicated and actually made sense to have an IRGen step, you may also verify that a given AST generates the given LCC IR.
+
+#+begin_example
+================
+Named Example Test
+================
+
+foo;
+
+---
+
+(foo)
+
+---
+
+main : i64(i32 %0, ptr %1, ptr %2):
+  bb0:
+    %3 = alloca i32
+    store i32 %0 into %3
+    %4 = alloca ptr
+    store ptr %1 into %4
+    %5 = alloca ptr
+    store ptr %2 into %5
+    ;; The important part
+    return i64 0
+
+#+end_example
+
+By starting a line with =---= /after an AST matcher has already been successfully parsed/, we parse expected LCC IR starting after it.
+
+This testing framework should allow any language to have a basic verification step for constructs in the language parsing properly and generating the expected code.

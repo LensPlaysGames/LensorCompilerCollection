@@ -7,6 +7,10 @@
 #include <filesystem>
 #include <type_traits>
 
+// TODO: Would be cool to have >= syntax to start a "continuation" test
+// possible instead of `---` and the expected AST. Basically, allow for
+// the language to assert that multiple tests have the same output.
+
 // TODO: Use something like this for stat-trak language testing framework
 class TestContext {
     size_t _count;
