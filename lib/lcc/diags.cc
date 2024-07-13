@@ -76,96 +76,138 @@ lcc::Diag::~Diag() { print(); }
 void lcc::Diag::print() {
     using enum utils::Colour;
 
-    /// If this diagnostic is suppressed, do nothing.
+    // If this diagnostic is suppressed, do nothing.
     if (kind == Kind::None) return;
 
-    /// Don’t print the same diagnostic twice.
+    // Don’t print the same diagnostic twice.
     defer { kind = Kind::None; };
 
-    /// Print attached diagnostics to be printed before this one.
+    // Print attached diagnostics to be printed before this one.
     for (auto& [diag, print_before] : attached)
         if (print_before)
             diag.print();
 
-    /// Diagnostics to be printed after this one will be printed later.
+    // Diagnostics to be printed after this one will be printed later.
     defer {
         for (auto& [diag, print_before] : attached)
             if (not print_before)
                 diag.print();
 
-        /// Not necessary but it may help conserve storage.
+        // Not necessary but it may help conserve storage.
         attached.clear();
     };
 
-    /// If the diagnostic is an error, set the error flag.
+    // If the diagnostic is an error, set the error flag.
     if (kind == Kind::Error and ctx) ctx->set_error();
 
-    /// If there is no context, then there is also no location info.
+    // If there is no context, then there is also no location info.
     if (not ctx) {
         PrintDiagWithoutLocation();
         return;
     }
 
-    /// If the location is invalid, either because the specified file does not
-    /// exists, its position is out of bounds or 0, or its length is 0, then we
-    /// skip printing the location.
+    // If the location is invalid, either because the specified file does not
+    // exists, its position is out of bounds or 0, or its length is 0, then we
+    // skip printing the location.
     utils::Colours C(ShouldUseColour());
     const auto& fs = ctx->files();
     if (not where.seekable(ctx)) {
-        /// Even if the location is invalid, print the file name if we can.
+        // Even if the location is invalid, print the file name if we can.
         if (where.file_id < fs.size()) {
             const auto& file = *fs[where.file_id].get();
             fmt::print(stderr, "{}{}: ", C(Bold), file.path().string());
         }
 
-        /// Print the message.
+        // Print the message.
         PrintDiagWithoutLocation();
         return;
     }
 
-    /// If the location is valid, get the line, line number, and column number.
+    // If the location is valid, get the line, line number, and column number.
     const auto [line, col, line_start, line_end] = where.seek(ctx);
 
-    /// Split the line into everything before the range, the range itself,
-    /// and everything after.
+    bool location_is_multiline{false};
+    for (auto* it = line_start; it < line_end; ++it)
+        if (*it == '\n') location_is_multiline = true;
+
+    // Split the line into everything before the range, the range itself, and
+    // everything after.
     std::string before(line_start, col);
     std::string range(line_start + col, where.len);
     std::string after(std::min(line_start + col + where.len, line_end), line_end);
 
-    /// Replace tabs with spaces. We need to do this *after* splitting
-    /// because this invalidates the offsets.
+    // Replace tabs with spaces. We need to do this *after* splitting because
+    // this invalidates the offsets.
     utils::ReplaceAll(before, "\t", "    ");
     utils::ReplaceAll(range, "\t", "    ");
     utils::ReplaceAll(after, "\t", "    ");
 
-    /// Print the file name, line number, and column number.
+    // Print the file name, line number, and column number.
     const auto& file = *fs[where.file_id].get();
     fmt::print(stderr, "{}{}:{}:{}: ", C(Bold), file.path().string(), line, col);
 
-    /// Print the diagnostic name and message.
-    fmt::print(stderr, "{}{}: {}{}\n", C(Colour(kind)), Name(kind), C(Reset), msg);
+    // Print the diagnostic name and message.
+    // TODO: If message is multiple lines, format it a little differently to be a little more understandable.
+    std::vector<usz> message_newline_offsets;
+    for (usz i = 0; i < msg.size(); ++i)
+        if (msg.at(i) == '\n') message_newline_offsets.push_back(i);
 
-    /// Print the line up to the start of the location, the range in the right
-    /// colour, and the rest of the line.
+    if (not message_newline_offsets.empty()) {
+        // Print message prefix
+        fmt::print(stderr, "{}{}:{} ", C(Colour(kind)), Name(kind), C(Reset));
+
+        usz printed_offset = 0;
+        for (auto newline_offset : message_newline_offsets) {
+            // Do indentation for continuing lines, but only if the lines don't begin
+            // with their own indentation already.
+            if (printed_offset != 0 and msg.at(printed_offset) != ' ') fmt::print("    ");
+            fmt::print(
+                "{}",
+                std::string_view(
+                    msg.begin() + isz(printed_offset),
+                    msg.begin() + isz(newline_offset) + 1
+                )
+            );
+            printed_offset += newline_offset + 1;
+        }
+        // Last part of format without a trailing newline.
+        if (not msg.ends_with('\n')) {
+            if (msg.at(printed_offset) != ' ') fmt::print("    ");
+            fmt::print(
+                "{}\n",
+                std::string_view(
+                    msg.begin() + isz(printed_offset),
+                    msg.end()
+                )
+            );
+        }
+    } else fmt::print(stderr, "{}{}: {}{}\n", C(Colour(kind)), Name(kind), C(Reset), msg);
+
+    // Print the line up to the start of the location, the range in the right
+    // colour, and the rest of the line.
     fmt::print(stderr, " {} | {}", line, before);
     fmt::print(stderr, "{}{}{}{}", C(Bold), C(Colour(kind)), range, C(Reset));
     fmt::print(stderr, "{}\n", after);
 
-    /// Determine the number of digits in the line number.
+    // Determine the number of digits in the line number.
     const auto digits = utils::NumberWidth(line);
 
-    /// Underline the range. For that, we first pad the line based on the number
-    /// of digits in the line number and append more spaces to line us up with
-    /// the range.
-    for (usz i = 0; i < digits + before.size() + sizeof("  | ") - 1; i++)
-        fmt::print(stderr, " ");
+    // Underline the range.
+    // NOTE: I don't know why, but I find single-character underlines
+    // annoying.
+    if (not location_is_multiline) {
+        // We first pad the line based on the number of digits in the line number
+        // and append more spaces to line us up with the range.
+        for (usz i = 0; i < digits + before.size() + sizeof("  | ") - 1; i++)
+            fmt::print(stderr, " ");
 
-    /// Finally, underline the range.
-    fmt::print(stderr, "{}{}", C(Bold), C(Colour(kind)));
-    for (usz i = 0; i < range.size(); i++) fmt::print(stderr, "~");
-    fmt::print(stderr, "{}\n", C(Reset));
+        // Finally, print the underline itself.
+        fmt::print(stderr, "{}{}", C(Bold), C(Colour(kind)));
+        for (usz i = 0; i < range.size(); i++) fmt::print(stderr, "~");
+        fmt::print(stderr, "{}\n", C(Reset));
+    }
 
-    /// Handle fatal errors.
+    // Handle fatal errors.
     HandleFatalErrors();
 }
 

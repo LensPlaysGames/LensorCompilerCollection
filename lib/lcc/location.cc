@@ -16,18 +16,18 @@ auto lcc::Location::seek(const lcc::Context* ctx) const -> LocInfo {
     auto& files = ctx->files();
     const auto* f = files.at(file_id).get();
 
-    /// Seek back to the start of the line.
+    // Seek back to the start of the line.
     const char* const data = f->data();
     info.line_start = data + pos;
     while (info.line_start > data and *info.line_start != '\n') info.line_start--;
     if (*info.line_start == '\n') info.line_start++;
 
-    /// Seek forward to the end of the line.
+    // Seek forward to the end of the line.
     const char* const end = data + f->size();
     info.line_end = data + pos + len;
     while (info.line_end < end and *info.line_end != '\n') info.line_end++;
 
-    /// Determine the line and column number.
+    // Determine the line and column number.
     info.line = 1;
     for (const char* d = data; d < data + pos; d++) {
         if (*d == '\n') {

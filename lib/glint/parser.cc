@@ -243,38 +243,6 @@ constexpr lcc::isz TypeQualifierPrecedence(intc::TokenKind t) {
 
 bool intc::Parser::AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
 
-auto intc::Parser::Parse(Context* context, std::string_view source) -> std::unique_ptr<Module> {
-    Parser parser(context, source);
-
-    /// Parse preamble. This also creates the module.
-    if (not parser.ParsePreamble(nullptr)) return {};
-
-    /// Parse Glint source.
-    parser.ParseTopLevel();
-
-    /// Return nullptr on error.
-    if (context->has_error())
-        return std::unique_ptr<Module>{};
-
-    return std::move(parser.mod);
-}
-
-auto intc::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
-    Parser parser(context, &file);
-
-    /// Parse preamble. This also creates the module.
-    if (not parser.ParsePreamble(nullptr)) return {};
-
-    /// Parse Glint source.
-    parser.ParseTopLevel();
-
-    /// Return nullptr on error.
-    if (context->has_error())
-        return std::unique_ptr<Module>{};
-
-    return std::move(parser.mod);
-}
-
 /// Creates a new scope and parses a block in that scope.
 auto intc::Parser::ParseBlock() -> Result<BlockExpr*> {
     return ParseBlock({this});
@@ -384,11 +352,11 @@ auto intc::Parser::ParseDeclRest(
 
             /// Type declaration
             if (At(Tk::Enum, Tk::Struct)) {
-                if (is_extern) Error("Type declarations cannot be extern");
+                if (is_extern) Error("Type declarations cannot be made external; a linker does not know how to resolve Glint types.");
                 // Copy required due to `move(ident)` below.
                 auto decl_name = ident;
 
-                /// Struct or enum declaration
+                // Struct or enum declaration
                 auto decl = ParseType();
                 if (not decl) return decl.diag();
                 return DeclScope()->declare(
@@ -445,7 +413,7 @@ auto intc::Parser::ParseDeclRest(
             auto expr = ParseExpr();
             if (not expr) return expr.diag();
 
-            /// Create the variable.
+            // Create the variable declaration.
             auto var = new (*mod) VarDecl(
                 ident,
                 Type::Unknown,
@@ -456,7 +424,7 @@ auto intc::Parser::ParseDeclRest(
             );
 
             // Declarations that use type inference cannot have certain storage specifiers.
-            if (is_extern) Error(cc_loc, "External declarations must specify a type");
+            if (is_extern) Error(cc_loc, "Type-inferred declarations cannot be made external");
             return DeclScope(var->linkage() == Linkage::LocalVar)->declare(context, std::move(ident), var);
         }
     }
@@ -768,7 +736,7 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         ToString(start_token)
     );
 
-    /// If the LHS is a diag, return.
+    // If the LHS is a diag, return.
     if (not lhs) return lhs.diag();
 
     /// LHS must not be null if we get here.
@@ -782,11 +750,7 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
     // separator. So, we are done parsing whatever expression we were parsing,
     // as if it's a semi-colon. But, it won't cause a function call to stop
     // being parsed. Hope that makes sense.
-    // FIXME: Use Consume?
-    if (tok.kind == Tk::Comma) {
-        NextToken();
-        return lhs;
-    }
+    if (Consume(Tk::Comma)) return lhs;
 
     /// The rules for operator precedence parsing are as follows:
     ///   - unary prefix operators are unambiguously handled up above;
@@ -841,8 +805,7 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         lhs = new (*mod) BinaryExpr(op, *lhs, *rhs, {lhs->location(), rhs->location()});
     }
 
-    /// As a special case, "()" after an expression is always a call, even
-    /// if we’re parsing single-expressions.
+    // "()" after an expression is always a call.
     if (At(Tk::LParen) and Is(LookAhead(1), Tk::RParen)) {
         lhs = new (*mod) CallExpr(
             lhs.value(),
@@ -850,7 +813,7 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
             {lhs->location(), LookAhead(1)->location}
         );
 
-        /// Yeet "()".
+        /// Yeet "(" and ")".
         NextToken();
         NextToken();
     }
@@ -1004,9 +967,8 @@ auto intc::Parser::ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scop
             return Diag::Warning(
                 context,
                 tok.location,
-                "External functions cannot have a body. If this '{{' is not "
-                "supposed to start a function body, consider adding a ';' after "
-                "the function type"
+                "External functions cannot have a body. If this '{{' is not supposed to "
+                "start a function body, consider adding a ';' after the function type"
             );
         }
 
@@ -1099,6 +1061,23 @@ auto intc::Parser::ParseIdentExpr() -> Result<Expr*> {
     auto text = tok.text;
     LCC_ASSERT(Consume(Tk::Ident), "ParseIdentExpr called while not at identifier");
 
+    if (tok.from_macro) {
+        auto found = CurrScope()->find(text);
+        if (not found.empty()) {
+            auto decl = found.at(0);
+            auto err = Diag::Error(
+                context,
+                loc,
+                "Refusing to expand unhygienic expansion of macro due to emitted identifier ``{}'' matching that of a previously declared object.\n"
+                "Recommended solution is to add ``defines {}'' to the macro definition, before the emits keyword.",
+                text,
+                text
+            );
+            err.attach(false, Diag::Note(context, decl->location(), "Original declaration here"));
+            return err;
+        }
+    }
+
     /// If the next token is ':' or '::', then this is a declaration.
     if (At(Tk::Colon, Tk::ColonColon)) return ParseDeclRest(std::move(text), loc, false);
 
@@ -1183,65 +1162,6 @@ auto intc::Parser::ParseStructType() -> Result<StructType*> {
 
     /// Create the struct type.
     return new (*mod) StructType(sc.scope, std::move(members), Location{loc, tok.location});
-}
-
-void intc::Parser::ParseTopLevel() {
-    curr_func = mod->top_level_func();
-
-    /// Create the global and top-level scope. The top-level scope is a bit of
-    /// a weird one because it only contains the local variables of the top-level
-    /// functions. Everything else at the top-level goes in the global scope.
-    auto global = new (*mod) Scope(nullptr);
-    auto top_level = new (*mod) Scope(global);
-
-    /// Set up the rest of the parser state.
-    scope_stack.push_back(global);
-    scope_stack.push_back(top_level);
-    curr_func->scope(TopLevelScope());
-
-    /// Parse the file.
-    for (;;) {
-        if (Consume(Tk::Semicolon)) continue;
-
-        /// Stop if we’re at end of file.
-        if (At(Tk::Eof)) break;
-
-        /// Parse a top-level expression.
-        auto expr = ParseExpr();
-        if (not Consume(Tk::Semicolon)) {
-            if (At(Tk::Eof)) {
-                Warning("Expected ';' but got end of file");
-            } else if (expr) {
-                Location location{};
-                if (expr.value()->location().is_valid())
-                    location = expr.value()->location();
-
-                // Attempt to get the location that is as close to where the semi-colon should be.
-                if (expr->kind() == Expr::Kind::VarDecl) {
-                    auto var_decl = as<VarDecl>(expr.value());
-                    if (var_decl->init())
-                        location = var_decl->init()->location();
-                    else location = var_decl->type()->location();
-                }
-                if (expr->kind() == Expr::Kind::FuncDecl and as<FuncDecl>(expr.value())->body())
-                    location = as<FuncDecl>(expr.value())->body()->location();
-
-                // Limit location to length of one, discarding the beginning (fold right).
-                if (location.len > 1) {
-                    location.pos += location.len - 1;
-                    location.len = 1;
-                }
-
-                Error(location, "Expected ';'")
-
-                    .attach(false, Diag::Note(context, tok.location, "Before this"));
-            }
-        }
-        if (expr) mod->add_top_level_expr(expr.value());
-
-        /// Synchronise on semicolons and braces in case of an error.
-        else Synchronise();
-    }
 }
 
 /// Parse a type where a type is expected.
@@ -1463,7 +1383,7 @@ auto intc::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
 }
 
 void intc::Parser::Synchronise() {
-    while (not At(Tk::Semicolon, Tk::LBrace, Tk::RBrace, Tk::Eof)) NextToken();
+    while (not At(Tk::Semicolon, Tk::RBrace, Tk::Eof)) NextToken();
     NextToken();
 }
 
@@ -1499,4 +1419,100 @@ auto intc::Parser::ParseFuncDecl(
 
     /// Add it to the current scope and return it.
     return as<FuncDecl>(DeclScope()->declare(context, std::move(name), func));
+}
+
+void intc::Parser::ParseTopLevel() {
+    curr_func = mod->top_level_func();
+
+    /// Create the global and top-level scope. The top-level scope is a bit of
+    /// a weird one because it only contains the local variables of the top-level
+    /// functions. Everything else at the top-level goes in the global scope.
+    auto global = new (*mod) Scope(nullptr);
+    auto top_level = new (*mod) Scope(global);
+
+    /// Set up the rest of the parser state.
+    scope_stack.push_back(global);
+    scope_stack.push_back(top_level);
+    curr_func->scope(TopLevelScope());
+
+    /// Parse the file.
+    for (;;) {
+        while (Consume(Tk::Semicolon))
+            ;
+
+        /// Stop if we’re at end of file.
+        if (At(Tk::Eof)) break;
+
+        /// Parse a top-level expression.
+        auto expr = ParseExpr();
+        if (not Consume(Tk::Semicolon)) {
+            if (At(Tk::Eof)) {
+                Warning("Expected ';' but got end of file");
+            } else if (expr) {
+                Location location{};
+                if (expr.value()->location().is_valid())
+                    location = expr.value()->location();
+
+                // Attempt to get the location that is as close to where the semi-colon should be.
+                if (expr->kind() == Expr::Kind::VarDecl) {
+                    auto var_decl = as<VarDecl>(expr.value());
+                    if (var_decl->init())
+                        location = var_decl->init()->location();
+                    else location = var_decl->type()->location();
+                }
+                if (expr->kind() == Expr::Kind::FuncDecl and as<FuncDecl>(expr.value())->body())
+                    location = as<FuncDecl>(expr.value())->body()->location();
+
+                // Limit location to length of one, discarding the beginning (fold right).
+                if (location.len > 1) {
+                    location.pos += location.len - 1;
+                    location.len = 1;
+                }
+
+                Error(location, "Expected ';'")
+
+                    .attach(false, Diag::Note(context, tok.location, "Before this"));
+            }
+        }
+        if (expr)
+            mod->add_top_level_expr(expr.value());
+        else {
+            // If we failed to parse an expression at the top level, there was an error.
+            context->set_error();
+            // Jump past the next semicolon or closing brace in case of an error.
+            Synchronise();
+        }
+    }
+}
+
+auto intc::Parser::Parse(Context* context, std::string_view source) -> std::unique_ptr<Module> {
+    Parser parser(context, source);
+
+    /// Parse preamble. This also creates the module.
+    if (not parser.ParsePreamble(nullptr)) return {};
+
+    /// Parse Glint source.
+    parser.ParseTopLevel();
+
+    /// Return nullptr on error.
+    if (context->has_error())
+        return std::unique_ptr<Module>{};
+
+    return std::move(parser.mod);
+}
+
+auto intc::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
+    Parser parser(context, &file);
+
+    /// Parse preamble. This also creates the module.
+    if (not parser.ParsePreamble(nullptr)) return {};
+
+    /// Parse Glint source.
+    parser.ParseTopLevel();
+
+    /// Return nullptr on error.
+    if (context->has_error())
+        return std::unique_ptr<Module>{};
+
+    return std::move(parser.mod);
 }

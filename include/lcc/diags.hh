@@ -13,9 +13,9 @@ struct Diag {
         None,    ///< Not an error. Do not emit this diagnostic.
         Note,    ///< Informational note.
         Warning, ///< Warning, but no hard error.
-        Error,   ///< Hard error. Program is ill-formed.
-        FError,  ///< Fatal (system) error. NOT a compiler bug.
-        ICError, ///< Compiler bug.
+        Error,   ///< Hard error. Program being compiled is ill-formed.
+        FError,  ///< Fatal error, but NOT a compiler bug.
+        ICError, ///< Internal Compiler error (bug in compiler).
     };
 
 private:

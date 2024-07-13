@@ -89,6 +89,7 @@ void lcc::glint::Lexer::NextToken() {
         /// If this token is another macro definition, handle it.
         if (tok.kind == TokenKind::Ident and tok.text == "macro")
             HandleMacroDefinition();
+
         return;
     }
 
@@ -383,7 +384,11 @@ void lcc::glint::Lexer::NextToken() {
         } break;
     }
 
-    tok.location.len = (u16) (CurrentOffset() - tok.location.pos);
+    // If we have a token that's been expanded from a macro, then it's
+    // location is already set, and would be severely mucked up if we tried to
+    // adjust the length all the way from the macro definition until after the
+    // macro invocation.
+    if (not tok.from_macro) tok.location.len = (u16) (CurrentOffset() - tok.location.pos);
 }
 
 void lcc::glint::Lexer::NextIdentifier() {
@@ -499,7 +504,7 @@ void lcc::glint::Lexer::NextNumber() {
         // Yeet prefix.
         if (base != 10) NextChar();
 
-        // Lex digits.
+        // Lex digits (and maybe digit separators).
         while (IsValidDigit(lastc) or lastc == DigitSeparator) {
             if (lastc != DigitSeparator)
                 tok.text += lastc;
@@ -507,8 +512,9 @@ void lcc::glint::Lexer::NextNumber() {
         }
 
         // We need at least one digit.
-        tok.location.len = (u16) (CurrentOffset() - tok.location.pos);
         if (tok.text.empty()) Error("Expected at least one {} digit", name);
+
+        tok.location.len = (u16) (CurrentOffset() - tok.location.pos);
 
         // Actually parse the number.
         const char* cstr = tok.text.c_str();
@@ -593,8 +599,6 @@ void lcc::glint::Lexer::ExpandMacro(Macro& m) {
                     bound_toks[param_tok.text] = e;
                     continue;
                 }
-
-                default: Diag::ICE("Unhandled macro argument selector kind");
             }
         }
 
@@ -711,8 +715,8 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
                 Error("Undefined macro argument '{}'", tok.text);
         }
 
-        /// Otherwise, if it is a gensym, create a gensym token for it.
-        else if (tok.kind == Tk::Ident and not macro.definitions.empty()) {
+        else if (tok.kind == Tk::Ident) {
+            // If it's a gensym, create a gensym token for it.
             auto it = rgs::find_if(
                 macro.definitions,
                 [&](auto&& t) { return t == tok.text; }
@@ -752,16 +756,16 @@ auto lcc::glint::Lexer::MacroExpansion::operator++() -> Token {
     Token ret;
     LCC_ASSERT(not done());
 
-    /// If the token is a macro arg, get the bound argument.
+    // If the token is a macro arg, get the bound argument.
     if (it->kind == TokenKind::MacroArg) {
         auto arg = bound_arguments.find(it->text);
         LCC_ASSERT(arg != bound_arguments.end(), "Unbound macro argument '{}'", it->text);
         it++;
         ret = arg->second;
     }
-
-    /// Otherwise, return a copy of the token.
-    else { ret = *it++; }
+    // Otherwise, return a copy of the token.
+    else
+        ret = *it++;
 
     /// If the token is a gensym, get its value.
     if (ret.kind == Tk::Gensym) {
@@ -769,11 +773,13 @@ auto lcc::glint::Lexer::MacroExpansion::operator++() -> Token {
         ret.text = gensyms[ret.integer_value];
     }
 
-    /// Mark the token as non-artificial, because, for example,
-    /// if we are inserting "endmacro", then we want the inserted
-    /// identifier to *not* be artificial so we actually end up
-    /// closing a macro definition.
+    // Mark the token as non-artificial, because, for example, if we are
+    // inserting "endmacro", then we want the inserted identifier to *not* be
+    // artificial so we actually end up closing a macro definition.
     ret.artificial = false;
+
+    ret.from_macro = true;
+
     return ret;
 }
 

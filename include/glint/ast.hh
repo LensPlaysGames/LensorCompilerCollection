@@ -1,6 +1,7 @@
 #ifndef GLINT_AST_HH
 #define GLINT_AST_HH
 
+#include <functional>
 #include <glint/eval.hh>
 #include <lcc/core.hh>
 #include <lcc/diags.hh>
@@ -227,6 +228,9 @@ struct GlintToken : public syntax::Token<TokenKind> {
     /// only be evaluated once.
     bool eval_once = true;
 
+    // Whether the token was expanded from a macro.
+    bool from_macro = false;
+
     bool operator==(const GlintToken& rhs) const;
 };
 
@@ -240,6 +244,8 @@ struct Macro {
 
 class Scope {
     Scope* _parent;
+    // This has to be a multimap to support function overloads having the same
+    // name yet resolving to different declarations.
     std::unordered_multimap<std::string, Decl*, detail::StringHash, std::equal_to<>> symbols;
     bool is_function_scope = false;
 
@@ -270,10 +276,20 @@ public:
         Decl* decl
     ) -> Result<Decl*>;
 
-    /// Look up a symbol in this scope.
-    /// FIXME: This is the stupidest fuckin API ever and has no documentation
-    /// on how to fucking use it. Way to go, champ.
-    auto find(std::string_view name) { return symbols.equal_range(name); }
+    // Look up a symbol in this scope.
+    std::vector<Decl*> find(std::string_view name) {
+        // std::pair can go die in a fucking hole. If you want to be a LISP so bad
+        // just fucking be one, loser.
+        auto it = symbols.equal_range(name);
+        // From the standard:
+        // "If there are no such elements, past-the-end (see end()) iterators are
+        // returned as both elements of the pair."
+        if (it.first == it.second) return {};
+        std::vector<Decl*> out{};
+        for (auto decl = it.first; decl != it.second; ++decl)
+            out.push_back(decl->second);
+        return out;
+    }
 
     /// Get the parent scope.
     auto parent() const { return _parent; }

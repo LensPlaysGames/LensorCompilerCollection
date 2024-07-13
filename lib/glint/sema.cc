@@ -619,11 +619,11 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     for (auto& param : ty->params()) {
         if (param.name.empty()) continue;
 
-        /// Check that we don’t already have a declaration with that
-        /// name in the function scope.
+        // Check that we don’t already have a declaration with that
+        // name in the function scope.
         auto decls = decl->scope()->find(param.name);
-        if (decls.first != decls.second) {
-            Error(decls.first->second->location(), "Declaration conflicts with parameter name");
+        if (not decls.empty()) {
+            Error(decls.at(0)->location(), "Declaration conflicts with parameter name");
             Diag::Note(context, param.location, "Parameter declared here");
             continue;
         }
@@ -1733,19 +1733,19 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
 }
 
 void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
-    /// Look up the thing in its scope, if there is no definition of the
-    /// symbol in its scope, search its parent scopes until we find one.
+    // Look up the thing in its scope, if there is no definition of the symbol
+    // in its scope, search its parent scopes until we find one.
     auto scope = expr->scope();
-    decltype(scope->find(expr->name())) syms;
+    std::vector<Decl*> syms;
     while (scope) {
         syms = scope->find(expr->name());
         scope = scope->parent();
-        if (syms.first != syms.second) break;
+        if (not syms.empty()) break;
     }
 
-    /// If we’re at the global scope and there still is no symbol, then
-    /// this symbol is apparently not declared.
-    if (syms.first == syms.second) {
+    // If we’re at the global scope and there still is no symbol, then this
+    // symbol is apparently not declared.
+    if (syms.empty()) {
         /// Search imported modules here.
         for (auto ref : mod.imports()) {
             if (expr->name() == ref.name) {
@@ -1759,14 +1759,13 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
 
         Error(expr->location(), "Unknown symbol '{}'", expr->name());
 
-        /// If there is a declaration of this variable in the top-level
-        /// scope, tell the user that they may have forgotten to make it
-        /// static.
+        // If there is a declaration of this variable in the top-level scope, tell
+        // the user that they may have forgotten to make it static.
         auto top_level = mod.top_level_scope()->find(expr->name());
-        if (top_level.first != top_level.second) {
+        if (not top_level.empty()) {
             Diag::Note(
                 context,
-                top_level.first->second->location(),
+                top_level.at(0)->location(),
                 "A declaration exists at the top-level. Did you mean to make it 'static'?"
             );
         }
@@ -1775,43 +1774,50 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         return;
     }
 
-    /// Either there is exactly one node that is not a function, or, there
-    /// may be one or more nodes with that name that are functions. In the
-    /// former case, resolve the reference to that node.
-    if (not is<FuncDecl>(syms.first->second)) {
-        Expr* e = syms.first->second;
+    // Either there is exactly one node that is not a function, or, there may
+    // be one or more nodes with that name that are functions. In the case of
+    // a non-function node, resolve to that node.
+    if (not is<FuncDecl>(syms.at(0))) {
+        // Make a copy of the pointer so we don't accidentally overwrite the
+        // declaration's pointer in the following analysation.
+        Expr* e = syms.at(0);
         Analyse(&e);
-        LCC_ASSERT(syms.first->second == e);
-        syms.first->second = as<Decl>(e);
+        // FIXME: What in the fuck is this for? The assert would mean we wouldn't
+        // need the following line and the line following means we wouldn't need
+        // the assert. A fucking idiot wrote this, clearly.
+        LCC_ASSERT(syms.at(0) == e);
+        syms.at(0) = as<Decl>(e);
 
-        /// If sema is still in progress for the declaration, then we’re in
-        /// its initialiser, which is illegal.
+        // If sema is in progress for the declaration, and there is a name ref we
+        // are trying to resolve that points to the declaration, it means the
+        // declared object is being used in it's own initialiser, which doesn't
+        // make sense.
         if (e->sema() == SemaNode::State::InProgress) {
             Error(
                 expr->location(),
-                "Cannot use variable '{}' in its own initialiser",
+                "Cannot use '{}' in its own initialiser",
                 expr->name()
             );
             expr->set_sema_errored();
             return;
         }
 
-        expr->target(syms.first->second);
-        expr->type(syms.first->second->type());
-        if (syms.first->second->is_lvalue()) expr->set_lvalue();
+        expr->target(syms.at(0));
+        expr->type(syms.at(0)->type());
+        if (syms.at(0)->is_lvalue()) expr->set_lvalue();
         return;
     }
 
-    /// Helper to append iterator ranges to an overload set.
+    // Helper to append iterator ranges to an overload set.
     std::vector<FuncDecl*> overloads;
     auto Append = [&overloads](auto&& range) {
-        for (auto it = range.first; it != range.second; it++)
-            overloads.push_back(as<FuncDecl>(it->second));
+        for (auto it = range.begin(); it != range.end(); it++)
+            overloads.push_back(as<FuncDecl>(*it));
     };
 
-    /// In the other case, collect all functions with that name as well as
-    /// all functions with that name in parent scopes and create an overload
-    /// set for them.
+    // In the other case, collect all functions with that name as well as
+    // all functions with that name in parent scopes and create an overload
+    // set for them.
     Append(syms);
     for (; scope; scope = scope->parent()) Append(scope->find(expr->name()));
 
@@ -1822,16 +1828,16 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         return;
     }
 
-    /// Create a new overload set and analyse it. This will make sure there are
-    /// no redeclarations etc.
-    Expr* os = new (mod) OverloadSet(overloads, expr->location());
-    Analyse(&os);
-    if (os->sema_errored()) expr->set_sema_errored();
+    // Create a new overload set and analyse it. This will make sure there are
+    // no redeclarations etc.
+    Expr* overload_set = new (mod) OverloadSet(overloads, expr->location());
+    Analyse(&overload_set);
+    if (overload_set->sema_errored()) expr->set_sema_errored();
 
-    /// The type of an overload set is special because its actual type will depend
-    /// on the context. Roughly, the `OverloadSet` type is convertible to (a pointer
-    /// to) any of the function types in the set.
-    expr->target(os);
+    // The type of an overload set is special because its actual type will depend
+    // on the context. Roughly, the `OverloadSet` type is convertible to any
+    // of the function types in the set, or pointers to them.
+    expr->target(overload_set);
     expr->type(Type::OverloadSet);
 }
 
@@ -1957,20 +1963,22 @@ bool lcc::glint::Sema::Analyse(Type** type_ptr) {
             LCC_ASSERT(n->name().size(), "NamedType has empty name");
             LCC_ASSERT(n->scope(), "NamedType {} has NULL scope", n->name());
 
-            /// This code is similar to name resolution for expressions,
-            /// except that we don’t need to worry about overloads.
+            // This code is similar to name resolution for expressions,
+            // except that we don’t need to worry about overloads.
             Type* ty{};
             for (auto scope = n->scope(); scope; scope = scope->parent()) {
                 auto syms = scope->find(n->name());
-                if (syms.first == syms.second) continue;
-                if (auto s = cast<TypeDecl>(syms.first->second)) {
+                // If we don't find the symbol in this scope, continue searching the
+                // parent scope.
+                if (syms.empty()) continue;
+                if (auto s = cast<TypeDecl>(syms.at(0))) {
                     Expr* e = s;
                     Analyse(&e);
                     ty = s->type();
                     break;
                 }
 
-                if (auto a = cast<TypeAliasDecl>(syms.first->second)) {
+                if (auto a = cast<TypeAliasDecl>(syms.at(0))) {
                     Expr* e = a;
                     Analyse(&e);
                     ty = a->type();
@@ -1980,7 +1988,7 @@ bool lcc::glint::Sema::Analyse(Type** type_ptr) {
                 Error(n->location(), "'{}' is not a type", n->name());
                 Diag::Note(
                     context,
-                    syms.first->second->location(),
+                    syms.at(0)->location(),
                     "Because of declaration here",
                     n->name()
                 );

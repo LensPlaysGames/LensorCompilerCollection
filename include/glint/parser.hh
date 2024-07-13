@@ -135,7 +135,10 @@ private:
     auto ParseType(isz current_precedence = 0) -> Result<Type*>;
     auto ParseWhileExpr() -> Result<WhileExpr*>;
 
-    /// Synchronise on semicolons and braces.
+    // Synchronise is normally used when a syntax error occurs, and attempts
+    // to get to a position that is known to be a good enough place to start
+    // parsing from again. For Glint, this means the hard expression separator
+    // ';', or the closing brace of a block.
     void Synchronise();
 
     /// Get the scope for local top-level variables. This is different
