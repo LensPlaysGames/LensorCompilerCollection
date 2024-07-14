@@ -165,20 +165,12 @@ else()
     )
 endif()
 
-# Enable asan if requested and possible.
-if (NOT WIN32)
-    if (ENABLE_ASAN)
-        target_compile_options(options INTERFACE -fsanitize=address)
-        target_compile_definitions(options INTERFACE ENABLE_ASAN=1)
-        target_link_options(options INTERFACE -fsanitize=address)
-
-        # Make address sanitiser ignore memory leaks. This is useful if there are
-        # more severe problems (e.g. use-after-free bugs) that need to be fixed.
-        if (ASAN_IGNORE_LEAKS)
-            target_compile_definitions(options INTERFACE ASAN_IGNORE_LEAKS=1)
-        endif ()
-    endif()
-endif ()
+# Enable AddressSanitizer if requested
+if (ENABLE_ASAN)
+  target_compile_options(options INTERFACE -fsanitize=address)
+  target_link_options(options INTERFACE -fsanitize=address)
+  target_compile_definitions(options INTERFACE ENABLE_ASAN=1)
+endif()
 
 # ============================================================================
 #  libfmt and include dirs.
@@ -188,6 +180,9 @@ include(FetchContent)
 set(FETCHCONTENT_QUIET OFF)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 message(STATUS "Checking dependencies ...")
+# NOTE: If you don't like cloning every time you configure a new build
+# tree, you can specify `fmtlib_SOURCE_DIR` as pointing to the cloned
+# repo.
 FetchContent_Declare(
     fmtlib
     GIT_REPOSITORY https://github.com/fmtlib/fmt.git
