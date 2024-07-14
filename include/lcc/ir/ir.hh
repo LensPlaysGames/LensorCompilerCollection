@@ -1,7 +1,6 @@
 #ifndef LCC_IR_IR_HH
 #define LCC_IR_IR_HH
 
-#include <algorithm>
 #include <lcc/core.hh>
 #include <lcc/forward.hh>
 #include <lcc/ir/type.hh>
@@ -11,6 +10,10 @@
 #include <lcc/utils/generator.hh>
 #include <lcc/utils/iterator.hh>
 #include <lcc/utils/rtti.hh>
+
+#include <algorithm>
+#include <string>
+#include <vector>
 
 namespace lcc {
 class Parameter;
