@@ -1,12 +1,17 @@
-#include <bit>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/mir_utils.hh>
 #include <lcc/codegen/x86_64/object.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/context.hh>
+#include <lcc/core.hh>
 #include <lcc/utils.hh>
 #include <object/generic.hh>
+
+#include <algorithm>
+#include <bit>
+#include <functional>
 #include <variant>
+#include <vector>
 
 namespace lcc {
 namespace x86_64 {

@@ -1,5 +1,10 @@
+#include <fmt/format.h>
+#include <lcc/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils/ir_printer.hh>
+
+#include <ranges>
+#include <string>
 
 namespace lcc {
 namespace {

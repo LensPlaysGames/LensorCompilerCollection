@@ -5,6 +5,9 @@
 #include <lcc/ir/ir.hh>
 #include <lcc/utils.hh>
 
+#include <string>
+#include <vector>
+
 namespace lcc {
 
 // I am dearly sorry for the public/private layout, but the struct layout

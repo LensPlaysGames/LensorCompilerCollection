@@ -5,9 +5,13 @@
 #include <lcc/context.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/utils.hh>
+
+#include <filesystem>
+#include <functional>
 #include <string>
 #include <type_traits>
 #include <variant>
+#include <vector>
 
 namespace lcc {
 namespace x86_64 {

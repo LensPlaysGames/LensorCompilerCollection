@@ -1,6 +1,6 @@
-#include <algorithm>
 #include <fmt/format.h>
 #include <lcc/context.hh>
+#include <lcc/core.hh>
 #include <lcc/diags.hh>
 #include <lcc/ir/domtree.hh>
 #include <lcc/ir/ir.hh>
@@ -9,7 +9,11 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/utils/rtti.hh>
+
+#include <algorithm>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace lcc {
 Function::Function(

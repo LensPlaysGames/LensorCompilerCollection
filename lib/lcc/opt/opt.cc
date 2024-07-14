@@ -1,5 +1,11 @@
+#include <lcc/core.hh>
 #include <lcc/ir/domtree.hh>
 #include <lcc/opt/opt.hh>
+
+#include <algorithm>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace lcc::opt {
 namespace {
