@@ -239,20 +239,6 @@ target_include_directories(glint PUBLIC include)
 target_link_libraries(glint PRIVATE options)
 target_link_libraries(glint PRIVATE object)
 
-# C language library
-add_library(
-  lcc-cc STATIC
-  include/c/ast.hh
-  include/c/lexer.hh
-  include/c/parser.hh
-  include/c/opts.hh
-  lib/c/ast.cc
-  lib/c/lexer.cc
-  lib/c/parser.cc
-)
-target_include_directories(lcc-cc PUBLIC include)
-target_link_libraries(lcc-cc PRIVATE options)
-
 # Intercept language library (will remove soon)
 add_library(
   intercept STATIC
@@ -357,7 +343,6 @@ add_executable(lcc src/lcc.cc)
 
 # Link lcc driver with language libraries.
 target_link_libraries(lcc PUBLIC glint)
-target_link_libraries(lcc PUBLIC lcc-cc)
 target_link_libraries(lcc PUBLIC intercept)
 
 # Apply options.

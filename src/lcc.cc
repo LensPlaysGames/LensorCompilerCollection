@@ -9,8 +9,6 @@
 #include <lcc/utils/platform.hh>
 
 // FIXME: We should probably have a more unified API for each language
-#include <c/ast.hh>
-#include <c/parser.hh>
 #include <glint/ast.hh>
 #include <glint/ir_gen.hh>
 #include <glint/parser.hh>
@@ -152,7 +150,7 @@ int main(int argc, const char** argv) {
                 {"  --color", "Whether to include colors colours in the output (default: auto)\n"},
                 {"", "    always, auto, never\n"},
                 {"  -x", "What language to parse input code as (default: extension based)\n"},
-                {"", "    c, glint, ir\n"},
+                {"", "    glint, ir\n"},
                 {"  -f", "What format to emit code in (default: asm)\n"},
                 {"", "    asm, gnu-as-att, obj, elf, coff, llvm\n"},
                 }}.get());
@@ -221,7 +219,7 @@ int main(int argc, const char** argv) {
         } else if (arg == "-x") {
             // What language to parse input code as
             auto lang = next_arg();
-            if (lang != "c" and lang != "glint" and lang != "ir") {
+            if (lang != "glint" and lang != "ir") {
                 fmt::print("CLI ERROR: Invalid lang {}\n", lang);
                 exit(1);
             }
@@ -428,21 +426,6 @@ int main(int argc, const char** argv) {
             if (options.stopat_sema) return;
 
             return EmitModule(lcc::intercept::IRGen::Generate(&context, *mod), path_str, output_file_path);
-        }
-
-        /// C.
-        else if (specified_language == "c" or (specified_language == "default" and path_str.ends_with(".c"))) {
-            /// Parse the file.
-            auto c_context = new lcc::c::CContext{&context};
-            auto translation_unit = lcc::c::Parser::Parse(c_context, file);
-
-            if (options.ast) translation_unit->print();
-            if (options.stopat_syntax) return;
-
-            /// Stop after sema if requested.
-            if (options.stopat_sema) return;
-
-            LCC_TODO();
         }
 
         /// Unknown.
