@@ -1089,6 +1089,42 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             *expr_ptr = new (mod) IntegerLiteral(value, expr->location());
         } break;
 
+        /// Validate overload sets.
+        case Expr::Kind::OverloadSet: {
+            auto& os = as<OverloadSet>(expr)->overloads();
+
+            /// An overload set must not contain two overloads with the
+            /// same parameter types. All function signatures have already
+            /// been analysed, so we just need to compare them.
+            for (usz i = 0; i < os.size(); i++) {
+                auto oi = os[i];
+                auto oi_params = oi->param_types();
+                for (usz j = i + 1; j < os.size(); j++) {
+                    auto oj = os[j];
+                    auto oj_params = oj->param_types();
+
+                    /// Different number of parameters means these two can’t be the same.
+                    if (oi_params.size() != oj_params.size()) continue;
+
+                    /// Compare the parameters.
+                    usz k = 0;
+                    for (; k < oi_params.size(); k++)
+                        if (not Type::Equal(oi_params[isz(k)], oj_params[isz(k)]))
+                            break;
+
+                    /// If all of them are equal, then we have a problem.
+                    if (k != oi_params.size()) {
+                        Error(
+                            oi->location(),
+                            "Overload set contains two overloads with the same parameter types"
+                        );
+                        Diag::Note(context, oj->location(), "Conflicting overload is here");
+                        expr->set_sema_errored();
+                    }
+                }
+            }
+        } break;
+
         /// Unary prefix and postfix expressions.
         case Expr::Kind::Unary:
             AnalyseUnary(as<UnaryExpr>(expr));
@@ -1125,41 +1161,6 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
         case Expr::Kind::EvaluatedConstant:
             break;
 
-        /// Validate overload sets.
-        case Expr::Kind::OverloadSet: {
-            auto& os = as<OverloadSet>(expr)->overloads();
-
-            /// An overload set must not contain two overloads with the
-            /// same parameter types. All function signatures have already
-            /// been analysed, so we just need to compare them.
-            for (usz i = 0; i < os.size(); i++) {
-                auto oi = os[i];
-                auto oi_params = oi->param_types();
-                for (usz j = i + 1; j < os.size(); j++) {
-                    auto oj = os[j];
-                    auto oj_params = oj->param_types();
-
-                    /// Different number of parameters means these two can’t be the same.
-                    if (oi_params.size() != oj_params.size()) continue;
-
-                    /// Compare the parameters.
-                    usz k = 0;
-                    for (; k < oi_params.size(); k++)
-                        if (not Type::Equal(oi_params[isz(k)], oj_params[isz(k)]))
-                            break;
-
-                    /// If all of them are equal, then we have a problem.
-                    if (k != oi_params.size()) {
-                        Error(
-                            oi->location(),
-                            "Overload set contains two overloads with the same parameter types"
-                        );
-                        Diag::Note(context, oj->location(), "Conflicting overload is here");
-                        expr->set_sema_errored();
-                    }
-                }
-            }
-        } break;
     }
 
     /// Do *not* use `expr` here, as it may have been replaced by something else.
