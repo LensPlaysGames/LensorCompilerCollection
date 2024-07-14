@@ -47,7 +47,9 @@ std::string ToString(MFunction& function, MOperand op) {
 }
 
 void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, const MachineDescription& desc, std::vector<MFunction>& mir) {
-    auto out = fmt::format("    .file \"{}\"\n", output_path.string());
+    std::string out{};
+    // TODO: Emit `.file` when we have the input source file
+    // out += fmt::format("    .file \"{}\"\n", output_path.string());
 
     for (auto* var : module->vars()) {
         if (var->init()) {
@@ -93,21 +95,39 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
     }
 
     for (auto& function : mir) {
+        // From GNU as manual: `.extern` is accepted in the source program--for
+        // compatibility with other assemblers--but it is ignored. `as` treats all
+        // undefined symbols as external. That's why we don't handle imported here.
+        // TODO: Should we use `.hidden`?
         if (function.linkage() == Linkage::Exported || function.linkage() == Linkage::Reexported)
-            out += fmt::format("    .globl {}\n", function.name());
+            out += fmt::format(
+                "    .globl {}\n"
+                "    .type {},@function\n",
+                function.name(),
+                function.name()
+            );
 
-        if (function.linkage() == Linkage::Imported || function.linkage() == Linkage::Reexported) {
-            out += fmt::format("    .extern {}\n", function.name());
+        if (function.linkage() == Linkage::Imported || function.linkage() == Linkage::Reexported)
             continue;
-        }
 
         out += fmt::format("{}:\n", function.name());
 
+        // CFA (CIE starts it as %rsp+8)
+        out += "    .cfi_startproc\n";
+
         // Function Header
         // TODO: Different stack frame kinds.
+        out += "    push %rbp\n";
+        // Update CFA offset, as we now have changed the stack pointer (by 8).
+        // `.cfi_def_cfa_offset` updates CFA offset to new expression, but not register.
+        // `.cfi_offset` notifies saved register rbp location from CFA.
         out +=
-            "    push %rbp\n"
-            "    mov %rsp, %rbp\n";
+            "    .cfi_def_cfa_offset 16\n"
+            "    .cfi_offset %rbp, -16\n";
+
+        out += "    mov %rsp, %rbp\n";
+        // Update CFA register, as we now have stored the value of RSP in RBP.
+        out += "    .cfi_def_cfa_register %rbp\n";
 
         usz stack_frame_size = rgs::fold_left(
             vws::transform(function.locals(), [](AllocaInst* l) {
@@ -145,6 +165,11 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     ) Diag::ICE("Move from register to register has mismatched sizes");
                 }
 
+                // TODO: CFA: Record saved registers
+                if (instruction.opcode() == +x86_64::Opcode::Push
+                    and instruction.all_operands().size() == 1
+                    and std::holds_alternative<MOperandRegister>(instruction.all_operands().at(0))) {}
+
                 // Simple jump threading
                 // clang-format off
                 if (&block != &function.blocks().back()
@@ -167,8 +192,13 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     out +=
                         "    mov %rbp, %rsp\n"
                         "    pop %rbp\n";
+
+                    // Update CFA expression since 16(%rbp) is no longer accurate.
+                    out += "    .cfi_def_cfa %rsp, 8\n";
+
                 } else if (instruction.opcode() == +x86_64::Opcode::Call) {
                     // Save return register, if necessary.
+                    // TODO: CFA `.cfi_offset`
                     if (instruction.reg() != desc.return_register)
                         out += fmt::format("    push %{}\n", ToString(x86_64::RegisterId(desc.return_register)));
                 }
@@ -260,6 +290,10 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 }
             }
         }
+
+        out += fmt::format("    .cfi_endproc\n");
+
+        out += fmt::format("    .size {}, .-{}\n", function.name(), function.name());
     }
 
     for (auto& section : module->extra_sections()) {
