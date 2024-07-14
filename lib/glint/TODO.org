@@ -1,0 +1,72 @@
+* TODO [Feature] Exported Alias for Custom Object File Symbols
+
+Current issue: gstd_read is too verbose for the language itself, but juuuust verbose enough for C usage. So we want one name visible from C, =gstd_read=, and another visible form Glint, =read= (which will probably be Glint name mangled).
+
+#+begin_src glint-ts
+  ;; NOTE: Should actually export /mangled/ name
+  export read: [Byte](path: [Byte]) {
+      ;; ...
+  }
+  ;; NOTE: This is where we may define any amount of aliases to the above
+  ;; function, mostly for interopability with other programs and languages.
+  ;; These are exported alongside the regular export, and may even be
+  ;; exported if the base declaration is not (i.e. so C code may call)
+  ;; NOTE: ¡SYNTAX EXPERIMENTAL!
+  ;; NOTE: Strings or identifiers allowed following 'to'.
+  alias read to gstd_read;
+#+end_src
+
+Sadly, this will probably require support all the way from Glint lexer through to IR to MIR to codegen backends, as I don't think we ever thought of a function having multiple names. But, now it might. So, we'll support that. Pretty easy in assembly, just allow outputting multiple =.globl= directives before a label instead of just one. In object files, it's as easy as defining an extra symbol with the same section and offset as the aliased symbol. However, getting that data from the language frontend to the backend through all the data transformations will be interesting (or we will cheat and pass it in the context lol).
+
+* TODO [REQUIRED] Deallocation of Dynamic Array with Unary Prefix Minus
+
+#+begin_src glint-ts
+a : [Byte]; ;; allocated
+-a; ;; deallocated
+a; ;; ERROR!
+#+end_src
+
+Also error (warn?) on deallocating in any loop control flow; the only time this would make sense is a dynamic array of dynamic arrays, I'd think. Note that deallocating cannot be undone.
+
+A fixed array obviously can't be deallocated, and an array parameter isn't moved to the function and therefore not deallocated. A dynamic array return value is moved to the caller, and may be freed like any other dynamic array.
+
+#+begin_src glint-ts
+import "std.SimpleFile";
+import "std.print";
+
+contents :: read "TODO.org";
+
+print contents.data;
+
+-contents;
+
+0;
+#+end_src
+
+The above program shouldn't leak any memory; contents is allocated within =read=, and deallocated after use.
+
+* POSSIBLE [Feature] Warn on Dynamic Array Creation Within Loop Control Flow
+
+It should be created outside the loop. This will mean the code that is written directly corresponds to the "more efficient" method of first allocating and then adding all the new data vs repeatedly allocating.
+
+* TODO This hits an assert in IRGen regarding name ref expr; it /should/ fail during type-checking
+
+#+begin_src glint-ts
+t_big : struct {
+    x : uint;
+    y : uint;
+    z : uint;
+};
+
+foo : void(a:t_big) {
+    a.x;
+}
+
+bar : t_big;
+foo(t_big);
+0;
+#+end_src
+
+Basically, =t_big= is a struct and so sema is thinking that it is okay to pass a type expression to somewhere where a value of that type is actually required, since the "variable" of =t_big= is of =t_big= struct type.
+
+To clarify again, the above should error during type-checking due to t_big being a type expression that resolves to t_big rather than a value of type t_big.
