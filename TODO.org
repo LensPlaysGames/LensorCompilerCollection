@@ -12,10 +12,10 @@ While the half-baked support we have with the basic compiler templates defined i
 
 ** ~opt~
 
-*** BUG
+*** TODO BUG
 [2024-07-08 Mon 13:28]
 
-Instruction combine (icmb) and ssa passes cause the following to change the signature of fopen and pass a struct instead of the ptr that it is supposed to. There is some issue with not updating the type of a replaced/altered instruction, or something.
+Instruction combine (icmb) and ssa passes cause the following to change the signature of fopen and pass a struct instead of the ptr that it is supposed to. There is some issue with not updating the type of a replaced/altered instruction, or something. It could also be the IR we are generating is just wrong for this particular case but it works unoptimised so it'd be an edge case, if it were.
 
 #+begin_src sh
 lcc examples/glint/SimpleFile.g --passes icmb,ssa
