@@ -182,10 +182,9 @@ int lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type*
             return Score(1);
         }
 
-        // Otherwise, if not known at compile-time, we will just go by what doesn'
-        // t cause a memory error. If it fits, it ships.
+        // Otherwise, if not known at compile-time, we will just go by what
+        // doesn't cause a memory error. If it fits, it ships.
         if (from->size(context) <= to->size(context)) {
-            fmt::print("Integer type {} too large to convert to {}\n", *from, *to);
             if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
             return Score(1);
         }
@@ -1160,7 +1159,6 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
         case Expr::Kind::Module:
         case Expr::Kind::EvaluatedConstant:
             break;
-
     }
 
     /// Do *not* use `expr` here, as it may have been replaced by something else.
