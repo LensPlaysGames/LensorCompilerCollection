@@ -260,6 +260,9 @@ public:
         return ptr;
     }
 
+    /// Get the parent scope.
+    auto parent() const { return _parent; }
+
     /// Declare a symbol in this scope.
     ///
     /// If the name doesn’t already exist in this scope, it is
@@ -277,7 +280,7 @@ public:
     ) -> Result<Decl*>;
 
     // Look up a symbol in this scope.
-    std::vector<Decl*> find(std::string_view name) {
+    std::vector<Decl*> find(std::string_view name) const {
         // std::pair can go die in a fucking hole. If you want to be a LISP so bad
         // just fucking be one, loser.
         auto it = symbols.equal_range(name);
@@ -291,15 +294,19 @@ public:
         return out;
     }
 
-    /// Get the parent scope.
-    auto parent() const { return _parent; }
+    std::vector<Decl*> find_recursive(std::string_view name) const {
+        auto f = find(name);
+        if (f.empty() and parent())
+            return parent()->find_recursive(name);
+        return f;
+    }
 
     /// Mark this scope as a function scope.
     void set_function_scope() { is_function_scope = true; }
 };
 
-/// Base class for nodes and types, i.e. for anything that
-/// can be analysed in sema.
+// Base class for nodes and types, i.e. for anything that
+// can be analysed in sema.
 class SemaNode {
 public:
     /// State of semantic analysis for an expression or type.
@@ -334,7 +341,7 @@ protected:
     constexpr SemaNode(Location loc) : _location(loc) {}
 
 public:
-    /// Check if this expression was successfully analysed by sema.
+    // Check if this expression was successfully analysed by sema.
     bool ok() const { return _state == State::Done; }
 
     Location location() const {
@@ -346,31 +353,31 @@ public:
         return _location;
     }
 
-    /// Get the state of semantic analysis for this node.
-    /// \see SemaNode::State
+    // Get the state of semantic analysis for this node.
+    // \see SemaNode::State
     auto sema() const -> State { return _state; }
 
-    /// Check if sema has errored.
+    // Check if sema has errored.
     bool sema_errored() const { return _state == State::Errored; }
 
-    /// \see SemaNode::State
+    // \see SemaNode::State
     bool sema_done_or_errored() const {
         return _state == State::Done or _state == State::Errored;
     }
 
-    /// \see SemaNode::State
+    // \see SemaNode::State
     void set_sema_in_progress() {
         LCC_ASSERT(not sema_done_or_errored());
         _state = State::InProgress;
     }
 
-    /// \see SemaNode::State
+    // \see SemaNode::State
     constexpr void set_sema_done() {
         LCC_ASSERT(_state != State::Errored);
         _state = State::Done;
     }
 
-    /// \see SemaNode::State
+    // \see SemaNode::State
     void set_sema_errored() {
         LCC_ASSERT(_state != State::Done);
         _state = State::Errored;

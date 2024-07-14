@@ -38,19 +38,24 @@ auto lcc::glint::Scope::declare(
     std::string&& name,
     Decl* decl
 ) -> Result<Decl*> {
-    /// If the symbol already exists, then this is an error, unless
-    /// that symbol is a function declaration, and this is also a
-    /// function declaration.
-    if (
-        auto it = symbols.find(name);
-        it != symbols.end()
-        and not is<FuncDecl>(it->second)
-        and not is<FuncDecl>(decl)
-    ) return Diag::Error(ctx, decl->location(), "Redeclaration of '{}'", name);
+    // If the symbol already exists, then this is an error, (unless that symbol
+    // resolves to one or more function declarations, and we are declaring a
+    // function).
+    auto found = find_recursive(name);
+    if (not found.empty()) {
+        bool found_all_functions{true};
+        for (auto found_decl : found) {
+            if (not is<FuncDecl>(found_decl)) {
+                found_all_functions = false;
+                break;
+            }
+        }
 
-    /// TODO: Check that this declaration is hygienic if it’s part of a macro.
+        if (not found_all_functions or not is<FuncDecl>(decl))
+            return Diag::Error(ctx, decl->location(), "Redeclaration of '{}'", name);
+    }
 
-    /// Otherwise, add the symbol.
+    // Otherwise, add the symbol.
     symbols.emplace(std::move(name), decl);
     return decl;
 }
