@@ -11,9 +11,7 @@ Current issue: gstd_read is too verbose for the language itself, but juuuust ver
   ;; function, mostly for interopability with other programs and languages.
   ;; These are exported alongside the regular export, and may even be
   ;; exported if the base declaration is not (i.e. so C code may call)
-  ;; NOTE: ¡SYNTAX EXPERIMENTAL!
-  ;; NOTE: Strings or identifiers allowed following 'to'.
-  alias read to gstd_read;
+  alias read "gstd_read";
 #+end_src
 
 Sadly, this will probably require support all the way from Glint lexer through to IR to MIR to codegen backends, as I don't think we ever thought of a function having multiple names. But, now it might. So, we'll support that. Pretty easy in assembly, just allow outputting multiple =.globl= directives before a label instead of just one. In object files, it's as easy as defining an extra symbol with the same section and offset as the aliased symbol. However, getting that data from the language frontend to the backend through all the data transformations will be interesting (or we will cheat and pass it in the context lol).
