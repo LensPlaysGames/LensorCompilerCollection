@@ -27,9 +27,11 @@ auto PrintMOperand(const MOperand& op) -> std::string {
         return fmt::format("local({}){:+}", index_string, l.offset);
     }
     if (std::holds_alternative<MOperandGlobal>(op))
-        return fmt::format("global({})", std::get<MOperandGlobal>(op)->name());
+        // It doesn't matter which name we refer to.
+        return fmt::format("global({})", std::get<MOperandGlobal>(op)->names().at(0).name);
     if (std::holds_alternative<MOperandFunction>(op))
-        return fmt::format("function({})", std::get<MOperandFunction>(op)->name());
+        // It doesn't matter which name we refer to.
+        return fmt::format("function({})", std::get<MOperandFunction>(op)->names().at(0).name);
     if (std::holds_alternative<MOperandBlock>(op))
         return fmt::format("block({})", std::get<MOperandBlock>(op)->name());
     return "<?>";
@@ -115,12 +117,19 @@ auto PrintMFunctionImpl(const MFunction& function, auto&& inst_opcode) -> std::s
             local->allocated_type()->bytes()
         );
     };
-    auto out = fmt::format(
-        "{}:\n{}{}",
-        function.name(),
-        fmt::join(vws::transform(vws::enumerate(function.locals()), PrintLocal), "\n"),
-        function.locals().empty() ? "" : "\n"
-    );
+    std::string out{};
+    for (auto n : function.names()) {
+        out += fmt::format(
+            "{}:\n",
+            n.name
+        );
+    }
+    if (not function.locals().empty()) {
+        out += fmt::format(
+            "{}\n",
+            fmt::join(vws::transform(vws::enumerate(function.locals()), PrintLocal), "\n")
+        );
+    }
     for (auto& block : function.blocks()) {
         out += PrintMBlockImpl(block, inst_opcode);
         out += '\n';
@@ -136,7 +145,13 @@ auto PrintMFunction(const MFunction& function) -> std::string {
 [[nodiscard]]
 auto PrintMIR(std::vector<GlobalVariable*>& vars, std::vector<MFunction>& mcode) -> std::string {
     const auto PrintGlobal = [&](const GlobalVariable* global) -> std::string {
-        return fmt::format("{}: {}", global->name(), *global->type());
+        std::string out{};
+        for (auto n : global->names()) {
+            if (n.name != global->names().at(0).name)
+                out += ", ";
+            out += fmt::format("{}", n.name);
+        }
+        return fmt::format("{}", *global->type());
     };
     return fmt::format(
         "{}{}{}{}",

@@ -380,9 +380,9 @@ auto Module::mir() -> std::vector<MFunction> {
     // To avoid iterator invalidation when any of these vectors are resizing,
     // we "pre-construct" functions and blocks.
     for (auto& function : code()) {
-        funcs.push_back(MFunction(function->linkage(), function->call_conv()));
+        funcs.push_back(MFunction(function->call_conv()));
         auto& f = funcs.back();
-        f.name() = function->name();
+        f.names() = function->names();
         for (auto& block : function->blocks())
             f.add_block(MBlock(block->name()));
     }

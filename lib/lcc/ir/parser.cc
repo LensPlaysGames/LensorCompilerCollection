@@ -600,8 +600,10 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     );
 
     /// Check for duplicates.
-    if (globals.contains(f->name())) Error("Duplicate global symbol '{}'", f->name());
-    globals["@" + f->name()] = f;
+    for (auto n : f->names()) {
+        if (globals.contains(n.name)) Error("Duplicate global symbol '{}'", n.name);
+        globals["@" + n.name] = f;
+    }
 
     /// Colon means we have a body.
     if (not Consume(Tk::Colon)) return {};

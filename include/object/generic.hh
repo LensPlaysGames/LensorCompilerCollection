@@ -265,19 +265,26 @@ struct GenericObject {
         return section(name);
     }
 
+    // Creates symbols representing all names of the given global.
     // NOTE: Requires .data, .bss sections to exist. .bss needs is_fill set to true.
-    void symbol_from_global(GlobalVariable* var) {
-        const bool imported = var->linkage() == Linkage::Imported || var->linkage() == Linkage::Reexported;
-        const bool exported = var->linkage() == Linkage::Exported || var->linkage() == Linkage::Reexported;
-
+    void symbols_from_global(GlobalVariable* var) {
         if (var->init()) {
-            // Write init to .data section
-            Symbol::Kind kind = exported
-                                  ? Symbol::Kind::EXPORT
-                                  : Symbol::Kind::STATIC;
-
             Section& initialized_data = section(".data");
-            symbols.push_back({kind, var->name(), ".data", initialized_data.contents().size()});
+
+            size_t data_offset = initialized_data.contents().size();
+            for (auto n : var->names()) {
+                const bool imported = n.linkage == Linkage::Imported || n.linkage == Linkage::Reexported;
+                const bool exported = n.linkage == Linkage::Exported || n.linkage == Linkage::Reexported;
+
+                LCC_ASSERT(not imported, "Cannot handle an *imported* global /with an initializer/");
+
+                // Write init to .data section
+                Symbol::Kind kind = exported
+                                      ? Symbol::Kind::EXPORT
+                                      : Symbol::Kind::STATIC;
+
+                symbols.push_back({kind, n.name, ".data", data_offset});
+            }
 
             switch (var->init()->kind()) {
                 case Value::Kind::IntegerConstant: {
@@ -300,40 +307,45 @@ struct GenericObject {
                     LCC_ASSERT(false, "Sorry, but global variable initialisation with value kind {} is not supported.", Value::ToString(var->init()->kind()));
             }
         } else {
-            if (imported) {
-                // Create symbol referencing externally-defined value.
-                symbols.push_back({Symbol::Kind::EXTERNAL, var->name(), ".bss", 0});
-            } else {
-                // Allocate space for variable in .bss section
-                Symbol s{Symbol::Kind::STATIC, var->name(), ".bss", 0};
-                Section& uninitialized_data = section(".bss");
+            for (auto n : var->names()) {
+                const bool imported = n.linkage == Linkage::Imported || n.linkage == Linkage::Reexported;
+                [[maybe_unused]] const bool exported = n.linkage == Linkage::Exported || n.linkage == Linkage::Reexported;
 
-                // Align uninitialized data to variable type's alignment requirements.
-                uninitialized_data.length() = u32(align_to(
-                    uninitialized_data.length(),
-                    isz(var->type()->align_bytes())
-                ));
+                if (imported) {
+                    // Create symbol referencing externally-defined value.
+                    symbols.push_back({Symbol::Kind::EXTERNAL, n.name, ".bss", 0});
+                } else {
+                    // Allocate space for variable in .bss section
+                    Symbol s{Symbol::Kind::STATIC, n.name, ".bss", 0};
+                    Section& uninitialized_data = section(".bss");
 
-                // The symbol will now begin at an aligned address.
-                s.byte_offset = uninitialized_data.length();
+                    // Align uninitialized data to variable type's alignment requirements.
+                    uninitialized_data.length() = u32(align_to(
+                        uninitialized_data.length(),
+                        isz(var->type()->align_bytes())
+                    ));
 
-                symbols.push_back(s);
+                    // The symbol will now begin at an aligned address.
+                    s.byte_offset = uninitialized_data.length();
 
-                // Write uninitialized bytes for this variable.
-                uninitialized_data.length() += u32(var->type()->bytes());
+                    symbols.push_back(s);
+
+                    // Write uninitialized bytes for this variable.
+                    uninitialized_data.length() += u32(var->type()->bytes());
+                }
             }
         }
     }
 
     std::string print() {
         std::string out{};
-        //out += fmt::format("SYMBOLS: {}\n", symbols.size());
+        // out += fmt::format("SYMBOLS: {}\n", symbols.size());
         for (auto sym : symbols)
             out += sym.print();
-        //out += fmt::format("RELOCATIONS: {}\n", relocations.size());
+        // out += fmt::format("RELOCATIONS: {}\n", relocations.size());
         for (auto relocation : relocations)
             out += relocation.print();
-        //out += fmt::format("SECTIONS: {}\n", sections.size());
+        // out += fmt::format("SECTIONS: {}\n", sections.size());
         for (auto section : sections)
             out += section.print();
         return out;

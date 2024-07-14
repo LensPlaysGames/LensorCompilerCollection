@@ -24,11 +24,11 @@ Function::Function(
     CallConv calling_convention,
     Location l
 ) : UseTrackingValue(Kind::Function, ty),
-    func_name(std::move(mangled_name)),
     loc(l),
     mod(mod),
-    link(linkage),
     cc(calling_convention) {
+    add_name(std::move(mangled_name), linkage);
+
     /// Create parameter instructions.
     param_list.reserve(ty->params().size());
     for (auto [i, param] : vws::enumerate(ty->params()))
@@ -40,10 +40,9 @@ Function::Function(
 
 GlobalVariable::GlobalVariable(Module* mod, Type* t, std::string name, Linkage linkage, Value* init)
     : UseTrackingValue(Value::Kind::GlobalVariable, Type::PtrTy),
-      _name(std::move(name)),
-      _linkage(linkage),
       _init(init),
       _allocated_type(t) {
+    _names.push_back({std::move(name), linkage});
     mod->add_var(this);
 }
 
@@ -624,15 +623,21 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     /// Print the function signature.
     void PrintFunctionHeader(Function* f) {
         auto ftype = as<FunctionType>(f->type());
+        for (auto n : f->names()) {
+            if (n.name != f->names().at(0).name)
+                Print("{}, ", C(White));
+            Print(
+                "{}{} {}({})",
+                C(Green),
+                n.name,
+                C(Red),
+                StringifyEnum(n.linkage)
+            );
+        }
         Print(
-            "{}{} {}:{}{}{}{} {}{}(",
-            C(Green),
-            f->name(),
+            ": {}{} {}{}(",
             C(Red),
-            f->linkage() == Linkage::Exported ? ""sv : " "sv,
-            f->linkage() == Linkage::Exported ? "" : StringifyEnum(f->linkage()),
-            f->call_conv() == CallConv::C ? ""sv : " "sv,
-            f->call_conv() == CallConv::C ? ""sv : StringifyEnum(f->call_conv()),
+            StringifyEnum(f->call_conv()),
             Ty(ftype->ret()),
             C(Red)
         );
@@ -932,16 +937,26 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     /// Print a global variable.
     void PrintGlobal(GlobalVariable* v) {
+        bool imported{false};
+        for (auto n : v->names()) {
+            if (n.name != v->names().front().name)
+                Print("{}, ", C(White));
+            Print(
+                "{}{}",
+                C(TempColour),
+                n.name
+            );
+            if (IsImportedLinkage(n.linkage))
+                imported = true;
+        }
         Print(
-            "{}{} {}: {} {}",
-            C(TempColour),
-            v->name(),
+            " {}: {} {}",
             C(Red),
             Ty(v->allocated_type()),
             C(Red)
         );
 
-        if (v->imported()) {
+        if (imported) {
             Print("external\n");
             return;
         }
@@ -970,7 +985,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
         switch (v->kind()) {
             case Value::Kind::Function:
-                return Format("{}@{}", C(Green), as<Function>(v)->name());
+                return Format("{}@{}", C(Green), as<Function>(v)->names().at(0).name);
 
             case Value::Kind::IntegerConstant:
                 return Format("{}{}", C(Magenta), as<IntegerConstant>(v)->value());
@@ -994,7 +1009,12 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::GlobalVariable: {
                 std::string val;
                 if (include_type) fmt::format_to(It(val), "{}ptr ", C(Cyan));
-                fmt::format_to(It(val), "{}@{}", C(TempColour), as<GlobalVariable>(v)->name());
+                fmt::format_to(
+                    It(val),
+                    "{}@{}",
+                    C(TempColour),
+                    as<GlobalVariable>(v)->names().at(0).name
+                );
                 return val;
             }
 

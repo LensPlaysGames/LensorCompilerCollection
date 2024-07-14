@@ -245,11 +245,11 @@ static void collect_interferences(AdjacencyMatrix& matrix, std::vector<Register>
             exits.push_back(&block);
     }
 
-    LCC_ASSERT(exits.size(), "Cannot walk CFG as function {} has no exit blocks", function.name());
+    LCC_ASSERT(exits.size(), "Cannot walk CFG as function {} has no exit blocks", function.names().at(0).name);
 
     // fmt::print(
     //     "Collected following exit blocks for function {}: {}\n",
-    //     function.name(),
+    //     function.names().at(0).name,
     //     fmt::join(vws::transform(exits, [](MBlock* b) { return b->name(); }), ", ")
     // );
 
@@ -460,7 +460,7 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
 
         if (not reg_value) {
             Diag::Error("Can not color graph with {} colors until stack spilling is implemented!", desc.registers.size());
-            Diag::Note("Allocating registers for function `{}`", function.name());
+            Diag::Note("Allocating registers for function `{}`", function.names().at(0).name);
             return;
         }
 

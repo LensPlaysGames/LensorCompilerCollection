@@ -279,7 +279,7 @@ public:
 };
 
 class MFunction {
-    std::string _name{};
+    std::vector<IRName> _names;
 
     std::vector<MBlock> _blocks{};
 
@@ -287,24 +287,20 @@ class MFunction {
 
     std::set<u8> _registers_used{};
 
-    /// The linkage of this function.
-    Linkage link;
-
-    /// The calling convention of this function.
     CallConv cc;
 
 public:
     // For target-specific stuff...
     usz sysv_integer_parameters_seen{};
 
-    MFunction(Linkage linkage, CallConv call_conv) : link(linkage), cc(call_conv) {}
+    MFunction(CallConv call_conv) : cc(call_conv) {}
 
-    auto name() -> std::string& {
-        return _name;
+    auto names() -> std::vector<IRName>& {
+        return _names;
     }
 
-    auto name() const -> const std::string& {
-        return _name;
+    auto names() const -> const std::vector<IRName> {
+        return _names;
     }
 
     auto blocks() -> std::vector<MBlock>& {
@@ -313,10 +309,6 @@ public:
 
     auto blocks() const -> const std::vector<MBlock>& {
         return _blocks;
-    }
-
-    auto linkage() const -> Linkage {
-        return link;
     }
 
     auto calling_convention() const -> CallConv {

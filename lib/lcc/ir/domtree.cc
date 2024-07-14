@@ -199,7 +199,7 @@ lcc::DomTree::DomTree(Function* f, bool compute_dominance_frontiers) : f(f) {
 
 auto lcc::DomTree::debug() const -> std::string {
     std::string out;
-    out += fmt::format("digraph {} {{\n", f->name());
+    out += fmt::format("digraph {} {{\n", f->names().at(0).name);
     for (auto [i, _] : vws::enumerate(f->blocks()))
         out += fmt::format("    {} [label=\"bb{}\"];\n", i, i);
     for (auto [i, _] : vws::enumerate(f->blocks()))

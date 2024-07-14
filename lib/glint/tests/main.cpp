@@ -70,14 +70,22 @@ struct GlintTest : Test {
                         // For every function in the expected IR, check that the function also exists in the IR we got.
                         for (auto* expected_func : expected_ir->code()) {
                             auto got_func_in_ir = std::find_if(got_ir->code().begin(), got_ir->code().end(), [&](lcc::Function* candidate) {
-                                return candidate->name() == expected_func->name();
+                                for (auto n : candidate->names()) {
+                                    auto found_in_expected = std::find_if(
+                                        expected_func->names().begin(),
+                                        expected_func->names().end(),
+                                        [&](const lcc::IRName& expected_n) { return expected_n.name == n.name; }
+                                    );
+                                    if (found_in_expected != expected_func->names().end()) return true;
+                                }
+                                return false;
                             });
                             if (got_func_in_ir == got_ir->code().end()) {
                                 ir_matches = false;
 
                                 fmt::print(
                                     "IR MISMATCH: Expected function {} to be in IR, but didn't find it\n",
-                                    expected_func->name()
+                                    expected_func->names().at(0).name
                                 );
                                 // Stop iterating IR functions since they already don't match.
                                 break;
@@ -93,7 +101,7 @@ struct GlintTest : Test {
 
                                 fmt::print(
                                     "IR MISMATCH: Block count in function {}\n",
-                                    expected_func->name()
+                                    expected_func->names().at(0).name
                                 );
                                 // Stop iterating IR functions since they already don't match.
                                 break;
@@ -109,7 +117,7 @@ struct GlintTest : Test {
                                     fmt::print(
                                         "IR MISMATCH: Instruction count in block {} in function {}\n",
                                         expected_block->name(),
-                                        expected_func->name()
+                                        expected_func->names().at(0).name
                                     );
                                     // Stop iterating IR functions since they already don't match.
                                     break;
@@ -133,7 +141,7 @@ struct GlintTest : Test {
                                         fmt::print(
                                             "IR MISMATCH: Expected instruction (1) but got instruction (2) in block {} in function {}\n",
                                             expected_block->name(),
-                                            expected_func->name()
+                                            expected_func->names().at(0).name
                                         );
 
                                         fmt::print("(1): ");

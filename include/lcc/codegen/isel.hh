@@ -470,8 +470,8 @@ struct Pattern {
 template <typename... Patterns>
 struct PatternList {
     static MFunction rewrite(lcc::Module* mod, MFunction& function) {
-        MFunction out{function.linkage(), function.calling_convention()};
-        out.name() = function.name();
+        MFunction out{function.calling_convention()};
+        out.names() = function.names();
         out.locals() = function.locals();
 
         // Get the longest input pattern length

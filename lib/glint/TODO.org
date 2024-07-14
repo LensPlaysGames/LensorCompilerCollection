@@ -16,6 +16,16 @@ Current issue: gstd_read is too verbose for the language itself, but juuuust ver
 
 Sadly, this will probably require support all the way from Glint lexer through to IR to MIR to codegen backends, as I don't think we ever thought of a function having multiple names. But, now it might. So, we'll support that. Pretty easy in assembly, just allow outputting multiple =.globl= directives before a label instead of just one. In object files, it's as easy as defining an extra symbol with the same section and offset as the aliased symbol. However, getting that data from the language frontend to the backend through all the data transformations will be interesting (or we will cheat and pass it in the context lol).
 
+Well I spent three hours trying to implement this and ended up throwing everything out because I'm apparently too stupid to fucking implement this properly at the moment. What's so stupid is it requires linkages to no longer apply to objects but to apply to the symbols that apply to the objects, and that is an indirection that literally none of the compiler has planned for.
+
+So, to actually do this, here's what I'll need to break it down into:
+1. IR and MIR function names get converted to a name + linkage.
+1a. Make sure everything still works as it does now.
+2. IR and MIR no longer forced to have one name.
+3. Glint IRGen handles aliases as names added to the base declaration with "Exported" linkage.
+
+JFC I did the backend part half in a trance.
+
 * TODO [REQUIRED] Deallocation of Dynamic Array with Unary Prefix Minus
 
 #+begin_src glint-ts

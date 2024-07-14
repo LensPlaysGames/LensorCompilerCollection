@@ -41,12 +41,13 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
     /// Emit a function signature
     void PrintFunctionHeader(Function* f) {
         auto ftype = as<FunctionType>(f->type());
+        // TODO: Multiple names and all that.
         Print(
             "{} {} {} {} (",
-            f->imported() ? "declare" : "define",
-            f->linkage() == Linkage::Internal ? "private" : "external",
+            IsImportedLinkage(f->names().at(0).linkage) ? "declare" : "define",
+            f->names().at(0).linkage == Linkage::Internal ? "private" : "external",
             Ty(ftype->ret()),
-            FormatName(f->name())
+            FormatName(f->names().at(0).name)
         );
 
         bool first = true;
@@ -384,10 +385,13 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
     /// Print a global variable declaration or definition.
     void PrintGlobal(GlobalVariable* v) {
         const bool is_string = v->init() and is<ArrayConstant>(v->init()) and as<ArrayConstant>(v->init())->is_string_literal();
+        LCC_ASSERT(v->names().size() == 1, "I don't know if LLVM can handle globals with multiple names and I don't care");
+        auto name = v->names().at(0).name;
+        auto linkage = v->names().at(0).linkage;
         Print(
             "{} = {} {} {} {}, align {}\n",
-            FormatName(v->name()),
-            v->imported() ? "external" : "private",
+            FormatName(name),
+            IsImportedLinkage(linkage) ? "external" : "private",
             is_string ? "unnamed_addr constant" : "global",
             Ty(v->allocated_type()),
             v->init() ? Val(v->init(), false) : "zeroinitializer",
@@ -537,14 +541,16 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::Function: {
                 std::string val;
                 if (include_type) val += "ptr ";
-                val += FormatName(as<Function>(v)->name());
+                // TODO: Multiple names and all that.
+                val += FormatName(as<Function>(v)->names().at(0).name);
                 return val;
             }
 
             case Value::Kind::GlobalVariable: {
                 std::string val;
                 if (include_type) val += "ptr ";
-                val += FormatName(as<GlobalVariable>(v)->name());
+                // TODO: Multiple names and all that.
+                val += FormatName(as<GlobalVariable>(v)->names().at(0).name);
                 return val;
             }
 

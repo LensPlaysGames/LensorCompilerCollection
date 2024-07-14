@@ -215,9 +215,7 @@ public:
                 auto rhs = cast<IntegerConstant>(add->rhs());
 
                 /// Evaluate if possible.
-                if (lhs and rhs) {
-                    Replace(i, lhs->value() + rhs->value());
-                }
+                if (lhs and rhs) Replace(i, lhs->value() + rhs->value());
 
                 /// Fold if possible. Otherwise, try to see if our rhs is
                 /// another add whose lhs is a constant and fold with it.
@@ -917,8 +915,17 @@ struct GlobalDCEPass : ModuleRewritePass {
         for (usz i = 0; i < mod->code().size(); /** No increment! **/) {
             auto f = mod->code()[i];
 
-            /// Do not delete exported functions or used functions.
-            if (f->exported() or not f->users().empty()) {
+            // Check if exported.
+            bool exported{false};
+            for (auto n : f->names()) {
+                if (IsExportedLinkage(n.linkage)) {
+                    exported = true;
+                    break;
+                }
+            }
+
+            // Do not delete exported functions or used functions.
+            if (exported or not f->users().empty()) {
                 i++;
                 continue;
             }

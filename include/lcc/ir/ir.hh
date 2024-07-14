@@ -212,9 +212,13 @@ public:
     static bool classof(const Value* v) { return v->kind() >= Value::Kind::Block; }
 };
 
+struct IRName {
+    std::string name;
+    Linkage linkage;
+};
+
 class GlobalVariable : public UseTrackingValue {
-    std::string _name;
-    Linkage _linkage;
+    std::vector<IRName> _names;
     Value* _init;
     Type* _allocated_type;
 
@@ -222,10 +226,8 @@ public:
     GlobalVariable(Module* mod, Type* t, std::string name, Linkage linkage, Value* init);
 
     Type* allocated_type() { return _allocated_type; }
-    bool imported() const { return IsImportedLinkage(linkage()); }
     Value* init() { return _init; }
-    auto name() const -> const std::string& { return _name; }
-    Linkage linkage() const { return _linkage; }
+    auto names() const -> const std::vector<IRName> { return _names; }
 
     /// RTTI.
     static bool classof(Value* v) { return +v->kind() >= +Kind::GlobalVariable; }
@@ -498,11 +500,11 @@ public:
 
 /// An IR function.
 class Function : public UseTrackingValue {
+private:
     using Iterator = utils::VectorIterator<Block*>;
     using ConstIterator = utils::VectorConstIterator<Block*>;
 
-    /// The (mangled) name of this function.
-    std::string func_name;
+    std::vector<IRName> func_names;
 
     /// The blocks in this function.
     std::vector<Block*> block_list{};
@@ -521,9 +523,6 @@ class Function : public UseTrackingValue {
     /// The associated machine function.
     MFunction* mfunc{};
 
-    /// The linkage of this function.
-    Linkage link;
-
     /// Function attributes.
     /// TODO.
 
@@ -531,6 +530,7 @@ class Function : public UseTrackingValue {
     CallConv cc;
 
 public:
+    // TODO: Re-do to take an IRName
     Function(
         Module* mod,
         std::string mangled_name,
@@ -566,18 +566,6 @@ public:
         return block_list.front();
     }
 
-    /// Whether this module exports this function.
-    bool exported() const { return IsExportedLinkage(link); }
-
-    /// Whether this function is imported from another module.
-    bool imported() const { return IsImportedLinkage(link); }
-
-    /// Get the linkage of this function.
-    auto linkage() const -> Linkage { return link; }
-
-    /// Set the linkage of this function.
-    void linkage(Linkage l) { link = l; }
-
     /// Get the source location of this function.
     auto location() const -> Location { return loc; }
 
@@ -590,11 +578,13 @@ public:
     /// Get the parent module of this function.
     auto module() const -> Module* { return mod; }
 
-    /// Get the name of this function.
-    auto name() const -> const std::string& { return func_name; }
+    // Get the names of this function.
+    auto names() const -> const std::vector<IRName> { return func_names; }
 
-    /// Set the name of this function.
-    void name(std::string n) { func_name = std::move(n); }
+    // Add a name to this function.
+    void add_name(std::string n, Linkage l) {
+        func_names.push_back({std::move(n), l});
+    }
 
     /// Get a parameter value.
     ///

@@ -3,6 +3,7 @@
 #include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/context.hh>
+#include <lcc/core.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/utils.hh>
 
@@ -42,9 +43,9 @@ std::string ToString(MFunction& function, MOperand op) {
     } else if (std::holds_alternative<MOperandLocal>(op)) {
         return fmt::format("{}(%rbp)", function.local_offset(std::get<MOperandLocal>(op)));
     } else if (std::holds_alternative<MOperandGlobal>(op)) {
-        return fmt::format("{}(%rip)", safe_name(std::get<MOperandGlobal>(op)->name()));
+        return fmt::format("{}(%rip)", safe_name(std::get<MOperandGlobal>(op)->names().at(0).name));
     } else if (std::holds_alternative<MOperandFunction>(op)) {
-        return fmt::format("{}", std::get<MOperandFunction>(op)->name());
+        return fmt::format("{}", std::get<MOperandFunction>(op)->names().at(0).name);
     } else if (std::holds_alternative<MOperandBlock>(op)) {
         return fmt::format("{}", block_name(std::get<MOperandBlock>(op)->name()));
     } else LCC_ASSERT(false, "Unhandled MOperand kind (index {})", op.index());
@@ -56,13 +57,22 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
     // out += fmt::format("    .file \"{}\"\n", output_path.string());
 
     for (auto* var : module->vars()) {
+        // From GNU as manual: `.extern` is accepted in the source program--for
+        // compatibility with other assemblers--but it is ignored. `as` treats all
+        // undefined symbols as external. That's why imported is ignored.
+        for (auto n : var->names()) {
+            if (IsExportedLinkage(n.linkage))
+                out += fmt::format("    .globl {}\n", n.name);
+        }
+
         if (var->init()) {
-            out += fmt::format("{}: ", safe_name(var->name()));
+            for (auto n : var->names())
+                out += fmt::format("{}:\n", safe_name(n.name));
             switch (var->init()->kind()) {
                 case Value::Kind::ArrayConstant: {
                     auto array_constant = as<ArrayConstant>(var->init());
                     out += fmt::format(
-                        ".byte {}",
+                        "    .byte {}\n",
                         fmt::join(
                             vws::transform(*array_constant, [&](char c) {
                                 return fmt::format("0x{:x}", int(c));
@@ -76,7 +86,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     auto integer_constant = as<IntegerConstant>(var->init());
                     LCC_ASSERT(integer_constant->type()->bytes() <= 8, "Oversized integer constant");
                     // Represent bytes literally
-                    out += ".byte ";
+                    out += "    .byte ";
                     u64 value = integer_constant->value().value();
                     for (usz i = 0; i < integer_constant->type()->bytes(); ++i) {
                         int byte = (value >> (i * 8)) & 0xff;
@@ -91,30 +101,30 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
             }
             out += '\n';
         }
-        // From GNU as manual: `.extern` is accepted in the source program--for
-        // compatibility with other assemblers--but it is ignored. `as` treats all
-        // undefined symbols as external.
-        if (var->linkage() != Linkage::Imported)
-            out += fmt::format("    .globl {}\n", var->name());
     }
 
     for (auto& function : mir) {
-        // From GNU as manual: `.extern` is accepted in the source program--for
-        // compatibility with other assemblers--but it is ignored. `as` treats all
-        // undefined symbols as external. That's why we don't handle imported here.
-        // TODO: Should we use `.hidden`?
-        if (function.linkage() == Linkage::Exported || function.linkage() == Linkage::Reexported)
-            out += fmt::format(
-                "    .globl {}\n"
-                "    .type {},@function\n",
-                function.name(),
-                function.name()
-            );
+        bool imported{false};
+        for (auto n : function.names()) {
+            // From GNU as manual: `.extern` is accepted in the source program--for
+            // compatibility with other assemblers--but it is ignored. `as` treats all
+            // undefined symbols as external.
+            if (IsExportedLinkage(n.linkage)) {
+                out += fmt::format(
+                    "    .globl {}\n"
+                    "    .type {},@function\n",
+                    n.name,
+                    n.name
+                );
+            }
 
-        if (function.linkage() == Linkage::Imported || function.linkage() == Linkage::Reexported)
-            continue;
+            if (IsImportedLinkage(n.linkage))
+                imported = true;
+        }
+        if (imported) continue;
 
-        out += fmt::format("{}:\n", function.name());
+        for (auto n : function.names())
+            out += fmt::format("{}:\n", n.name);
 
         // CFA (CIE starts it as %rsp+8)
         out += "    .cfi_startproc\n";
@@ -297,7 +307,10 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
 
         out += fmt::format("    .cfi_endproc\n");
 
-        out += fmt::format("    .size {}, .-{}\n", function.name(), function.name());
+        for (auto n : function.names()) {
+            if (IsExportedLinkage(n.linkage))
+                out += fmt::format("    .size {}, .-{}\n", n.name, n.name);
+        }
     }
 
     for (auto& section : module->extra_sections()) {

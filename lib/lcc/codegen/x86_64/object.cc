@@ -695,7 +695,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 // Make RIP-relative disp32 relocation
                 Relocation reloc{};
                 reloc.symbol.byte_offset = text.contents().size();
-                reloc.symbol.name = global->name();
+                reloc.symbol.name = global->names().at(0).name;
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
                 gobj.relocations.push_back(reloc);
@@ -719,7 +719,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 Relocation reloc{};
                 reloc.symbol.kind = Symbol::Kind::FUNCTION;
                 reloc.symbol.byte_offset = text.contents().size();
-                reloc.symbol.name = func->name();
+                reloc.symbol.name = func->names().at(0).name;
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
                 gobj.relocations.push_back(reloc);
@@ -846,7 +846,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 Relocation reloc{};
                 reloc.symbol.kind = Symbol::Kind::FUNCTION;
                 reloc.symbol.byte_offset = text.contents().size();
-                reloc.symbol.name = function->name();
+                reloc.symbol.name = function->names().at(0).name;
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
                 gobj.relocations.push_back(reloc);
@@ -884,7 +884,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 Relocation reloc{};
                 reloc.symbol.kind = Symbol::Kind::FUNCTION;
                 reloc.symbol.byte_offset = text.contents().size();
-                reloc.symbol.name = function->name();
+                reloc.symbol.name = function->names().at(0).name;
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
                 gobj.relocations.push_back(reloc);
@@ -1022,24 +1022,26 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
     // Section& bss = out.section(".bss");
 
     for (auto* var : module->vars())
-        out.symbol_from_global(var);
+        out.symbols_from_global(var);
 
     for (auto& func : mir) {
-        const bool imported = func.linkage() == Linkage::Imported || func.linkage() == Linkage::Reexported;
-        // const bool exported = func.linkage() == Linkage::Exported || func.linkage() == Linkage::Reexported;
+        for (auto n : func.names()) {
+            const bool imported = IsImportedLinkage(n.linkage);
+            // const bool exported = IsLinkageExported(n.linkage);
 
-        if (imported) {
-            Symbol sym{};
-            sym.kind = Symbol::Kind::EXTERNAL;
-            sym.name = func.name();
-            out.symbols.push_back(sym);
-        } else {
-            Symbol sym{};
-            sym.kind = Symbol::Kind::FUNCTION;
-            sym.name = func.name();
-            sym.section_name = text.name;
-            sym.byte_offset = text.contents().size();
-            out.symbols.push_back(sym);
+            if (imported) {
+                Symbol sym{};
+                sym.kind = Symbol::Kind::EXTERNAL;
+                sym.name = n.name;
+                out.symbols.push_back(sym);
+            } else {
+                Symbol sym{};
+                sym.kind = Symbol::Kind::FUNCTION;
+                sym.name = n.name;
+                sym.section_name = text.name;
+                sym.byte_offset = text.contents().size();
+                out.symbols.push_back(sym);
+            }
         }
 
         // Assemble function into machine code.
