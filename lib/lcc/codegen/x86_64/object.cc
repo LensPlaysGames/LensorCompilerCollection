@@ -918,7 +918,8 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 u8 op = 0x81;
                 if (imm.size <= 8) op = 0x80;
 
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
+                u8 opcode_extension = 5;
+                u8 modrm = modrm_byte(0b11, opcode_extension, regbits(reg));
 
                 if (imm.size > 8 and imm.size <= 16)
                     text += prefix16;
