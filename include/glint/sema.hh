@@ -118,6 +118,13 @@ private:
         return Diag::Error(context, loc, fmt, Format<Args>(std::forward<Args>(args))...);
     }
 
+    /// Wrapper that stringifies any types that are passed in and passes
+    /// everything to \c Diag::Warning.
+    template <typename... Args>
+    Diag Warning(Location loc, fmt::format_string<format_type_t<Args>...> fmt, Args&&... args) {
+        return Diag::Warning(context, loc, fmt, Format<Args>(std::forward<Args>(args))...);
+    }
+
     /// Evaluate a constant expression and ensure it is an integer.
     bool EvaluateAsInt(Expr* expr, Type* int_type, aint& out);
 

@@ -271,8 +271,7 @@ void lcc::glint::Sema::Discard(Expr** expr_ptr) {
 
     /// Otherwise, issue a warning if this expression does not have
     /// side effects.
-    if (not HasSideEffects(expr)) Diag::Warning(
-        context,
+    if (not HasSideEffects(expr)) Warning(
         expr->location(),
         "Expression result unused"
     );
@@ -716,7 +715,7 @@ void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
     auto ty = as<FuncType>(decl->type());
     if (ty->has_attr(FuncAttr::Used)) {
         if (decl->linkage() != Linkage::Internal)
-            Diag::Warning(context, decl->location(), "'used' has no effect on this function");
+            Warning(decl->location(), "'used' has no effect on this function");
         else decl->linkage(Linkage::Used);
     }
 }
@@ -1488,8 +1487,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         // NOTE: Call of integer with zero arguments by deproceduring should not
         // be possible, but this handles `100();`
         if (expr->args().empty() and not HasSideEffects(expr)) {
-            Diag::Warning(
-                context,
+            Warning(
                 expr->location(),
                 "Expression result unused"
             );
