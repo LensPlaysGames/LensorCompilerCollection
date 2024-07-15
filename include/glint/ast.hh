@@ -317,6 +317,11 @@ public:
         /// Sema is currently in progress. This can be used to detect cycles.
         InProgress,
 
+        // Something has happened in the language that makes referring to this
+        // node an error; this is applied to the target of variables that have
+        // been freed, for example.
+        NoLongerViable,
+
         /// There was an error analysing this expression. Any expression that
         /// depends on the type of this expression should not check it, nor try
         /// to convert it or issue an error about it.
@@ -342,7 +347,10 @@ protected:
 
 public:
     // Check if this expression was successfully analysed by sema.
-    bool ok() const { return _state == State::Done; }
+    bool ok() const {
+        return _state == State::Done
+            or _state == State::NoLongerViable;
+    }
 
     Location location() const {
         return _location;
@@ -369,6 +377,12 @@ public:
     void set_sema_in_progress() {
         LCC_ASSERT(not sema_done_or_errored());
         _state = State::InProgress;
+    }
+
+    // \see SemaNode::State
+    void set_sema_no_longer_viable() {
+        LCC_ASSERT(ok(), "Cannot mark non-checked node as no longer viable");
+        _state = State::NoLongerViable;
     }
 
     // \see SemaNode::State

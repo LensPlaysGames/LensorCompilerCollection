@@ -1735,12 +1735,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
     // Look up the thing in its scope, if there is no definition of the symbol
     // in its scope, search its parent scopes until we find one.
     auto scope = expr->scope();
-    std::vector<Decl*> syms;
-    while (scope) {
-        syms = scope->find(expr->name());
-        scope = scope->parent();
-        if (not syms.empty()) break;
-    }
+    std::vector<Decl*> syms = expr->scope()->find_recursive(expr->name());
 
     // If we’re at the global scope and there still is no symbol, then this
     // symbol is apparently not declared.
@@ -1786,6 +1781,14 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         // the assert. A fucking idiot wrote this, clearly.
         LCC_ASSERT(syms.at(0) == e);
         syms.at(0) = as<Decl>(e);
+
+        if (e->sema() == SemaNode::State::NoLongerViable) {
+            Error(
+                expr->location(),
+                "Reference to a name, {}, that is no longer viable; probably a use-after-free thing",
+                expr->name()
+            );
+        }
 
         // If sema is in progress for the declaration, and there is a name ref we
         // are trying to resolve that points to the declaration, it means the
@@ -1883,14 +1886,25 @@ void lcc::glint::Sema::AnalyseUnary(UnaryExpr* u) {
             u->set_lvalue();
         } break;
 
-        /// Negate an integer.
+        // Negate an integer or free a dynamic array.
         case TokenKind::Minus: {
+            if (u->operand()->type()->is_dynamic_array()) {
+                u->type(Type::Void);
+                LCC_ASSERT(
+                    is<NameRefExpr>(u->operand()),
+                    "Sorry, only handle NameRefExpr when freeing dynamic arrays"
+                );
+                as<NameRefExpr>(u->operand())->target()->set_sema_no_longer_viable();
+                break;
+            }
+
             LValueToRValue(&u->operand());
             auto ty = u->operand()->type();
+
             if (not ty->is_integer()) {
                 Error(
                     u->location(),
-                    "Operand of operator '-' must be an integer type, but was {}",
+                    "Operand of unary prefix operator '-' must be an integer type, but was {}",
                     ty
                 );
                 u->set_sema_errored();

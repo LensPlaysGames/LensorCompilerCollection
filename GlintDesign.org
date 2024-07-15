@@ -786,3 +786,10 @@ Yeah, that's not gonna fly.
 Yeah, that makes a lot of sense.
 
 For people who need a pointer to a pointer to a pointer... what in the fuck are you doing? Write it out if you need to be that crazy.
+
+*** Aliasing
+[2024-07-15 Mon 14:40]
+
+Linkers are powerful tools, and most languages don't give enough syntax to take advantage of those tools, in my opinion.
+
+This is where Glint aliases come in. An alias is a declared symbol to an already existing definition. For example, this allows giving multiple names to a single function, with different linkages (exported, internal, etc). So, a Glint library could expose =read= to Glint programs that import it, and alias =read= to =glint_read= for usage from C (that way in the C bindings you don't have to declare `read` as an external symbol, as that is likely already defined by libc or the program itself, etc). This way, we get interopability without having the verbosity of C forced into the language; we can still mangle function names, but now we have a way to provide unmangled, direct names to the linker for any given global variable or function definition.

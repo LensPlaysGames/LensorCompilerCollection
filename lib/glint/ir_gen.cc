@@ -303,6 +303,44 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     insert(eq);
                 } break;
                 case TokenKind::Minus: {
+                    if (unary_expr->operand()->type()->is_dynamic_array()) {
+                        auto* struct_t = as<DynamicArrayType>(unary_expr->operand()->type())->struct_type();
+                        auto* data_ptr = new (*module) GetMemberPtrInst(
+                            Convert(ctx, struct_t),
+                            generated_ir[unary_expr->operand()],
+                            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0)
+                        );
+                        auto* data_load = new (*module) LoadInst(lcc::Type::PtrTy, data_ptr);
+                        insert(data_ptr);
+                        insert(data_load);
+
+                        auto* free_ty = FunctionType::Get(
+                            ctx,
+                            lcc::Type::PtrTy,
+                            {lcc::IntegerType::Get(ctx, ctx->target()->ffi.size_of_long_long)}
+                        );
+                        auto* free_func = new (*module) Function(
+                            module,
+                            "free",
+                            free_ty,
+                            Linkage::Imported,
+                            CallConv::C,
+                            {}
+                        );
+                        auto* free_call = new (*module) CallInst(
+                            free_func,
+                            free_ty,
+                            {data_load}
+                        );
+                        insert(free_call);
+                        break;
+                    }
+
+                    LCC_ASSERT(
+                        unary_expr->operand()->type()->is_integer(),
+                        "Cannot IRGen unary prefix '-' of non-integer type"
+                    );
+
                     auto* neg = new (*module) NegInst(generated_ir[unary_expr->operand()], expr->location());
                     generated_ir[expr] = neg;
                     insert(neg);
