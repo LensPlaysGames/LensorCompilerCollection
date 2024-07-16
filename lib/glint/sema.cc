@@ -1864,7 +1864,15 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
                 "You typed '{}'; we are treating it as '{}' because it's so close",
                 expr->name(),
                 least_distance_decl->name()
-            );
+            )
+                .attach(
+                    false,
+                    Diag::Note(
+                        context,
+                        least_distance_decl->location(),
+                        "Declared here"
+                    )
+                );
             expr->target(least_distance_decl);
             expr->type(least_distance_decl->type());
             if (least_distance_decl->is_lvalue()) expr->set_lvalue();
