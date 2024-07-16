@@ -641,8 +641,23 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         decl->param_decls().push_back(as<VarDecl>(d));
     }
 
+    // Gets rid of parameter dynamic array declarations that were falsely
+    // recorded as dangling (parameters owned by caller).
+    decl->dangling_dynarrays().clear();
+
     /// Analyse the body.
     Analyse(&decl->body(), ty->return_type());
+
+    // Report every dynamic array declared in this function (and that is not
+    // returned) which doesn't have NoLongerViable status (aka freed).
+    // Parameters are owned by caller, don't count those.
+    for (auto dynarray : decl->dangling_dynarrays()) {
+        // TODO: Maybe a warning?
+        Error(
+            dynarray->location(),
+            "You forgot to free this dynamic array"
+        );
+    }
 
     /// The last expression in a function must be a return expression or convertible
     /// to the return type of the function. If it is a return expression, then it has
@@ -779,6 +794,14 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             auto r = as<ReturnExpr>(expr);
             auto ret_type = as<FuncType>(curr_func->type())->return_type();
             if (r->value()) Analyse(&r->value(), ret_type);
+
+            // NOTE: Just for forget-to-free diagnostics.
+            // If returned value is a dynamic array, remove that dynamic array's
+            // declaration from the list of dangling dynamic arrays.
+            if (r->value()->type()->is_dynamic_array()) {
+                if (auto* nameref = cast<NameRefExpr>(r->value()))
+                    std::erase(curr_func->dangling_dynarrays(), nameref->target());
+            }
 
             /// Make sure that it matches the return type.
             if (ret_type->is_void()) {
@@ -933,6 +956,9 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
 
                 LValueToRValue(&v->init());
             }
+
+            if (v->type()->is_dynamic_array())
+                curr_func->dangling_dynarrays().push_back(v);
 
             v->set_lvalue();
         } break;
@@ -1892,7 +1918,15 @@ void lcc::glint::Sema::AnalyseUnary(UnaryExpr* u) {
                     is<NameRefExpr>(u->operand()),
                     "Sorry, only handle NameRefExpr when freeing dynamic arrays"
                 );
-                as<NameRefExpr>(u->operand())->target()->set_sema_no_longer_viable();
+                auto target = as<NameRefExpr>(u->operand())->target();
+
+                // NOTE: If referenced again, will cause a used-but-no-longer-viable
+                // diagnostic (catches use-after-free).
+                target->set_sema_no_longer_viable();
+
+                // NOTE: For forget-to-free diagnostics.
+                std::erase(curr_func->dangling_dynarrays(), target);
+
                 break;
             }
 

@@ -1135,6 +1135,9 @@ class FuncDecl : public ObjectDecl {
     /// Calling convention.
     CallConv _cc;
 
+    // NOTE: For warnings in sema
+    std::vector<Decl*> _dangling_dynarrays{};
+
 public:
     FuncDecl(
         std::string name,
@@ -1172,6 +1175,9 @@ public:
 
     auto scope(Scope* scope) { _scope = scope; }
     auto scope() const -> Scope* { return _scope; }
+
+    auto dangling_dynarrays() -> std::vector<Decl*>& { return _dangling_dynarrays; }
+    auto dangling_dynarrays() const -> std::vector<Decl*> { return _dangling_dynarrays; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::FuncDecl; }
 };
