@@ -301,6 +301,27 @@ public:
         return f;
     }
 
+    // Get a list of symbols defined in this scope (for calculating
+    // levenshtein distance on an unknown symbol, for example).
+    // NOTE: This returns a view of the data in the symbols, so if you alter
+    // those you may very well have a bad time.
+    auto all_symbols() const -> const std::unordered_set<Decl*> {
+        std::unordered_set<Decl*> out{};
+        for (auto& [_, decl] : symbols)
+            out.emplace(decl);
+        return out;
+    }
+
+    // \see all_symbols()
+    auto all_symbols_recursive() const -> const std::unordered_set<Decl*> {
+        auto out = all_symbols();
+        if (parent()) {
+            auto parent_symbols = parent()->all_symbols_recursive();
+            out.insert(parent_symbols.begin(), parent_symbols.end());
+        }
+        return out;
+    }
+
     /// Mark this scope as a function scope.
     void set_function_scope() { is_function_scope = true; }
 };

@@ -648,6 +648,8 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     /// Analyse the body.
     Analyse(&decl->body(), ty->return_type());
 
+    if (context->has_error()) return;
+
     // Report every dynamic array declared in this function (and that is not
     // returned) which doesn't have NoLongerViable status (aka freed).
     // Parameters are owned by caller, don't count those.
@@ -1755,6 +1757,55 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
     }
 }
 
+size_t optimal_string_alignment_distance(std::string_view s, std::string_view t) {
+    auto m = s.size();
+    auto n = t.size();
+    // Allocate 2d array
+    size_t* d = (decltype(d))
+        calloc(
+            (m + 1) * (n + 1),
+            sizeof(typeof(*d))
+        );
+
+    auto ref = [d, n](size_t i, size_t j) -> size_t& {
+        return d[(i * n) + j];
+    };
+
+    for (size_t i = 0; i <= m; ++i) ref(i, 0) = i;
+    for (size_t j = 0; j <= n; ++j) ref(0, j) = j;
+
+    for (size_t j = 1; j <= n; ++j) {
+        auto j_i = j - 1;
+        for (size_t i = 1; i <= m; ++i) {
+            auto i_i = i - 1;
+            // SUBSTITUTION CHECK
+            size_t cost{0};
+            if (s.at(i_i) != t.at(j_i))
+                cost = 1;
+
+            ref(i, j) = std::min(
+                {ref(i - 1, j) + 1,
+                 ref(i, j - 1) + 1,
+                 ref(i - 1, j - 1) + cost}
+            );
+
+            // TRANSPOSITION CHECK
+            // abcd and acbd are very likely closer in distance, so we do that.
+            if (i > 1 and j > 1
+                and s.at(i_i) == t.at(j_i - 1)
+                and s.at(i_i - 1) == t.at(j_i)) {
+                ref(i, j) = std::min(
+                    {ref(i, j),
+                     ref(i - 2, j - 2) + 1}
+                );
+            }
+        }
+    }
+    size_t out = ref(m, n);
+    free(d);
+    return out;
+}
+
 void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
     // Look up the thing in its scope, if there is no definition of the symbol
     // in its scope, search its parent scopes until we find one.
@@ -1775,16 +1826,76 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             }
         }
 
-        Error(expr->location(), "Unknown symbol '{}'", expr->name());
+        // Attempt to help out the Glint programmer by finding the closest match
+        // of an existing declaration to what they typed.
+        // NOTE: The more similar two strings are, the more their distances
+        // approach zero.
+        Decl* least_distance_decl = nullptr;
+        size_t least_distance{size_t(-1)};
+        for (auto* decl : scope->all_symbols_recursive()) {
+            auto distance = optimal_string_alignment_distance(expr->name(), decl->name());
+            LCC_ASSERT(
+                distance,
+                "If distance from '{}' to '{}' was zero, then symbol would have been found. Likely error in distance calculation.\n",
+                expr->name(),
+                decl->name()
+            );
+            if (distance < least_distance) {
+                least_distance_decl = decl;
+                least_distance = distance;
+            }
+        }
+        // ¡AUTO-SPELLCHECK!
+        // For identifiers that are unknown yet so, so close to an existing, valid
+        // declaration, we just treat them like they were spelled right,
+        // targetting that declaration.
+        // This doesn't work well with strings below three characters, as the
+        // maximum possible distance is often below or equal to our threshold
+        // distance, so we don't apply it to short identifiers.
+        // Also, it is confusing when it changes the length, so we require that
+        // the replaced declaration has the same length as the given identifier.
+        // Basically, this means that the only real possible swap is when two
+        // single characters within a word are transposed (acbd instead of abcd).
+        if (least_distance == 1
+            and expr->name().size() > 2
+            and expr->name().size() == least_distance_decl->name().size()) {
+            Warning(
+                expr->location(),
+                "You typed '{}'; we are treating it as '{}' because it's so close",
+                expr->name(),
+                least_distance_decl->name()
+            );
+            expr->target(least_distance_decl);
+            expr->type(least_distance_decl->type());
+            if (least_distance_decl->is_lvalue()) expr->set_lvalue();
+            return;
+        }
+
+        auto err = Error(expr->location(), "Unknown symbol '{}'", expr->name());
 
         // If there is a declaration of this variable in the top-level scope, tell
         // the user that they may have forgotten to make it static.
         auto top_level = mod.top_level_scope()->find(expr->name());
         if (not top_level.empty()) {
-            Diag::Note(
-                context,
-                top_level.at(0)->location(),
-                "A declaration exists at the top-level. Did you mean to make it 'static'?"
+            err.attach(
+                false,
+                Diag::Note(
+                    context,
+                    top_level.at(0)->location(),
+                    "A declaration exists at the top-level. Did you mean to make it 'static'?"
+                )
+            );
+        }
+
+        if (least_distance_decl) {
+            err.attach(
+                false,
+                Diag::Note(
+                    context,
+                    least_distance_decl->location(),
+                    "Maybe you meant '{}', defined here?",
+                    least_distance_decl->name()
+                )
             );
         }
 
