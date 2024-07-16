@@ -3,6 +3,10 @@
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/platform.hh>
 
+#include <filesystem>
+#include <string>
+#include <string_view>
+
 /// ===========================================================================
 ///  Diagnostics.
 /// ===========================================================================

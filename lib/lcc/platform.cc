@@ -1,6 +1,7 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/platform.hh>
 
+#include <cstdio>
 #include <filesystem>
 #include <iostream>
 #include <span>
@@ -15,6 +16,7 @@
 
 #ifdef __linux__
 #    include <execinfo.h>
+#    include <unistd.h>
 #endif
 
 namespace {

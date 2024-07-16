@@ -116,6 +116,7 @@ struct Options {
 
 int main(int argc, const char** argv) {
     Options options{};
+    // TODO: Handle reading options from file with @<path> syntax.
     for (int i = 1; i < argc; ++i) {
         auto next_arg = [&]() {
             if (i + 1 >= argc) {

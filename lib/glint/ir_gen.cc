@@ -513,7 +513,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     generated_ir[expr] = new (*module) ShlInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Shr: {
-                    // Bitwise Shift Left
+                    // Bitwise Shift Right
                     // FIXME: SAR or SHL?
                     generated_ir[expr] = new (*module) SarInst(lhs, rhs, expr->location());
                 } break;
