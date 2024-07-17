@@ -812,3 +812,27 @@ This is where Glint aliases come in. An alias is a declared symbol to an already
 [2024-07-17 Wed 10:59]
 
 Especially type members (enum identifiers) given a value (i.e. nameof foo.x -> "x", or something like that).
+
+If we included the member strings in an array, we could even use the tag value of a sum type to decide which member name to print
+
+*** Real World Sum Type Usage Example
+[2024-07-17 Wed 11:12]
+
+#+begin_src glint-ts
+  token : sum {
+    invalid :cint -1;
+    integer :int 0;
+    identifier :[Byte] "";
+    string :[Byte] "";
+  };
+
+  ;; parameter should probably be a Byte view reference type
+  lex :token(input :[Byte].ref) { ... }
+  parse :void(input :[Byte].ref) {
+    t :: lex(input);
+    if (has t.integer) ... ;; Parsed integer
+    else if (has t.identifier) ... ;; Parsed identifier
+    else if (has t.string) ... ;; Parsed string
+  }
+#+end_src
+
