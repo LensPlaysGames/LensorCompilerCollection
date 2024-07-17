@@ -260,11 +260,14 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     auto rhs = instruction.get_operand(1);
                     if (std::holds_alternative<MOperandImmediate>(lhs)) {
                         if (std::holds_alternative<MOperandLocal>(rhs)) {
-                            // Moving immediate into local (memory) requires mov suffix in GNU. We use
-                            // size of local to determine how big of a move to do.
-                            auto local_index = std::get<MOperandLocal>(rhs).index;
-                            auto* local = function.locals().at(local_index);
-                            auto bitwidth = local->allocated_type()->bits();
+                            // Moving immediate into local (memory) requires mov suffix in GNU.
+
+                            // We use size of local to determine how big of a move to do.
+                            // auto local_index = std::get<MOperandLocal>(rhs).index;
+                            // auto* local = function.locals().at(local_index);
+                            // auto bitwidth = local->allocated_type()->bits();
+
+                            auto bitwidth = std::get<MOperandImmediate>(lhs).size;
                             switch (bitwidth) {
                                 case 64: out += 'q'; break;
                                 case 32: out += 'l'; break;
