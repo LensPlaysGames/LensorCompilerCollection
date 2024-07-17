@@ -1973,20 +1973,14 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         return;
     }
 
-    // Helper to append iterator ranges to an overload set.
+    // In the other case, collect all functions with that name and create an
+    // overload set for them.
     std::vector<FuncDecl*> overloads;
-    auto Append = [&overloads](auto&& range) {
-        for (auto it = range.begin(); it != range.end(); it++)
-            overloads.push_back(as<FuncDecl>(*it));
-    };
+    overloads.reserve(syms.size());
+    for (auto it = syms.begin(); it != syms.end(); ++it)
+        overloads.push_back(as<FuncDecl>(*it));
 
-    // In the other case, collect all functions with that name as well as
-    // all functions with that name in parent scopes and create an overload
-    // set for them.
-    Append(syms);
-    for (; scope; scope = scope->parent()) Append(scope->find(expr->name()));
-
-    /// If there is only one function, resolve it directly to that function.
+    // If there is only one function, resolve it directly to that function.
     if (overloads.size() == 1) {
         expr->target(overloads[0]);
         expr->type(overloads[0]->type());
