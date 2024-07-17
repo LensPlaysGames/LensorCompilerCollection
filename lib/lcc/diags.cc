@@ -131,8 +131,12 @@ void lcc::Diag::print() {
     const auto [line, col, line_start, line_end] = where.seek(ctx);
 
     bool location_is_multiline{false};
-    for (auto* it = line_start; it < line_end; ++it)
-        if (*it == '\n') location_is_multiline = true;
+    for (auto* it = line_start; it < line_end; ++it) {
+        if (*it == '\n') {
+            location_is_multiline = true;
+            break;
+        }
+    }
 
     // Split the line into everything before the range, the range itself, and
     // everything after.
