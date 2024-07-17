@@ -60,7 +60,7 @@ void :[int];
 Dynamic Array Initial Size
 ================
 size :: 69;
-void :[Byte size];
+void :[byte size];
 0;
 ---
 (block
@@ -144,6 +144,84 @@ void struct {
 ---
 (block
  (cast (t_struct))
+ (return (integer_literal)))
+
+
+================
+Union, Empty
+================
+void union {};
+0;
+---
+(block
+ (cast (t_union))
+ (return (integer_literal)))
+
+
+================
+Union, Single Member
+================
+void union { x: int };
+0;
+---
+(block
+ (cast (t_union))
+ (return (integer_literal)))
+
+
+================
+Union, Two Members
+================
+void union {
+    x: int
+    y:int
+};
+0;
+---
+(block
+ (cast (t_union))
+ (return (integer_literal)))
+
+
+================
+Union, Two Comma-separated Members
+================
+void union {
+    x: int,
+    y:int
+};
+0;
+---
+(block
+ (cast (t_union))
+ (return (integer_literal)))
+
+
+================
+Union, Two Comma-separated Members w/ Trailing
+================
+void union {
+    x: int,
+    y:int,
+};
+0;
+---
+(block
+ (cast (t_union))
+ (return (integer_literal)))
+
+
+================
+Union, Two Semicolon-separated Members
+================
+void union {
+    x: int;
+    y:int;
+};
+0;
+---
+(block
+ (cast (t_union))
  (return (integer_literal)))
 
 
