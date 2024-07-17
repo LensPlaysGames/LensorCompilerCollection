@@ -130,6 +130,7 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
 
         case Kind::Array: return elem()->align(ctx);
         case Kind::Struct: return as<StructType>(this)->alignment();
+        case Kind::Union: return as<UnionType>(this)->alignment();
         case Kind::Integer: return std::bit_ceil(as<IntegerType>(this)->bit_width());
     }
 
@@ -152,6 +153,7 @@ auto lcc::glint::Type::elem() const -> Type* {
         case Kind::Named:
         case Kind::Function:
         case Kind::Struct:
+        case Kind::Union:
         case Kind::Integer:
             Diag::ICE("Type has no element type");
     }
@@ -295,6 +297,7 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
             return as<ArrayType>(this)->dimension() * elem()->size(ctx);
 
         case Kind::Struct: return as<StructType>(this)->byte_size() * 8;
+        case Kind::Union: return as<UnionType>(this)->byte_size() * 8;
         case Kind::Integer: return as<IntegerType>(this)->bit_width();
     }
 
@@ -378,6 +381,10 @@ bool lcc::glint::Type::Equal(const Type* a, const Type* b) {
                     return false;
             return true;
         }
+
+        // For now, no unions are equal.
+        case Kind::Union:
+            return false;
 
         case Kind::Integer: {
             auto ia = as<IntegerType>(a);
@@ -512,6 +519,7 @@ std::string lcc::glint::Expr::name() const {
                 case Type::Kind::DynamicArray: return "t_dynarray";
                 case Type::Kind::Array: return "t_fixarray";
                 case Type::Kind::Function: return "t_function";
+                case Type::Kind::Union: return "t_union";
                 case Type::Kind::Enum: return "t_enum";
                 case Type::Kind::Struct: return "t_struct";
                 case Type::Kind::Integer: return "t_int";
@@ -1005,6 +1013,16 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
             );
         }
 
+        case Kind::Union: {
+            auto decl = as<UnionType>(this)->decl();
+            return fmt::format(
+                "{}union {}{}",
+                C(type_colour),
+                not decl or decl->name().empty() ? "<anonymous>" : decl->name(),
+                C(Reset)
+            );
+        }
+
         case Kind::Enum: {
             auto decl = as<EnumType>(this)->decl();
             return fmt::format(
@@ -1100,3 +1118,21 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
 void lcc::glint::Module::print(bool use_colour) {
     ASTPrinter{use_colour}.print(this);
 }
+auto lcc::glint::UnionType::array_type(Module& mod) -> ArrayType* {
+    if (not _cached_type) {
+        _cached_type = new (mod) ArrayType(
+            new (mod) IntegerType(8, false, {}),
+            new (mod) ConstantExpr(
+                new (mod) IntegerLiteral(byte_size(), {}),
+                EvalResult(aint(byte_size()))
+            ),
+            location()
+        );
+        _cached_type->element_type()->set_sema_done();
+        _cached_type->size()->set_sema_done();
+        _cached_type->set_sema_done();
+    }
+
+    return _cached_type;
+}
+

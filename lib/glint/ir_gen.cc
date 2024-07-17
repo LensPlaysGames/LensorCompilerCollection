@@ -80,6 +80,17 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             return lcc::StructType::Get(ctx, std::move(member_types));
         }
 
+        case Type::Kind::Union: {
+            const auto& t_union = as<UnionType>(in);
+            auto array_type = t_union->array_type();
+            if (not array_type) {
+                Diag::ICE(
+                    "Glint Type-checker should have set UnionType's _cached_type (by calling array_type()), but it appears to be nullptr at time of IRGen"
+                );
+            }
+            return Convert(ctx, array_type);
+        }
+
         case Type::Kind::Struct: {
             std::vector<lcc::Type*> member_types{};
             for (const auto& m : as<StructType>(in)->members())
@@ -568,6 +579,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::String:
                 case TokenKind::Struct:
                 case TokenKind::Enum:
+                case TokenKind::Union:
                 case TokenKind::Semicolon:
                 case TokenKind::Tilde:
                 case TokenKind::Void:
@@ -585,13 +597,19 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             auto cast = as<CastExpr>(expr);
             generate_expression(cast->operand());
 
-            lcc::Type* t_to = Convert(ctx, cast->type());
+            lcc::Type* t_to{nullptr};
+            if (cast->is_lvalue())
+                t_to = lcc::Type::PtrTy;
+            else t_to = Convert(ctx, cast->type());
 
             // Doesn't matter what we are casting from, we don't do anything to cast
             // it to the void.
             if (t_to->is_void()) return;
 
-            lcc::Type* t_from = generated_ir[cast->operand()]->type();
+            lcc::Type* t_from{nullptr};
+            if (cast->operand()->is_lvalue())
+                t_from = lcc::Type::PtrTy;
+            else t_from = generated_ir[cast->operand()]->type();
 
             /// No-op.
             if (cast->is_ref_to_lvalue() or cast->is_lvalue_to_ref()) {

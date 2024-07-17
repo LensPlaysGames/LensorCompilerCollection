@@ -362,6 +362,11 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
             for (auto& member_type : member_types)
                 *member_types_ptr++ = member_type;
         } break;
+
+        // TODO:
+        case Type::Kind::Union: {
+            LCC_TODO("Serialise union type (it's easy, just haven't yet)");
+        } break;
     }
 
     return type_index;
@@ -559,6 +564,7 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
             case Type::Kind::Array:
             case Type::Kind::DynamicArray:
             case Type::Kind::Function:
+            case Type::Kind::Union:
             case Type::Kind::Enum:
             case Type::Kind::Struct:
             case Type::Kind::Integer:

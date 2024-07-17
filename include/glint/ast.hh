@@ -106,6 +106,7 @@ enum struct TokenKind {
     Export,
     Struct,
     Enum,
+    Union,
     Lambda,
 
     CShort,     // cshort
@@ -432,6 +433,7 @@ public:
         DynamicArray,
         Array,
         Function,
+        Union,
         Enum,
         Struct,
         Integer,
@@ -582,6 +584,7 @@ static constexpr auto ToString(Type::Kind k) {
         case Type::Kind::DynamicArray: return "dynamic_array";
         case Type::Kind::Array: return "array";
         case Type::Kind::Function: return "function";
+        case Type::Kind::Union: return "union";
         case Type::Kind::Enum: return "enum";
         case Type::Kind::Struct: return "struct";
         case Type::Kind::Integer: return "integer";
@@ -828,7 +831,9 @@ public:
     auto scope() -> Scope* { return _scope; }
 
     static bool classof(const Type* type) {
-        return type->kind() == Kind::Enum or type->kind() == Kind::Struct;
+        return type->kind() == Kind::Enum
+            or type->kind() == Kind::Union
+            or type->kind() == Kind::Struct;
     }
 };
 
@@ -921,6 +926,46 @@ public:
 };
 
 // TODO
+class UnionType : public DeclaredType {
+public:
+    struct Member {
+        Type* type;
+        std::string name;
+        Location location;
+
+        Member(std::string name, Type* type, Location location)
+            : type(type), name(std::move(name)), location(location) {}
+    };
+
+private:
+    std::vector<Member> _members;
+    usz _byte_size{};
+    usz _alignment{};
+    ArrayType* _cached_type{nullptr};
+
+public:
+    UnionType(Scope* scope, std::vector<Member> members, Location location)
+        : DeclaredType(Kind::Union, scope, location), _members(std::move(members)) {}
+
+    usz alignment() const { return _alignment; }
+    void alignment(usz alignment) { _alignment = alignment; }
+
+    usz byte_size() const { return _byte_size; }
+    void byte_size(usz byteSize) { _byte_size = byteSize; }
+
+    auto array_type(Module& mod) -> ArrayType*;
+
+    /// Caller needs to make sure to check the return value is not nullptr.
+    auto array_type() const -> ArrayType* {
+        return _cached_type;
+    }
+
+    auto members() -> std::vector<Member>& { return _members; }
+    auto members() const -> const std::vector<Member>& { return _members; }
+
+    static bool classof(const Type* type) { return type->kind() == Kind::Union; }
+};
+
 class EnumeratorDecl;
 class EnumType : public DeclaredType {
     std::vector<EnumeratorDecl*> _enumerators;

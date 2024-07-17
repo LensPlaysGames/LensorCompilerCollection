@@ -1058,14 +1058,33 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
 
             /// Type must be a struct type (or something that represents one, like a DynamicArrayType)
             auto stripped_object_type = m->object()->type()->strip_pointers_and_references();
+
+            // Access to union member
+            if (auto union_type = cast<UnionType>(stripped_object_type)) {
+                auto& members = union_type->members();
+                auto it = rgs::find_if(members, [&](auto& member) { return member.name == m->name(); });
+                if (it == members.end()) {
+                    Error(m->location(), "Union {} has no member named '{}'", union_type, m->name());
+                    m->set_sema_errored();
+                    break;
+                }
+
+                // auto type = new (mod) PointerType(it->type);
+                auto cast = new (mod) CastExpr(m->object(), it->type, CastKind::HardCast, m->location());
+                cast->set_lvalue(m->object()->is_lvalue());
+                *expr_ptr = cast;
+                break;
+            }
+
             auto struct_type = cast<StructType>(stripped_object_type);
+
             if (not struct_type and is<DynamicArrayType>(stripped_object_type))
                 struct_type = as<DynamicArrayType>(stripped_object_type)->struct_type(mod);
 
             if (not struct_type) {
                 Error(
                     m->object()->location(),
-                    "LHS of member access must be a (pointer or reference to) struct, but was {}",
+                    "LHS of member access must be a struct, but was {}",
                     m->object()->type()
                 );
 
@@ -1761,6 +1780,7 @@ size_t optimal_string_alignment_distance(std::string_view s, std::string_view t)
     auto m = s.size();
     auto n = t.size();
     // Allocate 2d array
+    // d :: [uint (m + 1) * (n + 1)]; <- equivalent in Glint
     size_t* d = (decltype(d))
         calloc(
             (m + 1) * (n + 1),
@@ -2149,12 +2169,15 @@ bool lcc::glint::Sema::Analyse(Type** type_ptr) {
                     break;
                 }
 
-                Error(n->location(), "'{}' is not a type", n->name());
-                Diag::Note(
-                    context,
-                    syms.at(0)->location(),
-                    "Because of declaration here",
-                    n->name()
+                auto err = Error(n->location(), "'{}' is not a type", n->name());
+                err.attach(
+                    false,
+                    Diag::Note(
+                        context,
+                        syms.at(0)->location(),
+                        "Because of declaration here",
+                        n->name()
+                    )
                 );
 
                 n->set_sema_errored();
@@ -2259,6 +2282,35 @@ bool lcc::glint::Sema::Analyse(Type** type_ptr) {
             (void) a->struct_type(mod);
 
             if (a->initial_size()) Analyse(&a->initial_size());
+        } break;
+
+        // Set cached struct type for IRGen by calling array_type().
+        case Type::Kind::Union: {
+            auto u = as<UnionType>(type);
+            usz byte_size = 0;
+            usz alignment = 1;
+
+            // Finalise members
+            for (auto& member : u->members()) {
+                // Analyse member type
+                Analyse(&member.type);
+                member.type = DeclTypeDecay(member.type);
+                if (member.type->sema_errored()) {
+                    type->set_sema_errored();
+                    continue;
+                }
+
+                auto msize = member.type->size(context) / 8;
+                auto malign = member.type->align(context) / 8;
+                byte_size = std::max(byte_size, msize);
+                alignment = std::max(alignment, malign);
+            }
+
+            u->byte_size(byte_size);
+            u->alignment(alignment);
+
+            // Cache struct type for IRGen
+            (void) u->array_type(mod);
         } break;
 
         /// Analyse the parameters, the return type, and attributes.

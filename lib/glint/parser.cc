@@ -144,6 +144,7 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::Void:
         case Tk::Struct:
         case Tk::Enum:
+        case Tk::Union:
             return true;
 
         case Tk::Invalid:
@@ -351,7 +352,7 @@ auto intc::Parser::ParseDeclRest(
             NextToken();
 
             /// Type declaration
-            if (At(Tk::Enum, Tk::Struct)) {
+            if (At(Tk::Enum, Tk::Struct, Tk::Union)) {
                 if (is_extern) Error("Type declarations cannot be made external; a linker does not know how to resolve Glint types.");
                 // Copy required due to `move(ident)` below.
                 auto decl_name = ident;
@@ -560,6 +561,7 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         case Tk::LBrack:
         case Tk::Struct:
         case Tk::UInt:
+        case Tk::Union:
         case Tk::Void: {
             auto ty = ParseType();
             if (not ty) return ty.diag();
@@ -1092,9 +1094,28 @@ auto intc::Parser::ParseIfExpr() -> Result<IfExpr*> {
 
     /// Parse condition, then, and else.
     auto cond = ParseExpr();
-    Consume(Tk::Comma);
+    // Following condition, accept an optional expression separator
+    Consume(Tk::Semicolon) or Consume(Tk::Comma);
+
     auto then = ParseExprInNewScope();
-    Consume(Tk::Comma);
+    // Following then expression, accept an optional *soft* expression
+    // separator. I /would/ like for any expression separator to appear here,
+    // but the main issue lies in the top level expecting a semi-colon and
+    // that not being there if we consume it here and there is no else.
+    // Basically, what I'd like is if there is an else past a semi-colon then
+    // to handle that, but that requires lookahead and I don't like that lol.
+    if (LookAhead(1)->kind == Tk::Else) {
+        if (not At(Tk::Semicolon, Tk::Comma)) {
+            return Error(
+                loc,
+                "Expected expression separator (like a semicolon or comma)"
+                " between then expression and 'else' of this if, but got {}",
+                ToString(LookAhead(1)->kind)
+            );
+        }
+        Consume(Tk::Semicolon) or Consume(Tk::Comma);
+    }
+
     auto else_ = ExprResult::Null();
     if (Consume(Tk::Else)) else_ = ParseExpr();
     if (IsError(cond, then, else_)) return Diag();
@@ -1162,6 +1183,51 @@ auto intc::Parser::ParseStructType() -> Result<StructType*> {
 
     /// Create the struct type.
     return new (*mod) StructType(sc.scope, std::move(members), Location{loc, tok.location});
+}
+
+auto intc::Parser::ParseUnionType() -> Result<UnionType*> {
+    auto loc = tok.location;
+    LCC_ASSERT(Consume(Tk::Union), "ParseUnionType called while not at '{}'", ToString(Tk::Union));
+    if (not Consume(Tk::LBrace)) {
+        return Error(
+            "Expected '{}' after '{}' in union declaration",
+            ToString(Tk::LBrace),
+            ToString(Tk::Union)
+        );
+    }
+
+    /// Parse the union body.
+    ScopeRAII sc{this};
+    std::vector<UnionType::Member> members;
+    while (not At(Tk::RBrace)) {
+        /// Name.
+        auto name = tok.text;
+        auto start = tok.location;
+        if (not Consume(Tk::Ident))
+            return Error("Expected member name in struct declaration");
+
+        /// Type.
+        if (not Consume(Tk::Colon)) return Error("Expected ':' in struct declaration");
+        auto type = ParseType();
+        if (not type) return type.diag();
+
+        /// Add the member to the list.
+        members.emplace_back(
+            std::move(name),
+            *type,
+            Location{start, type->location()}
+        );
+
+        // Optionally eat soft or hard separator.
+        Consume(Tk::Semicolon) or Consume(Tk::Comma);
+    }
+
+    /// Yeet '}'.
+    if (not Consume(Tk::RBrace))
+        return Error("Expected '' in struct declaration", ToString(Tk::RBrace));
+
+    /// Create the type.
+    return new (*mod) UnionType(sc.scope, std::move(members), Location{loc, tok.location});
 }
 
 /// Parse a type where a type is expected.
@@ -1265,14 +1331,16 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
 
         /// Structure type.
         case Tk::Struct:
-            if (auto type = ParseStructType(); not type) return type.diag();
-            else ty = *type;
+            if (auto type = ParseStructType())
+                ty = *type;
+            else return type.diag();
             break;
 
         /// Enumeration type.
         case Tk::Enum:
-            if (auto type = ParseEnumType(); not type) return type.diag();
-            else ty = *type;
+            if (auto type = ParseEnumType())
+                ty = *type;
+            else return type.diag();
             break;
 
         /// Pointer type.
@@ -1317,6 +1385,12 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                 if (not Consume(Tk::RBrack))
                     return Error("Expected ]");
             }
+        } break;
+
+        case Tk::Union: {
+            if (auto type = ParseUnionType())
+                ty = *type;
+            else return type.diag();
         } break;
     }
 

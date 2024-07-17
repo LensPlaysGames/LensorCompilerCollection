@@ -119,7 +119,6 @@ private:
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
     auto ParseDecl() -> Result<Decl*>;
     auto ParseDeclRest(std::string ident, Location location, bool is_extern) -> Result<Decl*>;
-    auto ParseEnumType() -> Result<EnumType*>;
     auto ParseExpr(isz current_precedence = 0, bool single_expression = false) -> ExprResult;
     auto ParseExprInNewScope() -> ExprResult;
     auto ParseForExpr() -> Result<ForExpr*>;
@@ -131,6 +130,8 @@ private:
     auto ParseIfExpr() -> Result<IfExpr*>;
     auto ParsePreamble(File* f) -> Result<void>;
     auto ParseStructType() -> Result<StructType*>;
+    auto ParseEnumType() -> Result<EnumType*>;
+    auto ParseUnionType() -> Result<UnionType*>;
     void ParseTopLevel();
     auto ParseType(isz current_precedence = 0) -> Result<Type*>;
     auto ParseWhileExpr() -> Result<WhileExpr*>;

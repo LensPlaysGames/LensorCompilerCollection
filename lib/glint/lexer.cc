@@ -16,16 +16,14 @@ lcc::StringMap<Tk> keywords{
     {"export", Tk::Export},
     {"void", Tk::Void},
     {"bool", Tk::Bool},
-    {"Bool", Tk::Bool},
-    {"boolean", Tk::Bool},
-    {"Boolean", Tk::Bool},
-    {"Byte", Tk::Byte},
+    {"byte", Tk::Byte},
     {"int", Tk::Int},
     {"uint", Tk::UInt},
     {"cfor", Tk::For},
     {"return", Tk::Return},
     {"struct", Tk::Struct},
     {"enum", Tk::Enum},
+    {"union", Tk::Union},
     {"lambda", Tk::Lambda},
     {"true", Tk::True},
     {"false", Tk::False},
@@ -851,6 +849,7 @@ bool lcc::glint::GlintToken::operator==(const GlintToken& rhs) const {
         case TokenKind::Export:
         case TokenKind::Struct:
         case TokenKind::Enum:
+        case TokenKind::Union:
         case TokenKind::Lambda:
         case TokenKind::True:
         case TokenKind::False:
@@ -937,6 +936,7 @@ std::string_view lcc::glint::ToString(Tk kind) {
         case Tk::Alignof: return "alignof";
         case Tk::Struct: return "struct";
         case Tk::Enum: return "enum";
+        case Tk::Union: return "union";
         case Tk::Lambda: return "lambda";
         case Tk::CShort: return "cshort";
         case Tk::CUShort: return "cushort";
