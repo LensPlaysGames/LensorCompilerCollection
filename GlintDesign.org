@@ -203,7 +203,7 @@ switch foo {
   ;; The above will expand according to the following macro (or very
   ;; similarly).
   macro
-      for $sym :: $container:expr_once $body:expr
+      for $sym :: $container:expr_once $body:expr ;
   defines i, s
   emits
       s :: $container.end;
@@ -793,3 +793,22 @@ For people who need a pointer to a pointer to a pointer... what in the fuck are 
 Linkers are powerful tools, and most languages don't give enough syntax to take advantage of those tools, in my opinion.
 
 This is where Glint aliases come in. An alias is a declared symbol to an already existing definition. For example, this allows giving multiple names to a single function, with different linkages (exported, internal, etc). So, a Glint library could expose =read= to Glint programs that import it, and alias =read= to =glint_read= for usage from C (that way in the C bindings you don't have to declare `read` as an external symbol, as that is likely already defined by libc or the program itself, etc). This way, we get interopability without having the verbosity of C forced into the language; we can still mangle function names, but now we have a way to provide unmangled, direct names to the linker for any given global variable or function definition.
+
+*** The Why of Types
+[2024-07-16 Tue 15:43]
+
+- Boolean :: On or Off
+- Integer :: Group of Bits
+- Array :: Group of Unnamed, Contiguous Data Elements
+- Enum :: Group of Named Constant Expressions
+- Struct :: Group of Named, Contiguous Data
+- Union :: Group of Names to Contiguous Data
+- Sum :: Group of Names to Contiguous Data w/ Introspection
+
+*** optional opt-out of sum type checked access
+[2024-07-16 Tue 17:13]
+
+*** Just want to reiterate that we should be able to turn identifiers into strings
+[2024-07-17 Wed 10:59]
+
+Especially type members (enum identifiers) given a value (i.e. nameof foo.x -> "x", or something like that).
