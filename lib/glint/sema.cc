@@ -1915,7 +1915,13 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             );
         }
 
-        if (least_distance_decl) {
+        bool short_name = least_distance_decl and least_distance_decl->name().size() < 5;
+        constexpr usz short_name_distance_max = 1;
+
+        // If there is a short name, ensure it's distance is below or equal to the
+        // maximum distance. Without this, things like `bar` get suggested to be
+        // replaced with `fas`, and that just doesn't really make sense to me.
+        if (least_distance_decl and (not short_name or least_distance <= short_name_distance_max)) {
             err.attach(
                 false,
                 Diag::Note(
