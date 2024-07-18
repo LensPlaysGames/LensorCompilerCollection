@@ -71,7 +71,7 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             auto struct_type = t_dyn_array->struct_type();
             if (not struct_type) {
                 Diag::ICE(
-                    "Glint Type-checker should have set DynamicArrayType's _cached_type (by calling struct_type()), but it appears to be nullptr at time of IRGen"
+                    "Glint Type-checker should have set DynamicArrayType's cached type (by calling struct_type()), but it appears to be nullptr at time of IRGen"
                 );
             }
             std::vector<lcc::Type*> member_types{};
@@ -85,7 +85,7 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             auto array_type = t_union->array_type();
             if (not array_type) {
                 Diag::ICE(
-                    "Glint Type-checker should have set UnionType's _cached_type (by calling array_type()), but it appears to be nullptr at time of IRGen"
+                    "Glint Type-checker should have set UnionType's cached type (by calling array_type()), but it appears to be nullptr at time of IRGen"
                 );
             }
             return Convert(ctx, array_type);
@@ -237,6 +237,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                             lcc::Type::PtrTy,
                             {lcc::IntegerType::Get(ctx, ctx->target()->ffi.size_of_long_long)}
                         );
+                        // TODO: Only add function if it hasn't been added already (doesn't
+                        // matter, just messy).
                         auto* malloc_func = new (*module) Function(
                             module,
                             "malloc",
@@ -330,6 +332,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                             lcc::Type::PtrTy,
                             {lcc::IntegerType::Get(ctx, ctx->target()->ffi.size_of_long_long)}
                         );
+                        // TODO: Only add function if it hasn't been added already (doesn't
+                        // matter, just messy).
                         auto* free_func = new (*module) Function(
                             module,
                             "free",
@@ -943,14 +947,15 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         } break;
 
         // no-op/handled elsewhere
-        case K::Module: break;
-        case K::Sizeof: break;
-        case K::Alignof: break;
-        case K::Type: break;
-        case K::TypeDecl: break;
-        case K::TypeAliasDecl: break;
-        case K::FuncDecl: break;
-        case K::OverloadSet: break;
+        case K::Module:
+        case K::Sizeof:
+        case K::Alignof:
+        case K::Type:
+        case K::TypeDecl:
+        case K::TypeAliasDecl:
+        case K::FuncDecl:
+        case K::OverloadSet:
+            break;
     }
 }
 
