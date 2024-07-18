@@ -306,31 +306,33 @@ auto intc::Parser::ParseBlock(
 /// Parse an object or type declaration.
 auto intc::Parser::ParseDecl() -> Result<Decl*> {
     auto is_export = Consume(Tk::Export);
-    auto is_extern = Consume(Tk::External);
+    auto is_external = Consume(Tk::External);
     auto loc = tok.location;
     auto text = tok.text;
     if (not Consume(Tk::Ident)) return Error("Expected identifier to start declaration");
 
     // NOTE: The important bit.
-    auto decl = ParseDeclRest(text, loc, is_extern);
+    auto decl = ParseDeclRest(text, loc, is_external);
 
-    /// Apply storage specifiers.
     if (is_export) {
-        /// Export a declaration.
+        // Export a declaration.
         const auto Export = [&](Decl* decl) -> Result<Decl*> {
-            /// Set linkage to exported if this has linkage.
+            // Set linkage to exported if this has linkage.
             if (auto obj = cast<ObjectDecl>(decl))
                 obj->linkage(obj->linkage() == Linkage::Imported ? Linkage::Reexported : Linkage::Exported);
 
-            /// Add the declaration to the module’s export list.
+            // Add the declaration to the module’s export list.
             mod->add_export(decl);
             return decl;
         };
 
-        /// Exported declaration.
+        // NOTE: Why? Why can't we export a function defined three nested levels
+        // down? Unless it's a closure, I don't see why this would be an issue
+        // (other than design choice).
         if (CurrScope() != TopLevelScope())
             Error("Exported declarations are only allowed at the top level");
 
+        // Currying operator; calls Export(decl) iff decl is valid.
         decl = decl >>= Export;
     }
 
@@ -342,7 +344,7 @@ auto intc::Parser::ParseDecl() -> Result<Decl*> {
 auto intc::Parser::ParseDeclRest(
     std::string ident,
     lcc::Location location,
-    bool is_extern
+    bool is_external
 ) -> Result<Decl*> {
     switch (tok.kind) {
         default: return Error("Expected : or :: after identifier in declaration");
@@ -353,7 +355,7 @@ auto intc::Parser::ParseDeclRest(
 
             /// Type declaration
             if (At(Tk::Enum, Tk::Struct, Tk::Union)) {
-                if (is_extern) Error("Type declarations cannot be made external; a linker does not know how to resolve Glint types.");
+                if (is_external) Error("Type declarations cannot be made external; a linker does not know how to resolve Glint types.");
                 // Copy required due to `move(ident)` below.
                 auto decl_name = ident;
 
@@ -379,7 +381,7 @@ auto intc::Parser::ParseDeclRest(
             /// If the type is a function type, then this is
             /// a function declaration.
             if (auto type = cast<FuncType>(*ty))
-                return ParseFuncDecl(std::move(ident), type, is_extern);
+                return ParseFuncDecl(std::move(ident), type, is_external);
 
             /// Otherwise, it is a variable declaration. Parse
             /// the initialiser if there is one.
@@ -390,7 +392,7 @@ auto intc::Parser::ParseDeclRest(
 
                 /// This declaration is syntactically well formed, so
                 /// no need to synchronise. Keep parsing.
-                if (is_extern) Error(location, "Extern declarations may not have an initialiser");
+                if (is_external) Error(location, "External declarations may not have an initialiser");
             }
 
             /// Create the variable.
@@ -399,7 +401,7 @@ auto intc::Parser::ParseDeclRest(
                 *ty,
                 *init,
                 mod.get(),
-                is_extern ? Linkage::Imported : Linkage::LocalVar,
+                is_external ? Linkage::Imported : Linkage::LocalVar,
                 location
             );
 
@@ -425,7 +427,7 @@ auto intc::Parser::ParseDeclRest(
             );
 
             // Declarations that use type inference cannot have certain storage specifiers.
-            if (is_extern) Error(cc_loc, "Type-inferred declarations cannot be made external");
+            if (is_external) Error(cc_loc, "Type-inferred declarations cannot be made external");
             return DeclScope(var->linkage() == Linkage::LocalVar)->declare(context, std::move(ident), var);
         }
     }
@@ -949,11 +951,11 @@ auto intc::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
     }
 }
 
-auto intc::Parser::ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scope*>> {
+auto intc::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Expr*, Scope*>> {
     /// If the declaration is external, but there still seems to be
     /// a function body, warn the the user that they might be trying
     /// to do something that doesn’t make sense.
-    if (is_extern) {
+    if (is_external) {
         /// Equals sign is a hard error because it would have
         /// to be parsed as a declaration.
         if (At(Tk::Eq)) {
@@ -1465,16 +1467,16 @@ void intc::Parser::Synchronise() {
 ///
 /// \param name Function name. If empty, this is an anonymous function.
 /// \param type The type of the function.
-/// \param is_extern Whether this is an external function.
+/// \param is_external Whether this is an external function.
 /// \return The decl or an error.
 auto intc::Parser::ParseFuncDecl(
     std::string name,
     FuncType* type,
-    bool is_extern
+    bool is_external
 )
     -> Result<FuncDecl*> {
     /// Parse attributes and the function body.
-    auto body = ParseFuncBody(is_extern);
+    auto body = ParseFuncBody(is_external);
     if (not body) return Diag();
 
     /// Create the function.
@@ -1484,7 +1486,7 @@ auto intc::Parser::ParseFuncDecl(
         (*body).first,
         (*body).second,
         mod.get(),
-        is_extern ? Linkage::Imported : Linkage::Internal,
+        is_external ? Linkage::Imported : Linkage::Internal,
         type->location()
     );
 
