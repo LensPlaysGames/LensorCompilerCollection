@@ -117,6 +117,10 @@ struct Options {
 int main(int argc, const char** argv) {
     Options options{};
     // TODO: Handle reading options from file with @<path> syntax.
+    // TODO: Many languages will want their own "flags" or something like that
+    // of sorts that can be passed on the command line (I think in Glint this
+    // will be done as in-source attributes, but whatever, LCC isn't just
+    // about Glint). The driver should be made to accomodate this, somehow.
     for (int i = 1; i < argc; ++i) {
         auto next_arg = [&]() {
             if (i + 1 >= argc) {
@@ -300,6 +304,7 @@ int main(int argc, const char** argv) {
         options.mir,
         options.stopat_mir};
 
+    context.add_include_directory(".");
     for (const auto& dir : options.include_directories) {
         if (options.verbose) fmt::print("Added input directory: {}\n", dir);
         context.add_include_directory(dir);
@@ -392,17 +397,17 @@ int main(int argc, const char** argv) {
         else if (specified_language == "glint" or (specified_language == "default" and path_str.ends_with(".g"))) {
             /// Parse the file.
             auto mod = lcc::glint::Parser::Parse(&context, file);
-            if (context.has_error()) return; // the error condition is handled by the caller already
             if (options.ast) mod->print(use_colour);
+            if (context.has_error()) return; // the error condition is handled by the caller already
             if (options.stopat_syntax) return;
 
             /// Perform semantic analysis.
             lcc::glint::Sema::Analyse(&context, *mod, true);
-            if (context.has_error()) return; // the error condition is handled by the caller already
             if (options.ast) {
                 fmt::print("\nAfter Sema:\n");
                 mod->print(use_colour);
             }
+            if (context.has_error()) return; // the error condition is handled by the caller already
 
             /// Stop after sema if requested.
             if (options.stopat_sema) return;
