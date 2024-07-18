@@ -1,4 +1,3 @@
-#include <filesystem>
 #include <glint/ast.hh>
 #include <glint/module_description.hh>
 #include <glint/sema.hh>
@@ -7,6 +6,9 @@
 #include <lcc/utils/macros.hh>
 #include <object/elf.h>
 #include <object/elf.hh>
+
+#include <filesystem>
+#include <iterator>
 
 /// ===========================================================================
 ///  Helpers
@@ -831,34 +833,47 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
         case Expr::Kind::If: {
             auto i = as<IfExpr>(expr);
             Analyse(&i->condition());
-            if (not Convert(&i->condition(), Type::Bool)) Error(
-                i->condition()->location(),
-                "Invalid type for if condition: {}",
-                i->condition()->type()
-            );
+            if (not Convert(&i->condition(), Type::Bool)) {
+                Error(
+                    i->condition()->location(),
+                    "Invalid type for if condition: {}",
+                    i->condition()->type()
+                );
+            }
             LValueToRValue(&i->condition());
 
             /// Analyse the branches.
             Analyse(&i->then());
             if (i->otherwise()) Analyse(&i->otherwise());
 
-            /// If the branches are both void, then the type of the if statement
-            /// is void. Otherwise, it is the common type of the two branches.
-            if (i->then()->ok() and (not i->otherwise() or i->otherwise()->ok())) {
-                if (not i->otherwise()
-                    or not ConvertToCommonType(&i->then(), &i->otherwise()))
-                    i->type(Type::Void);
-                else {
-                    i->type(i->then()->type());
+            if (not i->then()->ok() or (i->otherwise() and not i->otherwise()->ok()))
+                i->set_sema_errored();
 
-                    /// Ensure that either both branches are lvalues, or neither is.
-                    if (i->then()->is_lvalue() and i->otherwise()->is_lvalue()) i->set_lvalue();
-                    else {
+            // If both branches exist, and both branches are convertible to a common
+            // type, then this IfExpr returns that common type. Otherwise, it's a void
+            // expression.
+            i->type(Type::Void);
+            if (i->then() and i->otherwise()
+                and not i->then()->type()->is_void()
+                and not i->otherwise()->type()->is_void()) {
+                if (ConvertToCommonType(&i->then(), &i->otherwise())) {
+                    // fmt::print("THEN\n");
+                    // i->then()->print(true);
+                    // fmt::print("OTHERWISE\n");
+                    // i->otherwise()->print(true);
+                    // fmt::print("Common type: {}\n", *i->then()->type());
+
+                    i->type(i->then()->type());
+                    // Do LValueToRValue conversion iff one branch is an lvalue.
+                    // Otherwise, match lvalue-ness.
+                    if (i->then()->is_lvalue() and i->otherwise()->is_lvalue())
+                        i->set_lvalue();
+                    else if (i->then()->is_lvalue())
                         LValueToRValue(&i->then());
+                    else if (i->otherwise()->is_lvalue())
                         LValueToRValue(&i->otherwise());
-                    }
                 }
-            } else i->set_sema_errored();
+            }
 
             if (i->type()->is_void()) {
                 Discard(&i->then());
@@ -1069,7 +1084,6 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                     break;
                 }
 
-                // auto type = new (mod) PointerType(it->type);
                 auto cast = new (mod) CastExpr(m->object(), it->type, CastKind::HardCast, m->location());
                 cast->set_lvalue(m->object()->is_lvalue());
                 *expr_ptr = cast;
@@ -1532,7 +1546,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 
     else if (auto ty = expr->callee()->type(); ty->is_integer()) {
         // NOTE: Call of integer with zero arguments by deproceduring should not
-        // be possible, but this handles `100();`
+        // be valid syntax, but this handles `100();` just in case.
         if (expr->args().empty() and not HasSideEffects(expr)) {
             Warning(
                 expr->location(),
@@ -1981,10 +1995,10 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
 
     // In the other case, collect all functions with that name and create an
     // overload set for them.
-    std::vector<FuncDecl*> overloads;
+    std::vector<FuncDecl*> overloads{};
     overloads.reserve(syms.size());
     for (auto it = syms.begin(); it != syms.end(); ++it)
-        overloads.push_back(as<FuncDecl>(*it));
+        overloads.emplace_back(as<FuncDecl>(*it));
 
     // If there is only one function, resolve it directly to that function.
     if (overloads.size() == 1) {
