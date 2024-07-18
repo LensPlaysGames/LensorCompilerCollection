@@ -22,7 +22,7 @@ struct ModuleDescription {
 
     // Default/expected values.
     static constexpr u8 default_version = 1;
-    static constexpr u8 magic_byte0 = 'I';
+    static constexpr u8 magic_byte0 = 'G';
     static constexpr u8 magic_byte1 = 'N';
     static constexpr u8 magic_byte2 = 'T';
     struct Header {
