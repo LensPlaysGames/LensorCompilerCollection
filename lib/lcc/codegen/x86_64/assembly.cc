@@ -54,8 +54,17 @@ std::string ToString(MFunction& function, MOperand op) {
 
 void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, const MachineDescription& desc, std::vector<MFunction>& mir) {
     std::string out{};
-    // TODO: Emit `.file` when we have the input source file
-    // out += fmt::format("    .file \"{}\"\n", output_path.string());
+
+    // If we ever add optional location information to the MIR (and some
+    // eventually trickles through), this would allow somebody to step through
+    // the source in a debugger like gdb.
+    for (const auto& f : module->context()->files()) {
+        out += fmt::format(
+            "    .file {} \"{}\"\n",
+            f->file_id(),
+            fs::absolute(f->path()).string()
+        );
+    }
 
     for (auto* var : module->vars()) {
         // From GNU as manual: `.extern` is accepted in the source program--for
@@ -126,6 +135,12 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
 
         for (auto n : function.names())
             out += fmt::format("{}:\n", n.name);
+
+        // TODO: Total hack just to try and get the source to show up at all in a
+        // debugger. We would need real location information to properly do this.
+        // Keep in mind that debug lines are 1-indexed.
+        //   .loc <file-id> <line-number> [ <column-number> ]
+        out += "    .loc 0 1\n";
 
         // CFA (CIE starts it as %rsp+8)
         out += "    .cfi_startproc\n";
