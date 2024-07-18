@@ -176,67 +176,74 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
             out += fmt::format("{}:\n", block_name(block.name()));
 
             for (auto& instruction : block.instructions()) {
-                // Don't move a register into itself.
+                // ================================
+                // QUICK PATH OPTIMISATION (don't move a register into itself)
+                // ================================
                 if (
                     instruction.opcode() == +x86_64::Opcode::Move
-                    and instruction.all_operands().size() == 2
+                    and is_reg_reg(instruction)
                 ) {
-                    auto lhs = instruction.get_operand(0);
-                    auto rhs = instruction.get_operand(1);
-                    if (std::holds_alternative<MOperandRegister>(lhs)
-                        and std::holds_alternative<MOperandRegister>(rhs)
-                        and std::get<MOperandRegister>(lhs).value == std::get<MOperandRegister>(rhs).value)
+                    auto [lhs, rhs] = extract_reg_reg(instruction);
+                    if (lhs.value == rhs.value)
                         continue;
                 }
-                if (instruction.opcode() == +x86_64::Opcode::Move and instruction.all_operands().size() == 2) {
-                    auto lhs = instruction.get_operand(0);
-                    auto rhs = instruction.get_operand(1);
-                    if (
-                        std::holds_alternative<MOperandRegister>(lhs)
-                        and std::holds_alternative<MOperandRegister>(rhs)
-                        and std::get<MOperandRegister>(lhs).size != std::get<MOperandRegister>(rhs).size
-                    ) Diag::ICE("Move from register to register has mismatched sizes");
-                }
-
-                // TODO: CFA: Record saved registers
-                if (
-                    instruction.opcode() == +x86_64::Opcode::Push
-                    and instruction.all_operands().size() == 1
-                    and std::holds_alternative<MOperandRegister>(instruction.all_operands().at(0))
-                ) {}
-
-                // movzx from 32 bit to 64 bit register is just a mov between 32 bit
-                // registers...
-                if (
-                    instruction.opcode() == +x86_64::Opcode::MoveZeroExtended
-                    and instruction.all_operands().size() == 2
-                    and std::holds_alternative<MOperandRegister>(instruction.get_operand(0))
-                    and std::holds_alternative<MOperandRegister>(instruction.get_operand(1))
-                ) {
-                    auto [lhs_reg, rhs_reg] = extract_reg_reg(instruction);
-                    if (lhs_reg.size == 32 and rhs_reg.size == 64) {
-                        instruction.opcode(+x86_64::Opcode::Move);
-                        rhs_reg.size = 32;
-                        instruction.all_operands().at(1) = rhs_reg;
-                    }
-                }
-
-                // Simple jump threading
+                // ================================
+                // QUICK PATH OPTIMISATION (simple jump threading)
+                // ================================
                 if (
                     &block != &function.blocks().back()
                     and instruction.opcode() == +x86_64::Opcode::Jump
-                    and instruction.all_operands().size() == 1
-                    and std::holds_alternative<MOperandBlock>(instruction.get_operand(0))
+                    and is_block(instruction)
                 ) {
-                    auto target_block = std::get<MOperandBlock>(instruction.get_operand(0));
+                    auto target_block = extract_block(instruction);
                     auto next_block = function.blocks().at(usz(block_index + 1));
                     if (target_block->name() == next_block.name())
                         continue;
                 }
 
+                // ================================
+                // CONFIDENCE CHECK (moves between registers must match sizes)
+                // ================================
+                if (
+                    instruction.opcode() == +x86_64::Opcode::Move
+                    and is_reg_reg(instruction)
+                ) {
+                    auto [lhs, rhs] = extract_reg_reg(instruction);
+                    if (lhs.size != rhs.size)
+                        Diag::ICE("Move from register to register has mismatched sizes");
+                }
+
+                // ================================
+                // TODO: CFA: Record saved registers
+                // ================================
+                if (
+                    instruction.opcode() == +x86_64::Opcode::Push
+                    and is_reg(instruction)
+                ) {}
+
+                // ================================
+                // INSTRUCTION FIXUP
+                //   movzx from 32 bit to 64 bit register is just a mov between 32 bit
+                //   registers...
+                // ================================
+                if (
+                    instruction.opcode() == +x86_64::Opcode::MoveZeroExtended
+                    and is_reg_reg(instruction)
+                ) {
+                    auto [lhs, rhs] = extract_reg_reg(instruction);
+                    if (lhs.size == 32 and rhs.size == 64) {
+                        instruction.opcode(+x86_64::Opcode::Move);
+                        rhs.size = 32;
+                        instruction.all_operands().at(1) = rhs;
+                    }
+                }
+
                 // Update 1-bit operations (boolean) to the minimum addressable on x86_64: a byte.
                 if (instruction.regsize() == 1) instruction.regsize(8);
 
+                // ================================
+                // INSTRUCTION PROLOGUE (some insts have preceding instructions)
+                // ================================
                 if (instruction.opcode() == +x86_64::Opcode::Return) {
                     // Function Footer
                     // TODO: Different stack frame kinds.
@@ -254,9 +261,19 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                         out += fmt::format("    push %{}\n", ToString(x86_64::RegisterId(desc.return_register)));
                 }
 
+                // ================================
+                // INSTRUCTION MNEMONIC
+                // ================================
                 out += "    ";
                 out += ToString(Opcode(instruction.opcode()));
-                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS and std::holds_alternative<MOperandRegister>(instruction.get_operand(1))) {
+
+                // ================================
+                // CUSTOM OPERAND HANDLING (dereference register operand on rhs of move)
+                // ================================
+                if (
+                    instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS
+                    and std::holds_alternative<MOperandRegister>(instruction.get_operand(1))
+                ) {
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
 
@@ -275,7 +292,13 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     else out += fmt::format(" {}, ({})\n", ToString(function, lhs), ToString(function, rhs));
                     continue;
                 }
-                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceLHS and std::holds_alternative<MOperandRegister>(instruction.get_operand(0))) {
+                // ================================
+                // CUSTOM OPERAND HANDLING (dereference register operand on lhs of move)
+                // ================================
+                if (
+                    instruction.opcode() == +x86_64::Opcode::MoveDereferenceLHS
+                    and std::holds_alternative<MOperandRegister>(instruction.get_operand(0))
+                ) {
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
                     usz offset = 0;
@@ -292,6 +315,9 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     else out += fmt::format(" ({}), {}\n", ToString(function, lhs), ToString(function, rhs));
                     continue;
                 }
+                // ================================
+                // CUSTOM INSTRUCTION SUFFIX HANDLING
+                // ================================
                 if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS) {
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
@@ -315,6 +341,10 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                         }
                     }
                 }
+
+                // ================================
+                // INSTRUCTION OPERANDS
+                // ================================
                 usz i = 0;
                 for (auto& operand : instruction.all_operands()) {
                     if (i == 0) out += ' ';
@@ -330,6 +360,9 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 }
                 out += '\n';
 
+                // ================================
+                // INSTRUCTION EPILOGUE (some insts have instructions following)
+                // ================================
                 if (instruction.opcode() == +x86_64::Opcode::Call) {
                     // Move return value from return register to result register, if necessary.
                     // Also restore return register, if necessary.
