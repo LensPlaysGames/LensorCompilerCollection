@@ -1581,7 +1581,7 @@ auto intc::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module
     Parser parser(context, &file);
 
     /// Parse preamble. This also creates the module.
-    if (not parser.ParsePreamble(nullptr)) return {};
+    if (not parser.ParsePreamble(&file)) return {};
 
     /// Parse Glint source.
     parser.ParseTopLevel();
