@@ -146,6 +146,7 @@ public:
     void is_defining(bool newDefining) { _register.defining_use = newDefining; }
 
     usz opcode() const { return _opcode; }
+    void opcode(usz opcode) { _opcode = opcode; }
 
     Kind kind() const {
         // FIXME: This should be enabled, but I don't have stackframes and can't

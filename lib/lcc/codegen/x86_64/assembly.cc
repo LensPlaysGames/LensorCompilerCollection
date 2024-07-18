@@ -1,4 +1,5 @@
 #include <lcc/codegen/mir.hh>
+#include <lcc/codegen/mir_utils.hh>
 #include <lcc/codegen/register_allocation.hh>
 #include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
@@ -161,7 +162,10 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
 
             for (auto& instruction : block.instructions()) {
                 // Don't move a register into itself.
-                if (instruction.opcode() == +x86_64::Opcode::Move and instruction.all_operands().size() == 2) {
+                if (
+                    instruction.opcode() == +x86_64::Opcode::Move
+                    and instruction.all_operands().size() == 2
+                ) {
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
                     if (std::holds_alternative<MOperandRegister>(lhs)
@@ -180,17 +184,35 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 }
 
                 // TODO: CFA: Record saved registers
-                if (instruction.opcode() == +x86_64::Opcode::Push
+                if (
+                    instruction.opcode() == +x86_64::Opcode::Push
                     and instruction.all_operands().size() == 1
-                    and std::holds_alternative<MOperandRegister>(instruction.all_operands().at(0))) {}
+                    and std::holds_alternative<MOperandRegister>(instruction.all_operands().at(0))
+                ) {}
+
+                // movzx from 32 bit to 64 bit register is just a mov between 32 bit
+                // registers...
+                if (
+                    instruction.opcode() == +x86_64::Opcode::MoveZeroExtended
+                    and instruction.all_operands().size() == 2
+                    and std::holds_alternative<MOperandRegister>(instruction.get_operand(0))
+                    and std::holds_alternative<MOperandRegister>(instruction.get_operand(1))
+                ) {
+                    auto [lhs_reg, rhs_reg] = extract_reg_reg(instruction);
+                    if (lhs_reg.size == 32 and rhs_reg.size == 64) {
+                        instruction.opcode(+x86_64::Opcode::Move);
+                        rhs_reg.size = 32;
+                        instruction.all_operands().at(1) = rhs_reg;
+                    }
+                }
 
                 // Simple jump threading
-                // clang-format off
-                if (&block != &function.blocks().back()
+                if (
+                    &block != &function.blocks().back()
                     and instruction.opcode() == +x86_64::Opcode::Jump
                     and instruction.all_operands().size() == 1
-                    and std::holds_alternative<MOperandBlock>(instruction.get_operand(0))) {
-                    // clang-format on
+                    and std::holds_alternative<MOperandBlock>(instruction.get_operand(0))
+                ) {
                     auto target_block = std::get<MOperandBlock>(instruction.get_operand(0));
                     auto next_block = function.blocks().at(usz(block_index + 1));
                     if (target_block->name() == next_block.name())
