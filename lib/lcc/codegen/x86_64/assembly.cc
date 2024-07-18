@@ -140,7 +140,15 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
         // debugger. We would need real location information to properly do this.
         // Keep in mind that debug lines are 1-indexed.
         //   .loc <file-id> <line-number> [ <column-number> ]
-        out += "    .loc 0 1\n";
+        if (function.location().is_valid()) {
+            auto l = function.location().seek_line_column(module->context());
+            out += fmt::format(
+                "    .loc {} {} {}\n",
+                function.location().file_id,
+                l.line,
+                l.col
+            );
+        }
 
         // CFA (CIE starts it as %rsp+8)
         out += "    .cfi_startproc\n";
@@ -172,6 +180,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
             out += fmt::format("    sub ${}, %rsp\n", stack_frame_size);
         }
 
+        Location last_location{};
         for (auto [block_index, block] : vws::enumerate(function.blocks())) {
             out += fmt::format("{}:\n", block_name(block.name()));
 
@@ -259,6 +268,23 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     // TODO: CFA `.cfi_offset`
                     if (instruction.reg() != desc.return_register)
                         out += fmt::format("    push %{}\n", ToString(x86_64::RegisterId(desc.return_register)));
+                }
+
+                // ================================
+                // INSTRUCTION DEBUG LOCATION
+                // ================================
+                {
+                    auto loc = instruction.location();
+                    if (loc.is_valid() and not loc.equal_position(last_location)) {
+                        auto l = loc.seek_line_column(module->context());
+                        out += fmt::format(
+                            "    .loc {} {} {}\n",
+                            loc.file_id,
+                            l.line,
+                            l.col
+                        );
+                        last_location = loc;
+                    }
                 }
 
                 // ================================

@@ -38,6 +38,16 @@ struct Location {
         len = u16(std::max<u32>(a.pos + a.len, b.pos + b.len) - pos);
     }
 
+    // Return true if the given location is valid and points to the same file
+    // position as this location.
+    bool equal_position(const Location other) {
+        return other.is_valid() and file_id == other.file_id and pos == other.pos;
+    }
+
+    bool operator==(const Location other) {
+        return equal_position(other) and len == other.len;
+    }
+
     /// Seek to a source location.
     [[nodiscard]] auto seek(const Context* ctx) const -> LocInfo;
 

@@ -473,6 +473,7 @@ struct PatternList {
         MFunction out{function.calling_convention()};
         out.names() = function.names();
         out.locals() = function.locals();
+        out.location(function.location());
 
         // Get the longest input pattern length
         usz longest_pattern_length = 0;
@@ -581,6 +582,9 @@ struct PatternList {
                     pattern::output::foreach ([&]<typename inst> {
                         // Use instruction's vreg from input of pattern.
                         auto output = new MInst(inst::opcode, {input.back()->reg(), uint(input.back()->regsize())});
+                        // Use instruction's location from input of pattern.
+                        output->location(input.back()->location());
+
                         // Keep track of newly allocated machine instructions.
                         pool.push_back(output);
                         instructions.insert(instructions.begin() + output_i, output);

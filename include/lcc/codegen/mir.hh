@@ -3,7 +3,9 @@
 
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
+#include <lcc/location.hh>
 #include <lcc/utils.hh>
+
 #include <set>
 #include <variant>
 #include <vector>
@@ -128,6 +130,8 @@ private:
     // interfere with each other, but clobbering alters that behaviour.
     std::vector<usz> _operand_clobbers{};
 
+    Location _location;
+
 public:
     MInst(Kind kind, Register reg)
         : _register(reg),
@@ -137,7 +141,9 @@ public:
         : _register(reg),
           _opcode(opcode){};
 
+    [[nodiscard]]
     usz reg() const { return _register.value; }
+    [[nodiscard]]
     usz regsize() const { return _register.size; }
     bool is_defining() const { return _register.defining_use; }
 
@@ -145,9 +151,15 @@ public:
     void regsize(uint newSize) { _register.size = newSize; }
     void is_defining(bool newDefining) { _register.defining_use = newDefining; }
 
+    [[nodiscard]]
     usz opcode() const { return _opcode; }
     void opcode(usz opcode) { _opcode = opcode; }
 
+    [[nodiscard]]
+    auto location() const -> Location { return _location; }
+    void location(Location location) { _location = location; }
+
+    [[nodiscard]]
     Kind kind() const {
         // FIXME: This should be enabled, but I don't have stackframes and can't
         // tell where this is triggering from so... yeah.
@@ -155,6 +167,7 @@ public:
         return static_cast<Kind>(_opcode);
     }
 
+    [[nodiscard]]
     usz use_count() const { return _use_count; }
 
     void add_use() {
@@ -165,6 +178,7 @@ public:
         operands.push_back(op);
     }
 
+    [[nodiscard]]
     MOperand get_operand(usz index) const {
         return operands.at(index);
     }
@@ -173,18 +187,22 @@ public:
         return get_operand(index);
     }
 
+    [[nodiscard]]
     std::vector<MOperand>& all_operands() {
         return operands;
     }
 
+    [[nodiscard]]
     const std::vector<MOperand>& all_operands() const {
         return operands;
     }
 
+    [[nodiscard]]
     std::vector<usz>& operand_clobbers() {
         return _operand_clobbers;
     }
 
+    [[nodiscard]]
     std::vector<usz> operand_clobbers() const {
         return _operand_clobbers;
     }
@@ -193,6 +211,7 @@ public:
         _operand_clobbers.push_back(operand_index);
     }
 
+    [[nodiscard]]
     static bool is_terminator(Kind k) {
         // TODO: noreturn calls?
         // clang-format off
@@ -214,37 +233,51 @@ class MBlock {
 
     std::vector<MInst> _instructions;
 
+    Location _location;
+
 public:
     MBlock(std::string name) : _name(name){};
 
+    [[nodiscard]]
     auto instructions() -> std::vector<MInst>& {
         return _instructions;
     }
 
+    [[nodiscard]]
     auto instructions() const -> const std::vector<MInst>& {
         return _instructions;
     }
 
+    [[nodiscard]]
     auto name() -> std::string& {
         return _name;
     }
 
+    [[nodiscard]]
     auto name() const -> const std::string& {
         return _name;
     }
 
+    [[nodiscard]]
+    auto location() const -> Location { return _location; }
+    void location(Location location) { _location = location; }
+
+    [[nodiscard]]
     auto successors() -> std::vector<std::string>& {
         return _successors;
     }
 
+    [[nodiscard]]
     auto successors() const -> std::vector<std::string> {
         return _successors;
     }
 
+    [[nodiscard]]
     auto predecessors() -> std::vector<std::string>& {
         return _predecessors;
     }
 
+    [[nodiscard]]
     auto predecessors() const -> std::vector<std::string> {
         return _predecessors;
     }
@@ -288,6 +321,8 @@ class MFunction {
 
     std::set<u8> _registers_used{};
 
+    Location _location;
+
     CallConv cc;
 
 public:
@@ -315,6 +350,10 @@ public:
     auto calling_convention() const -> CallConv {
         return cc;
     }
+
+    [[nodiscard]]
+    auto location() const -> Location { return _location; }
+    void location(Location location) { _location = location; }
 
     void add_block(const MBlock& block) {
         _blocks.push_back(block);

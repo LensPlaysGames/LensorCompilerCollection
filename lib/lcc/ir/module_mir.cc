@@ -383,6 +383,7 @@ auto Module::mir() -> std::vector<MFunction> {
         funcs.push_back(MFunction(function->call_conv()));
         auto& f = funcs.back();
         f.names() = function->names();
+        f.location(function->location());
         for (auto& block : function->blocks())
             f.add_block(MBlock(block->name()));
     }
@@ -421,6 +422,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Copy: {
                         auto copy_ir = as<CopyInst>(instruction);
                         auto copy = MInst(MInst::Kind::Copy, {virts[instruction], uint(copy_ir->type()->bits())});
+                        copy.location(copy_ir->location());
                         copy.add_operand(MOperandValueReference(function, f, copy_ir->operand()));
                         bb.add_instruction(copy);
                     } break;
@@ -441,6 +443,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         }
 
                         auto phi = MInst(MInst::Kind::Phi, {virts[instruction], uint(phi_ir->type()->bits())});
+                        phi.location(phi_ir->location());
                         for (auto& op : phi_ir->operands()) {
                             phi.add_operand(MOperandValueReference(function, f, op.block));
                             phi.add_operand(MOperandValueReference(function, f, op.value));
@@ -464,6 +467,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
                                     if (usz(arg_i) < arg_regs.size() and arg->type()->bytes() <= 8) {
                                         auto copy = MInst(MInst::Kind::Copy, {arg_regs[usz(arg_i)], 64});
+                                        copy.location(call_ir->location());
                                         copy.add_operand(MOperandValueReference(function, f, arg));
                                         bb.add_instruction(copy);
                                     } else {
@@ -528,6 +532,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                         // sub $<size>, %rsp
                                         auto stack_pointer_reg = Register{usz(x86_64::RegisterId::RSP), 64};
                                         auto sub = MInst(MInst::Kind::Sub, stack_pointer_reg);
+                                        sub.location(call_ir->location());
                                         sub.add_operand(stack_pointer_reg);
                                         sub.add_operand(MOperandImmediate(byte_count));
                                         bb.add_instruction(sub);
@@ -541,21 +546,25 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                         { // Destination argument (stack pointer)
                                             auto copy = MInst(MInst::Kind::Copy, {arg_regs[0], 64});
+                                            copy.location(call_ir->location());
                                             copy.add_operand(stack_pointer_reg);
                                             bb.add_instruction(copy);
                                         }
                                         { // Source argument
                                             auto copy = MInst(MInst::Kind::Copy, {arg_regs[1], 64});
+                                            copy.location(call_ir->location());
                                             copy.add_operand(MOperandValueReference(function, f, arg_ptr));
                                             bb.add_instruction(copy);
                                         }
                                         { // Size argument
                                             auto copy = MInst(MInst::Kind::Copy, {arg_regs[2], 64});
+                                            copy.location(call_ir->location());
                                             copy.add_operand(MOperandImmediate(byte_count));
                                             bb.add_instruction(copy);
                                         }
 
                                         auto call = MInst(MInst::Kind::Call, {usz(x86_64::RegisterId::RETURN), 0});
+                                        call.location(call_ir->location());
                                         call.add_operand(memcpy_function);
                                         bb.add_instruction(call);
                                     }
@@ -566,17 +575,21 @@ auto Module::mir() -> std::vector<MFunction> {
                                     if (arg_regs_used < arg_reg_total and arg->type()->bytes() <= 8) {
                                         // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
                                         auto copy = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], uint(arg->type()->bits())});
+                                        copy.location(call_ir->location());
                                         copy.add_operand(MOperandValueReference(function, f, arg));
                                         bb.add_instruction(copy);
                                     } else if (arg_regs_used < arg_reg_total - 1 and arg->type()->bytes() <= 16) {
                                         auto load_a = MInst(MInst::Kind::Load, {arg_regs[arg_regs_used++], 64});
                                         auto load_b = MInst(MInst::Kind::Load, {arg_regs[arg_regs_used++], uint(arg->type()->bits() - 64)});
+                                        load_a.location(call_ir->location());
+                                        load_b.location(call_ir->location());
 
                                         if (auto load_arg = cast<LoadInst>(arg)) {
                                             if (auto alloca = cast<AllocaInst>(load_arg->ptr())) {
                                                 load_a.add_operand(MOperandValueReference(function, f, alloca));
 
                                                 auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
+                                                add_b.location(call_ir->location());
                                                 add_b.add_operand(MOperandValueReference(function, f, alloca));
                                                 add_b.add_operand(MOperandImmediate(8, 32));
 
@@ -592,6 +605,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                             load_a.add_operand(MOperandValueReference(function, f, arg));
 
                                             auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
+                                            add_b.location(call_ir->location());
                                             add_b.add_operand(MOperandValueReference(function, f, arg));
                                             add_b.add_operand(MOperandImmediate(8, 32));
 
@@ -610,12 +624,14 @@ auto Module::mir() -> std::vector<MFunction> {
                         } else (LCC_ASSERT(false, "Unhandled architecture in gMIR generation from IR call"));
 
                         auto call = MInst(MInst::Kind::Call, {virts[instruction], uint(call_ir->function_type()->ret()->bits())});
+                        call.location(call_ir->location());
                         call.add_operand(MOperandValueReference(function, f, call_ir->callee()));
                         bb.add_instruction(call);
 
                         if (arg_stack_bytes_used) {
                             LCC_ASSERT(_ctx->target()->is_arch_x86_64(), "Handle architecture when resetting stack after a call");
                             auto stack_fixup = MInst(usz(x86_64::Opcode::Add), {usz(x86_64::RegisterId::RSP), 64});
+                            stack_fixup.location(call_ir->location());
                             stack_fixup.add_operand(MOperandImmediate(arg_stack_bytes_used));
                             stack_fixup.add_operand(Register{usz(x86_64::RegisterId::RSP), 64});
                             bb.add_instruction(stack_fixup);
@@ -652,11 +668,13 @@ auto Module::mir() -> std::vector<MFunction> {
                                 usz arg_regs_used = 0;
                                 for (auto op : intrinsic->operands()) {
                                     auto copy = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], uint(op->type()->bits())});
+                                    copy.location(intrinsic->location());
                                     copy.add_operand(MOperandValueReference(function, f, op));
                                     bb.add_instruction(copy);
                                 }
 
                                 auto call = MInst(MInst::Kind::Call, {0, 0});
+                                call.location(intrinsic->location());
                                 call.add_operand(memcpy_function);
                                 bb.add_instruction(call);
                             } break;
@@ -677,12 +695,14 @@ auto Module::mir() -> std::vector<MFunction> {
 
                             if (not offset) {
                                 auto copy = MInst(MInst::Kind::Copy, reg);
+                                copy.location(gep_ir->location());
                                 copy.add_operand(MOperandValueReference(function, f, gep_ir->ptr()));
                                 bb.add_instruction(copy);
                                 break;
                             }
 
                             auto add = MInst(MInst::Kind::Add, reg);
+                            add.location(gep_ir->location());
                             add.add_operand(MOperandValueReference(function, f, gep_ir->ptr()));
                             add.add_operand(MOperandImmediate(offset, 32));
 
@@ -694,10 +714,12 @@ auto Module::mir() -> std::vector<MFunction> {
                         }
 
                         auto mul = MInst(MInst::Kind::Mul, reg);
+                        mul.location(gep_ir->location());
                         mul.add_operand(MOperandImmediate(gep_ir->base_type()->bytes(), 32));
                         mul.add_operand(MOperandValueReference(function, f, gep_ir->idx()));
 
                         auto add = MInst(MInst::Kind::Add, reg);
+                        add.location(gep_ir->location());
                         add.add_operand(MOperandValueReference(function, f, gep_ir->ptr()));
                         add.add_operand(reg);
 
@@ -727,12 +749,14 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         if (not offset) {
                             auto copy = MInst(MInst::Kind::Copy, reg);
+                            copy.location(gmp_ir->location());
                             copy.add_operand(MOperandValueReference(function, f, gmp_ir->ptr()));
                             bb.add_instruction(copy);
                             break;
                         }
 
                         auto add = MInst(MInst::Kind::Add, reg);
+                        add.location(gmp_ir->location());
                         add.add_operand(MOperandValueReference(function, f, gmp_ir->ptr()));
                         add.add_operand(MOperandImmediate(offset, 32));
 
@@ -744,6 +768,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         // A branch does not produce a useable value, and as such it's register
                         // size is zero.
                         auto branch = MInst(MInst::Kind::Branch, {virts[instruction], 0});
+                        branch.location(branch_ir->location());
                         auto op = MOperandValueReference(function, f, branch_ir->target());
                         branch.add_operand(op);
                         bb.add_instruction(branch);
@@ -759,6 +784,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         // A branch does not produce a useable value, and as such it's register
                         // size is zero.
                         auto branch = MInst(MInst::Kind::CondBranch, {virts[instruction], 0});
+                        branch.location(branch_ir->location());
                         branch.add_operand(MOperandValueReference(function, f, branch_ir->cond()));
                         auto then_op = MOperandValueReference(function, f, branch_ir->then_block());
                         auto else_op = MOperandValueReference(function, f, branch_ir->else_block());
@@ -781,6 +807,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         // Unreachable does not produce a useable value, and as such it's register
                         // size is zero.
                         auto unreachable = MInst(MInst::Kind::Unreachable, {virts[instruction], 0});
+                        unreachable.location(as<UnreachableInst>(instruction)->location());
                         bb.add_instruction(unreachable);
                     } break;
 
@@ -825,14 +852,17 @@ auto Module::mir() -> std::vector<MFunction> {
                                         );
 
                                         auto store_a = MInst(MInst::Kind::Store, {virts[instruction], 0});
+                                        store_a.location(store_ir->location());
                                         store_a.add_operand(reg_a);
                                         store_a.add_operand(MOperandValueReference(function, f, alloca));
 
                                         auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
+                                        add_b.location(store_ir->location());
                                         add_b.add_operand(MOperandValueReference(function, f, alloca));
                                         add_b.add_operand(MOperandImmediate(8, 32));
 
                                         auto store_b = MInst(MInst::Kind::Store, {virts[instruction], 0});
+                                        store_b.location(store_ir->location());
                                         store_b.add_operand(reg_b);
                                         store_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
 
@@ -849,6 +879,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         // A store does not produce a useable value, and as such it's register
                         // size is zero.
                         auto store = MInst(MInst::Kind::Store, {virts[instruction], 0});
+                        store.location(store_ir->location());
                         store.add_operand(MOperandValueReference(function, f, store_ir->val()));
                         store.add_operand(MOperandValueReference(function, f, store_ir->ptr()));
                         bb.add_instruction(store);
@@ -857,6 +888,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Load: {
                         auto load_ir = as<LoadInst>(instruction);
                         auto load = MInst(MInst::Kind::Load, {virts[instruction], uint(load_ir->type()->bits())});
+                        load.location(load_ir->location());
                         load.add_operand(MOperandValueReference(function, f, load_ir->ptr()));
                         bb.add_instruction(load);
                     } break;
@@ -872,16 +904,20 @@ auto Module::mir() -> std::vector<MFunction> {
                                 // Add eight bytes to pointer to load from next.
                                 // Copy pointer
                                 auto copy_b = MInst(MInst::Kind::Copy, {next_vreg(), 64});
+                                copy_b.location(ret_ir->location());
                                 copy_b.add_operand(MOperandValueReference(function, f, ret_ir->val()));
 
                                 auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
+                                add_b.location(ret_ir->location());
                                 add_b.add_operand(MOperandRegister(copy_b.reg(), uint(copy_b.regsize())));
                                 add_b.add_operand(MOperandImmediate(8, 32));
 
                                 auto load_a = MInst(MInst::Kind::Load, {usz(x86_64::RegisterId::RAX), 64});
+                                load_a.location(ret_ir->location());
                                 load_a.add_operand(MOperandValueReference(function, f, ret_ir->val()));
 
                                 auto load_b = MInst(MInst::Kind::Load, {usz(x86_64::RegisterId::RDX), uint(func_type->ret()->bits() - 64)});
+                                load_b.location(ret_ir->location());
                                 load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
 
                                 bb.add_instruction(copy_b);
@@ -896,6 +932,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         usz regsize = 0;
                         if (ret_ir->has_value()) regsize = ret_ir->val()->type()->bits();
                         auto ret = MInst(MInst::Kind::Return, {virts[instruction], uint(regsize)});
+                        ret.location(ret_ir->location());
                         if (ret_ir->has_value())
                             ret.add_operand(MOperandValueReference(function, f, ret_ir->val()));
                         bb.add_instruction(ret);
@@ -910,6 +947,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Compl: {
                         auto unary_ir = as<UnaryInstBase>(instruction);
                         auto unary = MInst(ir_nary_inst_kind_to_mir(unary_ir->kind()), {virts[instruction], uint(unary_ir->type()->bits())});
+                        unary.location(unary_ir->location());
                         unary.add_operand(MOperandValueReference(function, f, unary_ir->operand()));
                         bb.add_instruction(unary);
                     } break;
@@ -940,6 +978,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::UGe: {
                         auto binary_ir = as<BinaryInst>(instruction);
                         auto binary = MInst(ir_nary_inst_kind_to_mir(binary_ir->kind()), {virts[instruction], uint(binary_ir->type()->bits())});
+                        binary.location(binary_ir->location());
                         binary.add_operand(MOperandValueReference(function, f, binary_ir->lhs()));
                         binary.add_operand(MOperandValueReference(function, f, binary_ir->rhs()));
                         bb.add_instruction(binary);
@@ -974,6 +1013,7 @@ auto Module::mir() -> std::vector<MFunction> {
                             Diag::ICE("Phi value cannot be a block");
 
                         auto copy = MInst(MInst::Kind::Copy, {minst.reg(), uint(minst.regsize())});
+                        copy.location(minst.location());
 
                         usz uses = minst.use_count();
                         while (uses && uses--) copy.add_use();
