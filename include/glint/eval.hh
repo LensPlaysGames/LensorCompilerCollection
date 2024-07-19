@@ -4,6 +4,11 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
 
+#include <concepts>
+#include <cstddef>
+#include <type_traits>
+#include <variant>
+
 namespace lcc::glint {
 class Scope;
 class Expr;

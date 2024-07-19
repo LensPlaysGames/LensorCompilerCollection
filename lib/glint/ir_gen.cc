@@ -1,5 +1,3 @@
-#include <glint/ast.hh>
-#include <glint/ir_gen.hh>
 #include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/ir.hh>
@@ -9,8 +7,11 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/rtti.hh>
 
-#include <memory>
-#include <unordered_map>
+#include <glint/ast.hh>
+#include <glint/ir_gen.hh>
+
+#include <iterator>
+#include <utility>
 #include <vector>
 
 namespace lcc {

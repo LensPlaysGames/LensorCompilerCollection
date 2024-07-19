@@ -1,10 +1,16 @@
-#include <glint/ast.hh>
-#include <glint/module_description.hh>
 #include <lcc/file.hh>
 #include <lcc/utils.hh>
 
+#include <glint/ast.hh>
+#include <glint/module_description.hh>
+
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <iterator>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 lcc::glint::Module::Module(

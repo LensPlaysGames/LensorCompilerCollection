@@ -8,6 +8,7 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace lcc::glint {
 class Sema {
