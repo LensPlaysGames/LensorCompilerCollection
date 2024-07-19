@@ -513,88 +513,169 @@ void lcc::glint::Sema::Analyse(Context* ctx, Module& m, bool use_colours) {
     return s.AnalyseModule();
 }
 
+bool lcc::glint::Sema::try_get_metadata_blob_from_object(
+    const Module::Ref& import,
+    const std::string& include_dir,
+    std::vector<std::string>& paths_tried
+) {
+    auto path_base0 = include_dir + std::filesystem::path::preferred_separator + import.name;
+    auto path_base1 = include_dir + std::filesystem::path::preferred_separator + "lib" + import.name;
+    auto paths = {
+        path_base0 + ".o",
+        path_base0 + ".obj",
+        path_base0 + ".a",
+        path_base1 + ".o",
+        path_base1 + ".obj",
+        path_base1 + ".a",
+    };
+    for (auto p : paths) {
+        paths_tried.push_back(p);
+        if (std::filesystem::exists(p)) {
+            fmt::print("Found IMPORT {} at {}\n", import.name, p);
+            // Open file, get contents
+            auto object_file = File::Read(p);
+            LCC_ASSERT(
+                not object_file.empty(),
+                "Found object file for module {} at {}, but the file is empty",
+                import.name,
+                p
+            );
+            // Determine file-type via magic bytes or extension
+            std::vector<u8> metadata_blob{};
+            if (
+                object_file.size() >= sizeof(elf64_header)
+                and object_file.at(0) == 0x7f and object_file.at(1) == 'E'
+                and object_file.at(2) == 'L' and object_file.at(3) == 'F'
+            ) {
+                auto section = elf::get_section_from_blob(
+                    object_file,
+                    metadata_section_name
+                );
+                metadata_blob = std::move(section.contents());
+            } else LCC_ASSERT(
+                false,
+                "Unrecognized file format of module {} at {}",
+                import.name,
+                p
+            );
+            // Very basic validation pass
+            LCC_ASSERT(
+                not metadata_blob.empty(),
+                "Didn't properly get metadata (it's empty) for module {} at {}",
+                import.name,
+                p
+            );
+            LCC_ASSERT(
+                metadata_blob.at(0) == ModuleDescription::default_version
+                    and metadata_blob.at(1) == ModuleDescription::magic_byte0
+                    and metadata_blob.at(2) == ModuleDescription::magic_byte1
+                    and metadata_blob.at(3) == ModuleDescription::magic_byte2,
+                "Metadata for module {} at {} has invalid magic bytes",
+                import.name,
+                p
+            );
+            // Deserialise metadata blob into a module
+            // FIXME: (this module? or a new module?)
+            mod.deserialise(context, metadata_blob);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
+    const Module::Ref& import,
+    const std::string& include_dir,
+    std::vector<std::string>& paths_tried
+) {
+    auto path = include_dir
+              + std::filesystem::path::preferred_separator
+              + import.name + std::string(metadata_file_extension);
+
+    paths_tried.push_back(path);
+    if (std::filesystem::exists(path)) {
+        fmt::print("Found IMPORT {} at {}\n", import.name, path);
+
+        // Open file, get contents
+        auto gmeta_file = File::Read(path);
+
+        std::vector<u8> metadata_blob{};
+        metadata_blob.insert(metadata_blob.end(), gmeta_file.begin(), gmeta_file.end());
+        LCC_ASSERT(
+            not metadata_blob.empty(),
+            "Found gmeta file for module {} at {}, but the file is empty",
+            import.name,
+            path
+        );
+        LCC_ASSERT(
+            metadata_blob.at(0) == ModuleDescription::default_version
+                and metadata_blob.at(1) == ModuleDescription::magic_byte0
+                and metadata_blob.at(2) == ModuleDescription::magic_byte1
+                and metadata_blob.at(3) == ModuleDescription::magic_byte2,
+            "Metadata for module {} at {} has invalid magic bytes",
+            import.name,
+            path
+        );
+        mod.deserialise(context, metadata_blob);
+        return true;
+    }
+
+    return false;
+}
+
+bool lcc::glint::Sema::try_get_metadata_blob_from_assembly(
+    const Module::Ref& import,
+    const std::string& include_dir,
+    std::vector<std::string>& paths_tried
+) {
+    auto path = include_dir
+              + std::filesystem::path::preferred_separator
+              + import.name + ".s";
+
+    paths_tried.push_back(path);
+    if (std::filesystem::exists(path)) {
+        // TODO: We can kind of cheat and just direct seek to `.section .glint`,
+        // then `.byte`, then parse the whole line as comma-separated integer
+        // literals forming a stream of bytes.
+        LCC_TODO("Parse Glint module metadata from assembly file (alternatively, provide a gmeta or object file)");
+    }
+    return false;
+}
+
 void lcc::glint::Sema::AnalyseModule() {
-    /// Load imported modules.
-    for (auto import : mod.imports()) {
+    // Load imported modules.
+    for (auto& import : mod.imports()) {
         bool loaded{false};
         std::vector<std::string> paths_tried{};
-        // Using module name, look in all include directories for
-        // "<module name>.o". Parse the object file and get the `.intc_metadata`
-        // section out of it, then deserialise that into the module.
+
         for (auto include_dir : context->include_directories()) {
-            auto path_base0 = include_dir + std::filesystem::path::preferred_separator + import.name;
-            auto path_base1 = include_dir + std::filesystem::path::preferred_separator + "lib" + import.name;
-            auto paths = {
-                path_base0 + ".o",
-                path_base0 + ".obj",
-                path_base0 + ".a",
-                path_base1 + ".o",
-                path_base1 + ".obj",
-                path_base1 + ".a",
-            };
-            for (auto p : paths) {
-                paths_tried.push_back(p);
-                if (std::filesystem::exists(p)) {
-                    fmt::print("Found IMPORT {} at {}\n", import.name, p);
-                    // Open file, get contents
-                    auto object_file = File::Read(p);
-                    LCC_ASSERT(
-                        not object_file.empty(),
-                        "Found object file for module {} at {}, but the file is empty",
-                        import.name,
-                        p
-                    );
-                    // Determine file-type via magic bytes or extension
-                    // TODO: Could possibly cheat and look for magic bytes/header in the file
-                    // anywhere.
-                    std::vector<u8> metadata_blob{};
-                    if (object_file.size() >= sizeof(elf64_header)
-                        and object_file.at(0) == 0x7f and object_file.at(1) == 'E'
-                        and object_file.at(2) == 'L' and object_file.at(3) == 'F') {
-                        auto section = elf::get_section_from_blob(
-                            object_file,
-                            ".intc_metadata"sv
-                        );
-                        metadata_blob = std::move(section.contents());
-                    } else LCC_ASSERT(
-                        false,
-                        "Unrecognized file format of module {} at {}",
-                        import.name,
-                        p
-                    );
-                    // Very basic validation pass
-                    LCC_ASSERT(
-                        not metadata_blob.empty(),
-                        "Didn't properly get metadata (it's empty) for module {} at {}",
-                        import.name,
-                        p
-                    );
-                    LCC_ASSERT(
-                        metadata_blob.at(0) == ModuleDescription::default_version
-                            and metadata_blob.at(1) == ModuleDescription::magic_byte0
-                            and metadata_blob.at(2) == ModuleDescription::magic_byte1
-                            and metadata_blob.at(3) == ModuleDescription::magic_byte2,
-                        "Metadata for module {} at {} has invalid magic bytes",
-                        import.name,
-                        p
-                    );
-                    // Deserialise metadata blob into a module
-                    // FIXME: (this module? or a new module?)
-                    mod.deserialise(context, metadata_blob);
-                    loaded = true;
-                    break;
-                }
-            }
+            loaded = try_get_metadata_blob_from_gmeta(import, include_dir, paths_tried)
+                  or try_get_metadata_blob_from_object(import, include_dir, paths_tried)
+                  or try_get_metadata_blob_from_assembly(import, include_dir, paths_tried);
+            if (loaded) break;
         }
 
-        LCC_ASSERT(
-            loaded,
-            "Could not find imported module {} in any include directory\n"
-            "Paths tried:\n"
-            "{}",
-            import.name,
-            fmt::join(paths_tried, "\n")
-        );
+        if (not loaded) {
+            // TODO: Link/reference help documentation on how to point the compiler to
+            // look in the proper place for Glint metadata, and how to produce it.
+            Error(
+                {},
+                "Could not find imported module {} in any include directory.\n"
+                "Paths tried:\n"
+                "{}",
+                import.name,
+                fmt::join(paths_tried, "\n")
+            )
+                .attach(
+                    false,
+                    Diag::Note(
+                        context,
+                        import.location,
+                        "Imported here"
+                    )
+                );
+            std::exit(1);
+        }
     }
 
     /// Analyse the signatures of all functions. This must be done
@@ -1413,7 +1494,7 @@ void lcc::glint::Sema::AnalyseBinary(BinaryExpr* b) {
             /// whether the assignment is valid or not.
             b->type(b->lhs()->type());
 
-            /// Assignment yields an lvalue.
+            // Assignment always yields an lvalue.
             b->set_lvalue();
 
             /// The RHS must be assignable to the LHS.

@@ -1,5 +1,8 @@
 #include <glint/ast.hh>
 #include <glint/module_description.hh>
+#include <lcc/file.hh>
+#include <lcc/utils.hh>
+
 #include <string>
 #include <string_view>
 #include <vector>
@@ -8,7 +11,9 @@ lcc::glint::Module::Module(
     File* file,
     std::string module_name,
     bool is_logical_module
-) : name{std::move(module_name)}, _is_module{is_logical_module}, file{file} {
+) : _name{std::move(module_name)},
+    _is_module{is_logical_module},
+    file{file} {
     FuncType* ty{};
 
     /// Create the type of the top-level function.
@@ -34,23 +39,32 @@ lcc::glint::Module::Module(
         };
     }
 
-    top_level_function = new (*this) FuncDecl{
-        is_logical_module ? fmt::format("_XGlint__init_{}", name) : "main",
-        ty,
-        new (*this) BlockExpr{{}, {}},
-        nullptr,
-        this,
-        Linkage::Exported,
-        {},
-        CallConv::C,
-    };
+    Location loc{};
+    if (file) {
+        loc = Location{
+            0,
+            (decltype(Location::len)) file->size(),
+            (decltype(Location::file_id)) file->file_id() //
+        };
+    }
+    top_level_function
+        = new (*this) FuncDecl{
+            is_logical_module ? fmt::format("_XGlint__init_{}", name()) : "main",
+            ty,
+            new (*this) BlockExpr{{}, {}},
+            nullptr,
+            this,
+            Linkage::Exported,
+            loc,
+            CallConv::C,
+        };
 }
 
 lcc::glint::Module::~Module() {
     for (auto* node : nodes) delete node;
     for (auto* type : types) delete type;
     for (auto* scope : scopes) delete scope;
-    for (auto& [_, i] : _imports) delete i;
+    for (auto& import : _imports) delete import.module;
 }
 
 void lcc::glint::Module::add_top_level_expr(Expr* node) {
@@ -402,12 +416,16 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
         declarations.insert(declarations.end(), decl->name().begin(), decl->name().end());
     }
 
-    // Make name easily serialisable
+    // TODO: Make name serialisable
     LCC_ASSERT(
-        name.size(),
+        name().size(),
         "Cannot serialise unnamed module"
     );
-    serialised_name.insert(serialised_name.end(), name.begin(), name.end());
+    serialised_name.insert(
+        serialised_name.end(),
+        name().begin(),
+        name().end()
+    );
     LCC_ASSERT(
         std::find(serialised_name.begin(), serialised_name.end(), '\0') == serialised_name.end(),
         "Cannot serialise module with NULL character in name"
@@ -499,17 +517,17 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                     length_array[i] = module_metadata_blob.at(type_offset++);
                 u32 length = from_bytes<u32>(length_array);
 
-                LCC_ASSERT(name.size(), "Deserialised named type has zero-length name");
+                LCC_ASSERT(name().size(), "Deserialised named type has zero-length name");
 
-                std::string name{};
+                std::string deserialised_name{};
                 for (u32 i = 0; i < length; ++i)
-                    name += char(module_metadata_blob.at(type_offset++));
+                    deserialised_name += char(module_metadata_blob.at(type_offset++));
 
-                LCC_ASSERT(name.size(), "Deserialised named type has empty name");
+                LCC_ASSERT(deserialised_name.size(), "Deserialised named type has empty name");
 
                 // FIXME: This may need to be top level scope, not entirely sure the
                 // semantics of this yet.
-                new (*this) NamedType(name, global_scope(), {});
+                new (*this) NamedType(deserialised_name, global_scope(), {});
             } break;
 
             // BuiltinType: builtin_kind :u8
@@ -607,6 +625,7 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
         auto* ty = types.at(types_zero_index + decl_hdr.type_index);
 
         // FIXME: Should it be top level scope instead of global?
+        auto* scope = global_scope();
         switch (ModuleDescription::DeclarationHeader::Kind(decl_hdr.kind)) {
             // Created from Expr::Kind::TypeDecl
             case ModuleDescription::DeclarationHeader::Kind::TYPE: {
@@ -616,14 +635,14 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                 );
                 auto type_decl = new (*this) TypeDecl(this, name, as<DeclaredType>(ty), {});
                 type_decl->set_sema_done();
-                auto decl = global_scope()->declare(ctx, std::string(name), type_decl);
+                auto decl = scope->declare(ctx, std::string(name), type_decl);
             } break;
 
             // Created from Expr::Kind::TypeAliasDecl
             case ModuleDescription::DeclarationHeader::Kind::TYPE_ALIAS: {
                 auto* type_alias_decl = new (*this) TypeAliasDecl(name, ty, {});
                 type_alias_decl->set_sema_done();
-                auto decl = global_scope()->declare(ctx, std::string(name), type_alias_decl);
+                auto decl = scope->declare(ctx, std::string(name), type_alias_decl);
             } break;
 
             // Created from Expr::Kind::VarDecl
@@ -631,7 +650,7 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                 // FIXME: Should possibly be reexported.
                 auto* var_decl = new (*this) VarDecl(name, ty, nullptr, this, Linkage::Imported, {});
                 var_decl->set_sema_done();
-                auto decl = global_scope()->declare(ctx, std::string(name), var_decl);
+                auto decl = scope->declare(ctx, std::string(name), var_decl);
             } break;
 
             // Created from Expr::Kind::FuncDecl
@@ -640,9 +659,9 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                     is<FuncType>(ty),
                     "Cannot create FuncDecl when deserialised type is not a function"
                 );
-                auto* func_decl = new (*this) FuncDecl(name, as<FuncType>(ty), nullptr, global_scope(), this, Linkage::Imported, {});
+                auto* func_decl = new (*this) FuncDecl(name, as<FuncType>(ty), nullptr, scope, this, Linkage::Imported, {});
                 func_decl->set_sema_done();
-                auto decl = global_scope()->declare(ctx, std::string(name), func_decl);
+                auto decl = scope->declare(ctx, std::string(name), func_decl);
             } break;
 
             // Created from Expr::Kind::EnumeratorDecl

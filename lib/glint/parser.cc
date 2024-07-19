@@ -1140,14 +1140,16 @@ auto intc::Parser::ParsePreamble(File* f) -> Result<void> {
 
     while (At(Tk::Semicolon)) NextToken();
 
-    /// Parse imports.
+    // Parse imports.
     while (At(Tk::Ident) and tok.text == "import" and not tok.artificial) {
+        Location loc = tok.location;
         NextToken(); /// Yeet "import".
-        if (not At(Tk::Ident)) return Error("Expected module name after import");
+        if (not At(Tk::Ident, Tk::String)) return Error("Expected module name after import");
 
-        /// Add the module to be loaded later.
-        mod->add_import(tok.text);
-        NextToken(); /// Yeet module name.
+        // Add the module to be loaded later.
+        mod->add_import(tok.text, {loc, tok.location});
+        NextToken(); // Yeet module name.
+
         while (At(Tk::Semicolon)) NextToken();
     }
 

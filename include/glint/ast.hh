@@ -1,7 +1,6 @@
 #ifndef GLINT_AST_HH
 #define GLINT_AST_HH
 
-#include <functional>
 #include <glint/eval.hh>
 #include <lcc/core.hh>
 #include <lcc/diags.hh>
@@ -9,9 +8,14 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
 #include <lcc/utils/result.hh>
+
+#include <functional>
 #include <span>
 
 namespace lcc::glint {
+static constexpr std::string_view metadata_section_name{".glint"};
+static constexpr std::string_view metadata_file_extension{".gmeta"};
+
 enum struct IntrinsicKind {
     BuiltinDebugtrap,
     BuiltinFilename,
@@ -140,20 +144,23 @@ class Module {
 public:
     struct Ref {
         std::string name;
-        mutable Module* module;
-        Ref(std::string name, Module* module) : name(std::move(name)), module(module) {}
+        Module* module;
+        Location location;
+
+        Ref(std::string name, Module* module, Location location)
+            : name(std::move(name)), module(module), location(location) {}
     };
 
 private:
-    std::string name{};
+    std::string _name{};
 
     FuncDecl* top_level_function{};
     bool _is_module;
     File* file;
 
-    std::vector<Ref> _imports;
-    std::vector<Decl*> exports;
-    std::vector<FuncDecl*> _functions;
+    std::vector<Ref> _imports{};
+    std::vector<Decl*> exports{};
+    std::vector<FuncDecl*> _functions{};
 
     usz lambda_counter = 0;
 
@@ -168,9 +175,9 @@ public:
     /// Add a function to this module.
     void add_function(FuncDecl* func) { _functions.push_back(func); }
 
-    /// Add an import.
-    void add_import(std::string module_name) {
-        _imports.emplace_back(std::move(module_name), nullptr);
+    // Add an import
+    void add_import(std::string module_name, Location location = {}) {
+        _imports.emplace_back(std::move(module_name), nullptr, location);
     }
 
     /// Add a top-level expression.
@@ -199,6 +206,9 @@ public:
 
     /// Get a function name that is unique within this module.
     auto unique_function_name() -> std::string { return fmt::format("_XGlint__lambda_{}", lambda_counter++); }
+
+    // Get the name of this module
+    auto name() const -> std::string_view { return _name; }
 
     bool is_module() const {
         return _is_module;
@@ -917,7 +927,7 @@ public:
         return _cached_struct;
     }
 
-    /// Make sure to check the return value is not nullptr.
+    /// Caller needs to make sure to check the return value is not nullptr.
     auto struct_type() -> StructType* {
         return _cached_struct;
     }
@@ -1069,6 +1079,8 @@ public:
 
     auto type() const -> Type*;
 
+    void print(bool use_colour) const;
+
     /// Deep-copy an expression.
     static Expr* Clone(Module& mod, Expr* expr);
 };
@@ -1109,6 +1121,52 @@ public:
     static bool classof(const Expr* expr) {
         return expr->kind() >= Kind::TypeDecl and expr->kind() <= Kind::FuncDecl;
     }
+};
+
+class IntegerLiteral : public TypedExpr {
+    aint _value;
+
+public:
+    IntegerLiteral(aint value, Location location)
+        : TypedExpr(Kind::IntegerLiteral, location, Type::Int), _value(value) {
+        /// For now, there should be no way that the value could be out of range.
+        set_sema_done();
+    }
+
+    IntegerLiteral(aint value, Type* ty, Location location)
+        : TypedExpr(Kind::IntegerLiteral, location, ty), _value(value) {
+        /// For now, there should be no way that the value could be out of range.
+        set_sema_done();
+    }
+
+    aint value() const { return _value; }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::IntegerLiteral; }
+};
+
+class StringLiteral : public TypedExpr {
+    usz _index;
+
+public:
+    /// Intern the given string and create a string literal for it.
+    StringLiteral(Module& mod, std::string_view value, Location location);
+
+    usz string_index() const { return _index; }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::StringLiteral; }
+};
+
+class CompoundLiteral : public TypedExpr {
+    std::vector<Expr*> _values;
+
+public:
+    CompoundLiteral(std::vector<Expr*> values, Location location, Type* type = Type::Unknown)
+        : TypedExpr(Kind::CompoundLiteral, location, type), _values(std::move(values)) {}
+
+    auto values() -> std::vector<Expr*>& { return _values; }
+    auto values() const -> const std::vector<Expr*>& { return _values; }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::CompoundLiteral; }
 };
 
 /// Enumerator declaration.
@@ -1271,52 +1329,6 @@ public:
         : Decl(Kind::TypeAliasDecl, std::move(name), aliased_type, location) {}
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeAliasDecl; }
-};
-
-class IntegerLiteral : public TypedExpr {
-    aint _value;
-
-public:
-    IntegerLiteral(aint value, Location location)
-        : TypedExpr(Kind::IntegerLiteral, location, Type::Int), _value(value) {
-        /// For now, there should be no way that the value could be out of range.
-        set_sema_done();
-    }
-
-    IntegerLiteral(aint value, Type* ty, Location location)
-        : TypedExpr(Kind::IntegerLiteral, location, ty), _value(value) {
-        /// For now, there should be no way that the value could be out of range.
-        set_sema_done();
-    }
-
-    aint value() const { return _value; }
-
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::IntegerLiteral; }
-};
-
-class StringLiteral : public TypedExpr {
-    usz _index;
-
-public:
-    /// Intern the given string and create a string literal for it.
-    StringLiteral(Module& mod, std::string_view value, Location location);
-
-    usz string_index() const { return _index; }
-
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::StringLiteral; }
-};
-
-class CompoundLiteral : public TypedExpr {
-    std::vector<Expr*> _values;
-
-public:
-    CompoundLiteral(std::vector<Expr*> values, Location location, Type* type = Type::Unknown)
-        : TypedExpr(Kind::CompoundLiteral, location, type), _values(std::move(values)) {}
-
-    auto values() -> std::vector<Expr*>& { return _values; }
-    auto values() const -> const std::vector<Expr*>& { return _values; }
-
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::CompoundLiteral; }
 };
 
 /// A set of function overloads.

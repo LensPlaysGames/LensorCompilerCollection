@@ -1004,8 +1004,22 @@ auto IRGen::Generate(Context* context, glint::Module& mod) -> lcc::Module* {
 
     if (mod.is_module()) {
         Section metadata_blob{};
-        metadata_blob.name = ".glint_";
+        metadata_blob.name = metadata_section_name;
         metadata_blob.contents() = mod.serialise();
+
+        // TODO: If we are given a CLI option to save module metadata(s) in a
+        // separate file in a specific directory, do that. For now just always do
+        // it.
+        fs::path p{"./"};
+        p.replace_filename(mod.name());
+        p.replace_extension(metadata_file_extension);
+        (void) File::Write(
+            metadata_blob.contents().data(),
+            metadata_blob.contents().size(),
+            p
+        );
+
+        // Tell LCC to emit this section in the output code.
         ir_gen.mod()->add_extra_section(metadata_blob);
     }
 

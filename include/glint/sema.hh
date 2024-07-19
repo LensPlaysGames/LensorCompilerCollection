@@ -218,6 +218,22 @@ private:
     /// the designated type. The location of the cast is set
     /// to the location of the expression.
     void WrapWithCast(Expr** expr, Type* type, CastKind kind);
+
+    bool try_get_metadata_blob_from_gmeta(
+        const Module::Ref& import,
+        const std::string& include_dir,
+        std::vector<std::string>& paths_tried
+    );
+    bool try_get_metadata_blob_from_object(
+        const Module::Ref& import,
+        const std::string& include_dir,
+        std::vector<std::string>& paths_tried
+    );
+    bool try_get_metadata_blob_from_assembly(
+        const Module::Ref& import,
+        const std::string& include_dir,
+        std::vector<std::string>& paths_tried
+    );
 };
 } // namespace lcc::glint
 
