@@ -77,6 +77,17 @@ bool lcc::Diag::ShouldUseColour() const {
 
 lcc::Diag::~Diag() { print(); }
 
+constexpr std::string named_link(std::string_view uri, std::string_view name) {
+    return fmt::format("\033]8;;{}\033\\{}\033]8;;\033\\", uri, name);
+}
+
+std::string file_link(lcc::fs::path path) {
+    return named_link(
+        fmt::format("file://{}", lcc::fs::absolute(path).string()),
+        lcc::fs::relative(path).string()
+    );
+}
+
 void lcc::Diag::print() {
     using enum utils::Colour;
 
@@ -152,11 +163,12 @@ void lcc::Diag::print() {
 
     // Print the file name, line number, and column number.
     const auto& file = *fs[where.file_id].get();
-    fmt::print(stderr, "{}{}:{}:{}: ", C(Bold), file.path().string(), line, col);
+    fmt::print(stderr, "{}{}:{}:{}: ", C(Bold), fs::relative(file.path()).string(), line, col);
+    // fmt::print(stderr, "{}{}:{}:{}: ", C(Bold), file_link(file.path()), line, col);
 
     // Print the diagnostic name and message.
     // TODO: If message is multiple lines, format it a little differently to be a little more understandable.
-    std::vector<usz> message_newline_offsets;
+    std::vector<usz> message_newline_offsets{};
     for (usz i = 0; i < msg.size(); ++i)
         if (msg.at(i) == '\n') message_newline_offsets.push_back(i);
 
@@ -168,20 +180,22 @@ void lcc::Diag::print() {
         for (auto newline_offset : message_newline_offsets) {
             // Do indentation for continuing lines, but only if the lines don't begin
             // with their own indentation already.
-            if (printed_offset != 0 and msg.at(printed_offset) != ' ') fmt::print("    ");
+            if (printed_offset != 0 and msg.at(printed_offset) != ' ') fmt::print(stderr, "    ");
             fmt::print(
+                stderr,
                 "{}",
                 std::string_view(
                     msg.begin() + isz(printed_offset),
                     msg.begin() + isz(newline_offset) + 1
                 )
             );
-            printed_offset += newline_offset + 1;
+            printed_offset = newline_offset + 1;
         }
         // Last part of format without a trailing newline.
         if (not msg.ends_with('\n')) {
-            if (msg.at(printed_offset) != ' ') fmt::print("    ");
+            if (msg.at(printed_offset) != ' ') fmt::print(stderr, "    ");
             fmt::print(
+                stderr,
                 "{}\n",
                 std::string_view(
                     msg.begin() + isz(printed_offset),
