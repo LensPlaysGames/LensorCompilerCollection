@@ -157,7 +157,12 @@ int main(int argc, const char** argv) {
                 {"  -x", "What language to parse input code as (default: extension based)\n"},
                 {"", "    glint, ir\n"},
                 {"  -f", "What format to emit code in (default: asm)\n"},
-                {"", "    asm, gnu-as-att, obj, elf, coff, llvm\n"},
+                // Basically, the name on the left of the colon will pick a default from
+                // one on the right of the colon based on the system the compiler was
+                // compiled for.
+                {"", "    asm: gnu-as-att,\n"},
+                {"", "    obj: elf, coff,\n"},
+                {"", "    IR: ir, llvm\n"},
                 }}.get());
             // clang-format on
             exit(0);
@@ -234,9 +239,8 @@ int main(int argc, const char** argv) {
             auto format = next_arg();
             if (
                 format != "asm" and format != "gnu-as-att"
-                and format != "obj" and format != "elf"
-                and format != "coff" and format != "llvm"
-                and format != "ir"
+                and format != "obj" and format != "elf" and format != "coff"
+                and format != "IR" and format != "ir" and format != "llvm"
             ) {
                 fmt::print("CLI ERROR: Invalid format {}\n", format);
                 exit(1);
@@ -279,7 +283,7 @@ int main(int argc, const char** argv) {
     auto* format = detail::default_format;
     if (options.format == "default") {
         ;
-    } else if (options.format == "ir") {
+    } else if (options.format == "ir" or options.format == "IR") {
         format = lcc::Format::lcc_ir;
     } else if (options.format == "asm" || options.format == "gnu-as-att") {
         format = lcc::Format::gnu_as_att_assembly;
