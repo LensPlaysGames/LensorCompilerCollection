@@ -4,21 +4,6 @@
 
 Now written in C++, LCC started as a compiler written in C for just one hobby language, ~Intercept~. Over the course of a few years, it has grown into a compiler collection, with a whole host of frontends created and maintained by the growing and thriving community.
 
-** What LCC /Isn't/
-
-LCC is not:
-- your system's linker
-- associated with LLVM
-
-** Implemented Languages
-
-- Glint
-
-In the future, we hope to support
-
-- some of C
-- YOUR language :)
-
 ** Usage
 
 For convenience purposes, there is a single executable, ~lcc~, that can delegate between all of the different compilers in the collection. This is called the /compiler driver/, often shortened to just /driver/.
@@ -46,3 +31,44 @@ Finally, build an executable from the build tree.
 #+begin_src shell
   cmake --build bld
 #+end_src
+
+** Implemented Languages
+
+- Glint
+
+In the future, we hope to support
+
+- some of C
+- YOUR language :)
+
+*** Targeting LCC IR
+
+For those of you who already have a language /and/ a compiler implementation that you are happy with, you are able to extend it minimally to allow LCC to compile (and optimise!) your language. There are two main ways to do this: via text, or direct interaction.
+
+**** Textual LCC IR
+
+As a compiler developer, it is important for me to be able to understand the different data structures in the compiler, so, naturally, I print them out to the terminal. This results in a textual representation of the intermediate representation, which I have also written a parser for. =lcc= treats file extension =.lcc= as LCC IR source, which can be produced from the languages built into the compiler with the IR output code format command line option =-f ir=.
+
+You could theoretically write an AST-visiting code generator that outputs text, much like you can with assembly (and like I did when this compiler first started), but you wouldn't have to worry about register allocation, or any of that complicated business. Just the underlying computations that you want to make happen. If you then fed this to =lcc=, it would know how to compile (and optimise!) it.
+
+NOTE: If you target textual LCC IR, there is no guarantee of the syntax of the IR over time. That is, if we need to make changes, changes will be made, and that may mean the text your code generator generates is no longer valid LCC IR. Do also note that if you opt for direct interaction, you get the textual emission *for free*, while also not suffering from the invalidation problems. Also, if written in C++, you could maybe take advantage of LangTest to test your language and make sure both your parser and your LCC IR generator work properly.
+
+**** Direct Interaction
+
+Link with =liblcc= and use the code directly in your existing compiler implementation.
+
+Generally, IR generation can be very wide but not very deep. That is, there can be quite a bit of code to write, but there is only a few things that it is doing. This is evident in the header of Glint's IR generation, at =include/glint/ir_gen.hh=---there are only a few important functions: =insert=, to insert an IR instruction at the current position, and =generate_expression= to insert instructions corresponding to the AST node it's given. From there, it's only as complex as your language's AST is.
+
+Of course, if your language's compiler implementation /already/ produces it's own lower-level-than-an-AST representation, you could convert from that; there are no rules as long as you produce IR functions with IR blocks with IR instructions within them :).
+
+This is just here for those curious to start probing around in the code that you would be using to generate LCC IR.
+#+begin_example
+#include <lcc/context.hh>
+#include <lcc/core.hh>
+#include <lcc/ir/ir.hh>
+#include <lcc/ir/module.hh>
+#include <lcc/ir/type.hh>
+#include <lcc/target.hh>
+#include <lcc/utils.hh>
+#include <lcc/utils/rtti.hh>
+#+end_example
