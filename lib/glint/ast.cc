@@ -1,13 +1,14 @@
-#include <bit>
-#include <glint/ast.hh>
-#include <glint/module_description.hh>
-#include <glint/parser.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/ast_printer.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
-#include <linux/limits.h>
+
+#include <glint/ast.hh>
+#include <glint/module_description.hh>
+#include <glint/parser.hh>
+
+#include <bit>
 #include <type_traits>
 
 /// ===========================================================================

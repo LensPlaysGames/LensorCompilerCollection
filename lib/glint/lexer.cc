@@ -1,8 +1,15 @@
-#include <cstdlib>
+#include <lcc/utils/macros.hh>
 
 #include <glint/lexer.hh>
 #include <glint/parser.hh>
-#include <lcc/utils/macros.hh>
+
+#include <concepts>
+#include <cstdlib>
+#include <iterator>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 using Tk = lcc::glint::TokenKind;
 

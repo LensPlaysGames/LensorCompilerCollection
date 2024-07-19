@@ -1,10 +1,16 @@
 #ifndef GLINT_LEXER_HH
 #define GLINT_LEXER_HH
 
-#include <glint/ast.hh>
 #include <lcc/context.hh>
 #include <lcc/syntax/lexer.hh>
 #include <lcc/utils.hh>
+
+#include <glint/ast.hh>
+
+#include <deque>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace lcc::glint {
 class Lexer : public syntax::Lexer<GlintToken> {

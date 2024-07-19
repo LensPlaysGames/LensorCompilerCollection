@@ -1,7 +1,6 @@
 #ifndef GLINT_AST_HH
 #define GLINT_AST_HH
 
-#include <glint/eval.hh>
 #include <lcc/core.hh>
 #include <lcc/diags.hh>
 #include <lcc/syntax/token.hh>
@@ -9,8 +8,16 @@
 #include <lcc/utils/aint.hh>
 #include <lcc/utils/result.hh>
 
+#include <glint/eval.hh>
+
 #include <functional>
 #include <span>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace lcc::glint {
 static constexpr std::string_view metadata_section_name{".glint"};

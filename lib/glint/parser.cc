@@ -1,12 +1,17 @@
-#include <glint/ast.hh>
-#include <glint/parser.hh>
 #include <lcc/diags.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
 
-#define bind LCC_BIND
+#include <glint/ast.hh>
+#include <glint/parser.hh>
+
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace intc = lcc::glint;
 

@@ -1,9 +1,13 @@
 #ifndef GLINT_SEMA_HH
 #define GLINT_SEMA_HH
 
-#include <glint/ast.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
+
+#include <glint/ast.hh>
+
+#include <string>
+#include <utility>
 
 namespace lcc::glint {
 class Sema {

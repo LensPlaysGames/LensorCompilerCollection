@@ -1,14 +1,22 @@
-#include <glint/ast.hh>
-#include <glint/module_description.hh>
-#include <glint/sema.hh>
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 #include <object/elf.h>
 #include <object/elf.hh>
 
+#include <glint/ast.hh>
+#include <glint/module_description.hh>
+#include <glint/sema.hh>
+
+#include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <iterator>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 /// ===========================================================================
 ///  Helpers
