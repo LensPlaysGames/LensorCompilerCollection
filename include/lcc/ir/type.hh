@@ -3,6 +3,10 @@
 
 #include <lcc/forward.hh>
 #include <lcc/utils.hh>
+
+#include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace lcc {

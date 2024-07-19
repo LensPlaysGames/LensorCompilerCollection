@@ -1,9 +1,13 @@
 #ifndef LCC_GENERATOR_HH
 #define LCC_GENERATOR_HH
 
-#include <coroutine>
 #include <lcc/diags.hh>
+
+#include <coroutine>
+#include <iterator>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 namespace lcc {
 template <typename T>

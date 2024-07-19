@@ -5,6 +5,11 @@
 #include <lcc/location.hh>
 #include <lcc/utils.hh>
 
+#include <exception>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace lcc {
 /// A diagnostic. The diagnostic is issued when the destructor is called.
 struct Diag {

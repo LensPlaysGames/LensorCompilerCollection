@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <bit>
 #include <functional>
+#include <ranges>
 #include <variant>
 #include <vector>
 

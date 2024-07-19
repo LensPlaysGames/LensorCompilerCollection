@@ -1,8 +1,11 @@
-#include <cstdio>
-#include <cstring>
 #include <lcc/utils.hh>
 #include <object/elf.h>
 #include <object/generic.hh>
+
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <vector>
 
 namespace lcc {
 

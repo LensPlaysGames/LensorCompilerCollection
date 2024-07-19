@@ -4,6 +4,10 @@
 #include <lcc/core.hh>
 #include <lcc/utils.hh>
 
+#include <span>
+#include <string>
+#include <string_view>
+
 namespace lcc::utils {
 template <typename Derived, typename NodeTy, typename TypeTy>
 struct ASTPrinter {

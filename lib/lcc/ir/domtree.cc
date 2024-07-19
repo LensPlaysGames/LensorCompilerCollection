@@ -1,5 +1,10 @@
 #include <lcc/ir/domtree.hh>
 
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 namespace lcc {
 namespace {
 class DisjointSets {

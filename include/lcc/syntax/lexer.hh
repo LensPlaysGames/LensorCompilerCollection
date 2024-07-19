@@ -6,6 +6,7 @@
 #include <lcc/utils.hh>
 
 #include <string_view>
+#include <utility>
 
 namespace lcc::syntax {
 namespace detail {

@@ -3,9 +3,13 @@
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/platform.hh>
 
+#include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 /// ===========================================================================
 ///  Diagnostics.

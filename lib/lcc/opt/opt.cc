@@ -3,7 +3,12 @@
 #include <lcc/opt/opt.hh>
 
 #include <algorithm>
+#include <concepts>
+#include <functional>
+#include <iterator>
 #include <string_view>
+#include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 

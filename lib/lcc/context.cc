@@ -1,6 +1,9 @@
 #include <lcc/context.hh>
 #include <lcc/ir/type.hh>
+
+#include <limits>
 #include <mutex>
+#include <utility>
 
 lcc::Context::Context(
     const Target* tgt,

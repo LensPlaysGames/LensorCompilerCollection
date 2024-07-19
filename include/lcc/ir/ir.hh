@@ -12,7 +12,12 @@
 #include <lcc/utils/rtti.hh>
 
 #include <algorithm>
+#include <concepts>
+#include <functional>
+#include <span>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace lcc {

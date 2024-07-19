@@ -5,6 +5,9 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
 
+#include <string>
+#include <utility>
+
 namespace lcc::intercept {
 class Sema {
     Context* context;

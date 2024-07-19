@@ -4,6 +4,9 @@
 #include <lcc/codegen/mir.hh>
 #include <lcc/utils.hh>
 
+#include <string>
+#include <string_view>
+
 namespace lcc {
 namespace x86_64 {
 

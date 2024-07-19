@@ -4,6 +4,10 @@
 #include <lcc/forward.hh>
 #include <lcc/utils.hh>
 
+#include <filesystem>
+#include <string_view>
+#include <vector>
+
 namespace lcc {
 
 /// A file in the context.

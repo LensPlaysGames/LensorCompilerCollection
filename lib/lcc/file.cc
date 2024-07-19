@@ -1,9 +1,7 @@
 #include <lcc/context.hh>
-#include <lcc/utils/macros.hh>
-#include <lcc/file.hh>
 #include <lcc/diags.hh>
-#include <random>
-#include <thread>
+#include <lcc/file.hh>
+#include <lcc/utils/macros.hh>
 
 #ifndef _WIN32
 #    include <fcntl.h>
@@ -12,6 +10,18 @@
 #    include <sys/wait.h>
 #    include <unistd.h>
 #endif
+
+#include <array>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <memory>
+#include <random>
+#include <ranges>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <vector>
 
 auto lcc::File::TempPath(std::string_view extension) -> fs::path {
     std::mt19937 rd(std::random_device{}());

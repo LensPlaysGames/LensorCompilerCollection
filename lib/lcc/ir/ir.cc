@@ -11,8 +11,15 @@
 #include <lcc/utils/rtti.hh>
 
 #include <algorithm>
+#include <cctype>
+#include <functional>
+#include <iterator>
+#include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace lcc {

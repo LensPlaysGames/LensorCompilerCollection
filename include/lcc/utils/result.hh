@@ -4,6 +4,12 @@
 #include <lcc/diags.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/rtti.hh>
+
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <type_traits>
+#include <utility>
 #include <variant>
 
 namespace lcc {

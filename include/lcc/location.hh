@@ -3,6 +3,8 @@
 
 #include <lcc/utils.hh>
 
+#include <algorithm>
+
 namespace lcc {
 class Context;
 

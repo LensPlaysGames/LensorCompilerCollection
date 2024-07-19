@@ -3,6 +3,12 @@
 
 #include <lcc/utils.hh>
 
+#include <cstddef>
+#include <iterator>
+#include <memory>
+#include <type_traits>
+#include <vector>
+
 namespace lcc::utils {
 #if !defined(NDEBUG) || defined(LCC_DEBUG_ITERATORS)
 

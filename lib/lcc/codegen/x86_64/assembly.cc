@@ -10,6 +10,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <ranges>
 #include <string>
 #include <type_traits>
 #include <variant>

@@ -5,6 +5,16 @@
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
 
+#include <cstdlib>
+#include <deque>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
+#include <variant>
+#include <vector>
+
 /// Namespace required for friend declarations in ir.hh.
 namespace lcc::parser {
 enum struct TokenKind {

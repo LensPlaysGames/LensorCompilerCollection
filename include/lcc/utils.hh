@@ -1,6 +1,10 @@
 #ifndef LCC_UTILS_HH
 #define LCC_UTILS_HH
 
+#include <fmt/color.h>
+#include <fmt/compile.h>
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -8,10 +12,8 @@
 #include <cstdio>
 #include <deque>
 #include <filesystem>
-#include <fmt/color.h>
-#include <fmt/compile.h>
-#include <fmt/format.h>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <new>
 #include <numeric>
@@ -19,6 +21,7 @@
 #include <ranges>
 #include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>

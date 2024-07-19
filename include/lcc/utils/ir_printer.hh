@@ -6,6 +6,11 @@
 #include <lcc/ir/module.hh>
 #include <lcc/utils.hh>
 
+#include <iterator>
+#include <string>
+#include <unordered_map>
+#include <utility>
+
 namespace lcc {
 template <typename Derived, usz block_indent>
 class IRPrinter {

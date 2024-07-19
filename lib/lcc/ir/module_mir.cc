@@ -6,7 +6,9 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 
+#include <algorithm>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 namespace lcc {
