@@ -26,7 +26,7 @@ So, to actually do this, here's what I'll need to break it down into:
 
 JFC I did the backend part half in a trance.
 
-* TODO [REQUIRED] Deallocation of Dynamic Array with Unary Prefix Minus
+* DONE [REQUIRED] Deallocation of Dynamic Array with Unary Prefix Minus
 
 #+begin_src glint-ts
 a : [Byte]; ;; allocated
@@ -78,3 +78,5 @@ foo(t_big);
 Basically, =t_big= is a struct and so sema is thinking that it is okay to pass a type expression to somewhere where a value of that type is actually required, since the "variable" of =t_big= is of =t_big= struct type.
 
 To clarify again, the above should error during type-checking due to t_big being a type expression that resolves to t_big rather than a value of type t_big.
+
+The type of =t_big= is currently the type it represents, but I think the type needs to be something like =type= and the value needs to be the actual type it represents.
