@@ -826,13 +826,141 @@ If we included the member strings in an array, we could even use the tag value o
     string :[Byte] "";
   };
 
+  byte_view : struct {
+    begin: byte.ptr;
+    end: byte.ptr;
+  };
+
   ;; parameter should probably be a Byte view reference type
-  lex :token(input :[Byte].ref) { ... }
-  parse :void(input :[Byte].ref) {
+  lex :token(input :byte_view.ref) { ... };
+  parse :void(input :byte_view.ref) {
     t :: lex(input);
     if (has t.integer) ... ;; Parsed integer
     else if (has t.identifier) ... ;; Parsed identifier
     else if (has t.string) ... ;; Parsed string
-  }
+  };
 #+end_src
 
+*** Supplantation
+[2024-07-18 Thu 16:28]
+
+Inheritance sucks, so, let's do something different. I have been thinking that inheritance is basically just a member whose symbols are imported into the above namespace; that is, the actual memory layout isn't different from just including the inherited type as the type of first member. The largest convenience with inheritance, compared to this "as a member" method, is that the names and identifiers to access various data can easily get long and confusing (i.e. do I need ~foo.id.name~ or ~foo.info.name~?). So, it seems that inheritance is an overboard solution for something that really just amounts to altering the valid symbols in the program.
+
+I think a simpler way of doing this would be via supplantation. To define a member as supplanted means to replace the member with the contents of the given type. Most often this will be done with structs, to form a sort of header "base" struct with various different "derived" structs.
+
+#+begin_src glint-ts
+  vector2 : struct {
+    x :int
+    y :int
+  };
+
+  vector3 : struct {
+    supplant foo;
+    z :int;
+  };
+
+  baz :bar;
+  baz.x := 69;
+  baz.y := 42;
+  baz.z := 69;
+  baz.foo.x := 69;
+  baz.foo.y := 42;
+  baz.z := 69;
+#+end_src
+
+**** Supplanting a Sum Type Seems Interesting
+
+#+begin_src glint-ts
+  foo : sum { x :int  y :int };
+  bar : struct {
+      :supplant foo;
+      z :int;
+  };
+  baz : struct {
+      ;; Explicitly-named, supplanted member (.foz.x, .x, and .foo.x all refer
+      ;; to the same place)
+      foz :supplant foo;
+      z :int;
+  };
+
+  ;; Actually sets foo.tag to "x" correspondent and then stores data into
+  ;; foo.data
+  bar.x := 42;
+
+  ;; Codegens as an access to foo sum type (i.e. checked or unchecked)
+  void bar.x;
+
+  has bar.x; ;; true
+#+end_src
+
+As you can see, this would form a very powerful foundation for header/data sort of data structures.
+
+One thing that I want to make happen is that a pointer to a struct with supplanted members is implicitly convertible to a pointer to those supplanted member's types. This may require adding a known offset to the base pointer, so the values themselves are not equal, but they are implicitly convertible. This way you can pass a struct with a supplanted =foo= type into a function that expects a parameter of =foo= type, whether it is a value, areference, or a pointer. This means that you could pass a Vector3 with a Vector2 supplanted member directly into functions that operate on Vector2's, or even pointers or references to Vector2's.
+
+Inspired by Pascal "with do" blocks, as well as Jai "using" keyword.
+
+**** Reaching Downward
+
+NOTE: I don't think this is the direction Glint should go in; I think there are other ways to implement such designs (like a ).
+
+One thing this doesn't address (yet) is reaching from a "base" type to a "derived" type.
+
+This would require vtables (terrible name), which is basically the act of inserting a special tag and a pointer to the "derived" type's vtable into the "base" type. The special tag will be initialized when either a "base" or "derived" type is created with a value that corresponds to the type. The pointer in the "base" type will also be initialised with a pointer to the vtable of the "derived" type.
+
+NOTE: A really good, quick view of how vtables might work if written by hand by Jonathan Blow: https://youtu.be/ZHqFrNyLlpA?si=4uOsb2I4OTSbxcz0&t=4517.
+
+This means that, given a runtime instance of a "base" type, we have
+  A. the actual type that this type was created as a part of (i.e. the "derived" type) via the inserted special tag, and
+  B. the actual place in memory where the instance of this type is located.
+From this, we can, at runtime, add checks whenever we access something that may be overriden (still not sure on syntax/semantics of this) to ensure we access the proper data. I.e. if special tag is equal to the "base" type tag, then we can access things "normally", but if the special tag corresponds to a "derived" type, we go through the pointer, to the vtable, to access it.
+
+For functions (virtual data members don't really make sense?), the resolved function only changes based on the "derived" type, aka the special tag data member in the "base" type. So, we generate global struct instances (accessible at runtime) that correspond to each type, and the elements in the struct instance are the compile-time known values of the function addresses for that particular type. So, if both "base" and "derived" types have identical implementations, both of these vtables would have equal values. But, if "derived" or "base" was to alter their (and only their) implementation, the vtable for that type would be alterred to point to that implementation instead.
+
+However, /all/ of this is exactly that: /all/-encompassing---kind of complicated. And the only benefit is, er... what exactly is the benefit of this? I guess the main use case is to have a group of "base" types that all "do the same thing" but have different ways of doing so. For example, let's say we wanted each "thing" to print something based on it's local, custom data. So, let's say we have a =Test= "base" type with an overridable =run= member. Then, after writing two tests, =SmellTest= and =SniffTest=, that override the =run= member, we want to store a group of =Test= and then iterate over all of them, calling the =run= function on each one.
+
+#+begin_src glint-ts
+  Test : base {
+    run : bool() true;
+  };
+  SmellTest : derived Test {
+    smell :uint;
+
+    run :bool() { return smell = 420; }
+
+  };
+  SniffTest : derived Test {
+    scent :uint;
+
+    run :bool() { return scent = 69; }
+  };
+
+  tests :[Test 2] !{ (SmellTest) (SniffTest) };
+  for test :: tests, test.run;
+#+end_src
+
+**** Proposed Alternative to vtables
+
+"Write it yourself---it's easier."
+
+#+begin_src glint-ts
+  Test : sum {
+    smell :uint;
+    sniff :uint;
+  };
+  smelltest_run :bool(test :Test) { return test.smell = 420; }
+  snifftest_run :bool(test :Test) { return test.scent = 69; }
+  run :bool(test :Test) {
+    if (has test.smell)
+      return smelltest_run test;
+    if (has test.sniff),
+      return snifftest_run test;
+  }
+
+  smelltest : Test !{ .smell 420 };
+  snifftest : Test !{ .sniff 69 };
+
+  tests :[Test 2] !{ (smelltest) (snifftest) };
+  for test :: tests, run test;
+#+end_src
+
+If you understood the vtable stuff up above and how sum types in Glint work (tagged unions), you can pretty clearly see that this is just the user writing the vtable themselves in the form of a dispatch function =run=. At the same time, we DRASTICALLY reduced the boilerplate just defining test types over and over. The only real downside I see to this is that it's possible to add a value to the =Test= sum type (i.e. a new type of test) /without/ that type being represented in the dispatch function =run=. However, there will be solutions to this in the future (i.e. a switch/match sort-of-thing that may dispatch to code based on the stored type in a sum type which can error AT COMPILE TIME if all cases are not handled (think =-Wswitch=)). Alternatively, once we provide more introspection capabilities, we could do the C-style of doing an assert that the /count/ of types held in a sum type is a specific value; of course, this would need to be a compile-time assert, which we also need to think about, I just realised, lol.
