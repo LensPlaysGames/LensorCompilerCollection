@@ -352,7 +352,49 @@ auto Module::mir() -> std::vector<MFunction> {
             case Value::Kind::Poison:
                 Diag::ICE("Cannot generate MIR from poison IR value");
 
-            default: break;
+            // These value kinds are referenced through register operands.
+            case Value::Kind::Call:
+            case Value::Kind::GetElementPtr:
+            case Value::Kind::GetMemberPtr:
+            case Value::Kind::Intrinsic:
+            case Value::Kind::Load:
+            case Value::Kind::Phi:
+            case Value::Kind::Store:
+            case Value::Kind::Branch:
+            case Value::Kind::CondBranch:
+            case Value::Kind::Return:
+            case Value::Kind::Unreachable:
+            case Value::Kind::ZExt:
+            case Value::Kind::SExt:
+            case Value::Kind::Trunc:
+            case Value::Kind::Bitcast:
+            case Value::Kind::Neg:
+            case Value::Kind::Copy:
+            case Value::Kind::Compl:
+            case Value::Kind::Add:
+            case Value::Kind::Sub:
+            case Value::Kind::Mul:
+            case Value::Kind::SDiv:
+            case Value::Kind::UDiv:
+            case Value::Kind::SRem:
+            case Value::Kind::URem:
+            case Value::Kind::Shl:
+            case Value::Kind::Sar:
+            case Value::Kind::Shr:
+            case Value::Kind::And:
+            case Value::Kind::Or:
+            case Value::Kind::Xor:
+            case Value::Kind::Eq:
+            case Value::Kind::Ne:
+            case Value::Kind::SLt:
+            case Value::Kind::SLe:
+            case Value::Kind::SGt:
+            case Value::Kind::SGe:
+            case Value::Kind::ULt:
+            case Value::Kind::ULe:
+            case Value::Kind::UGt:
+            case Value::Kind::UGe:
+                break;
         }
         return MOperandRegister{virts[v], uint(regsize)};
     };
@@ -1042,9 +1084,8 @@ auto Module::mir() -> std::vector<MFunction> {
                     indices_of_instructions_to_remove.push_back(minst_index);
                 }
             }
-            for (isz index : indices_of_instructions_to_remove | vws::reverse) {
+            for (isz index : indices_of_instructions_to_remove | vws::reverse)
                 mblock.instructions().erase(mblock.instructions().begin() + index);
-            }
         }
     }
 
