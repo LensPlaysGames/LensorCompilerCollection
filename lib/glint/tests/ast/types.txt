@@ -70,6 +70,62 @@ void :[byte size];
 
 
 ================
+Sum, Two Members
+================
+void sum {
+    x: int
+    y:int
+};
+0;
+---
+(block
+ (cast (t_sum))
+ (return (integer_literal)))
+
+
+================
+Sum, Two Comma-separated Members
+================
+void sum {
+    x: int,
+    y:int
+};
+0;
+---
+(block
+ (cast (t_sum))
+ (return (integer_literal)))
+
+
+================
+Sum, Two Comma-separated Members w/ Trailing
+================
+void sum {
+    x: int,
+    y:int,
+};
+0;
+---
+(block
+ (cast (t_sum))
+ (return (integer_literal)))
+
+
+================
+Sum, Two Semicolon-separated Members
+================
+void sum {
+    x: int;
+    y:int;
+};
+0;
+---
+(block
+ (cast (t_sum))
+ (return (integer_literal)))
+
+
+================
 Struct, Empty
 ================
 void struct {};

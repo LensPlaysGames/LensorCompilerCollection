@@ -65,19 +65,22 @@ struct GlintTest : Test {
                     // fmt::print("EXPECTED IR SPAN:\n{}\n", ir);
                     auto expected_ir = lcc::Module::Parse(&context, ir);
                     if (expected_ir) {
-                        auto got_ir = lcc::glint::IRGen::Generate(&context, *mod);
+                        auto* got_ir = lcc::glint::IRGen::Generate(&context, *mod);
 
                         // For every function in the expected IR, check that the function also exists in the IR we got.
                         for (auto* expected_func : expected_ir->code()) {
                             auto got_func_in_ir = std::find_if(got_ir->code().begin(), got_ir->code().end(), [&](lcc::Function* candidate) {
-                                for (auto n : candidate->names()) {
-                                    auto found_in_expected = std::find_if(
-                                        expected_func->names().begin(),
-                                        expected_func->names().end(),
-                                        [&](const lcc::IRName& expected_n) { return expected_n.name == n.name; }
-                                    );
-                                    if (found_in_expected != expected_func->names().end()) return true;
+                                // For every name that it could be...
+                                for (const auto& n : candidate->names()) {
+                                    // check if it is equal to any one of "our" names; if so, we're done.
+                                    for (const auto& expected_n : expected_func->names()) {
+                                        if (expected_n.name == n.name) {
+                                            return true;
+                                        }
+                                    }
                                 }
+                                // If we get through all possible names and not a single one matched any
+                                // of our names, than we didn't get the IR function we expected.
                                 return false;
                             });
                             if (got_func_in_ir == got_ir->code().end()) {
@@ -87,10 +90,12 @@ struct GlintTest : Test {
                                     "IR MISMATCH: Expected function {} to be in IR, but didn't find it\n",
                                     expected_func->names().at(0).name
                                 );
+                                got_ir->print_ir(true);
+
                                 // Stop iterating IR functions since they already don't match.
                                 break;
                             }
-                            auto got_func = *got_func_in_ir;
+                            auto* got_func = *got_func_in_ir;
                             // TODO: There are other ways functions might not be equivalent, but I
                             // don't think we should handle each and every one of those here. We
                             // should implement '==', or something similar, on lcc::Function itself, I
@@ -108,8 +113,8 @@ struct GlintTest : Test {
                             }
 
                             for (size_t block_i = 0; block_i < expected_func->blocks().size(); ++block_i) {
-                                auto expected_block = expected_func->blocks().at(block_i);
-                                auto got_block = got_func->blocks().at(block_i);
+                                auto* expected_block = expected_func->blocks().at(block_i);
+                                auto* got_block = got_func->blocks().at(block_i);
 
                                 if (expected_func->blocks().size() != got_func->blocks().size()) {
                                     ir_matches = false;
@@ -125,8 +130,8 @@ struct GlintTest : Test {
 
                                 std::unordered_map<lcc::Inst*, lcc::Inst*> expected_to_got{};
                                 for (size_t inst_i = 0; inst_i < expected_block->instructions().size(); ++inst_i) {
-                                    auto expected_inst = expected_block->instructions().at(inst_i);
-                                    auto got_inst = got_block->instructions().at(inst_i);
+                                    auto* expected_inst = expected_block->instructions().at(inst_i);
+                                    auto* got_inst = got_block->instructions().at(inst_i);
                                     expected_to_got[expected_inst] = got_inst;
 
                                     if (expected_inst->kind() != got_inst->kind()) {
@@ -168,9 +173,9 @@ struct GlintTest : Test {
                                         expected_children.begin() != expected_children.end()
                                         and got_children.begin() != got_children.end()
                                     ) {
-                                        auto expected_child = *expected_children.begin();
-                                        auto got_child = *got_children.begin();
-                                        if (auto expected_child_inst = cast<lcc::Inst>(expected_child)) {
+                                        auto* expected_child = *expected_children.begin();
+                                        auto* got_child = *got_children.begin();
+                                        if (auto* expected_child_inst = cast<lcc::Inst>(expected_child)) {
                                             if (expected_to_got[expected_child_inst] != got_child) {
                                                 ir_matches = false;
 

@@ -2519,8 +2519,22 @@ bool lcc::glint::Sema::Analyse(Type** type_ptr) {
         // Also set cached struct type for IRGen by calling struct_type().
         case Type::Kind::Sum: {
             auto s = as<SumType>(type);
-            LCC_ASSERT(s->members().size(), "SumType has no members");
-            LCC_ASSERT(s->members().size() != 1, "SumType has one member");
+            if (s->members().size() == 0) {
+                Error(
+                    s->location(),
+                    "Sum type empty!\n"
+                    "A sum type must have more than one member (otherwise, use a struct, or something)"
+                );
+                return false;
+            }
+            if (s->members().size() == 1) {
+                Error(
+                    s->location(),
+                    "Sum type has a single member.\n"
+                    "A sum type must have more than one member (otherwise, use a struct, or something)"
+                );
+                return false;
+            }
 
             // Finalise members
             for (auto& member : s->members()) {
