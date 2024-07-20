@@ -10,6 +10,11 @@ While the half-baked support we have with the basic compiler templates defined i
 
 * ~lcc~, Codegen
 
+** TODO Cleanup and Consolidate Calling Convention Code
+[2024-07-19 Fri 21:18]
+
+We are calculating register classes, making argument register lists, etc. all over the place when we should probably just have a sysv header and a msx64 header that we have everything in. This should also clean up the call sites quite a bit (hopefully). Example =arg_regs= within =lib/lcc/ir/module_mir.cc=.
+
 ** ~opt~
 
 *** TODO BUG
@@ -87,50 +92,3 @@ Just ughh.
 
 We want this to contain a list of types that begin with ~Require*~.
 For example, ~RequireOperandSizeLessThan<operand_index, declared_size>~.
-
-* ~Intercept~, Language
-
-** TODO Packed Structs called "Cereals"
-[2023-12-09 Sat 17:39]
-
-Basically, a packed struct is going to be an entirely separate type
-kind, like struct, enum, etc.
-
-#+begin_src int
-  foo : cereal {
-    x :u8;
-    y :u16;
-  }
-#+end_src
-
-The size of ~foo~ above would be 24 bits, and the layout is guaranteed.
-
-The use of cereals would be for serialisation and deserialisation,
-where you sometimes need exact bit or byte types that don't necessarily
-follow all padding rules and such.
-
-** TODO Error on non-hygienic declarations when defining a macro
-[2023-12-09 Sat 18:22]
-
-Whoever wrote the lexer and parser absolutely butchered macros. I
-already fixed ~defines~, I'm pretty sure, but it wasn't even erroring
-when it should, so we aren't checking for hygienic expansions :(.
-
-** TODO An assignment is an explicit typing of the rhs as much as a declaration is of the left
-[2023-12-13 Wed 16:24]
-
-This means we should treat the right hand side of an assignment, in
-code like the following,
-#+begin_src int
-  x : u32 = 69
-  x := -1
-#+end_src
-as an explicit cast of the expression's result type to the left hand
-side type, should it be convertible.
-
-An /explicit/ cast means the programmer specified they want it to
-happen. I *WANT* an assignment to happen if I write it, and I shouldn't
-be forced to write `as typeof x` or similar just to make it work.
-
-** TODO ~usz~ and ~isz~
-[2023-12-21 Thu 11:32]
