@@ -16,10 +16,12 @@
 lcc::glint::Module::Module(
     File* file,
     std::string module_name,
-    bool is_logical_module
+    Module::ModuleStatus is_logical_module,
+    Module::SumTypeBadAccessCheckStatus sum_type_bad_access_check
 ) : _name{std::move(module_name)},
     _is_module{is_logical_module},
-    file{file} {
+    _sum_type_bad_access_check{sum_type_bad_access_check},
+    _file{file} {
     FuncType* ty{};
 
     /// Create the type of the top-level function.
@@ -53,7 +55,7 @@ lcc::glint::Module::Module(
             (decltype(Location::file_id)) file->file_id() //
         };
     }
-    top_level_function
+    _top_level_function
         = new (*this) FuncDecl{
             is_logical_module ? fmt::format("_XGlint__init_{}", name()) : "main",
             ty,
@@ -74,12 +76,12 @@ lcc::glint::Module::~Module() {
 }
 
 void lcc::glint::Module::add_top_level_expr(Expr* node) {
-    as<BlockExpr>(top_level_function->body())->add(node);
+    as<BlockExpr>(top_level_function()->body())->add(node);
 }
 
 auto lcc::glint::Module::intern(std::string_view str) -> usz {
     auto it = rgs::find(strings, str);
-    if (it != strings.end()) { return usz(it - strings.begin()); }
+    if (it != strings.end()) { return usz(std::distance(strings.begin(), it)); }
     strings.emplace_back(str);
     return strings.size() - 1;
 }
@@ -123,23 +125,6 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
     out.push_back(tag);
 
     switch (ty->kind()) {
-        // DynamicArrayType: element_type_index :TypeIndex
-        case Type::Kind::DynamicArray: {
-            auto* type = as<DynamicArrayType>(ty);
-
-            // Write `element_type_index: TypeIndex`, keeping track of byte index into
-            // binary metadata blob where it can be found again.
-            auto element_type_index_offset = out.size();
-            auto element_type_index = ModuleDescription::TypeIndex(-1);
-            auto type_index_bytes = to_bytes(element_type_index);
-            out.insert(out.end(), type_index_bytes.begin(), type_index_bytes.end());
-
-            auto element_type = serialise(out, cache, type->element_type());
-
-            auto* element_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + element_type_index_offset);
-            *element_type_ptr = element_type;
-        } break;
-
         // NamedType: length :u32, name :u8[length]
         case Type::Kind::Named: {
             auto* type = as<NamedType>(ty);
@@ -282,7 +267,7 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
         } break;
 
         // EnumType:
-        //     underlying_type_index :u16
+        //     underlying_type_index :TypeIndex
         //     enum_decl_count :u32
         //     enum_decls :u64[enum_decl_count]
         // FIXME: Ideally we should get the size of the value (enum_decls element
@@ -311,6 +296,23 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
 
             auto* underlying_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + underlying_type_offset);
             *underlying_type_ptr = underlying_type;
+        } break;
+
+        // DynamicArrayType: element_type_index :TypeIndex
+        case Type::Kind::DynamicArray: {
+            auto* type = as<DynamicArrayType>(ty);
+
+            // Write `element_type_index: TypeIndex`, keeping track of byte index into
+            // binary metadata blob where it can be found again.
+            auto element_type_index_offset = out.size();
+            auto element_type_index = ModuleDescription::TypeIndex(-1);
+            auto type_index_bytes = to_bytes(element_type_index);
+            out.insert(out.end(), type_index_bytes.begin(), type_index_bytes.end());
+
+            auto element_type = serialise(out, cache, type->element_type());
+
+            auto* element_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + element_type_index_offset);
+            *element_type_ptr = element_type;
         } break;
 
         // ArrayType: element_type_index :u16, element_count :u64
@@ -383,7 +385,12 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
                 *member_types_ptr++ = member_type;
         } break;
 
-        // TODO:
+        // TODO: Will be a lot like a struct
+        case Type::Kind::Sum: {
+            LCC_TODO("Serialise sum type (just haven't yet)");
+        } break;
+
+        // TODO: Will be a lot like a struct
         case Type::Kind::Union: {
             LCC_TODO("Serialise union type (it's easy, just haven't yet)");
         } break;
@@ -395,7 +402,7 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
 std::vector<lcc::u8> lcc::glint::Module::serialise() {
     ModuleDescription::Header hdr{};
     std::vector<u8> declarations{};
-    std::vector<u8> types{};
+    std::vector<u8> types_data{};
     std::vector<u8> serialised_name{};
 
     // Decls and types collected from exports.
@@ -404,7 +411,7 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
         // Decl: DeclHeader, length :u8, name :u8[length]
 
         // Prepare declaration header
-        ModuleDescription::TypeIndex type_index = serialise(types, type_cache, decl->type());
+        ModuleDescription::TypeIndex type_index = serialise(types_data, type_cache, decl->type());
         ModuleDescription::DeclarationHeader decl_hdr{
             u16(ModuleDescription::DeclarationHeader::get_kind(decl)),
             type_index};
@@ -439,9 +446,9 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
     serialised_name.push_back('\0');
 
     // Final header fixups now that nothing will change.
-    hdr.size = u32(sizeof(ModuleDescription::Header) + declarations.size() + types.size() + serialised_name.size());
+    hdr.size = u32(sizeof(ModuleDescription::Header) + declarations.size() + types_data.size() + serialised_name.size());
     hdr.type_table_offset = u32(sizeof(ModuleDescription::Header) + declarations.size());
-    hdr.name_offset = u32(sizeof(ModuleDescription::Header) + declarations.size() + types.size());
+    hdr.name_offset = u32(sizeof(ModuleDescription::Header) + declarations.size() + types_data.size());
     hdr.declaration_count = u16(exports.size());
     hdr.type_count = u16(type_cache.size());
 
@@ -451,7 +458,7 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
     std::vector<u8> out{};
     out.insert(out.end(), hdr_bytes.begin(), hdr_bytes.end());
     out.insert(out.end(), declarations.begin(), declarations.end());
-    out.insert(out.end(), types.begin(), types.end());
+    out.insert(out.end(), types_data.begin(), types_data.end());
     out.insert(out.end(), serialised_name.begin(), serialised_name.end());
     return out;
 }
@@ -471,7 +478,11 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
         fmt::print("ERROR: Could not deserialise: Invalid version {} in header\n", hdr.version);
         return false;
     }
-    if (hdr.magic[0] != ModuleDescription::magic_byte0 or hdr.magic[1] != ModuleDescription::magic_byte1 or hdr.magic[2] != ModuleDescription::magic_byte2) {
+    if (
+        hdr.magic[0] != ModuleDescription::magic_byte0
+        or hdr.magic[1] != ModuleDescription::magic_byte1
+        or hdr.magic[2] != ModuleDescription::magic_byte2
+    ) {
         fmt::print("ERROR: Could not deserialise: Invalid magic bytes in header: {} {} {}\n", hdr.magic[0], hdr.magic[1], hdr.magic[2]);
         return false;
     }
@@ -490,6 +501,8 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
     struct BasicFixup {
         // Type index of the type that needs fixing up.
         ModuleDescription::TypeIndex fixup_type_index;
+        BasicFixup(ModuleDescription::TypeIndex index)
+            : fixup_type_index(index) {}
     };
     struct PointerFixup : BasicFixup {
         ModuleDescription::TypeIndex pointee_type_index;
@@ -569,6 +582,9 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                 FFIType::Make(*this, ffi_kind, {});
             } break;
 
+            case Type::Kind::DynamicArray:
+                LCC_TODO("DESERIALISE: A dynamic array is just like a pointer or reference, but I need to implement a fixup list for them and just haven't yet");
+
             // PointerType, ReferenceType: type_index :TypeIndex
             case Type::Kind::Pointer:
             case Type::Kind::Reference: {
@@ -578,20 +594,128 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                     ref_type_index_array[i] = module_metadata_blob.at(type_offset++);
                 auto ref_type_index = from_bytes<ModuleDescription::TypeIndex>(ref_type_index_array);
 
+                // Normally done in operator new of Type, but we do it manually here since
+                // we can't new the pointer type until.
                 types.push_back(nullptr);
+
                 if (kind == Type::Kind::Pointer)
                     ptr_fixups.push_back({type_index, ref_type_index});
                 else if (kind == Type::Kind::Reference)
                     ref_fixups.push_back({type_index, ref_type_index});
             } break;
 
-            case Type::Kind::Array:
-            case Type::Kind::DynamicArray:
-            case Type::Kind::Function:
-            case Type::Kind::Union:
-            case Type::Kind::Enum:
+            // IntegerType: bitwidth :u16, is_signed :u8
+            case Type::Kind::Integer: {
+                static constexpr auto bitwidth_size = sizeof(u16);
+                std::array<u8, bitwidth_size> bitwidth_array{};
+                for (unsigned i = 0; i < bitwidth_size; ++i)
+                    bitwidth_array[i] = module_metadata_blob.at(type_offset++);
+                auto bitwidth = from_bytes<u16>(bitwidth_array);
+
+                u8 is_signed = bitwidth_array[type_offset++];
+                new (*this) IntegerType(bitwidth, is_signed, {});
+            } break;
+
+            // ArrayType: element_type_index :TypeIndex, element_count :u64
+            case Type::Kind::Array: {
+                static constexpr auto element_type_index_size = sizeof(ModuleDescription::TypeIndex);
+                std::array<u8, element_type_index_size> element_type_index_array{};
+                for (unsigned i = 0; i < element_type_index_size; ++i)
+                    element_type_index_array[i] = module_metadata_blob.at(type_offset++);
+                auto element_type_index = from_bytes<ModuleDescription::TypeIndex>(element_type_index_array);
+
+                static constexpr auto element_count_size = sizeof(u64);
+                std::array<u8, element_count_size> element_count_array{};
+                for (unsigned i = 0; i < element_count_size; ++i)
+                    element_count_array[i] = module_metadata_blob.at(type_offset++);
+                auto element_count = from_bytes<u64>(element_count_array);
+
+                (void) element_type_index;
+                (void) element_count;
+                LCC_TODO("DESERIALISE: Implement ArrayType fixups and make one of those");
+            } break;
+
+                // FunctionType:
+                //     attributes :u32
+                //     param_count :u16
+                //     param_types :TypeIndex[param_count]
+                //     return_type :TypeIndex
+                //     param_names :(param_name_length :u16, param_name :u8[param_name_length])[param_count]
+            case Type::Kind::Function: {
+                static constexpr auto attributes_size = sizeof(u32);
+                std::array<u8, attributes_size> attributes_array{};
+                for (unsigned i = 0; i < attributes_size; ++i)
+                    attributes_array[i] = module_metadata_blob.at(type_offset++);
+                auto attributes = from_bytes<u32>(attributes_array);
+
+                static constexpr auto param_count_size = sizeof(u16);
+                std::array<u8, param_count_size> param_count_array{};
+                for (unsigned i = 0; i < param_count_size; ++i)
+                    param_count_array[i] = module_metadata_blob.at(type_offset++);
+                auto param_count = from_bytes<u16>(param_count_array);
+
+                // Parameter Type indices
+                std::vector<ModuleDescription::TypeIndex> param_type_indices{};
+                for (usz param_index = 0; param_index < param_count; ++param_index) {
+                    static constexpr auto param_type_index_size = sizeof(ModuleDescription::TypeIndex);
+                    std::array<u8, param_type_index_size> param_type_index_array{};
+                    for (unsigned i = 0; i < param_type_index_size; ++i)
+                        param_type_index_array[i] = module_metadata_blob.at(type_offset++);
+                    auto param_type_index = from_bytes<ModuleDescription::TypeIndex>(param_type_index_array);
+
+                    param_type_indices.emplace_back(param_type_index);
+                }
+
+                static constexpr auto return_type_index_size = sizeof(ModuleDescription::TypeIndex);
+                std::array<u8, return_type_index_size> return_type_index_array{};
+                for (unsigned i = 0; i < return_type_index_size; ++i)
+                    return_type_index_array[i] = module_metadata_blob.at(type_offset++);
+                auto return_type_index = from_bytes<ModuleDescription::TypeIndex>(return_type_index_array);
+
+                // Parameter names
+                std::vector<std::string> param_names{};
+                for (usz param_index = 0; param_index < param_count; ++param_index) {
+                    static constexpr auto param_name_length_size = sizeof(u16);
+                    std::array<u8, param_name_length_size> param_name_length_array{};
+                    for (unsigned i = 0; i < param_name_length_size; ++i)
+                        param_name_length_array[i] = module_metadata_blob.at(type_offset++);
+                    auto param_name_length = from_bytes<u16>(param_name_length_array);
+
+                    std::string param_name{};
+                    param_name.reserve(param_name_length);
+                    for (unsigned i = 0; i < param_name_length_size; ++i)
+                        param_name += char(module_metadata_blob.at(type_offset++));
+
+                    param_names.emplace_back(param_name);
+                }
+
+                (void) attributes;
+                (void) param_count;
+                (void) param_type_indices;
+                (void) return_type_index;
+                (void) param_names;
+                LCC_TODO("DESERIALISE: Function type (fixup nightmare)");
+            } break;
+
+            // StructType:
+            //     size_in_bytes :u16
+            //     align_in_bytes :u16
+            //     member_count :u16
+            //     member_types :TypeIndex[member_count]
+            //     member_data :(byte_offset :u16, name_length :u16, member_name :u8[name_length])[member_count]
             case Type::Kind::Struct:
-            case Type::Kind::Integer:
+
+            // EnumType:
+            //     underlying_type_index :TypeIndex
+            //     enum_decl_count :u32
+            //     enum_decls :u64[enum_decl_count]
+            // FIXME: Ideally we should get the size of the value (enum_decls element
+            // type) from the underlying type, instead of just assuming it fits in 64
+            // bits.
+            case Type::Kind::Enum:
+
+            case Type::Kind::Sum:
+            case Type::Kind::Union:
                 LCC_TODO("Parse type kind {} from binary module metadata", ToString(kind));
                 break;
         }

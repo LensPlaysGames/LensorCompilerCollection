@@ -86,6 +86,20 @@ enum struct TokenKind {
     Le, // <=
     Ge, // >=
 
+    // PlusPlus,    // ++
+    // MinusMinus,  // --
+    // PlusEq,      // +=
+    // MinusEq,     // -=
+    // StarEq,      // *=
+    // SlashEq,     // /=
+    // PercentEq,   // %=
+    // AmpersandEq, // &=
+    // PipeEq,      // |=
+    // CaretEq,  // ^=
+    // TildeEq,  // ~=
+    // AtEq,     // @=
+    // HashEq,   // #=
+    // DotEq,    // .=
     ColonEq,    // :=
     ColonColon, // ::
     RightArrow, // ->
@@ -110,12 +124,14 @@ enum struct TokenKind {
     ArbitraryInt,
     Sizeof,  // sizeof
     Alignof, // alignof
+    Has,
     For,
     Return,
     Export,
     Struct,
     Enum,
     Union,
+    Sum,
     Lambda,
 
     CShort,     // cshort
@@ -152,25 +168,54 @@ public:
         Module* module;
         Location location;
 
-        Ref(std::string name, Module* module, Location location)
-            : name(std::move(name)), module(module), location(location) {}
+        // STYLE NOTE: Because this is a struct where we are meant to access the members
+        // directly, we use a trailing underscore to disambiguate.
+        Ref(std::string name_, Module* module_, Location location_)
+            : name(std::move(name_)), module(module_), location(location_) {}
     };
 
 private:
+    // STYLE NOTE: Private members with public accessors should be prefixed
+    // with an underscore to disambiguate them.
     std::string _name{};
 
-    FuncDecl* top_level_function{};
-    bool _is_module;
-    File* file;
+    FuncDecl* _top_level_function{};
+
+    // In Glint, there is a distinction between a module which may be imported
+    // and an executable program.
+    bool _is_module{false};
+
+    // If this is true, then runtime access checks will be inserted for sum
+    // types. Otherwise, it's on you, kid. Note that this means a custom
+    // handler will not be called, even if one is defined.
+    bool _sum_type_bad_access_check{true};
+
+    File* _file;
 
     std::vector<Ref> _imports{};
     std::vector<Decl*> exports{};
     std::vector<FuncDecl*> _functions{};
 
-    usz lambda_counter = 0;
+    usz _lambda_counter = 0;
 
 public:
-    Module(File* file, std::string module_name, bool is_logical_module);
+    enum ModuleStatus : bool {
+        IsNotAModule = false,
+        IsAModule = true,
+
+        IsNotAnExecutable = true,
+        IsAnExecutable = false
+    };
+    enum SumTypeBadAccessCheckStatus : bool {
+        DontCheck = false,
+        DoSumTypeBadAccessCheck = true
+    };
+    Module(
+        File* file,
+        std::string module_name,
+        ModuleStatus is_logical_module,
+        SumTypeBadAccessCheckStatus sum_type_bad_access_check
+    );
 
     ~Module();
 
@@ -192,44 +237,61 @@ public:
     auto functions() -> std::vector<FuncDecl*>& { return _functions; }
 
     /// Get the global scope.
+    [[nodiscard]]
     auto global_scope() const -> Scope* { return scopes[0]; }
 
     /// Get the module imports.
     auto imports() -> std::vector<Ref>& { return _imports; }
 
     /// Intern a string and return its index.
-    usz intern(std::string_view str);
+    [[nodiscard]]
+    auto intern(std::string_view str) -> usz;
 
     /// Print the AST of this module.
     void print(bool use_colour);
 
     /// Get the top-level function.
-    auto top_level_func() const -> FuncDecl* { return top_level_function; }
+    [[nodiscard]]
+    auto top_level_function() const -> FuncDecl* { return _top_level_function; }
 
     /// Get the top-level scope.
+    [[nodiscard]]
     auto top_level_scope() const -> Scope* { return scopes[1]; }
 
     /// Get a function name that is unique within this module.
-    auto unique_function_name() -> std::string { return fmt::format("_XGlint__lambda_{}", lambda_counter++); }
+    auto unique_function_name() -> std::string { return fmt::format("_XGlint__lambda_{}", _lambda_counter++); }
 
     // Get the name of this module
+    [[nodiscard]]
     auto name() const -> std::string_view { return _name; }
 
-    bool is_module() const {
+    [[nodiscard]]
+    auto is_module() const -> bool {
         return _is_module;
     }
 
+    [[nodiscard]]
+    auto sum_type_bad_access_check() const -> bool {
+        return _sum_type_bad_access_check;
+    }
+    void sum_type_bad_access_check(bool check) {
+        _sum_type_bad_access_check = check;
+    }
+
     /// Obtain a module metadata blob describing this Glint module.
-    std::vector<u8> serialise();
+    [[nodiscard]]
+    auto serialise() -> std::vector<u8>;
     // Serialise type into given out parameter and append type to cache iff it
     // is not already in the cache. Return the index within the cache of the
     // given type.
-    lcc::u16 serialise(std::vector<u8>& out, std::vector<Type*>& cache, Type*);
+    [[nodiscard]]
+    auto serialise(std::vector<u8>& out, std::vector<Type*>& cache, Type*) -> lcc::u16;
     /// Deserialise a module metadata blob into `this`.
     /// \return a boolean value denoting `true` iff deserialisation succeeded.
     /// NOTE: Only call this on new modules, as it does not clear out old
     /// module before deserialising into `this`.
-    bool deserialise(lcc::Context*, std::vector<u8> module_metadata_blob);
+    [[nodiscard]]
+    auto deserialise(lcc::Context*, std::vector<u8> module_metadata_blob) -> bool;
 
     std::vector<Expr*> nodes;
     std::vector<Type*> types;
@@ -380,7 +442,7 @@ private:
 
 protected:
     constexpr SemaNode() = default;
-    constexpr SemaNode(Location loc) : _location(loc) {}
+    constexpr SemaNode(Location location) : _location(location) {}
 
 public:
     // Check if this expression was successfully analysed by sema.
@@ -436,7 +498,7 @@ public:
 };
 
 class Type : public SemaNode {
-    friend class lcc::Context;
+    friend lcc::Init;
 
 public:
     enum struct Kind {
@@ -448,6 +510,7 @@ public:
         DynamicArray,
         Array,
         Function,
+        Sum,
         Union,
         Enum,
         Struct,
@@ -526,6 +589,9 @@ public:
     /// Check if this is a struct type.
     bool is_struct() const { return _kind == Kind::Struct; }
 
+    /// Check if this is a struct type.
+    bool is_sum_type() const { return _kind == Kind::Sum; }
+
     /// Check if this is the uninitialised type.
     bool is_unknown() const;
 
@@ -599,6 +665,7 @@ static constexpr auto ToString(Type::Kind k) {
         case Type::Kind::DynamicArray: return "dynamic_array";
         case Type::Kind::Array: return "array";
         case Type::Kind::Function: return "function";
+        case Type::Kind::Sum: return "sum";
         case Type::Kind::Union: return "union";
         case Type::Kind::Enum: return "enum";
         case Type::Kind::Struct: return "struct";
@@ -611,7 +678,7 @@ static constexpr auto ToString(Type::Kind k) {
 /// and there is no point in storing their names in each of them, so an
 /// instance of one only ever stores its primitive type kind.
 class BuiltinType : public Type {
-    friend lcc::Context;
+    friend lcc::Init;
 
 public:
     enum struct BuiltinKind {
@@ -641,8 +708,8 @@ public:
 
     bool operator==(BuiltinKind k) const { return _kind == k; }
 
-    static auto Make(Module& mod, K k, Location l) -> BuiltinType* {
-        return new (mod) BuiltinType(k, l);
+    static auto Make(Module& mod, K k, Location location) -> BuiltinType* {
+        return new (mod) BuiltinType(k, location);
     }
 
     /// Get instances of primitive types.
@@ -661,7 +728,7 @@ class IntegerType : public Type {
     bool _is_signed;
 
 public:
-    IntegerType(usz bitWidth, bool isSigned, Location location)
+    constexpr IntegerType(usz bitWidth, bool isSigned, Location location)
         : Type(Kind::Integer, location), _bit_width(bitWidth), _is_signed(isSigned) {}
 
     bool is_signed() const { return _is_signed; }
@@ -692,7 +759,7 @@ private:
     using K = FFIKind;
 
     const K kind;
-    FFIType(K k, Location loc) : Type(Kind::FFIType, loc), kind(k) {}
+    constexpr FFIType(K k, Location location) : Type(Kind::FFIType, location), kind(k) {}
 
 public:
     /// Get the kind of this C FFI type.
@@ -700,8 +767,8 @@ public:
 
     bool operator==(FFIKind k) const { return kind == k; }
 
-    static auto Make(Module& mod, K k, Location l) -> FFIType* {
-        return new (mod) FFIType(k, l);
+    static constexpr auto Make(Module& mod, K k, Location location) -> FFIType* {
+        return new (mod) FFIType(k, location);
     }
 
     /// Get instances of C FFI types.
@@ -779,8 +846,8 @@ public:
         Type* type;
         Location location;
 
-        Param(std::string name, Type* type, Location location)
-            : name(std::move(name)), type(type), location(location) {}
+        Param(std::string name_, Type* type_, Location location_)
+            : name(std::move(name_)), type(type_), location(location_) {}
     };
 
 private:
@@ -848,6 +915,7 @@ public:
     static bool classof(const Type* type) {
         return type->kind() == Kind::Enum
             or type->kind() == Kind::Union
+            or type->kind() == Kind::Sum
             or type->kind() == Kind::Struct;
     }
 };
@@ -860,8 +928,8 @@ public:
         Location location;
         usz byte_offset{};
 
-        Member(std::string name, Type* type, Location location)
-            : type(type), name(std::move(name)), location(location) {}
+        Member(std::string name_, Type* type_, Location location_)
+            : type(type_), name(std::move(name_)), location(location_) {}
     };
 
 private:
@@ -940,7 +1008,50 @@ public:
     static bool classof(const Type* type) { return type->kind() == Kind::DynamicArray; }
 };
 
-// TODO
+// Automagical tagged union, basically.
+class SumType : public DeclaredType {
+public:
+    static constexpr usz IntegerWidth = 64;
+
+    struct Member {
+        Type* type;
+        Expr* expr;
+        std::string name;
+        Location location;
+
+        Member(std::string name_, Type* type_, Expr* expr_, Location location_)
+            : type(type_), expr(expr_), name(std::move(name_)), location(location_) {}
+    };
+
+private:
+    std::vector<Member> _members;
+    usz _byte_size{};
+    usz _alignment{};
+    StructType* _cached_struct;
+
+public:
+    SumType(Scope* scope, std::vector<Member> members, Location location)
+        : DeclaredType(Kind::Sum, scope, location), _members(std::move(members)) {}
+
+    usz alignment() const { return _alignment; }
+    void alignment(usz alignment) { _alignment = alignment; }
+
+    usz byte_size() const { return _byte_size; }
+    void byte_size(usz byteSize) { _byte_size = byteSize; }
+
+    auto struct_type(Module& mod) -> StructType*;
+
+    /// Caller needs to make sure to check the return value is not nullptr.
+    auto struct_type() -> StructType* {
+        return _cached_struct;
+    }
+
+    auto members() -> std::vector<Member>& { return _members; }
+    auto members() const -> const std::vector<Member>& { return _members; }
+
+    static bool classof(const Type* type) { return type->kind() == Kind::Sum; }
+};
+
 class UnionType : public DeclaredType {
 public:
     struct Member {
@@ -948,8 +1059,8 @@ public:
         std::string name;
         Location location;
 
-        Member(std::string name, Type* type, Location location)
-            : type(type), name(std::move(name)), location(location) {}
+        Member(std::string name_, Type* type_, Location location_)
+            : type(type_), name(std::move(name_)), location(location_) {}
     };
 
 private:
@@ -992,12 +1103,18 @@ public:
           _enumerators(std::move(enumerators)),
           _underlying_type(underlying_type) {}
 
+    [[nodiscard]]
     auto enumerators() -> std::vector<EnumeratorDecl*>& { return _enumerators; }
+    [[nodiscard]]
     auto enumerators() const -> const std::vector<EnumeratorDecl*>& { return _enumerators; }
 
+    [[nodiscard]]
     auto underlying_type() -> Type*& { return _underlying_type; }
+    [[nodiscard]]
+    auto underlying_type() const -> Type* { return _underlying_type; }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Enum; }
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool { return type->kind() == Kind::Enum; }
 };
 
 /// \brief Base class for expression syntax nodes.

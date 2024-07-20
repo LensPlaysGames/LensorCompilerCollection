@@ -387,9 +387,8 @@ bool lcc::glint::Sema::HasSideEffects(Expr* expr) {
             if (rgs::any_of(c->args(), HasSideEffects)) return true;
 
             // Function calls
-            auto ty = c->callee()->type();
-            while (is<PointerType, ReferenceType>(ty)) ty = ty->elem();
-            if (ty->is_function()) {
+            auto callee_ty = c->callee()->type()->strip_pointers_and_references();
+            if (callee_ty->is_function()) {
                 auto f = c->callee_type();
                 return not f->has_attr(FuncAttr::Pure) and not f->has_attr(FuncAttr::Const);
             }
@@ -472,7 +471,30 @@ void lcc::glint::Sema::InsertPointerToIntegerCast(Expr** operand) {
 
 void lcc::glint::Sema::LValueToRValue(Expr** expr, bool strip_ref) {
     if ((*expr)->sema_errored()) return;
-    if ((*expr)->is_lvalue()) WrapWithCast(expr, (*expr)->type(), CastKind::LValueToRValueConv);
+
+    // This converts the type of a member access of a sum type into the type
+    // of the member it is accessing.
+    // This matters because when we do something like `bar.x := 69;`, we need
+    // to access both the `tag` and `data` of `bar`, so we need the member
+    // access of it's member to actually return an lvalue to `bar`, rather
+    // than an lvalue to the member itself. But, when we do lvalue to rvalue
+    // conversion on this member access, we actually want to access the member
+    // itself (and not the value of `bar`), so the type is changed to reflect
+    // the fact that we are only accessing the single member (even though we
+    // will likely end up accessing the underlying object in order to check
+    // that the tag is valid, for example). This is just a reflection of the
+    // type of the value this member access expression returns.
+    // NOTE: This may not be /exactly/ correct when it comes to the type
+    // semantics of the language /iff/ we didn't have ways to know that the
+    // underlying object the member access is accessing is of a sum type.
+    if (auto* m = cast<MemberAccessExpr>(*expr); m and is<SumType>(m->type())) {
+        m->finalise(as<SumType>(m->type())->struct_type(), 1);
+        m->type(as<SumType>(m->type())->members().at(m->member()).type);
+    }
+
+    if ((*expr)->is_lvalue())
+        WrapWithCast(expr, (*expr)->type(), CastKind::LValueToRValueConv);
+
     if (strip_ref and is<ReferenceType>((*expr)->type())) {
         WrapWithCast(
             expr,
@@ -521,11 +543,11 @@ void lcc::glint::Sema::Analyse(Context* ctx, Module& m, bool use_colours) {
     return s.AnalyseModule();
 }
 
-bool lcc::glint::Sema::try_get_metadata_blob_from_object(
+auto lcc::glint::Sema::try_get_metadata_blob_from_object(
     const Module::Ref& import,
     const std::string& include_dir,
     std::vector<std::string>& paths_tried
-) {
+) -> bool {
     auto path_base0 = include_dir + std::filesystem::path::preferred_separator + import.name;
     auto path_base1 = include_dir + std::filesystem::path::preferred_separator + "lib" + import.name;
     auto paths = {
@@ -584,18 +606,17 @@ bool lcc::glint::Sema::try_get_metadata_blob_from_object(
             );
             // Deserialise metadata blob into a module
             // FIXME: (this module? or a new module?)
-            mod.deserialise(context, metadata_blob);
-            return true;
+            return mod.deserialise(context, metadata_blob);
         }
     }
     return false;
 }
 
-bool lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
+auto lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
     const Module::Ref& import,
     const std::string& include_dir,
     std::vector<std::string>& paths_tried
-) {
+) -> bool {
     auto path = include_dir
               + std::filesystem::path::preferred_separator
               + import.name + std::string(metadata_file_extension);
@@ -624,18 +645,17 @@ bool lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
             import.name,
             path
         );
-        mod.deserialise(context, metadata_blob);
-        return true;
+        return mod.deserialise(context, metadata_blob);
     }
 
     return false;
 }
 
-bool lcc::glint::Sema::try_get_metadata_blob_from_assembly(
+auto lcc::glint::Sema::try_get_metadata_blob_from_assembly(
     const Module::Ref& import,
     const std::string& include_dir,
     std::vector<std::string>& paths_tried
-) {
+) -> bool {
     auto path = include_dir
               + std::filesystem::path::preferred_separator
               + import.name + ".s";
@@ -656,7 +676,7 @@ void lcc::glint::Sema::AnalyseModule() {
         bool loaded{false};
         std::vector<std::string> paths_tried{};
 
-        for (auto include_dir : context->include_directories()) {
+        for (const auto& include_dir : context->include_directories()) {
             loaded = try_get_metadata_blob_from_gmeta(import, include_dir, paths_tried)
                   or try_get_metadata_blob_from_object(import, include_dir, paths_tried)
                   or try_get_metadata_blob_from_assembly(import, include_dir, paths_tried);
@@ -673,15 +693,12 @@ void lcc::glint::Sema::AnalyseModule() {
                 "{}",
                 import.name,
                 fmt::join(paths_tried, "\n")
-            )
-                .attach(
-                    false,
-                    Diag::Note(
-                        context,
-                        import.location,
-                        "Imported here"
-                    )
-                );
+            );
+            Diag::Note(
+                context,
+                import.location,
+                "Imported here"
+            );
             std::exit(1);
         }
     }
@@ -1160,7 +1177,8 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 LCC_UNREACHABLE();
             }
 
-            /// Type must be a struct type (or something that represents one, like a DynamicArrayType)
+            /// Type must be a struct type (or something that represents one, like a
+            /// DynamicArrayType or SumType)
             auto stripped_object_type = m->object()->type()->strip_pointers_and_references();
 
             // Access to union member
@@ -1176,6 +1194,72 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 auto cast = new (mod) CastExpr(m->object(), it->type, CastKind::HardCast, m->location());
                 cast->set_lvalue(m->object()->is_lvalue());
                 *expr_ptr = cast;
+                break;
+            }
+
+            // Access to sum type member
+            if (auto sum_type = cast<SumType>(stripped_object_type)) {
+                auto& members = sum_type->members();
+                auto it = rgs::find_if(members, [&](auto& member) { return member.name == m->name(); });
+                if (it == members.end()) {
+                    Error(m->location(), "Sum type {} has no member named '{}'", sum_type, m->name());
+                    m->set_sema_errored();
+                    break;
+                }
+
+                // NOTE: While the actual type of this member access is the type of the
+                // member (as an lvalue), we don't set that here so that we can properly
+                // generate the code needed during IRGen by just checking if the lhs of an
+                // assignment is a sum type or if a member access itself is of a sum type
+                // then we know to add the tag check and default expression path.
+                m->type(sum_type);
+                // m->type(it->type);
+
+                m->finalise(
+                    sum_type->struct_type(),
+                    usz(std::distance(members.begin(), it))
+                );
+
+                m->set_lvalue();
+
+                // fmt::print("\nOOHWEE\n");
+                // mod.print(true);
+
+                // LCC_TODO("SumType Member Access AST Generation");
+
+                // The following
+                //   foo : sum { x :cint 0, y :uint 0 };
+                // turns into
+                //   foo : struct { tag :enum { x:0 y:1 }; data :union { :cint :uint }; }
+                //
+                // bar :foo;
+                //
+                // The following
+                //   bar.x := 69;
+                // should turn into
+                //   bar.tag := foo.tag.x;
+                //   (:cint.ptr &bar.data) := 69;
+                //
+                // The following
+                //   bar.x;
+                // should turn into (if tag, then access)
+                //   if (bar.tag = foo.tag.x)
+                //     @(:cint.ptr &bar.data);
+                //   else default_constant_expression foo.x;
+                //
+                // It might be interesting to require a constant expression initialiser in
+                // sum type declarations and then have an `else` that returns that if the
+                // accessed sum type has the wrong data in it.
+                //
+                // The following
+                //   has bar.x;
+                // should turn into
+                //   bar.tag = foo.tag.x;
+
+                // auto cast = new (mod) CastExpr(m->object(), it->type, CastKind::HardCast, m->location());
+                // cast->set_lvalue(m->object()->is_lvalue());
+                // *expr_ptr = cast;
+
                 break;
             }
 
@@ -1505,13 +1589,33 @@ void lcc::glint::Sema::AnalyseBinary(BinaryExpr* b) {
             // Assignment always yields an lvalue.
             b->set_lvalue();
 
+            // Disallow assigning to a sum type directly.
+            auto* lhs_type = b->lhs()->type();
+            if (auto* sum_type = cast<SumType>(b->lhs()->type())) {
+                if (auto* m = cast<MemberAccessExpr>(b->lhs())) {
+                    // Use member access to fetch type from sum type
+                    lhs_type = sum_type->members().at(m->member()).type;
+                } else {
+                    // FIXME This isn't perfect, as ideally referencing a sum type anywhere
+                    // except a member access should be an error, but we shouldn't have to add
+                    // explicit checks absolutely everywhere that the thing we're dealing with
+                    // isn't a sum type that isn't a member access.
+                    Error(
+                        b->lhs()->location(),
+                        "Cannot assign to a sum type; access one of it's members using ``.''"
+                    );
+                    b->set_sema_errored();
+                    return;
+                }
+            }
+
             /// The RHS must be assignable to the LHS.
-            if (not Convert(&b->rhs(), b->lhs()->type())) {
+            if (not Convert(&b->rhs(), lhs_type)) {
                 Error(
                     b->rhs()->location(),
                     "Type of expression {} is not convertible to variable type {}",
                     b->rhs()->type(),
-                    b->lhs()->type()
+                    lhs_type
                 );
                 return;
             }
@@ -1632,8 +1736,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     //           NameRefExpr y
     //       )
     // )
-
-    else if (auto ty = expr->callee()->type(); ty->is_integer()) {
+    else if (auto callee_ty = expr->callee()->type(); callee_ty->is_integer()) {
         // NOTE: Call of integer with zero arguments by deproceduring should not
         // be valid syntax, but this handles `100();` just in case.
         if (expr->args().empty() and not HasSideEffects(expr)) {
@@ -1669,8 +1772,8 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     }
 
     /// Otherwise, if the type is not already a function type, we can’t call this.
-    else if (not ty->is_function()) {
-        Error(expr->callee()->location(), "Cannot call non-function(-pointer) type {}", ty);
+    else if (not callee_ty->is_function()) {
+        Error(expr->callee()->location(), "Cannot call non-function(-pointer) type {}", callee_ty);
         expr->set_sema_errored();
         return;
     }
@@ -2224,6 +2327,30 @@ void lcc::glint::Sema::AnalyseUnary(UnaryExpr* u) {
             /// The result of '!' is always a bool.
             u->type(Type::Bool);
         } break;
+
+        // Check if a sum type currently stores a given member.
+        case TokenKind::Has: {
+            if (not is<SumType>(u->operand()->type())) {
+                Error(
+                    u->operand()->location(),
+                    "Operand of 'has' must be a sum type"
+                );
+                u->set_sema_errored();
+                break;
+            }
+
+            if (not is<MemberAccessExpr>(u->operand())) {
+                Error(
+                    u->operand()->location(),
+                    "Operand of 'has' must be a member access to a sum type"
+                );
+                u->set_sema_errored();
+                break;
+            }
+
+            // The result of 'has' is boolean.
+            u->type(Type::Bool);
+        } break;
     }
 }
 
@@ -2385,6 +2512,34 @@ bool lcc::glint::Sema::Analyse(Type** type_ptr) {
             (void) a->struct_type(mod);
 
             if (a->initial_size()) Analyse(&a->initial_size());
+        } break;
+
+        // Apply decltype decay to the element type, prohibit arrays of
+        // references, and, if there is an initial size expression, analyse that.
+        // Also set cached struct type for IRGen by calling struct_type().
+        case Type::Kind::Sum: {
+            auto s = as<SumType>(type);
+            LCC_ASSERT(s->members().size(), "SumType has no members");
+            LCC_ASSERT(s->members().size() != 1, "SumType has one member");
+
+            // Finalise members
+            for (auto& member : s->members()) {
+                // Analyse member type
+                Analyse(&member.type);
+                member.type = DeclTypeDecay(member.type);
+                if (member.type->sema_errored()) {
+                    type->set_sema_errored();
+                    continue;
+                }
+
+                auto msize = member.type->size(context) / 8;
+                auto malign = member.type->align(context) / 8;
+                s->byte_size(std::max(s->byte_size(), msize));
+                s->alignment(std::max(s->alignment(), malign));
+            }
+
+            // Cache struct type for IRGen.
+            (void) s->struct_type(mod);
         } break;
 
         // Set cached struct type for IRGen by calling array_type().

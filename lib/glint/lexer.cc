@@ -26,10 +26,12 @@ lcc::StringMap<Tk> keywords{
     {"byte", Tk::Byte},
     {"int", Tk::Int},
     {"uint", Tk::UInt},
+    {"has", Tk::Has},
     {"cfor", Tk::For},
     {"return", Tk::Return},
     {"struct", Tk::Struct},
     {"enum", Tk::Enum},
+    {"sum", Tk::Sum},
     {"union", Tk::Union},
     {"lambda", Tk::Lambda},
     {"true", Tk::True},
@@ -748,13 +750,13 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
 }
 
 lcc::glint::Lexer::MacroExpansion::MacroExpansion(
-    Lexer& l,
-    Macro& m,
+    Lexer& lexer,
+    Macro& macro,
     StringMap<Token> args,
-    Location loc
-) : m(&m), it(m.expansion.begin()), bound_arguments(std::move(args)), location(loc) {
-    for (usz i = 0; i < m.definitions.size(); i++)
-        gensyms.push_back(fmt::format("__L{}", l.gensym_counter++));
+    Location l
+) : m(&macro), it(macro.expansion.begin()), bound_arguments(std::move(args)), location(l) {
+    for (usz i = 0; i < macro.definitions.size(); i++)
+        gensyms.push_back(fmt::format("__L{}", lexer.gensym_counter++));
 }
 
 auto lcc::glint::Lexer::MacroExpansion::operator++() -> Token {
@@ -857,6 +859,8 @@ bool lcc::glint::GlintToken::operator==(const GlintToken& rhs) const {
         case TokenKind::Struct:
         case TokenKind::Enum:
         case TokenKind::Union:
+        case TokenKind::Sum:
+        case TokenKind::Has:
         case TokenKind::Lambda:
         case TokenKind::True:
         case TokenKind::False:
@@ -895,6 +899,7 @@ std::string_view lcc::glint::ToString(Tk kind) {
         case Tk::Int: return "int";
         case Tk::UInt: return "uint";
         case Tk::ArbitraryInt: return "sized integer";
+        case Tk::Has: return "has";
         case Tk::For: return "for";
         case Tk::Return: return "return";
         case Tk::LParen: return "(";
@@ -944,6 +949,7 @@ std::string_view lcc::glint::ToString(Tk kind) {
         case Tk::Struct: return "struct";
         case Tk::Enum: return "enum";
         case Tk::Union: return "union";
+        case Tk::Sum: return "sum";
         case Tk::Lambda: return "lambda";
         case Tk::CShort: return "cshort";
         case Tk::CUShort: return "cushort";

@@ -13,13 +13,11 @@
 #include <utility>
 #include <vector>
 
-namespace intc = lcc::glint;
-
 namespace {
 /// Get the binary precedence of a token.
 constexpr inline lcc::isz CallPrecedence = 100'000;
-constexpr auto BinaryOrPostfixPrecedence(intc::TokenKind t) -> lcc::isz {
-    using Tk = intc::TokenKind;
+constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
+    using Tk = lcc::glint::TokenKind;
     switch (t) {
         case Tk::Dot:
             return 1'000'000'000;
@@ -70,8 +68,8 @@ constexpr auto BinaryOrPostfixPrecedence(intc::TokenKind t) -> lcc::isz {
 }
 
 /// Check if an operator is right-associative.
-constexpr bool IsRightAssociative(intc::TokenKind t) {
-    using Tk = intc::TokenKind;
+constexpr bool IsRightAssociative(lcc::glint::TokenKind t) {
+    using Tk = lcc::glint::TokenKind;
     switch (t) {
         case Tk::Star:
         case Tk::Slash:
@@ -101,8 +99,8 @@ constexpr bool IsRightAssociative(intc::TokenKind t) {
     }
 }
 
-constexpr bool MayStartAnExpression(intc::TokenKind kind) {
-    using Tk = intc::TokenKind;
+constexpr bool MayStartAnExpression(lcc::glint::TokenKind kind) {
+    using Tk = lcc::glint::TokenKind;
     switch (kind) {
         case Tk::LParen:
         case Tk::LBrack:
@@ -130,6 +128,7 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::Colon:
         case Tk::Sizeof:
         case Tk::Alignof:
+        case Tk::Has:
             return true;
 
         // Types
@@ -150,6 +149,7 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::Struct:
         case Tk::Enum:
         case Tk::Union:
+        case Tk::Sum:
             return true;
 
         case Tk::Invalid:
@@ -234,8 +234,8 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
 ///     i32.ref()
 ///     [i32.ref.ptr 10]
 ///     [i32.ptr 10].ref
-constexpr lcc::isz TypeQualifierPrecedence(intc::TokenKind t) {
-    using Tk = intc::TokenKind;
+constexpr lcc::isz TypeQualifierPrecedence(lcc::glint::TokenKind t) {
+    using Tk = lcc::glint::TokenKind;
     switch (t) {
         case Tk::At: return 400;
         case Tk::Dot: return 400;
@@ -247,14 +247,14 @@ constexpr lcc::isz TypeQualifierPrecedence(intc::TokenKind t) {
 }
 } // namespace
 
-bool intc::Parser::AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
+bool lcc::glint::Parser::AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
 
 /// Creates a new scope and parses a block in that scope.
-auto intc::Parser::ParseBlock() -> Result<BlockExpr*> {
+auto lcc::glint::Parser::ParseBlock() -> Result<BlockExpr*> {
     return ParseBlock({this});
 }
 
-auto intc::Parser::ParseBlock(
+auto lcc::glint::Parser::ParseBlock(
     /// The only purpose of this parameter is to open a new scope
     /// for this block. Do NOT remove it, even if it appears unused.
     [[maybe_unused]] ScopeRAII sc
@@ -309,7 +309,7 @@ auto intc::Parser::ParseBlock(
 }
 
 /// Parse an object or type declaration.
-auto intc::Parser::ParseDecl() -> Result<Decl*> {
+auto lcc::glint::Parser::ParseDecl() -> Result<Decl*> {
     auto is_export = Consume(Tk::Export);
     auto is_external = Consume(Tk::External);
     auto loc = tok.location;
@@ -321,14 +321,14 @@ auto intc::Parser::ParseDecl() -> Result<Decl*> {
 
     if (is_export) {
         // Export a declaration.
-        const auto Export = [&](Decl* decl) -> Result<Decl*> {
+        const auto Export = [&](Decl* exported_decl) -> Result<Decl*> {
             // Set linkage to exported if this has linkage.
-            if (auto obj = cast<ObjectDecl>(decl))
+            if (auto obj = cast<ObjectDecl>(exported_decl))
                 obj->linkage(obj->linkage() == Linkage::Imported ? Linkage::Reexported : Linkage::Exported);
 
-            // Add the declaration to the module’s export list.
-            mod->add_export(decl);
-            return decl;
+            // Add the exported declaration to the module’s export list.
+            mod->add_export(exported_decl);
+            return exported_decl;
         };
 
         // NOTE: Why? Why can't we export a function defined three nested levels
@@ -346,7 +346,7 @@ auto intc::Parser::ParseDecl() -> Result<Decl*> {
 
 /// Parse everything after the identifier in an object declaration.
 /// NOTE: Will `move(ident)`
-auto intc::Parser::ParseDeclRest(
+auto lcc::glint::Parser::ParseDeclRest(
     std::string ident,
     lcc::Location location,
     bool is_external
@@ -359,7 +359,7 @@ auto intc::Parser::ParseDeclRest(
             NextToken();
 
             /// Type declaration
-            if (At(Tk::Enum, Tk::Struct, Tk::Union)) {
+            if (At(Tk::Enum, Tk::Struct, Tk::Union, Tk::Sum)) {
                 if (is_external) Error("Type declarations cannot be made external; a linker does not know how to resolve Glint types.");
                 // Copy required due to `move(ident)` below.
                 auto decl_name = ident;
@@ -439,7 +439,7 @@ auto intc::Parser::ParseDeclRest(
 }
 
 /// Parse an enum declaration.
-auto intc::Parser::ParseEnumType() -> Result<EnumType*> {
+auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::Enum), "ParseEnumType called while not at 'enum'");
 
@@ -495,7 +495,7 @@ auto intc::Parser::ParseEnumType() -> Result<EnumType*> {
         );
 }
 
-auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> ExprResult {
+auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expression) -> ExprResult {
     auto lhs = ExprResult::Null();
 
     /// See below.
@@ -551,6 +551,15 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
             lhs = new (*mod) AlignofExpr(*lhs, {loc, lhs->location()});
         } break;
 
+        case Tk::Has: {
+            auto loc = tok.location;
+            // Yeet `has`
+            NextToken();
+            lhs = ParseExpr();
+            if (not lhs) return lhs.diag();
+            lhs = new (*mod) UnaryExpr(Tk::Has, *lhs, false, {loc, lhs->location()});
+        } break;
+
         // Expressions that start with a type.
         case Tk::ArbitraryInt:
         case Tk::Bool:
@@ -569,6 +578,7 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         case Tk::Struct:
         case Tk::UInt:
         case Tk::Union:
+        case Tk::Sum:
         case Tk::Void: {
             auto ty = ParseType();
             if (not ty) return ty.diag();
@@ -898,12 +908,12 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
     return lhs;
 }
 
-auto intc::Parser::ParseExprInNewScope() -> ExprResult {
+auto lcc::glint::Parser::ParseExprInNewScope() -> ExprResult {
     ScopeRAII sc{this};
     return ParseExpr();
 }
 
-auto intc::Parser::ParseForExpr() -> Result<ForExpr*> {
+auto lcc::glint::Parser::ParseForExpr() -> Result<ForExpr*> {
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::For), "ParseForExpr called while not at 'for'");
 
@@ -929,7 +939,7 @@ auto intc::Parser::ParseForExpr() -> Result<ForExpr*> {
     return new (*mod) ForExpr(*init, *cond, *increment, *body, loc);
 }
 
-auto intc::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
+auto lcc::glint::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
     static const StringMap<FuncAttr> attrs_map{
         {"const", FuncAttr::Const},
         {"discardable", FuncAttr::Discardable},
@@ -956,7 +966,7 @@ auto intc::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
     }
 }
 
-auto intc::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Expr*, Scope*>> {
+auto lcc::glint::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Expr*, Scope*>> {
     /// If the declaration is external, but there still seems to be
     /// a function body, warn the the user that they might be trying
     /// to do something that doesn’t make sense.
@@ -1011,7 +1021,7 @@ auto intc::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Expr*, Sc
     return std::pair{*expr, scope};
 }
 
-auto intc::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
+auto lcc::glint::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
     LCC_ASSERT(Consume(Tk::LParen), "ParseFunctionSignature called while not at '('");
 
     // Parse parameters.
@@ -1065,7 +1075,7 @@ auto intc::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
     );
 }
 
-auto intc::Parser::ParseIdentExpr() -> Result<Expr*> {
+auto lcc::glint::Parser::ParseIdentExpr() -> Result<Expr*> {
     auto loc = tok.location;
     auto text = tok.text;
     LCC_ASSERT(Consume(Tk::Ident), "ParseIdentExpr called while not at identifier");
@@ -1094,7 +1104,7 @@ auto intc::Parser::ParseIdentExpr() -> Result<Expr*> {
     return new (*mod) NameRefExpr(std::move(text), CurrScope(), loc);
 }
 
-auto intc::Parser::ParseIfExpr() -> Result<IfExpr*> {
+auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     /// Yeet "if".
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::If), "ParseIf called while not at 'if'");
@@ -1129,19 +1139,49 @@ auto intc::Parser::ParseIfExpr() -> Result<IfExpr*> {
     return new (*mod) IfExpr(cond.value(), then.value(), else_.value(), loc);
 }
 
-auto intc::Parser::ParsePreamble(File* f) -> Result<void> {
-    /// Parse module name and create the module.
+auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<void> {
+    // Parse module name and create the module.
+
+    // TODO: We probably want to implement a compiler directive that a module
+    // can set to turn this on or off for itself. Oh yeah, that reminds me,
+    // also a way to change the code that's inserted based on the LCC target.
+    //
+    //     *^ sum_type_bad_access_check [ true | false ];
+    //
+    // You know what I actually like more than that, I think? What if the act
+    // of installing a handler is the act of enabling it. That way we also
+    // don't have to do stupid by-hand code generation for the case, as well,
+    // we just call the function they define. To me, it makes sense to be
+    // per-module (per-library, in interop terms), because each module's
+    // maintainer should have the ability to control the code they maintain.
+    // So, a well-tested and thoroughly debugged library can omit the handler
+    // in production while a new Glint programmer who wants to make sure they
+    // know about any weirdness going on can install a classic "print message
+    // and crash" handler. This is sort of like operator overloading but on a
+    // module, I guess, lol.
+    constexpr auto sum_t_bad_access_check{
+        // Module::DontCheck
+        Module::DoSumTypeBadAccessCheck //
+    };
+
+    std::string module_name{""};
+    auto module_kind = Module::IsAnExecutable;
+
     if (At(Tk::Ident) and tok.text == "module" and not tok.artificial) {
+        module_kind = Module::IsAModule;
         NextToken(); /// Yeet "module".
+
         if (not At(Tk::Ident)) return Error("Expected module name");
-        mod = std::make_unique<Module>(f, tok.text, true);
+        module_name = tok.text;
         NextToken(); /// Yeet module name.
     }
 
-    /// Create an executable module instead.
-    else {
-        mod = std::make_unique<Module>(f, "", false);
-    }
+    mod = std::make_unique<Module>(
+        f,
+        module_name,
+        module_kind,
+        sum_t_bad_access_check
+    );
 
     while (At(Tk::Semicolon)) NextToken();
 
@@ -1161,7 +1201,7 @@ auto intc::Parser::ParsePreamble(File* f) -> Result<void> {
     return {};
 }
 
-auto intc::Parser::ParseStructType() -> Result<StructType*> {
+auto lcc::glint::Parser::ParseStructType() -> Result<StructType*> {
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::Struct), "ParseStructType called while not at 'struct'");
     if (not Consume(Tk::LBrace)) return Error("Expected '{{' after 'struct' in struct declaration");
@@ -1194,7 +1234,7 @@ auto intc::Parser::ParseStructType() -> Result<StructType*> {
     return new (*mod) StructType(sc.scope, std::move(members), Location{loc, tok.location});
 }
 
-auto intc::Parser::ParseUnionType() -> Result<UnionType*> {
+auto lcc::glint::Parser::ParseUnionType() -> Result<UnionType*> {
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::Union), "ParseUnionType called while not at '{}'", ToString(Tk::Union));
     if (not Consume(Tk::LBrace)) {
@@ -1239,8 +1279,72 @@ auto intc::Parser::ParseUnionType() -> Result<UnionType*> {
     return new (*mod) UnionType(sc.scope, std::move(members), Location{loc, tok.location});
 }
 
+auto lcc::glint::Parser::ParseSumType() -> Result<SumType*> {
+    auto loc = tok.location;
+    LCC_ASSERT(Consume(Tk::Sum), "ParseSumType called while not at 'sum'");
+    if (not Consume(Tk::LBrace)) return Error("Expected '{{' after 'sum'");
+
+    /// Parse the struct body.
+    ScopeRAII sc{this};
+    std::vector<SumType::Member> members;
+    while (not At(Tk::RBrace)) {
+        // Name
+        auto name = tok.text;
+        auto start = tok.location;
+        if (not Consume(Tk::Ident)) return Error("Expected member name in sum type declaration");
+
+        // Type
+        if (not Consume(Tk::Colon)) return Error("Expected ':' in sum type declaration");
+        auto type = ParseType();
+        if (not type) return type.diag();
+
+        // Default expression
+        Expr* default_expression{};
+
+        // TODO: I don't think this is how sum types will work anymore (it would
+        // be cool if it was an option given all subtypes of a sum type have an
+        // evaluatable default expression). That is, accessing a member of a sum
+        // type doesn't need to /always/ return a default value if the access is
+        // bad; after all, this /should/ never happen in production code, as all
+        // the bugs were ironed out during development... Basically, I want for
+        // people to be able to customise the behaviour of a bad access vs
+        // requiring only good accesses.
+        // TODO: The real todo from all that is:
+        //     "make init expression an Expr* instead of EvalResult".
+
+        // Eat '=', if present
+        if (Consume(Tk::Eq)) {
+            auto init = ParseExpr();
+            if (not init) return init.diag();
+            default_expression = *init;
+
+            // Attempt to constant evaluate the expression
+            EvalResult out{};
+            if (init->evaluate(context, out, false))
+                default_expression = new (*mod) ConstantExpr(default_expression, out);
+        }
+
+        // Add the member to the list.
+        members.emplace_back(
+            std::move(name),
+            *type,
+            default_expression,
+            Location{start, type->location()}
+        );
+
+        // Optionally eat soft or hard separator
+        Consume(Tk::Semicolon) or Consume(Tk::Comma);
+    }
+
+    /// Yeet '}'.
+    if (not Consume(Tk::RBrace)) return Error("Expected '}}' in sum type declaration");
+
+    /// Create the struct type.
+    return new (*mod) SumType(sc.scope, std::move(members), Location{loc, tok.location});
+}
+
 /// Parse a type where a type is expected.
-auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
+auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
     /// Parse the base type.
     Type* ty{};
     auto location = tok.location;
@@ -1383,14 +1487,19 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                 auto size_expr = ParseExpr();
                 if (not size_expr) return size_expr.diag();
                 // TODO: Better check for if expression is compile-time known
-                if (size_expr->kind() != Expr::Kind::EvaluatedConstant and size_expr->kind() != Expr::Kind::IntegerLiteral) {
-                    // DYNAMIC ARRAY because non-compile-time size expression
+                EvalResult out{};
+                if (size_expr->evaluate(context, out, false)) {
+                    // FIXED ARRAY because size expression is compile-time-known.
+                    size_expr = new (*mod) ConstantExpr(*size_expr, out);
+                    ty = new (*mod) ArrayType(*type, *size_expr, type->location());
+                } else {
+                    // DYNAMIC ARRAY because size expression is NOT compile-time-known.
                     ty = new (*mod) DynamicArrayType(
                         *type,
                         *size_expr,
                         location
                     );
-                } else ty = new (*mod) ArrayType(*type, *size_expr, type->location());
+                }
                 if (not Consume(Tk::RBrack))
                     return Error("Expected ]");
             }
@@ -1398,6 +1507,12 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
 
         case Tk::Union: {
             if (auto type = ParseUnionType())
+                ty = *type;
+            else return type.diag();
+        } break;
+
+        case Tk::Sum: {
+            if (auto type = ParseSumType())
                 ty = *type;
             else return type.diag();
         } break;
@@ -1411,11 +1526,15 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
 
             case Tk::Dot: {
                 NextToken();
+
                 if (tok.kind != Tk::Ident)
                     return Error("Expected IDENTIFIER after . following type {}, not {}", *ty, ToString(tok.kind));
-                location.len = u16(tok.text.size() + tok.location.pos - location.pos);
+
+                location = {location, tok.location};
                 if (tok.text == "pptr") {
-                    ty = new (*mod) PointerType(new (*mod) PointerType(ty, location));
+                    ty = new (*mod) PointerType(
+                        new (*mod) PointerType(ty, location)
+                    );
                     // Eat "pptr"
                     NextToken();
                     break;
@@ -1453,7 +1572,7 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
     return ty;
 }
 
-auto intc::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
+auto lcc::glint::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
     /// Yeet "while".
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::While), "ParseWhile called while not at 'while'");
@@ -1465,7 +1584,7 @@ auto intc::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
     return new (*mod) WhileExpr(cond.value(), body.value(), loc);
 }
 
-void intc::Parser::Synchronise() {
+void lcc::glint::Parser::Synchronise() {
     while (not At(Tk::Semicolon, Tk::RBrace, Tk::Eof)) NextToken();
     NextToken();
 }
@@ -1476,7 +1595,7 @@ void intc::Parser::Synchronise() {
 /// \param type The type of the function.
 /// \param is_external Whether this is an external function.
 /// \return The decl or an error.
-auto intc::Parser::ParseFuncDecl(
+auto lcc::glint::Parser::ParseFuncDecl(
     std::string name,
     FuncType* type,
     bool is_external
@@ -1504,8 +1623,8 @@ auto intc::Parser::ParseFuncDecl(
     return as<FuncDecl>(DeclScope()->declare(context, std::move(name), func));
 }
 
-void intc::Parser::ParseTopLevel() {
-    curr_func = mod->top_level_func();
+void lcc::glint::Parser::ParseTopLevel() {
+    curr_func = mod->top_level_function();
 
     /// Create the global and top-level scope. The top-level scope is a bit of
     /// a weird one because it only contains the local variables of the top-level
@@ -1562,13 +1681,14 @@ void intc::Parser::ParseTopLevel() {
         else {
             // If we failed to parse an expression at the top level, there was an error.
             context->set_error();
+
             // Jump past the next semicolon or closing brace in case of an error.
             Synchronise();
         }
     }
 }
 
-auto intc::Parser::Parse(Context* context, std::string_view source) -> std::unique_ptr<Module> {
+auto lcc::glint::Parser::Parse(Context* context, std::string_view source) -> std::unique_ptr<Module> {
     Parser parser(context, source);
 
     /// Parse preamble. This also creates the module.
@@ -1584,7 +1704,7 @@ auto intc::Parser::Parse(Context* context, std::string_view source) -> std::uniq
     return std::move(parser.mod);
 }
 
-auto intc::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
+auto lcc::glint::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
     Parser parser(context, &file);
 
     /// Parse preamble. This also creates the module.

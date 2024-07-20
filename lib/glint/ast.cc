@@ -137,6 +137,7 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
         case Kind::Array: return elem()->align(ctx);
         case Kind::Struct: return as<StructType>(this)->alignment();
         case Kind::Union: return as<UnionType>(this)->alignment();
+        case Kind::Sum: return as<SumType>(this)->alignment();
         case Kind::Integer: return std::bit_ceil(as<IntegerType>(this)->bit_width());
     }
 
@@ -148,11 +149,11 @@ auto lcc::glint::Type::elem() const -> Type* {
         case Kind::Pointer: return as<PointerType>(this)->element_type();
         case Kind::Reference: return as<ReferenceType>(this)->element_type();
         case Kind::Array: return as<ArrayType>(this)->element_type();
-        case Kind::DynamicArray: return as<DynamicArrayType>(this)->element_type();
+        case Kind::DynamicArray:
+            return as<DynamicArrayType>(this)->element_type();
 
-        /// const_cast is ok because we’re just reading the underlying type.
         case Kind::Enum:
-            return const_cast<EnumType*>(as<EnumType>(this))->underlying_type();
+            return as<EnumType>(this)->underlying_type();
 
         case Kind::Builtin:
         case Kind::FFIType:
@@ -160,6 +161,7 @@ auto lcc::glint::Type::elem() const -> Type* {
         case Kind::Function:
         case Kind::Struct:
         case Kind::Union:
+        case Kind::Sum:
         case Kind::Integer:
             Diag::ICE("Type has no element type");
     }
@@ -241,7 +243,11 @@ bool lcc::glint::Type::is_unsigned_int(const Context* ctx) const {
 bool lcc::glint::Type::is_void() const { return ::is_builtin(this, BuiltinType::BuiltinKind::Void); }
 
 auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
-    LCC_ASSERT(sema_done_or_errored());
+    LCC_ASSERT(
+        sema_done_or_errored(),
+        "Type {} has not been analysed",
+        this->string(false)
+    );
     if (sema_errored()) return 0;
     switch (kind()) {
         case Kind::Builtin:
@@ -298,6 +304,9 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
 
         case Kind::DynamicArray:
             return Type::VoidPtr->size(ctx) + DynamicArrayType::IntegerWidth * 2;
+
+        case Kind::Sum:
+            return SumType::IntegerWidth + as<SumType>(this)->byte_size();
 
         case Kind::Array:
             return as<ArrayType>(this)->dimension() * elem()->size(ctx);
@@ -387,6 +396,10 @@ bool lcc::glint::Type::Equal(const Type* a, const Type* b) {
                     return false;
             return true;
         }
+
+        // For now, no sum types are equal.
+        case Kind::Sum:
+            LCC_TODO("If sum types flatten to the same types, then they are equal");
 
         // For now, no unions are equal.
         case Kind::Union:
@@ -525,6 +538,7 @@ std::string lcc::glint::Expr::name() const {
                 case Type::Kind::DynamicArray: return "t_dynarray";
                 case Type::Kind::Array: return "t_fixarray";
                 case Type::Kind::Function: return "t_function";
+                case Type::Kind::Sum: return "t_sum";
                 case Type::Kind::Union: return "t_union";
                 case Type::Kind::Enum: return "t_enum";
                 case Type::Kind::Struct: return "t_struct";
@@ -916,11 +930,11 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
     }
 
     void print(lcc::glint::Module* mod) {
-        printed_functions.insert(mod->top_level_func());
-        if (auto funcbody = cast<lcc::glint::BlockExpr>(mod->top_level_func()->body())) {
+        printed_functions.insert(mod->top_level_function());
+        if (auto funcbody = cast<lcc::glint::BlockExpr>(mod->top_level_function()->body())) {
             for (auto* node : funcbody->children())
                 PrintTopLevelNode(node);
-        } else PrintTopLevelNode(mod->top_level_func()->body());
+        } else PrintTopLevelNode(mod->top_level_function()->body());
 
         for (auto* f : mod->functions())
             if (not printed_functions.contains(f))
@@ -1013,6 +1027,16 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
             auto decl = as<StructType>(this)->decl();
             return fmt::format(
                 "{}struct {}{}",
+                C(type_colour),
+                not decl or decl->name().empty() ? "<anonymous>" : decl->name(),
+                C(Reset)
+            );
+        }
+
+        case Kind::Sum: {
+            auto decl = as<SumType>(this)->decl();
+            return fmt::format(
+                "{}sum {}{}",
                 C(type_colour),
                 not decl or decl->name().empty() ? "<anonymous>" : decl->name(),
                 C(Reset)
@@ -1124,6 +1148,11 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
 void lcc::glint::Module::print(bool use_colour) {
     ASTPrinter{use_colour}.print(this);
 }
+
+void lcc::glint::Expr::print(bool use_colour) const {
+    ASTPrinter{use_colour}(this);
+}
+
 auto lcc::glint::UnionType::array_type(Module& mod) -> ArrayType* {
     if (not _cached_type) {
         _cached_type = new (mod) ArrayType(
@@ -1142,3 +1171,29 @@ auto lcc::glint::UnionType::array_type(Module& mod) -> ArrayType* {
     return _cached_type;
 }
 
+auto lcc::glint::SumType::struct_type(Module& mod) -> StructType* {
+    if (not _cached_struct) {
+        auto tag_member = new (mod) IntegerType(64, false, {});
+        tag_member->set_sema_done();
+
+        auto data_member = new (mod) ArrayType(
+            new (mod) IntegerType(8, false, {}),
+            new (mod) ConstantExpr(
+                new (mod) IntegerLiteral(byte_size(), {}),
+                EvalResult(aint(byte_size()))
+            ),
+            location()
+        );
+        data_member->elem()->set_sema_done();
+        data_member->set_sema_done();
+
+        _cached_struct = new (mod) StructType(
+            mod.global_scope(),
+            {{"tag", tag_member, {}}, {"data", data_member, {}}},
+            location()
+        );
+        _cached_struct->set_sema_done();
+    }
+
+    return _cached_struct;
+}

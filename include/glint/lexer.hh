@@ -38,10 +38,10 @@ class Lexer : public syntax::Lexer<GlintToken> {
         std::vector<std::string> gensyms{};
 
     public:
-        MacroExpansion(Lexer& l, Macro& m, StringMap<Token> args, Location loc);
+        MacroExpansion(Lexer&, Macro&, StringMap<Token> args, Location);
 
         /// Check if the macro is done expanding.
-        bool done() const { return it == m->expansion.end(); }
+        auto done() const -> bool { return it == m->expansion.end(); }
 
         /// Get the next token from the expansion.
         auto operator++() -> Token;
@@ -66,10 +66,10 @@ class Lexer : public syntax::Lexer<GlintToken> {
     void HandleMacroDefinition();
 
 protected:
-    Lexer(Context* context, std::string_view source)
-        : syntax::Lexer<Token>(context, source) { NextToken(); }
-    Lexer(Context* context, File* file)
-        : syntax::Lexer<Token>(context, file) { NextToken(); }
+    Lexer(Context* ctx, std::string_view source)
+        : syntax::Lexer<Token>(ctx, source) { NextToken(); }
+    Lexer(Context* ctx, File* file)
+        : syntax::Lexer<Token>(ctx, file) { NextToken(); }
 
     /// Note: Calling LookAhead() invalidates the addresses of
     /// previous lookaheads, if this requires more tokens to be

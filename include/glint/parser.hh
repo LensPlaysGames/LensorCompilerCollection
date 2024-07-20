@@ -39,8 +39,8 @@ private:
         Parser* parser;
         Scope* scope;
 
-        ScopeRAII(Parser* parser, Scope* parent = nullptr)
-            : parser(parser), scope(new(*parser->mod) Scope(parent ? parent : parser->CurrScope())) {
+        ScopeRAII(Parser* parser_, Scope* parent = nullptr)
+            : parser(parser_), scope(new(*parser->mod) Scope(parent ? parent : parser->CurrScope())) {
             parser->scope_stack.push_back(scope);
         }
 
@@ -65,8 +65,8 @@ private:
         }
     };
 
-    Parser(Context* context, File* file) : Lexer(context, file) {}
-    Parser(Context* context, std::string_view source) : Lexer(context, source) {}
+    Parser(Context* ctx, File* file) : Lexer(ctx, file) {}
+    Parser(Context* ctx, std::string_view source) : Lexer(ctx, source) {}
 
     /// Check if we’re at one of a set of tokens.
     [[nodiscard]] static bool Is(GlintToken* tk, auto... tks) { return ((tk->kind == tks) or ...); }
@@ -115,9 +115,6 @@ private:
     /// Issue a warning at the location of the current token.
     using Lexer::Warning;
 
-    /// Get the global scope.
-    auto GlobalScope() -> Scope* { return scope_stack[0]; }
-
     auto ParseBlock() -> Result<BlockExpr*>;
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
     auto ParseDecl() -> Result<Decl*>;
@@ -135,6 +132,7 @@ private:
     auto ParseStructType() -> Result<StructType*>;
     auto ParseEnumType() -> Result<EnumType*>;
     auto ParseUnionType() -> Result<UnionType*>;
+    auto ParseSumType() -> Result<SumType*>;
     void ParseTopLevel();
     auto ParseType(isz current_precedence = 0) -> Result<Type*>;
     auto ParseWhileExpr() -> Result<WhileExpr*>;
@@ -145,8 +143,12 @@ private:
     // ';', or the closing brace of a block.
     void Synchronise();
 
-    /// Get the scope for local top-level variables. This is different
-    /// from the global scope.
+    /// Get the global scope.
+    auto GlobalScope() -> Scope* { return scope_stack[0]; }
+
+    /// Get the scope for local top-level variables.
+    /// This is different from the global scope, as a Glint source file is
+    /// entirely within `main`.
     auto TopLevelScope() -> Scope* { return scope_stack[1]; }
 
     friend Scope;

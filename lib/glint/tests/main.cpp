@@ -57,7 +57,7 @@ struct GlintTest : Test {
                 // TODO: Only confirm AST conforms to expected match tree iff test is NOT
                 // decorated as expected to fail.
 
-                auto* root = mod->top_level_func()->body();
+                auto* root = mod->top_level_function()->body();
                 ast_matches = perform_match<lcc::glint::Expr>(root, matcher);
 
                 if (not ir.empty()) {
@@ -211,7 +211,7 @@ struct GlintTest : Test {
             fmt::print("{}FAIL{}\n", C(Colour::Red), C(Colour::Reset));
             if (not ast_matches) {
                 std::string expected = matcher.print();
-                std::string got = print_node<lcc::glint::Expr>(mod->top_level_func()->body());
+                std::string got = print_node<lcc::glint::Expr>(mod->top_level_function()->body());
 
                 // find_different_from_begin()
                 size_t diff_begin{0};
