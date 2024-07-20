@@ -5,6 +5,10 @@ namespace lcc {
 
 [[nodiscard]]
 auto PrintMOperand(const MOperand& op) -> std::string {
+    static_assert(
+        std::variant_size_v<MOperand> == 6,
+        "Exhaustive handling of MOperand alternatives in debug printing"
+    );
     if (std::holds_alternative<MOperandImmediate>(op)) {
         auto imm = std::get<MOperandImmediate>(op);
         return fmt::format("{}.{}", imm.value, imm.size);

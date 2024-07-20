@@ -39,6 +39,10 @@ auto block_name(const std::string& in) -> std::string {
 } // namespace
 
 auto ToString(MFunction& function, MOperand op) -> std::string {
+    static_assert(
+        std::variant_size_v<MOperand> == 6,
+        "Exhaustive handling of MOperand alternatives in x86_64 GNU Assembly backend"
+    );
     if (std::holds_alternative<MOperandRegister>(op)) {
         // TODO: Assert that register id is one of the x86_64 register ids...
         MOperandRegister reg = std::get<MOperandRegister>(op);

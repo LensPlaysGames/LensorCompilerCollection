@@ -537,6 +537,10 @@ struct PatternList {
                                 if (not operands_match) return;
 
                                 auto& operand = instruction->all_operands().at(op_i);
+                                static_assert(
+                                    std::variant_size_v<MOperand> == 6,
+                                    "Exhaustive handling of MOperand alternatives in instruction selection"
+                                );
                                 if (std::holds_alternative<MOperandImmediate>(operand)) {
                                     operands_match = op::kind == OperandKind::Immediate;
                                 } else if (std::holds_alternative<MOperandRegister>(operand)) {

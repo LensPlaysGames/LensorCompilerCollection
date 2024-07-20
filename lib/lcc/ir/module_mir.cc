@@ -1112,6 +1112,10 @@ auto Module::mir() -> std::vector<MFunction> {
                         usz uses = minst.use_count();
                         while (uses and uses--) copy.add_use();
 
+                        static_assert(
+                            std::variant_size_v<MOperand> == 6,
+                            "Exhaustive handling of MOperand alternatives in phi2copy"
+                        );
                         if (std::holds_alternative<MOperandImmediate>(op)) {
                             copy.add_operand(std::get<MOperandImmediate>(op));
                         } else if (std::holds_alternative<MOperandRegister>(op)) {
