@@ -4,106 +4,136 @@
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
 
-lcc::Type* lcc::Type::UnknownTy;
-lcc::Type* lcc::Type::PtrTy;
-lcc::Type* lcc::Type::VoidTy;
-lcc::Type* lcc::Type::I1Ty;
+namespace lcc {
 
-lcc::intercept::Type* lcc::intercept::Type::Bool;
-lcc::intercept::Type* lcc::intercept::Type::Byte;
-lcc::intercept::Type* lcc::intercept::Type::Int;
-lcc::intercept::Type* lcc::intercept::Type::Unknown;
-lcc::intercept::Type* lcc::intercept::Type::Void;
-lcc::intercept::Type* lcc::intercept::Type::VoidPtr;
-lcc::intercept::Type* lcc::intercept::Type::OverloadSet;
+// THE VALUES WHICH THE TYPE POINTERS POINT TO ARE CREATED HERE
+class Init {
+public:
+    static consteval auto ir_unknown() noexcept {
+        return Type{Type::Kind::Unknown};
+    }
+    static consteval auto ir_ptr() noexcept {
+        return Type{Type::Kind::Pointer};
+    }
+    static consteval auto ir_void() noexcept {
+        return Type{Type::Kind::Void};
+    }
+    static consteval auto ir_i1() noexcept {
+        return IntegerType{1};
+    }
 
-lcc::glint::Type* lcc::glint::Type::Bool;
-lcc::glint::Type* lcc::glint::Type::Byte;
-lcc::glint::Type* lcc::glint::Type::Int;
-lcc::glint::Type* lcc::glint::Type::UInt;
-lcc::glint::Type* lcc::glint::Type::Unknown;
-lcc::glint::Type* lcc::glint::Type::Void;
-lcc::glint::Type* lcc::glint::Type::VoidPtr;
-lcc::glint::Type* lcc::glint::Type::OverloadSet;
+    static consteval auto intercept_unknown() noexcept {
+        return intercept::BuiltinType{intercept::BuiltinType::K::Unknown, {}};
+    }
+    static consteval auto intercept_bool() noexcept {
+        return intercept::BuiltinType{intercept::BuiltinType::K::Bool, {}};
+    }
+    static consteval auto intercept_byte() noexcept {
+        return intercept::BuiltinType{intercept::BuiltinType::K::Byte, {}};
+    }
+    static consteval auto intercept_int() noexcept {
+        return intercept::BuiltinType{intercept::BuiltinType::K::Int, {}};
+    }
+    static consteval auto intercept_overload_set() noexcept {
+        return intercept::BuiltinType{intercept::BuiltinType::K::OverloadSet, {}};
+    }
+    static consteval auto intercept_void() noexcept {
+        return intercept::BuiltinType{intercept::BuiltinType::K::Void, {}};
+    }
+    static consteval auto intercept_void_ptr(intercept::Type* void_ty) noexcept {
+        auto t = intercept::PointerType{void_ty};
+        t.set_sema_done();
+        return t;
+    }
+
+    static consteval auto glint_unknown() noexcept {
+        return glint::BuiltinType{glint::BuiltinType::K::Unknown, {}};
+    }
+    static consteval auto glint_bool() noexcept {
+        return glint::BuiltinType{glint::BuiltinType::K::Bool, {}};
+    }
+    static consteval auto glint_byte() noexcept {
+        return glint::BuiltinType{glint::BuiltinType::K::Byte, {}};
+    }
+    static consteval auto glint_int() noexcept {
+        return glint::BuiltinType{glint::BuiltinType::K::Int, {}};
+    }
+    static consteval auto glint_uint() noexcept {
+        return glint::BuiltinType{glint::BuiltinType::K::UInt, {}};
+    }
+    static consteval auto glint_overload_set() noexcept {
+        return glint::BuiltinType{glint::BuiltinType::K::OverloadSet, {}};
+    }
+    static consteval auto glint_void() noexcept {
+        return glint::BuiltinType{glint::BuiltinType::K::Void, {}};
+    }
+    // NOTE: If you pass in anything that isn't glint_void_ty, you are going
+    // to have a very bad time. We do this so that we don't require a
+    // forward declaration.
+    static consteval auto glint_void_ptr(glint::Type* void_ty) noexcept {
+        auto t = glint::PointerType{void_ty};
+        t.set_sema_done();
+        return t;
+    }
+};
+} // namespace lcc
+
+// THE TEMPORARIES WHICH THE POINTERS POINT TO ARE CREATED HERE
+namespace {
+// LCC IR TYPES
+constinit auto ir_unknown_ty = lcc::Init::ir_unknown();
+constinit auto ir_ptr_ty = lcc::Init::ir_ptr();
+constinit auto ir_void_ty = lcc::Init::ir_void();
+constinit auto ir_i1_ty = lcc::Init::ir_i1();
+
+/// Initialise default instances of builtin Intercept types.
+constinit auto intercept_bool_ty = lcc::Init::intercept_bool();
+constinit auto intercept_byte_ty = lcc::Init::intercept_byte();
+constinit auto intercept_int_ty = lcc::Init::intercept_int();
+constinit auto intercept_unknown_ty = lcc::Init::intercept_unknown();
+constinit auto intercept_void_ty = lcc::Init::intercept_void();
+constinit auto intercept_overload_set_ty = lcc::Init::intercept_overload_set();
+constinit auto intercept_void_ptr_ty = lcc::Init::intercept_void_ptr(&intercept_void_ty);
+
+// GLINT TYPES
+constinit auto glint_unknown_ty = lcc::Init::glint_unknown();
+constinit auto glint_bool_ty = lcc::Init::glint_bool();
+constinit auto glint_byte_ty = lcc::Init::glint_byte();
+constinit auto glint_int_ty = lcc::Init::glint_int();
+constinit auto glint_uint_ty = lcc::Init::glint_uint();
+constinit auto glint_overload_set_ty = lcc::Init::glint_overload_set();
+constinit auto glint_void_ty = lcc::Init::glint_void();
+constinit auto glint_void_ptr_ty = lcc::Init::glint_void_ptr(&glint_void_ty);
+
+} // namespace
+
+// THIS IS WHERE THE ACTUAL STATIC MEMBERS ARE DEFINED
+
+// Initialise builtin and/or common IR types.
+constinit lcc::Type* lcc::Type::UnknownTy = &ir_unknown_ty;
+constinit lcc::Type* lcc::Type::PtrTy = &ir_ptr_ty;
+constinit lcc::Type* lcc::Type::VoidTy = &ir_void_ty;
+constinit lcc::Type* lcc::Type::I1Ty = &ir_i1_ty;
+
+// Initialise builtin and/or common Intercept types.
+constinit lcc::intercept::Type* lcc::intercept::Type::Bool = &intercept_bool_ty;
+constinit lcc::intercept::Type* lcc::intercept::Type::Byte = &intercept_byte_ty;
+constinit lcc::intercept::Type* lcc::intercept::Type::Int = &intercept_int_ty;
+constinit lcc::intercept::Type* lcc::intercept::Type::Unknown = &intercept_unknown_ty;
+constinit lcc::intercept::Type* lcc::intercept::Type::Void = &intercept_void_ty;
+constinit lcc::intercept::Type* lcc::intercept::Type::VoidPtr = &intercept_void_ptr_ty;
+constinit lcc::intercept::Type* lcc::intercept::Type::OverloadSet = &intercept_overload_set_ty;
+
+// Initialise builtin and/or common Glint types
+constinit lcc::glint::Type* lcc::glint::Type::Unknown = &glint_unknown_ty;
+constinit lcc::glint::Type* lcc::glint::Type::Bool = &glint_bool_ty;
+constinit lcc::glint::Type* lcc::glint::Type::Byte = &glint_byte_ty;
+constinit lcc::glint::Type* lcc::glint::Type::Int = &glint_int_ty;
+constinit lcc::glint::Type* lcc::glint::Type::UInt = &glint_uint_ty;
+constinit lcc::glint::Type* lcc::glint::Type::OverloadSet = &glint_overload_set_ty;
+constinit lcc::glint::Type* lcc::glint::Type::Void = &glint_void_ty;
+constinit lcc::glint::Type* lcc::glint::Type::VoidPtr = &glint_void_ptr_ty;
 
 void lcc::Context::InitialiseLCCData() {
-    /// Initialise builtin IR types.
-    static Type ir_unknown_ty{Type::Kind::Unknown};
-    static Type ir_ptr_ty{Type::Kind::Pointer};
-    static Type ir_void_ty{Type::Kind::Void};
-    static IntegerType ir_i1_ty{1};
-
-    Type::UnknownTy = &ir_unknown_ty;
-    Type::PtrTy = &ir_ptr_ty;
-    Type::VoidTy = &ir_void_ty;
-    Type::I1Ty = &ir_i1_ty;
-
-    /// Initialise default instances of builtin Intercept types.
-    static constinit lcc::intercept::BuiltinType int_ty_bool = {
-        lcc::intercept::BuiltinType::BuiltinKind::Bool,
-        {}};
-    static constinit lcc::intercept::BuiltinType int_ty_byte = {
-        lcc::intercept::BuiltinType::BuiltinKind::Byte,
-        {}};
-    static constinit lcc::intercept::BuiltinType int_ty_int = {
-        lcc::intercept::BuiltinType::BuiltinKind::Int,
-        {}};
-    static constinit lcc::intercept::BuiltinType int_ty_unknown = {
-        lcc::intercept::BuiltinType::BuiltinKind::Unknown,
-        {}};
-    static constinit lcc::intercept::BuiltinType int_ty_void = {
-        lcc::intercept::BuiltinType::BuiltinKind::Void,
-        {}};
-    static constinit lcc::intercept::BuiltinType int_ty_os = {
-        lcc::intercept::BuiltinType::BuiltinKind::OverloadSet,
-        {}};
-    static constinit lcc::intercept::PointerType int_ty_void_ptr = [] {
-        lcc::intercept::PointerType ty = {&int_ty_void, {}};
-        ty.set_sema_done();
-        return ty;
-    }();
-
-    lcc::intercept::Type::Bool = &int_ty_bool;
-    lcc::intercept::Type::Byte = &int_ty_byte;
-    lcc::intercept::Type::Int = &int_ty_int;
-    lcc::intercept::Type::Unknown = &int_ty_unknown;
-    lcc::intercept::Type::Void = &int_ty_void;
-    lcc::intercept::Type::OverloadSet = &int_ty_os;
-    lcc::intercept::Type::VoidPtr = &int_ty_void_ptr;
-
-    /// Initialise default instances of builtin Glint types.
-    static constinit lcc::glint::BuiltinType glint_ty_bool = {
-        lcc::glint::BuiltinType::BuiltinKind::Bool,
-        {}};
-    static constinit lcc::glint::BuiltinType glint_ty_byte = {
-        lcc::glint::BuiltinType::BuiltinKind::Byte,
-        {}};
-    static constinit lcc::glint::BuiltinType glint_ty_int = {
-        lcc::glint::BuiltinType::BuiltinKind::Int,
-        {}};
-    static constinit lcc::glint::BuiltinType glint_ty_uint = {
-        lcc::glint::BuiltinType::BuiltinKind::UInt,
-        {}};
-    static constinit lcc::glint::BuiltinType glint_ty_unknown = {
-        lcc::glint::BuiltinType::BuiltinKind::Unknown,
-        {}};
-    static constinit lcc::glint::BuiltinType glint_ty_void = {
-        lcc::glint::BuiltinType::BuiltinKind::Void,
-        {}};
-    static constinit lcc::glint::BuiltinType glint_ty_os = {
-        lcc::glint::BuiltinType::BuiltinKind::OverloadSet,
-        {}};
-    static constinit lcc::glint::PointerType glint_ty_void_ptr = [] {
-        lcc::glint::PointerType ty = {&glint_ty_void, {}};
-        ty.set_sema_done();
-        return ty;
-    }();
-    lcc::glint::Type::Bool = &glint_ty_bool;
-    lcc::glint::Type::Byte = &glint_ty_byte;
-    lcc::glint::Type::Int = &glint_ty_int;
-    lcc::glint::Type::UInt = &glint_ty_int;
-    lcc::glint::Type::Unknown = &glint_ty_unknown;
-    lcc::glint::Type::Void = &glint_ty_void;
-    lcc::glint::Type::OverloadSet = &glint_ty_os;
-    lcc::glint::Type::VoidPtr = &glint_ty_void_ptr;
+    // no-op (and we'd like to keep it this way, if possible)
 }
