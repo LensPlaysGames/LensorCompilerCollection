@@ -21,13 +21,13 @@
 /// ===========================================================================
 ///  Helpers
 /// ===========================================================================
-bool lcc::glint::Sema::AnalyseAndDiscard(Expr** expr) {
+auto lcc::glint::Sema::AnalyseAndDiscard(Expr** expr) -> bool {
     if (not Analyse(expr)) return false;
     Discard(expr);
     return true;
 }
 
-bool lcc::glint::Sema::Convert(Expr** expr, Type* type) {
+auto lcc::glint::Sema::Convert(Expr** expr, Type* type) -> bool {
     if ((*expr)->sema_errored()) return true;
     return ConvertImpl<true>(expr, type) >= 0;
 }
@@ -35,16 +35,22 @@ bool lcc::glint::Sema::Convert(Expr** expr, Type* type) {
 /// For an explanation of the return value of this function, see
 /// the comment on the declaration of TryConvert().
 template <bool PerformConversion>
-int lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type* to) {
+auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type* to) -> int {
+    LCC_ASSERT(expr_ptr and *expr_ptr and to, "Pointers mustn't be null");
+
     enum : int {
         TypesContainErrors = -2,
         ConversionImpossible = -1,
         NoOp = 0,
     };
 
+    // Caching from always caused a whole bunch of problems so this is the
+    // never-cache solution while still providing a nice name
+#define from ((*expr_ptr)->type())
+
     /// Cannot convert if the types contain errors.
-    auto from = (*expr_ptr)->type();
-    if (from->sema_errored() or to->sema_errored()) return TypesContainErrors;
+    if (from->sema_errored() or to->sema_errored())
+        return TypesContainErrors;
 
     /// This is so we don’t forget that we’ve applied lvalue-to-rvalue
     /// conversion and raised the score by one.
@@ -72,7 +78,8 @@ int lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type*
 
     /// Lvalue to rvalue conversion is required.
     score += (*expr_ptr)->is_lvalue();
-    if constexpr (PerformConversion) LValueToRValue(expr_ptr, false);
+    if constexpr (PerformConversion)
+        LValueToRValue(expr_ptr, false);
 
     /// Get reference-to-reference conversions out of the way early.
     if (from->is_reference() and to->is_reference()) {
@@ -81,7 +88,7 @@ int lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type*
 
         /// References to arrays can be converted to references to
         /// the first element.
-        auto arr = cast<ArrayType>(from->elem());
+        auto* arr = cast<ArrayType>(from->elem());
         if (arr and Type::Equal(arr->element_type(), to->elem())) {
             if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
             return Score(1);
@@ -91,8 +98,7 @@ int lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type*
     }
 
     /// Strip reference from `from` if need be.
-    if (auto ref = cast<ReferenceType>(from)) {
-        from = ref->element_type();
+    if (auto* ref = cast<ReferenceType>(from)) {
         score += 1;
         if constexpr (PerformConversion) LValueToRValue(expr_ptr);
     }
@@ -113,7 +119,7 @@ int lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type*
     /// Pointer to pointer conversions.
     if (from->is_pointer() and to->is_pointer()) {
         /// Pointers to arrays are convertible to pointers to the first element.
-        auto arr = cast<ArrayType>(from->elem());
+        auto* arr = cast<ArrayType>(from->elem());
         if (arr and Type::Equal(arr->element_type(), to->elem())) {
             if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
             return Score(1);
@@ -128,8 +134,8 @@ int lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type*
 
     // Array to array conversions.
     if (from->is_array() and to->is_array()) {
-        auto from_arr = as<ArrayType>(from);
-        auto to_arr = as<ArrayType>(to);
+        auto* from_arr = as<ArrayType>(from);
+        auto* to_arr = as<ArrayType>(to);
 
         // If the array we are converting from is larger than the resulting array,
         // it wouldn't fit and that conversion is impossible.
@@ -146,13 +152,19 @@ int lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type*
     }
 
     /// Function types can be converted to their corresponding function types.
-    if (from->is_function() and to->is_pointer() and Type::Equal(to->elem(), from)) {
+    if (
+        from->is_function() and to->is_pointer()
+        and Type::Equal(to->elem(), from)
+    ) {
         if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
         return NoOp;
     }
 
     /// Integer to boolean and vis versa implicit conversions.
-    if ((from->is_integer() and to->is_bool()) or (from->is_bool() and to->is_integer())) {
+    if (
+        (from->is_integer() and to->is_bool())
+        or (from->is_bool() and to->is_integer())
+    ) {
         if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
         return Score(1);
     }
@@ -205,6 +217,8 @@ int lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type*
     /// Try deproceduring one last time.
     if (Deproceduring(expr_ptr)) return Score(1);
 
+#undef from
+
     return ConversionImpossible;
 }
 
@@ -216,7 +230,7 @@ void lcc::glint::Sema::ConvertOrError(Expr** expr, Type* to) {
     );
 }
 
-bool lcc::glint::Sema::ConvertToCommonType(Expr** a, Expr** b) {
+auto lcc::glint::Sema::ConvertToCommonType(Expr** a, Expr** b) -> bool {
     // An integer literal should always be converted into the type of the
     // other side, favoring the left hand side when ambiguous.
     bool a_is_literal = is<IntegerLiteral>(*a);
@@ -235,10 +249,10 @@ auto lcc::glint::Sema::DeclTypeDecay(Type* type) -> Type* {
     return type->is_function() ? Ptr(type) : type;
 }
 
-bool lcc::glint::Sema::Deproceduring(Expr** expr_ptr) {
+auto lcc::glint::Sema::Deproceduring(Expr** expr_ptr) -> bool {
     /// This conversion only applies to functions and function pointers.
-    auto expr = *expr_ptr;
-    auto ty = expr->type();
+    auto* expr = *expr_ptr;
+    auto* ty = expr->type();
     if (not ty->is_function()
         and (not ty->is_pointer() or not ty->elem()->is_function()))
         return false;
@@ -249,7 +263,7 @@ bool lcc::glint::Sema::Deproceduring(Expr** expr_ptr) {
     if (is<BlockExpr>(expr)) return false;
 
     /// Functions that take arguments are not affected.
-    auto ftype = cast<FuncType>(ty->is_function() ? ty : ty->elem());
+    auto* ftype = cast<FuncType>(ty->is_function() ? ty : ty->elem());
     if (not ftype->params().empty()) return false;
 
     /// Otherwise, insert a call.
@@ -259,15 +273,15 @@ bool lcc::glint::Sema::Deproceduring(Expr** expr_ptr) {
 }
 
 void lcc::glint::Sema::Discard(Expr** expr_ptr) {
-    auto expr = *expr_ptr;
+    auto* expr = *expr_ptr;
 
     /// If the expression returns void, or has an error, ignore it.
     if (not expr->ok() or expr->type()->is_void()) return;
 
     /// If the expression is a call to a function not marked
     /// as discardable, issue an error.
-    if (auto call = cast<CallExpr>(expr)) {
-        auto ftype = call->callee_type();
+    if (auto* call = cast<CallExpr>(expr)) {
+        auto* ftype = call->callee_type();
         if (not ftype->has_attr(FuncAttr::Discardable)) Error(
             call->location(),
             "Discarding return value of function not marked as 'discardable'"
@@ -287,7 +301,7 @@ void lcc::glint::Sema::Discard(Expr** expr_ptr) {
     );
 }
 
-bool lcc::glint::Sema::EvaluateAsInt(Expr* expr, Type* int_type, aint& out) {
+auto lcc::glint::Sema::EvaluateAsInt(Expr* expr, Type* int_type, aint& out) -> bool {
     EvalResult res;
     if (not expr->evaluate(context, res, true)) return false;
 
@@ -322,7 +336,7 @@ bool lcc::glint::Sema::EvaluateAsInt(Expr* expr, Type* int_type, aint& out) {
     return ok;
 }
 
-bool lcc::glint::Sema::HasSideEffects(Expr* expr) {
+auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
     switch (expr->kind()) {
         /// These always have side effects.
         case Expr::Kind::While:
@@ -363,33 +377,33 @@ bool lcc::glint::Sema::HasSideEffects(Expr* expr) {
             return rgs::any_of(as<BlockExpr>(expr)->children(), HasSideEffects);
 
         case Expr::Kind::EvaluatedConstant: {
-            auto c = as<ConstantExpr>(expr);
+            auto* c = as<ConstantExpr>(expr);
             return c->expr() and HasSideEffects(c->expr());
         }
 
         case Expr::Kind::Binary: {
-            auto b = as<BinaryExpr>(expr);
+            auto* b = as<BinaryExpr>(expr);
             if (HasSideEffects(b->lhs()) or HasSideEffects(b->rhs())) return true;
             return b->op() == TokenKind::ColonEq;
         }
 
         case Expr::Kind::If: {
-            auto i = as<IfExpr>(expr);
+            auto* i = as<IfExpr>(expr);
             if (HasSideEffects(i->condition())) return true;
             if (HasSideEffects(i->then())) return true;
             return i->otherwise() and HasSideEffects(i->otherwise());
         }
 
         case Expr::Kind::Call: {
-            auto c = as<CallExpr>(expr);
+            auto* c = as<CallExpr>(expr);
 
             if (HasSideEffects(c->callee())) return true;
             if (rgs::any_of(c->args(), HasSideEffects)) return true;
 
             // Function calls
-            auto callee_ty = c->callee()->type()->strip_pointers_and_references();
+            auto* callee_ty = c->callee()->type()->strip_pointers_and_references();
             if (callee_ty->is_function()) {
-                auto f = c->callee_type();
+                auto* f = c->callee_type();
                 return not f->has_attr(FuncAttr::Pure) and not f->has_attr(FuncAttr::Const);
             }
 
@@ -397,7 +411,7 @@ bool lcc::glint::Sema::HasSideEffects(Expr* expr) {
         }
 
         case Expr::Kind::IntrinsicCall: {
-            auto c = as<IntrinsicCallExpr>(expr);
+            auto* c = as<IntrinsicCallExpr>(expr);
             switch (c->intrinsic_kind()) {
                 case IntrinsicKind::BuiltinDebugtrap:
                 case IntrinsicKind::BuiltinMemCopy:
@@ -421,7 +435,7 @@ bool lcc::glint::Sema::HasSideEffects(Expr* expr) {
     LCC_UNREACHABLE();
 }
 
-bool lcc::glint::Sema::ImplicitDe_Reference(Expr** expr) {
+auto lcc::glint::Sema::ImplicitDe_Reference(Expr** expr) -> bool {
     if (is<ReferenceType>((*expr)->type())) {
         /// Don’t strip reference here since we want an lvalue.
         LValueToRValue(expr, false);
@@ -435,7 +449,7 @@ bool lcc::glint::Sema::ImplicitDe_Reference(Expr** expr) {
     return (*expr)->is_lvalue();
 }
 
-bool lcc::glint::Sema::ImplicitDereference(Expr** expr) {
+auto lcc::glint::Sema::ImplicitDereference(Expr** expr) -> bool {
     if (is<ReferenceType>((*expr)->type())) {
         /// Don’t strip reference here since we want an lvalue.
         LValueToRValue(expr, false);
@@ -487,9 +501,15 @@ void lcc::glint::Sema::LValueToRValue(Expr** expr, bool strip_ref) {
     // NOTE: This may not be /exactly/ correct when it comes to the type
     // semantics of the language /iff/ we didn't have ways to know that the
     // underlying object the member access is accessing is of a sum type.
-    if (auto* m = cast<MemberAccessExpr>(*expr); m and is<SumType>(m->type())) {
-        m->finalise(as<SumType>(m->type())->struct_type(), 1);
-        m->type(as<SumType>(m->type())->members().at(m->member()).type);
+    {
+        if (auto* m = cast<MemberAccessExpr>(*expr)) {
+            if (auto* s = cast<SumType>(m->type())) {
+                auto mindex = m->member();
+                // TODO: "1" is actually index of ".data" in underlying struct type.
+                m->finalise(s->struct_type(), 1);
+                m->type(s->members().at(mindex).type);
+            }
+        }
     }
 
     if ((*expr)->is_lvalue())
@@ -518,7 +538,7 @@ auto lcc::glint::Sema::Ref(Type* ty) -> ReferenceType* {
     return as<ReferenceType>(ref);
 }
 
-int lcc::glint::Sema::TryConvert(Expr** expr, Type* type) {
+auto lcc::glint::Sema::TryConvert(Expr** expr, Type* type) -> int {
     return ConvertImpl<false>(expr, type);
 }
 
@@ -797,12 +817,16 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
 
         if (is<ReturnExpr>(*last)) return;
 
-        if (not Convert(last, ty->return_type())) Error(
-            (*last)->location(),
-            "Type of last expression {} is not convertible to return type {}",
-            (*last)->type(),
-            ty->return_type()
-        );
+        if (not Convert(last, ty->return_type())) {
+            Error(
+                (*last)->location(),
+                "Type of last expression {} is not convertible to return type {}",
+                (*last)->type(),
+                ty->return_type()
+            );
+            context->set_error();
+            return;
+        }
 
         LValueToRValue(last);
 

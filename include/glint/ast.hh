@@ -1548,7 +1548,7 @@ public:
         if (_children.empty()) return nullptr;
         auto last = &_children.back();
         auto last_index = last - _children.data();
-        while (is<FuncDecl>(*last) && last_index--)
+        while (is<FuncDecl>(*last) and last_index--)
             last = _children.data() + last_index;
 
         return last;
