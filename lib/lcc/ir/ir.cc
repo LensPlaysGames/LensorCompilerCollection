@@ -24,15 +24,15 @@
 
 namespace lcc {
 Function::Function(
-    Module* mod,
+    Module* module,
     std::string mangled_name,
     FunctionType* ty,
     Linkage linkage,
     CallConv calling_convention,
-    Location l
+    Location location
 ) : UseTrackingValue(Kind::Function, ty),
-    loc(l),
-    mod(mod),
+    _location(location),
+    mod(module),
     cc(calling_convention) {
     add_name(std::move(mangled_name), linkage);
 
@@ -77,9 +77,11 @@ GlobalVariable* GlobalVariable::CreateStringPtr(Module* mod, std::string name, s
     return var;
 }
 
-usz Type::bits() const {
+auto Type::bits() const -> usz {
     switch (kind) {
-        case Kind::Unknown: Diag::ICE("Cannot get size of unknown type");
+        case Kind::Unknown:
+            Diag::ICE("Cannot get size of unknown type");
+
         case Kind::Void: return 0;
 
         case Kind::Function:
@@ -267,7 +269,7 @@ Inst* Block::insert(Inst* i, bool force) {
 }
 
 bool Block::has_predecessor(Block* block) const {
-    auto term = block->terminator();
+    auto* term = block->terminator();
     if (not term) return false;
     switch (term->kind()) {
         default: LCC_UNREACHABLE();
@@ -279,13 +281,13 @@ bool Block::has_predecessor(Block* block) const {
             return as<BranchInst>(term)->target() == this;
 
         case Value::Kind::CondBranch: {
-            auto cond_branch = as<CondBranchInst>(term);
+            auto* cond_branch = as<CondBranchInst>(term);
             return cond_branch->then_block() == this or cond_branch->else_block() == this;
         }
     }
 }
 
-auto Block::id() const -> usz {
+usz Block::id() const {
     if (not parent) return 0;
     return usz(std::distance(parent->blocks().begin(), rgs::find(parent->blocks(), this)));
 }
@@ -307,51 +309,51 @@ auto Inst::Children() -> Generator<Value**> {
             break;
 
         case Kind::Call: {
-            auto c = as<CallInst>(this);
+            auto* c = as<CallInst>(this);
             co_yield &c->callee_value;
             for (auto& a : c->arguments) co_yield &a;
         } break;
 
         case Kind::GetElementPtr: {
-            auto gep = as<GEPInst>(this);
+            auto* gep = as<GEPInst>(this);
             co_yield &gep->pointer;
             co_yield &gep->index;
         } break;
 
         case Kind::GetMemberPtr: {
-            auto gmp = as<GetMemberPtrInst>(this);
+            auto* gmp = as<GetMemberPtrInst>(this);
             co_yield &gmp->pointer;
             co_yield &gmp->index;
         } break;
 
         case Kind::Intrinsic: {
-            auto i = as<IntrinsicInst>(this);
-            for (auto a : i->operand_list) co_yield &a;
+            auto* i = as<IntrinsicInst>(this);
+            for (auto* a : i->operand_list) co_yield &a;
         } break;
 
         case Kind::Load: {
-            auto load = as<LoadInst>(this);
+            auto* load = as<LoadInst>(this);
             co_yield &load->pointer;
         } break;
 
         case Kind::Phi: {
-            auto phi = as<PhiInst>(this);
+            auto* phi = as<PhiInst>(this);
             for (auto& [value, _] : phi->incoming) co_yield &value;
         } break;
 
         case Kind::Store: {
-            auto s = as<StoreInst>(this);
+            auto* s = as<StoreInst>(this);
             co_yield &s->pointer;
             co_yield &s->value;
         } break;
 
         case Kind::CondBranch: {
-            auto br = as<CondBranchInst>(this);
+            auto* br = as<CondBranchInst>(this);
             co_yield &br->condition;
         } break;
 
         case Kind::Return: {
-            auto ret = as<ReturnInst>(this);
+            auto* ret = as<ReturnInst>(this);
             if (ret->has_value()) co_yield &ret->value;
         } break;
 
@@ -362,7 +364,7 @@ auto Inst::Children() -> Generator<Value**> {
         case Kind::Neg:
         case Kind::Copy:
         case Kind::Compl: {
-            auto u = cast<UnaryInstBase>(this);
+            auto* u = cast<UnaryInstBase>(this);
             co_yield &u->op;
         } break;
 
@@ -389,7 +391,7 @@ auto Inst::Children() -> Generator<Value**> {
         case Kind::ULe:
         case Kind::UGt:
         case Kind::UGe: {
-            auto b = cast<BinaryInst>(this);
+            auto* b = cast<BinaryInst>(this);
             co_yield &b->left;
             co_yield &b->right;
         } break;
@@ -398,7 +400,7 @@ auto Inst::Children() -> Generator<Value**> {
 
 void Inst::EraseImpl() {
     /// Clear usees.
-    for (auto usee : children()) RemoveUse(usee, this);
+    for (auto* usee : children()) RemoveUse(usee, this);
 
     /// Erase this instruction.
     if (parent) parent->instructions().erase(rgs::find(parent->instructions(), this));
@@ -406,12 +408,12 @@ void Inst::EraseImpl() {
 
 auto Inst::children() const -> Generator<Value*> {
     /// const_cast is fine since this does not mutate the instruction.
-    auto self = const_cast<Inst*>(this);
-    for (auto v : self->Children()) co_yield *v;
+    auto* self = const_cast<Inst*>(this);
+    for (auto* v : self->Children()) co_yield *v;
 
     /// Include blocks if there are any.
-    if (auto br = cast<BranchInst>(self)) co_yield br->target();
-    else if (auto cond_br = cast<CondBranchInst>(self)) {
+    if (auto* br = cast<BranchInst>(self)) co_yield br->target();
+    else if (auto* cond_br = cast<CondBranchInst>(self)) {
         co_yield cond_br->then_block();
         co_yield cond_br->else_block();
     }
@@ -566,13 +568,11 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     void PrintHeader(Module* mod) {
         using enum utils::Colour;
-        utils::Colours C{use_colour};
         Print("{}; LCC Module '{}'{}\n", C(White), mod->name(), C(Reset));
     }
 
     std::string Ty(Type* ty) {
         using enum utils::Colour;
-        utils::Colours C{use_colour};
         if (auto struct_type = cast<StructType>(ty)) {
             return fmt::format("{}@{}{}", C(Green), struct_type->string(false), C(Reset));
         } else if (auto arr = cast<ArrayType>(ty)) {
@@ -600,7 +600,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             );
         }
 
-        return ty->string(use_colour);
+        return ty->string(_use_colour);
     }
 
     void PrintStructType(Type* t) {

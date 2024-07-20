@@ -36,6 +36,7 @@ class Context {
 
 public:
     /// IR type caches.
+    // TODO: Could these be smart pointers? If not, why?
     std::unordered_map<usz, Type*> integer_types;
     std::vector<Type*> array_types;
     std::vector<Type*> function_types;
@@ -43,7 +44,7 @@ public:
 
     /// Create a new context.
     explicit Context(
-        const Target* tgt,
+        const Target* target,
         const Format* format,
         bool colour_diagnostics,
         bool should_print_mir,
@@ -53,15 +54,16 @@ public:
     /// Do not allow copying or moving the context.
     Context(const Context&) = delete;
     Context(Context&&) = delete;
-    Context& operator=(const Context&) = delete;
-    Context& operator=(Context&&) = delete;
+    auto operator=(const Context&) -> Context& = delete;
+    auto operator=(Context&&) -> Context& = delete;
 
     /// Delete all files and IR types.
     ~Context();
 
     /// Create a new file from a name and contents.
     template <typename Buffer>
-    File& create_file(fs::path name, Buffer&& contents) {
+    [[nodiscard]]
+    auto create_file(fs::path name, Buffer&& contents) -> File& {
         return make_file(
             std::move(name),
             std::vector<char>{std::forward<Buffer>(contents)}
@@ -81,16 +83,17 @@ public:
     ///
     /// \param path The path to the file.
     /// \return A reference to the file.
-    File& get_or_load_file(fs::path path);
+    [[nodiscard]]
+    auto get_or_load_file(fs::path path) -> File&;
 
     /// Check if the error flag is set.
     [[nodiscard]]
-    bool has_error() const { return error_flag; }
+    auto has_error() const -> bool { return error_flag; }
 
     /// Set the error flag.
     ///
     /// \return The previous value of the error flag.
-    bool set_error() const {
+    auto set_error() const -> bool {
         auto old = error_flag;
         error_flag = true;
         return old;
@@ -98,21 +101,25 @@ public:
 
     /// Get the target.
     [[nodiscard]]
-    auto target() const -> const Target* { return _target; }
+    auto target() const { return _target; }
 
     /// Get the target.
     [[nodiscard]]
-    auto format() const -> const Format* { return _format; }
+    auto format() const { return _format; }
 
     /// Whether to use colours in diagnostics.
     [[nodiscard]]
-    bool use_colour_diagnostics() const { return _colour_diagnostics; }
+    auto use_colour_diagnostics() const -> bool {
+        return _colour_diagnostics;
+    }
 
     [[nodiscard]]
-    bool should_print_mir() const { return _should_print_mir; }
+    auto should_print_mir() const -> bool {
+        return _should_print_mir;
+    }
 
     [[nodiscard]]
-    bool stopat_mir() const { return _stopat_mir; }
+    auto stopat_mir() const -> bool { return _stopat_mir; }
 
     auto include_directories() const -> const decltype(_include_directories)& {
         return _include_directories;
@@ -124,7 +131,7 @@ public:
 
 private:
     /// Register a file in the context.
-    File& make_file(fs::path name, std::vector<char>&& contents);
+    auto make_file(fs::path name, std::vector<char>&& contents) -> File&;
 };
 } // namespace lcc
 

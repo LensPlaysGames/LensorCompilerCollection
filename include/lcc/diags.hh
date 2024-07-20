@@ -24,10 +24,10 @@ struct Diag {
     };
 
 private:
-    const Context* ctx;
     Kind kind;
-    Location where;
-    std::string msg;
+    const Context* context{};
+    Location where{};
+    std::string message{};
 
     /// Attached diagnostics.
     std::vector<std::pair<Diag, bool>> attached;
@@ -39,64 +39,66 @@ private:
     void PrintDiagWithoutLocation();
 
     /// Determine whether we should use colours at all.
-    bool ShouldUseColour() const;
+    [[nodiscard]]
+    auto ShouldUseColour() const -> bool;
 
 public:
     static constexpr u8 ICE_EXIT_CODE = 17;
     static constexpr u8 FATAL_EXIT_CODE = 18;
 
-    Diag(Diag&& other)
-        : ctx(other.ctx),
-          kind(other.kind),
+    // Move constructor
+    Diag(Diag&& other) noexcept
+        : kind(other.kind),
+          context(other.context),
           where(other.where),
-          msg(std::move(other.msg)),
+          message(std::move(other.message)),
           attached(std::move(other.attached)) {
         other.kind = Kind::None;
     }
 
-    Diag& operator=(Diag&& other) {
+    auto operator=(Diag&& other) noexcept -> Diag& {
         if (this == &other) return *this;
-        ctx = other.ctx;
+        context = other.context;
         kind = other.kind;
         where = other.where;
-        msg = std::move(other.msg);
+        message = std::move(other.message);
         attached = std::move(other.attached);
         other.kind = Kind::None;
         return *this;
     }
 
     /// Create an empty diagnostic.
-    explicit Diag() : ctx(nullptr), kind(Kind::None), where(), msg() {}
+    explicit Diag(){};
 
     /// Disallow copying.
     Diag(const Diag&) = delete;
-    Diag& operator=(const Diag&) = delete;
+    auto operator=(const Diag&) -> Diag& = delete;
 
     /// The destructor prints the diagnostic, if it hasn’t been moved from.
     ~Diag();
 
     /// Issue a diagnostic.
-    Diag(const Context* ctx, Kind kind, Location where, std::string msg)
-        : ctx(ctx), kind(kind), where(where), msg(std::move(msg)) {}
+    Diag(const Context* context_, Kind kind_, Location where_, std::string message_)
+        : kind(kind_), context(context_), where(where_), message(std::move(message_)) {}
 
     /// Issue a diagnostic with no location.
-    Diag(Kind _kind, std::string&& msg)
-        : ctx(nullptr), kind(_kind), where(), msg(std::move(msg)) {}
+    Diag(Kind kind_, std::string&& message_)
+        : kind(kind_), message(std::move(message_)) {}
 
     /// Issue a diagnostic with a format string and arguments.
     template <typename... Args>
     Diag(
-        const Context* ctx,
-        Kind kind,
-        Location where,
+        const Context* context_,
+        Kind kind_,
+        Location where_,
         fmt::format_string<Args...> fmt,
         Args&&... args
-    ) : Diag{ctx, kind, where, fmt::format(fmt, std::forward<Args>(args)...)} {}
+    ) : Diag{context_, kind_, where_, fmt::format(fmt, std::forward<Args>(args)...)} {}
 
     /// Issue a diagnostic with a format string and arguments, but no location.
     template <typename... Args>
-    Diag(Kind kind, fmt::format_string<Args...> fmt, Args&&... args)
-        : Diag{kind, fmt::format(fmt, std::forward<Args>(args)...)} {}
+    Diag(Kind kind_, fmt::format_string<Args...> fmt, Args&&... args)
+        : Diag{kind_, fmt::format(fmt, std::forward<Args>(args)...)} {}
 
     /// Attach another diagnostic to this one.
     ///
@@ -127,71 +129,77 @@ public:
 
     /// Emit a note.
     template <typename... Args>
-    static Diag Note(fmt::format_string<Args...> fmt, Args&&... args) {
+    static auto Note(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
         return Diag{Kind::Note, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Emit a note.
     template <typename... Args>
-    static Diag Note(
+    static auto Note(
         const Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args
-    ) {
+    ) -> Diag {
         return Diag{ctx, Kind::Note, where, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Emit a warning.
     template <typename... Args>
-    static Diag Warning(fmt::format_string<Args...> fmt, Args&&... args) {
+    static auto Warning(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
         return Diag{Kind::Warning, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Emit a warning.
     template <typename... Args>
-    static Diag Warning(
+    static auto Warning(
         const Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args
-    ) {
+    ) -> Diag {
         return Diag{ctx, Kind::Warning, where, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Emit an error.
     template <typename... Args>
-    static Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
+    static auto Error(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
         return Diag{Kind::Error, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Emit an error.
     template <typename... Args>
-    static Diag Error(
+    static auto Error(
         const Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args
-    ) {
+    ) -> Diag {
         return Diag{ctx, Kind::Error, where, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Raise an internal compiler error and exit.
     template <typename... Args>
-    [[noreturn]] static void ICE(fmt::format_string<Args...> fmt, Args&&... args) {
-        Diag{Kind::ICError, fmt::format(fmt, std::forward<Args>(args)...)};
+    [[noreturn]]
+    static void ICE(fmt::format_string<Args...> fmt, Args&&... args) {
+        // Yes, this nested scope is important; the destructor prints the
+        // diagnostic, and an ICE exits after printing.
+        { Diag _{Kind::ICError, fmt::format(fmt, std::forward<Args>(args)...)}; }
+        fmt::print(stderr, "\n¡¡BIG PROBLEM!! ICE didn't exit...\n");
         std::terminate(); /// Should never be reached.
     }
 
     /// Raise an internal compiler error at a location and exit.
     template <typename... Args>
-    [[noreturn]] static void ICE(
+    [[noreturn]]
+    static void ICE(
         const Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args
     ) {
-        Diag{ctx, Kind::ICError, where, fmt::format(fmt, std::forward<Args>(args)...)};
+        { Diag _{ctx, Kind::ICError, where, fmt::format(fmt, std::forward<Args>(args)...)}; }
+        fmt::print(stderr, "\n¡¡BIG PROBLEM!! ICE didn't exit...\n");
         std::terminate(); /// Should never be reached.
     }
 
@@ -201,8 +209,9 @@ public:
     /// the underlying system, such as attempting to output to a directory that
     /// isn’t accessible to the user.
     template <typename... Args>
-    [[noreturn]] static void Fatal(fmt::format_string<Args...> fmt, Args&&... args) {
-        Diag{Kind::FError, fmt::format(fmt, std::forward<Args>(args)...)};
+    [[noreturn]]
+    static void Fatal(fmt::format_string<Args...> fmt, Args&&... args) {
+        { Diag _{Kind::FError, fmt::format(fmt, std::forward<Args>(args)...)}; }
         std::terminate(); /// Should never be reached.
     }
 };

@@ -47,19 +47,20 @@ static constexpr std::string_view Name(lcc::Diag::Kind kind) {
 }
 } // namespace
 
-/// Abort due to assertion failure.
-[[noreturn]] void lcc::detail::AssertFail(std::string&& msg) {
+// Exit due to assertion failure.
+[[noreturn]]
+void lcc::detail::AssertFail(std::string&& msg) {
     Diag::ICE("{}", std::move(msg));
 }
 
 void lcc::Diag::HandleFatalErrors() {
-    /// Abort on ICE.
+    // Exit on internal compiler error (ICE).
     if (kind == Kind::ICError) {
         lcc::platform::PrintBacktrace();
         std::exit(ICE_EXIT_CODE);
     }
 
-    /// Exit on a fatal error.
+    // Also exit on any fatal error.
     if (kind == Kind::FError) std::exit(FATAL_EXIT_CODE);
 }
 
@@ -70,22 +71,22 @@ void lcc::Diag::PrintDiagWithoutLocation() {
 
     /// Print the message.
     fmt::print(stderr, "{}{}{}: {}", C(Bold), C(Colour(kind)), Name(kind), C(Reset));
-    fmt::print(stderr, "{}\n", msg);
+    fmt::print(stderr, "{}\n", message);
     HandleFatalErrors();
 }
 
 bool lcc::Diag::ShouldUseColour() const {
-    if (ctx) return ctx->use_colour_diagnostics();
+    if (context) return context->use_colour_diagnostics();
     return lcc::platform::StderrIsTerminal();
 }
 
 lcc::Diag::~Diag() { print(); }
 
-constexpr std::string named_link(std::string_view uri, std::string_view name) {
+constexpr auto named_link(std::string_view uri, std::string_view name) -> std::string {
     return fmt::format("\033]8;;{}\033\\{}\033]8;;\033\\", uri, name);
 }
 
-std::string file_link(lcc::fs::path path) {
+auto file_link(const lcc::fs::path& path) -> std::string {
     return named_link(
         fmt::format("file://{}", lcc::fs::absolute(path).string()),
         lcc::fs::relative(path).string()
@@ -117,10 +118,10 @@ void lcc::Diag::print() {
     };
 
     // If the diagnostic is an error, set the error flag.
-    if (kind == Kind::Error and ctx) ctx->set_error();
+    if (kind == Kind::Error and context) context->set_error();
 
     // If there is no context, then there is also no location info.
-    if (not ctx) {
+    if (not context) {
         PrintDiagWithoutLocation();
         return;
     }
@@ -129,8 +130,8 @@ void lcc::Diag::print() {
     // exists, its position is out of bounds or 0, or its length is 0, then we
     // skip printing the location.
     utils::Colours C(ShouldUseColour());
-    const auto& fs = ctx->files();
-    if (not where.seekable(ctx)) {
+    const auto& fs = context->files();
+    if (not where.seekable(context)) {
         // Even if the location is invalid, print the file name if we can.
         if (where.file_id < fs.size()) {
             const auto& file = *fs[where.file_id].get();
@@ -143,7 +144,7 @@ void lcc::Diag::print() {
     }
 
     // If the location is valid, get the line, line number, and column number.
-    const auto [line, col, line_start, line_end] = where.seek(ctx);
+    const auto [line, col, line_start, line_end] = where.seek(context);
 
     bool location_is_multiline{false};
     for (auto* it = line_start; it < line_end; ++it) {
@@ -173,8 +174,8 @@ void lcc::Diag::print() {
     // Print the diagnostic name and message.
     // TODO: If message is multiple lines, format it a little differently to be a little more understandable.
     std::vector<usz> message_newline_offsets{};
-    for (usz i = 0; i < msg.size(); ++i)
-        if (msg.at(i) == '\n') message_newline_offsets.push_back(i);
+    for (usz i = 0; i < message.size(); ++i)
+        if (message.at(i) == '\n') message_newline_offsets.push_back(i);
 
     if (not message_newline_offsets.empty()) {
         // Print message prefix
@@ -184,30 +185,30 @@ void lcc::Diag::print() {
         for (auto newline_offset : message_newline_offsets) {
             // Do indentation for continuing lines, but only if the lines don't begin
             // with their own indentation already.
-            if (printed_offset != 0 and msg.at(printed_offset) != ' ') fmt::print(stderr, "    ");
+            if (printed_offset != 0 and message.at(printed_offset) != ' ') fmt::print(stderr, "    ");
             fmt::print(
                 stderr,
                 "{}",
                 std::string_view(
-                    msg.begin() + isz(printed_offset),
-                    msg.begin() + isz(newline_offset) + 1
+                    message.begin() + isz(printed_offset),
+                    message.begin() + isz(newline_offset) + 1
                 )
             );
             printed_offset = newline_offset + 1;
         }
         // Last part of format without a trailing newline.
-        if (not msg.ends_with('\n')) {
-            if (msg.at(printed_offset) != ' ') fmt::print(stderr, "    ");
+        if (not message.ends_with('\n')) {
+            if (message.at(printed_offset) != ' ') fmt::print(stderr, "    ");
             fmt::print(
                 stderr,
                 "{}\n",
                 std::string_view(
-                    msg.begin() + isz(printed_offset),
-                    msg.end()
+                    message.begin() + isz(printed_offset),
+                    message.end()
                 )
             );
         }
-    } else fmt::print(stderr, "{}{}: {}{}\n", C(Colour(kind)), Name(kind), C(Reset), msg);
+    } else fmt::print(stderr, "{}{}: {}{}\n", C(Colour(kind)), Name(kind), C(Reset), message);
 
     // Print the line up to the start of the location, the range in the right
     // colour, and the rest of the line.

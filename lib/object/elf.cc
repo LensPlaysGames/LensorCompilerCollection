@@ -1,13 +1,18 @@
-#include <filesystem>
+#include <fmt/format.h>
 #include <lcc/file.hh>
+#include <lcc/utils.hh>
 #include <object/elf.h>
 #include <object/elf.hh>
 #include <object/generic.hh>
 
-namespace lcc {
-namespace elf {
+#include <filesystem>
+#include <string>
+#include <string_view>
+#include <utility>
 
-std::pair<bool, std::string> validate_header(const elf64_header& hdr) {
+namespace lcc::elf {
+
+auto validate_header(const elf64_header& hdr) -> std::pair<bool, std::string> {
     if (hdr.e_ident[EI_MAG0] != 0x7f
         or hdr.e_ident[EI_MAG1] != 'E'
         or hdr.e_ident[EI_MAG2] != 'L'
@@ -96,7 +101,7 @@ void verify_header(const elf64_header& hdr) {
     );
 }
 
-Section get_section_from_blob(std::vector<char> blob, std::string_view name) {
+auto get_section_from_blob(std::vector<char> blob, std::string_view name) -> Section {
     LCC_ASSERT(
         blob.size() >= sizeof(elf64_header),
         "Cannot get section {} from ELF binary blob as it is too small to even contain the header",
@@ -112,18 +117,18 @@ Section get_section_from_blob(std::vector<char> blob, std::string_view name) {
     out.name = name;
 
     auto section_headers_offset = hdr.e_shoff;
-    auto* section_headers_base = reinterpret_cast<const elf64_shdr*>(
+    const auto* section_headers_base = reinterpret_cast<const elf64_shdr*>(
         blob.data() + section_headers_offset
     );
     auto section_header_count = hdr.e_shnum;
 
     // First grab reference to section header name section.
     // Usually `.strtab` or `.shstrtab`.
-    auto* shstrtab_hdr = section_headers_base + hdr.e_shstrndx;
+    const auto* shstrtab_hdr = section_headers_base + hdr.e_shstrndx;
     auto* shstrtab = blob.data() + shstrtab_hdr->sh_offset;
     // Now try to find section with the given name.
     for (decltype(section_header_count) i = 0; i < section_header_count; ++i) {
-        auto* section_header = section_headers_base + i;
+        const auto* section_header = section_headers_base + i;
         std::string_view section_name{shstrtab + section_header->sh_name};
         if (section_name == name) {
             auto begin = blob.begin() + isz(section_header->sh_offset);
@@ -136,7 +141,7 @@ Section get_section_from_blob(std::vector<char> blob, std::string_view name) {
 }
 
 // NOTE: Asserts false if anything goes wrong (file can't open, section not there, etc)
-Section get_section_from_file(std::filesystem::path filepath, std::string_view name) {
+auto get_section_from_file(const fs::path& filepath, std::string_view name) -> Section {
     LCC_ASSERT(
         std::filesystem::exists(filepath),
         "Cannot get section from ELF file that does not exist: {}",
@@ -147,5 +152,4 @@ Section get_section_from_file(std::filesystem::path filepath, std::string_view n
     return get_section_from_blob(contents, name);
 }
 
-} // namespace elf
-} // namespace lcc
+} // namespace lcc::elf

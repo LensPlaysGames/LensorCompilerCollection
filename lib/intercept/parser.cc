@@ -315,9 +315,9 @@ auto intc::Parser::ParseDecl() -> Result<Decl*> {
     /// Apply storage specifiers.
     if (is_export) {
         /// Export a declaration.
-        const auto Export = [&](Decl* decl) -> Result<Decl*> {
+        const auto Export = [&](Decl* exported_decl) -> Result<Decl*> {
             /// Set linkage to exported if this has linkage.
-            if (auto obj = cast<ObjectDecl>(decl)) {
+            if (auto obj = cast<ObjectDecl>(exported_decl)) {
                 obj->linkage(obj->linkage() == Linkage::Imported ? Linkage::Reexported : Linkage::Exported);
 
                 /// If static was also specified, issue a warning if extern wasn’t
@@ -326,13 +326,13 @@ auto intc::Parser::ParseDecl() -> Result<Decl*> {
                 if (is_static and not is_extern) Diag::Warning(
                     context,
                     obj->location(),
-                    "Static specifier has no effect on this declaration"
+                    "Static specifier has no effect on this exported_declaration"
                 );
             }
 
-            /// Add the declaration to the module’s export list.
-            mod->add_export(decl);
-            return decl;
+            /// Add the exported_declaration to the module’s export list.
+            mod->add_export(exported_decl);
+            return exported_decl;
         };
 
         /// Exported declaration.

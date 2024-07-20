@@ -96,14 +96,14 @@ class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
 public:
     std::unique_ptr<Module> mod;
 
-    Parser(Context* context, File* file)
-        : syntax::Lexer<Token>(context, file) {
+    Parser(Context* ctx, File* file)
+        : syntax::Lexer<Token>(ctx, file) {
         mod = std::make_unique<Module>(context);
         NextToken();
     }
 
-    Parser(Context* context, std::string_view source)
-        : syntax::Lexer<Token>(context, source) {
+    Parser(Context* ctx, std::string_view source)
+        : syntax::Lexer<Token>(ctx, source) {
         mod = std::make_unique<Module>(context);
         NextToken();
     }
@@ -112,9 +112,16 @@ public:
 
 private:
     /// Check if we’re at one of a set of tokens.
-    [[nodiscard]] static bool Is(Token* tk, auto... tks) { return ((tk->kind == tks) or ...); }
-    [[nodiscard]] bool At(auto... tks) { return Is(&tok, tks...); }
-    [[nodiscard]] bool Kw(std::string_view text) { return At(Tk::Keyword) and tok.text == text; }
+    [[nodiscard]]
+    static auto Is(Token* tk, auto... tks) -> bool { return ((tk->kind == tks) or ...); }
+
+    [[nodiscard]]
+    auto At(auto... tks) -> bool { return Is(&tok, tks...); }
+
+    [[nodiscard]]
+    auto Kw(std::string_view text) -> bool {
+        return At(Tk::Keyword) and tok.text == text;
+    }
 
     void AddTemporary(std::string name, Value* val) {
         if (temporaries.contains(name)) Error("Duplicate temporary '{}'", name);
@@ -122,7 +129,7 @@ private:
     }
 
     /// Like At(), but consume the token if it matches.
-    bool Consume(auto... tks) {
+    auto Consume(auto... tks) -> bool {
         if (At(tks...)) {
             NextToken();
             return true;
@@ -141,13 +148,13 @@ private:
     void NextToken();
 
     template <typename Instruction>
-    auto ParseBinary(std::string res) -> Result<Inst*>;
+    auto ParseBinary(std::string tmp) -> Result<Inst*>;
 
     template <typename Instruction>
-    auto ParseCast(std::string res) -> Result<Inst*>;
+    auto ParseCast(std::string tmp) -> Result<Inst*>;
 
     template <typename Instruction>
-    auto ParseGEP(std::string res) -> Result<Inst*>;
+    auto ParseGEP(std::string tmp) -> Result<Inst*>;
 
     auto ParseBlock() -> Result<Block*>;
     auto ParseCall(bool tail) -> Result<CallInst*>;
@@ -402,8 +409,8 @@ auto lcc::parser::Parser::ParseBinary(std::string tmp) -> Result<Inst*> {
     auto loc = tok.location;
     NextToken();
     auto lhs = ParseValue();
-    auto tok = ConsumeOrError(Tk::Comma);
-    if (IsError(lhs, tok)) return Diag();
+    auto comma = ConsumeOrError(Tk::Comma);
+    if (IsError(lhs, comma)) return Diag();
     auto rhs = ParseUntypedValue(lhs->first);
 
     Instruction* inst;
@@ -737,8 +744,8 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
                 if (IsError(cond, lit_to, to, lit_else, els)) return Diag();
                 auto br = new (*mod) CondBranchInst(loc);
                 SetValue(br, br->condition, *cond);
-                SetBlock(br, br->then_, *to);
-                SetBlock(br, br->else_, *els);
+                SetBlock(br, br->then, *to);
+                SetBlock(br, br->otherwise, *els);
                 return br;
             }
 
@@ -941,10 +948,10 @@ auto lcc::parser::Parser::ParseType() -> Result<Type*> {
     return base;
 }
 
-auto lcc::parser::Parser::ParseUntypedValue(Type* ty) -> Result<IRValue> {
+auto lcc::parser::Parser::ParseUntypedValue(Type* assumed_type) -> Result<IRValue> {
     if (Kw("poison")) {
         NextToken();
-        return IRValue{new (*mod) PoisonValue(ty)};
+        return IRValue{new (*mod) PoisonValue(assumed_type)};
     }
 
     if (At(Tk::Global)) {
@@ -964,7 +971,10 @@ auto lcc::parser::Parser::ParseUntypedValue(Type* ty) -> Result<IRValue> {
     }
 
     if (At(Tk::Integer)) {
-        auto i = new (*mod) IntegerConstant(ty, tok.integer_value);
+        auto i = new (*mod) IntegerConstant(
+            assumed_type,
+            tok.integer_value
+        );
         NextToken();
         return IRValue{i};
     }
@@ -993,18 +1003,19 @@ void lcc::parser::Parser::SetValue(Inst* parent, Value*& val, IRValue v) {
 }
 
 void lcc::parser::Parser::SetBlock(Inst* parent, lcc::Block*& val, lcc::parser::Parser::IRValue v) {
-    if (auto value = std::get_if<Value*>(&v)) {
-        auto b = cast<Block>(*value);
+    if (auto* value = std::get_if<Value*>(&v)) {
+        auto* b = cast<Block>(*value);
         if (not b) {
             Error("Value does not name a block");
             return;
         }
         val = b;
         Inst::AddUse(b, parent);
-    } else if ([[maybe_unused]] auto g = std::get_if<Global>(&v)) {
+    } else if ([[maybe_unused]] auto* g = std::get_if<Global>(&v)) {
         Error("Value does not name a block");
     } else {
-        block_fixups[std::get<Temporary>(v).data].emplace_back(parent, &val);
+        block_fixups[std::get<Temporary>(v).data]
+            .emplace_back(parent, &val);
     }
 }
 

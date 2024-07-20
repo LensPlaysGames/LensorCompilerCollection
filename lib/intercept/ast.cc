@@ -18,7 +18,7 @@ intc::Module::Module(
     File* file,
     std::string module_name,
     bool is_logical_module
-) : name{std::move(module_name)}, _is_module{is_logical_module}, file{file} {
+) : name{std::move(module_name)}, _is_module{is_logical_module}, _file{file} {
     FuncType* ty{};
 
     /// Create the type of the top-level function.
@@ -1209,7 +1209,7 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
 std::vector<lcc::u8> intc::Module::serialise() {
     ModuleDescription::Header hdr{};
     std::vector<u8> declarations{};
-    std::vector<u8> types{};
+    std::vector<u8> types_data{};
     std::vector<u8> serialised_name{};
 
     // Decls and types collected from exports.
@@ -1218,7 +1218,7 @@ std::vector<lcc::u8> intc::Module::serialise() {
         // Decl: DeclHeader, length :u8, name :u8[length]
 
         // Prepare declaration header
-        ModuleDescription::TypeIndex type_index = serialise(types, type_cache, decl->type());
+        ModuleDescription::TypeIndex type_index = serialise(types_data, type_cache, decl->type());
         ModuleDescription::DeclarationHeader decl_hdr{
             u16(ModuleDescription::DeclarationHeader::get_kind(decl)),
             type_index};
@@ -1243,9 +1243,9 @@ std::vector<lcc::u8> intc::Module::serialise() {
     serialised_name.push_back('\0');
 
     // Final header fixups now that nothing will change.
-    hdr.size = u32(sizeof(ModuleDescription::Header) + declarations.size() + types.size() + serialised_name.size());
+    hdr.size = u32(sizeof(ModuleDescription::Header) + declarations.size() + types_data.size() + serialised_name.size());
     hdr.type_table_offset = u32(sizeof(ModuleDescription::Header) + declarations.size());
-    hdr.name_offset = u32(sizeof(ModuleDescription::Header) + declarations.size() + types.size());
+    hdr.name_offset = u32(sizeof(ModuleDescription::Header) + declarations.size() + types_data.size());
     hdr.declaration_count = u16(exports.size());
     hdr.type_count = u16(type_cache.size());
 
@@ -1255,7 +1255,7 @@ std::vector<lcc::u8> intc::Module::serialise() {
     std::vector<u8> out{};
     out.insert(out.end(), hdr_bytes.begin(), hdr_bytes.end());
     out.insert(out.end(), declarations.begin(), declarations.end());
-    out.insert(out.end(), types.begin(), types.end());
+    out.insert(out.end(), types_data.begin(), types_data.end());
     out.insert(out.end(), serialised_name.begin(), serialised_name.end());
     return out;
 }
@@ -1329,15 +1329,15 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
 
                 LCC_ASSERT(name.size(), "Deserialised named type has zero-length name");
 
-                std::string name{};
+                std::string deserialised_name{};
                 for (u32 i = 0; i < length; ++i)
-                    name += char(module_metadata_blob.at(type_offset++));
+                    deserialised_name += char(module_metadata_blob.at(type_offset++));
 
-                LCC_ASSERT(name.size(), "Deserialised named type has empty name");
+                LCC_ASSERT(deserialised_name.size(), "Deserialised named type has empty name");
 
                 // FIXME: This may need to be top level scope, not entirely sure the
                 // semantics of this yet.
-                new (*this) NamedType(name, global_scope(), {});
+                new (*this) NamedType(deserialised_name, global_scope(), {});
             } break;
 
             // BuiltinType: builtin_kind :u8
@@ -1425,9 +1425,9 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
 
         u8 name_length = module_metadata_blob.at(offset++);
 
-        std::string name{};
+        std::string deserialised_name{};
         for (decltype(offset) i = 0; i < name_length; ++i)
-            name += char(*(module_metadata_blob.data() + offset + i));
+            deserialised_name += char(*(module_metadata_blob.data() + offset + i));
         offset += name_length;
 
         auto* ty = types.at(types_zero_index + decl_hdr.type_index);
@@ -1440,24 +1440,24 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
                     is<DeclaredType>(ty),
                     "Can't make TypeDecl from a Type that is not derived from DeclaredType"
                 );
-                auto type_decl = new (*this) TypeDecl(this, name, as<DeclaredType>(ty), {});
+                auto type_decl = new (*this) TypeDecl(this, deserialised_name, as<DeclaredType>(ty), {});
                 type_decl->set_sema_done();
-                auto decl = global_scope()->declare(ctx, std::string(name), type_decl);
+                auto decl = global_scope()->declare(ctx, std::string(deserialised_name), type_decl);
             } break;
 
             // Created from Expr::Kind::TypeAliasDecl
             case ModuleDescription::DeclarationHeader::Kind::TYPE_ALIAS: {
-                auto* type_alias_decl = new (*this) TypeAliasDecl(name, ty, {});
+                auto* type_alias_decl = new (*this) TypeAliasDecl(deserialised_name, ty, {});
                 type_alias_decl->set_sema_done();
-                auto decl = global_scope()->declare(ctx, std::string(name), type_alias_decl);
+                auto decl = global_scope()->declare(ctx, std::string(deserialised_name), type_alias_decl);
             } break;
 
             // Created from Expr::Kind::VarDecl
             case ModuleDescription::DeclarationHeader::Kind::VARIABLE: {
                 // FIXME: Should possibly be reexported.
-                auto* var_decl = new (*this) VarDecl(name, ty, nullptr, this, Linkage::Imported, {});
+                auto* var_decl = new (*this) VarDecl(deserialised_name, ty, nullptr, this, Linkage::Imported, {});
                 var_decl->set_sema_done();
-                auto decl = global_scope()->declare(ctx, std::string(name), var_decl);
+                auto decl = global_scope()->declare(ctx, std::string(deserialised_name), var_decl);
             } break;
 
             // Created from Expr::Kind::FuncDecl
@@ -1466,9 +1466,9 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
                     is<FuncType>(ty),
                     "Cannot create FuncDecl when deserialised type is not a function"
                 );
-                auto* func_decl = new (*this) FuncDecl(name, as<FuncType>(ty), nullptr, global_scope(), this, Linkage::Imported, {});
+                auto* func_decl = new (*this) FuncDecl(deserialised_name, as<FuncType>(ty), nullptr, global_scope(), this, Linkage::Imported, {});
                 func_decl->set_sema_done();
-                auto decl = global_scope()->declare(ctx, std::string(name), func_decl);
+                auto decl = global_scope()->declare(ctx, std::string(deserialised_name), func_decl);
             } break;
 
             // Created from Expr::Kind::EnumeratorDecl

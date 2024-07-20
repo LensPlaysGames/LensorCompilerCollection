@@ -16,44 +16,76 @@
 #include <variant>
 #include <vector>
 
-namespace lcc {
-namespace x86_64 {
+namespace lcc::x86_64 {
+
+namespace {
 
 // NOTE: Does not handle empty string (because we want every input of this
 // function to produce the same output)
-static std::string safe_name(std::string in) {
+auto safe_name(std::string in) -> std::string {
     LCC_ASSERT(not in.empty(), "safe_name does not handle empty string input");
     // . in the middle of an identifier is not allowed
     std::replace(in.begin(), in.end(), '.', '_');
     return fmt::format("{}", in);
 }
 
-static std::string block_name(std::string in) {
-    LCC_ASSERT(in.size(), "Cannot emit empty block name!");
+auto block_name(const std::string& in) -> std::string {
+    LCC_ASSERT(not in.empty(), "Cannot emit empty block name!");
     // ".L" at the beginning tells the assembler it's a local label and not a
     // function, which helps objdump and things like that don't get confused.
     return fmt::format(".L{}", safe_name(in));
 }
 
-std::string ToString(MFunction& function, MOperand op) {
+} // namespace
+
+auto ToString(MFunction& function, MOperand op) -> std::string {
     if (std::holds_alternative<MOperandRegister>(op)) {
         // TODO: Assert that register id is one of the x86_64 register ids...
         MOperandRegister reg = std::get<MOperandRegister>(op);
-        return fmt::format("%{}", ToString(RegisterId(reg.value), reg.size));
-    } else if (std::holds_alternative<MOperandImmediate>(op)) {
-        return fmt::format("${}", std::get<MOperandImmediate>(op).value);
-    } else if (std::holds_alternative<MOperandLocal>(op)) {
-        return fmt::format("{}(%rbp)", function.local_offset(std::get<MOperandLocal>(op)));
-    } else if (std::holds_alternative<MOperandGlobal>(op)) {
-        return fmt::format("{}(%rip)", safe_name(std::get<MOperandGlobal>(op)->names().at(0).name));
-    } else if (std::holds_alternative<MOperandFunction>(op)) {
-        return fmt::format("{}", std::get<MOperandFunction>(op)->names().at(0).name);
-    } else if (std::holds_alternative<MOperandBlock>(op)) {
-        return fmt::format("{}", block_name(std::get<MOperandBlock>(op)->name()));
-    } else LCC_ASSERT(false, "Unhandled MOperand kind (index {})", op.index());
+        return fmt::format(
+            "%{}",
+            ToString(RegisterId(reg.value), reg.size)
+        );
+    }
+    if (std::holds_alternative<MOperandImmediate>(op)) {
+        return fmt::format(
+            "${}",
+            std::get<MOperandImmediate>(op).value
+        );
+    }
+    if (std::holds_alternative<MOperandLocal>(op)) {
+        return fmt::format(
+            "{}(%rbp)",
+            function.local_offset(std::get<MOperandLocal>(op))
+        );
+    }
+    if (std::holds_alternative<MOperandGlobal>(op)) {
+        return fmt::format(
+            "{}(%rip)",
+            safe_name(std::get<MOperandGlobal>(op)->names().at(0).name)
+        );
+    }
+    if (std::holds_alternative<MOperandFunction>(op)) {
+        return fmt::format(
+            "{}",
+            std::get<MOperandFunction>(op)->names().at(0).name
+        );
+    }
+    if (std::holds_alternative<MOperandBlock>(op)) {
+        return fmt::format(
+            "{}",
+            block_name(std::get<MOperandBlock>(op)->name())
+        );
+    }
+    LCC_ASSERT(false, "Unhandled MOperand kind (index {})", op.index());
 }
 
-void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, const MachineDescription& desc, std::vector<MFunction>& mir) {
+void emit_gnu_att_assembly(
+    const fs::path& output_path,
+    Module* module,
+    const MachineDescription& desc,
+    std::vector<MFunction>& mir
+) {
     std::string out{};
 
     // If we ever add optional location information to the MIR (and some
@@ -81,7 +113,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 out += fmt::format("{}:\n", safe_name(n.name));
             switch (var->init()->kind()) {
                 case Value::Kind::ArrayConstant: {
-                    auto array_constant = as<ArrayConstant>(var->init());
+                    auto* array_constant = as<ArrayConstant>(var->init());
                     out += fmt::format(
                         "    .byte {}\n",
                         fmt::join(
@@ -94,7 +126,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 } break;
 
                 case Value::Kind::IntegerConstant: {
-                    auto integer_constant = as<IntegerConstant>(var->init());
+                    auto* integer_constant = as<IntegerConstant>(var->init());
                     LCC_ASSERT(integer_constant->type()->bytes() <= 8, "Oversized integer constant");
                     // Represent bytes literally
                     out += "    .byte ";
@@ -108,7 +140,11 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 } break;
 
                 default:
-                    LCC_ASSERT(false, "Sorry, but global variable initialisation with value kind {} is not supported.", Value::ToString(var->init()->kind()));
+                    LCC_ASSERT(
+                        false,
+                        "Sorry, but global variable initialisation with value kind {} is not supported.",
+                        Value::ToString(var->init()->kind())
+                    );
             }
             out += '\n';
         }
@@ -205,7 +241,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     and instruction.opcode() == +x86_64::Opcode::Jump
                     and is_block(instruction)
                 ) {
-                    auto target_block = extract_block(instruction);
+                    auto* target_block = extract_block(instruction);
                     auto next_block = function.blocks().at(usz(block_index + 1));
                     if (target_block->name() == next_block.name())
                         continue;
@@ -393,7 +429,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 if (instruction.opcode() == +x86_64::Opcode::Call) {
                     // Move return value from return register to result register, if necessary.
                     // Also restore return register, if necessary.
-                    if (instruction.reg() and instruction.reg() != desc.return_register) {
+                    if (instruction.use_count() and instruction.reg() and instruction.reg() != desc.return_register) {
                         out += fmt::format(
                             "    mov %{}, %{}\n",
                             ToString(x86_64::RegisterId(desc.return_register), instruction.regsize()),
@@ -420,7 +456,10 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
         const auto write_byte = [&](u8 byte) {
             return fmt::format("0x{:x}", byte);
         };
-        out += fmt::format(".byte {}\n", fmt::join(vws::transform(section.contents(), write_byte), ","));
+        out += fmt::format(
+            ".byte {}\n",
+            fmt::join(vws::transform(section.contents(), write_byte), ",")
+        );
     }
 
     out += ".section .note.GNU-stack\n";
@@ -430,5 +469,4 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
     else File::WriteOrTerminate(out.data(), out.size(), output_path);
 }
 
-} // namespace x86_64
-} // namespace lcc
+} // namespace lcc::x86_64

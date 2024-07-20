@@ -269,12 +269,12 @@ struct Inst {
     }
 
     template <typename operand>
-    static constexpr MOperand get_operand(
+    static constexpr auto get_operand(
         Module* mod,
         MFunction& function,       // for locals lookup
         std::vector<MInst*> input, // for Input*Reference,
         std::unordered_map<usz, usz>& new_virtuals
-    ) {
+    ) -> MOperand {
         const auto input_operand_by_index = [&](usz index) -> Result<MOperand> {
             // Current operand index.
             usz i = 0;
@@ -365,7 +365,7 @@ struct Inst {
                 usz needle = operand::size;
                 // Whether or not we've found the operand we are looking for.
                 bool found = false;
-                for (auto instruction : input) {
+                for (auto* instruction : input) {
                     for (auto op_candidate : instruction->all_operands()) {
                         // This is the instruction we are looking for!
                         if (i == needle) {
@@ -549,9 +549,7 @@ struct PatternList {
                                     operands_match = op::kind == OperandKind::Function;
                                 } else if (std::holds_alternative<MOperandBlock>(operand)) {
                                     operands_match = op::kind == OperandKind::Block;
-                                } else {
-                                    LCC_ASSERT(false, "Unhandled MIR Operand Kind in ISel...");
-                                }
+                                } else LCC_ASSERT(false, "Unhandled MIR Operand Kind in ISel...");
                                 ++op_i;
                             });
                         }
@@ -581,7 +579,7 @@ struct PatternList {
                     isz output_i = 0;
                     pattern::output::foreach ([&]<typename inst> {
                         // Use instruction's vreg from input of pattern.
-                        auto output = new MInst(inst::opcode, {input.back()->reg(), uint(input.back()->regsize())});
+                        auto* output = new MInst(inst::opcode, {input.back()->reg(), uint(input.back()->regsize())});
                         // Use instruction's location from input of pattern.
                         output->location(input.back()->location());
 
@@ -633,7 +631,7 @@ struct PatternList {
                 // instructions that there may be). If the window is empty, but there are
                 // still more instructions to handle in this block, also go back and
                 // handle them.
-            } while (instructions.size() != 0 || instructions_handled < old_block.instructions().size());
+            } while (not instructions.empty() or instructions_handled < old_block.instructions().size());
         }
 
         return out;

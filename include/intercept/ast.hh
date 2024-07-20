@@ -131,7 +131,7 @@ public:
     struct Ref {
         std::string name;
         mutable Module* module;
-        Ref(std::string name, Module* module) : name(std::move(name)), module(module) {}
+        Ref(std::string name_, Module* module_) : name(std::move(name_)), module(module_) {}
     };
 
 private:
@@ -139,7 +139,7 @@ private:
 
     FuncDecl* top_level_function{};
     bool _is_module;
-    File* file;
+    File* _file;
 
     std::vector<Ref> _imports;
     std::vector<Decl*> exports;
@@ -354,7 +354,7 @@ public:
 };
 
 class Type : public SemaNode {
-    friend class lcc::Context;
+    friend class lcc::Init;
 
 public:
     enum struct Kind {
@@ -525,7 +525,7 @@ static constexpr auto ToString(Type::Kind k) {
 /// in storing their names in each of them, so an instance of one
 /// only ever stores its primitive type kind.
 class BuiltinType : public Type {
-    friend lcc::Context;
+    friend lcc::Init;
 
 public:
     enum struct BuiltinKind {
@@ -693,8 +693,8 @@ public:
         Type* type;
         Location location;
 
-        Param(std::string name, Type* type, Location location)
-            : name(std::move(name)), type(type), location(location) {}
+        Param(std::string name_, Type* type_, Location location_)
+            : name(std::move(name_)), type(type_), location(location_) {}
     };
 
 private:
@@ -772,8 +772,8 @@ public:
         Location location;
         usz byte_offset{};
 
-        Member(std::string name, Type* type, Location location)
-            : type(type), name(std::move(name)), location(location) {}
+        Member(std::string name_, Type* type_, Location location_)
+            : type(type_), name(std::move(name_)), location(location_) {}
     };
 
 private:

@@ -23,6 +23,7 @@ class Target {
 public:
     /// Create a copy of a target but change a few things.
     template <typename Callable>
+    [[nodiscard]]
     consteval auto with(Callable c) const -> Target { return c(Target{*this}); }
 
     /// Available targets.
@@ -70,24 +71,29 @@ public:
     usz size_of_pointer;
     usz align_of_pointer;
 
-    bool is_platform_linux() const {
+    [[nodiscard]]
+    auto is_platform_linux() const -> bool {
         return this == x86_64_linux;
     }
 
-    bool is_platform_windows() const {
+    [[nodiscard]]
+    auto is_platform_windows() const -> bool {
         return this == x86_64_windows;
     }
 
-    bool is_arch_x86_64() const {
+    [[nodiscard]]
+    auto is_arch_x86_64() const -> bool {
         return this == x86_64_windows
             or this == x86_64_linux;
     }
 
-    bool is_cconv_sysv() const {
+    [[nodiscard]]
+    auto is_cconv_sysv() const -> bool {
         return this == x86_64_linux;
     }
 
-    bool is_cconv_ms() const {
+    [[nodiscard]]
+    auto is_cconv_ms() const -> bool {
         return this == x86_64_windows;
     }
 };

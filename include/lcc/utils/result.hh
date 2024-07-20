@@ -108,13 +108,14 @@ public:
 
     /// Access the underlying value.
     [[nodiscard]] auto operator->() -> ValueType
-    requires std::is_pointer_v<ValueType>
+    requires (std::is_pointer_v<ValueType>)
     { return value(); }
 
     /// Access the underlying value.
-    [[nodiscard]] auto operator->() -> ValueType*
-    requires (not std::is_pointer_v<ValueType>)
-    { return std::addressof(value()); }
+    [[nodiscard]] auto operator->() -> ValueType* //
+        requires (not std::is_pointer_v<ValueType>) {
+            return std::addressof(value());
+        }
 
     /// \brief Monad bind operator for results.
     ///
@@ -190,11 +191,6 @@ bool IsError(Result<ValueTypes>&... results) {
 /// Macro for binding a member function to the \c this pointer.
 ///
 /// See the documentation for \c Result::operator>>= for more information.
-///
-/// It is recommended to put `#define bind LCC_BIND` at the top of any
-/// implementation files to reduce visual clutter. However, do NOT put that
-/// in header files because `bind` is too common of a word and could easily
-/// break something.
 ///
 /// Cute trick for monad binding.
 #define LCC_BIND *this->*&

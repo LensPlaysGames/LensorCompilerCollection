@@ -14,8 +14,7 @@
 #include <variant>
 #include <vector>
 
-namespace lcc {
-namespace x86_64 {
+namespace lcc::x86_64 {
 
 // /digit - A digit between 0 and 7 indicates that the ModR/M byte of the
 //     instruction uses only the r/m (register or memory) operand. The reg
@@ -36,7 +35,8 @@ namespace x86_64 {
 //     64-bit mode, indicates the four bit field of REX.b and opcode[2:0]
 //     field encodes the register operand of the instruction.
 
-static std::vector<u8> as_bytes(u16 value) {
+namespace {
+constexpr auto as_bytes(u16 value) -> std::vector<u8> {
     // 0xffff
     //   __    upper
     //     __  lower
@@ -44,11 +44,11 @@ static std::vector<u8> as_bytes(u16 value) {
     const u8 lower = u8((value >> 0) & 0xff);
     return {lower, upper};
 }
-static std::vector<u8> as_bytes(i16 value) {
+constexpr auto as_bytes(i16 value) -> std::vector<u8> {
     return as_bytes(static_cast<u16>(value));
 }
 
-static std::vector<u8> as_bytes(u32 value) {
+constexpr auto as_bytes(u32 value) -> std::vector<u8> {
     // 0xffff.ffff
     // a ____
     // b      ____
@@ -58,11 +58,11 @@ static std::vector<u8> as_bytes(u32 value) {
     const u8 lower_b = u8((value >> 0) & 0xff);
     return {lower_b, upper_b, lower_a, upper_a};
 }
-static std::vector<u8> as_bytes(i32 value) {
+constexpr auto as_bytes(i32 value) -> std::vector<u8> {
     return as_bytes(static_cast<u32>(value));
 }
 
-static std::vector<u8> as_bytes(u64 value) {
+constexpr auto as_bytes(u64 value) -> std::vector<u8> {
     const u8 upper_a = u8((value >> 56) & 0xff);
     const u8 lower_a = u8((value >> 48) & 0xff);
     const u8 upper_b = u8((value >> 40) & 0xff);
@@ -73,11 +73,11 @@ static std::vector<u8> as_bytes(u64 value) {
     const u8 lower_d = u8((value >> 0) & 0xff);
     return {lower_d, upper_d, lower_c, upper_c, lower_b, upper_b, lower_a, upper_a};
 }
-static std::vector<u8> as_bytes(i64 value) {
+constexpr auto as_bytes(i64 value) -> std::vector<u8> {
     return as_bytes(static_cast<u64>(value));
 }
 
-static constexpr std::vector<u8> as_bytes(MOperandImmediate imm) {
+constexpr auto as_bytes(MOperandImmediate imm) -> std::vector<u8> {
     if (imm.size <= 8)
         return {u8(imm.value)};
     if (imm.size <= 16)
@@ -89,10 +89,14 @@ static constexpr std::vector<u8> as_bytes(MOperandImmediate imm) {
     LCC_UNREACHABLE();
 }
 
-static constexpr std::vector<u8> as_bytes_cap32(MOperandImmediate imm) {
+constexpr auto as_bytes_cap32(MOperandImmediate imm) -> std::vector<u8> {
     if (imm.size > 32) imm.size = 32;
     return as_bytes(imm);
 }
+} // namespace
+
+// TODO: Move helpful static functions beyond this to a header in case I
+// or somebody else wants to reuse all this annoying RTFM code.
 
 // NOTE: +rw indicates the lower three bits of the opcode byte are used
 // to indicate the 16-bit register operand.
@@ -144,11 +148,6 @@ static constexpr u8 rw_encoding(RegisterId id) {
 static constexpr u8 rw_encoding(Register reg) {
     return rw_encoding(RegisterId(reg.value));
 }
-[[nodiscard]]
-static constexpr u8 rw_encoding(MOperand op) {
-    // LCC_ASSERT(std::holds_alternative<MOperandRegister>(op));
-    return rw_encoding(RegisterId(std::get<MOperandRegister>(op).value));
-}
 
 // NOTE: +rd indicates the lower three bits of the opcode byte are used
 // to indicate the 32 or 64-bit register operand.
@@ -177,10 +176,6 @@ static constexpr u8 rd_encoding(RegisterId id) {
 static constexpr u8 rd_encoding(Register reg) {
     return rw_encoding(reg);
 }
-[[nodiscard]]
-static constexpr u8 rd_encoding(MOperand op) {
-    return rw_encoding(op);
-}
 
 // NOTE: +rb indicates the lower three bits of the opcode byte are used
 // to indicate the 32 or 64-bit register operand.
@@ -208,10 +203,6 @@ static constexpr u8 rb_encoding(RegisterId id) {
 [[nodiscard]]
 static constexpr u8 rb_encoding(Register reg) {
     return rw_encoding(reg);
-}
-[[nodiscard]]
-static constexpr u8 rb_encoding(MOperand op) {
-    return rw_encoding(op);
 }
 
 /// REX.W == extend to 64 bit operation
@@ -323,7 +314,13 @@ static constexpr u8 prefix16 = 0x66;
 //     REX.W 0x89 /r
 // but where 0x88 and 0x89 are switched out with some other opcodes. MR vs
 // RM operand encoding handles it per opcode.
-static void opcode_slash_r(GenericObject& gobj, MFunction& func, MInst& inst, u8 opcode, Section& text) {
+static void opcode_slash_r(
+    GenericObject& gobj,
+    MFunction& func,
+    MInst& inst,
+    u8 opcode,
+    Section& text
+) {
     // GNU syntax (src, dst operands)
     //
     //       0x88 /r  |  MOV r8, r/m8     |  MR
@@ -371,7 +368,12 @@ static void opcode_slash_r(GenericObject& gobj, MFunction& func, MInst& inst, u8
     }
 }
 
-static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Section& text) {
+static void assemble_inst(
+    GenericObject& gobj,
+    MFunction& func,
+    MInst& inst,
+    Section& text
+) {
     // TODO: Once I write code to assemble all the instructions, start to
     // consolidate and de-duplicate code by looking at "pattern" of
     // instruction encoding as if opcode can be switched out.
@@ -562,6 +564,23 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 text += {op, modrm};
                 text += as_bytes(i32(offset));
                 // TODO: r12 nonsense
+            } else if (is_reg_reg(inst)) {
+                auto [src, dst] = extract_reg_reg(inst);
+
+                LCC_ASSERT((is_one_of<1, 8, 16, 32, 64>(dst.size)));
+
+                u8 op = 0x89;
+                if (dst.size == 1 or dst.size == 8)
+                    op = 0x88;
+
+                // TODO: Is 0b11 right here? Wouldn't that mean register to register move?
+                u8 modrm = modrm_byte(0b11, regbits(dst), regbits(src));
+
+                if (dst.size == 16) text += prefix16;
+                if (dst.size == 64 || reg_topbit(src) || reg_topbit(dst))
+                    text += rex_byte(dst.size == 64, reg_topbit(dst), false, reg_topbit(src));
+                text += {op, modrm};
+                // TODO: mcode_sib_if_r12 ??
             }
             // GNU syntax (src, dst operands)
             //        0xc6 /0 ib | MOV imm8, r/m8   | MI
@@ -617,10 +636,56 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 u8 modrm = modrm_byte(0b10, regbits(reg), regbits(RegisterId::RBP));
 
                 if (reg.size == 16) text += prefix16;
-                if (reg.size == 64 || reg_topbit(reg))
+                if (reg.size == 64 or reg_topbit(reg))
                     text += rex_byte(reg.size == 64, reg_topbit(reg), false, false);
                 text += {op, modrm};
                 text += as_bytes(i32(offset));
+            } else if (is_global_reg(inst)) {
+                auto [global, dst] = extract_global_reg(inst);
+
+                LCC_ASSERT(
+                    (is_one_of<1, 8, 16, 32, 64>(dst.size)),
+                    "x86_64 mov only supports 8, 16, 32, or 64 bit register destination operand: got {}",
+                    dst.size
+                );
+
+                u8 opcode = 0x8b;
+                u8 modrm = modrm_byte(0b00, regbits(dst), 0b101);
+
+                if (dst.size == 16) {
+                    text += prefix16;
+                    opcode = 0x8a;
+                }
+                if (dst.size == 64 or reg_topbit(dst))
+                    text += rex_byte(dst.size == 64, reg_topbit(dst), false, false);
+                text += {opcode, modrm};
+
+                // Make RIP-relative disp32 relocation
+                Relocation reloc{};
+                reloc.symbol.byte_offset = text.contents().size();
+                reloc.symbol.name = global->names().at(0).name;
+                reloc.symbol.section_name = text.name;
+                reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
+                gobj.relocations.push_back(reloc);
+
+                text += as_bytes(u32(0));
+            } else if (is_reg_reg(inst)) {
+                auto [src, dst] = extract_reg_reg(inst);
+
+                LCC_ASSERT((is_one_of<1, 8, 16, 32, 64>(dst.size)));
+
+                u8 op = 0x8b;
+                if (dst.size == 1 or dst.size == 8)
+                    op = 0x8a;
+
+                u8 modrm = modrm_byte(0b11, regbits(dst), regbits(src));
+
+                if (dst.size == 16) text += prefix16;
+                if (dst.size == 64 || reg_topbit(src) || reg_topbit(dst))
+                    text += rex_byte(dst.size == 64, reg_topbit(dst), false, reg_topbit(src));
+                text += {op, modrm};
+                // TODO: mcode_sib_if_r12 ??
+
             } else Diag::ICE(
                 "Sorry, unhandled form of move (deref lhs)\n    {}\n",
                 PrintMInstImpl(inst, opcode_to_string)
@@ -703,6 +768,25 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
 
                 text += as_bytes(u32(0));
 
+            } else if (is_local_reg(inst)) {
+                auto [local, reg] = extract_local_reg(inst);
+                isz offset = func.local_offset(local);
+
+                LCC_ASSERT(
+                    (is_one_of<16, 32, 64>(reg.size)),
+                    "x86_64 lea only supports 16, 32, or 64 bit register destination operand: got {}",
+                    reg.size
+                );
+
+                u8 op = 0x8d;
+
+                u8 modrm = modrm_byte(0b10, regbits(reg), regbits(RegisterId::RBP));
+
+                if (reg.size == 16) text += prefix16;
+                if (reg.size == 64 || reg_topbit(reg))
+                    text += rex_byte(reg.size == 64, reg_topbit(reg), false, false);
+                text += {op, modrm};
+                text += as_bytes(i32(offset));
             } else Diag::ICE(
                 "Sorry, invalid form\n    {}\n",
                 PrintMInstImpl(inst, opcode_to_string)
@@ -713,14 +797,14 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
             // 0xe8 cd | CALL rel32 | D
             // "D" means operand is encoded as literal offset.
             if (is_function(inst)) {
-                auto func = extract_function(inst);
+                auto function = extract_function(inst);
 
                 text += {0xe8};
                 // Make RIP-relative disp32 relocation
                 Relocation reloc{};
                 reloc.symbol.kind = Symbol::Kind::FUNCTION;
                 reloc.symbol.byte_offset = text.contents().size();
-                reloc.symbol.name = func->names().at(0).name;
+                reloc.symbol.name = function->names().at(0).name;
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
                 gobj.relocations.push_back(reloc);
@@ -1015,7 +1099,11 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
     }
 }
 
-GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, std::vector<MFunction>& mir) {
+auto emit_mcode_gobj(
+    Module* module,
+    const MachineDescription& desc,
+    std::vector<MFunction>& mir
+) -> GenericObject {
     GenericObject out{};
 
     Section text_{".text"};
@@ -1078,5 +1166,4 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
     return out;
 }
 
-} // namespace x86_64
-} // namespace lcc
+} // namespace lcc::x86_64

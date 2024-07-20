@@ -3,13 +3,20 @@
 
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
+#include <lcc/utils.hh>
 
-namespace lcc {
-namespace x86_64 {
+#include <filesystem>
+#include <vector>
 
-void emit_gnu_att_assembly(std::filesystem::path, Module*, const MachineDescription&, std::vector<MFunction>&);
+namespace lcc::x86_64 {
 
-} // namespace x86_64
-} // namespace lcc
+void emit_gnu_att_assembly(
+    const fs::path&,
+    lcc::Module*,
+    const MachineDescription&,
+    std::vector<MFunction>&
+);
+
+} // namespace lcc::x86_64
 
 #endif /* LCC_CODEGEN_X86_64_ASSEMBLY_HH */

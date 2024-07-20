@@ -67,7 +67,7 @@ void lcc::intercept::Lexer::NextToken() {
     }
 
     /// Pop empty macro expansions off the expansion stack.
-    std::erase_if(macro_expansion_stack, [](MacroExpansion& x){ return x.done(); });
+    std::erase_if(macro_expansion_stack, [](MacroExpansion& x) { return x.done(); });
 
     /// Iff there are macro expansions to handle, get tokens from there
     /// instead of from the file.
@@ -408,9 +408,9 @@ void lcc::intercept::Lexer::HandleIdentifier() {
     /// Try and parse a number just after encountering `s` or `u` at the
     /// beginning of an identifier.
     if (
-        tok.text.size() > 1 and
-        (tok.text[0] == 's' or tok.text[0] == 'i' or tok.text[0] == 'u') and
-        IsDigit(tok.text[1])
+        tok.text.size() > 1
+        and (tok.text[0] == 's' or tok.text[0] == 'i' or tok.text[0] == 'u')
+        and IsDigit(tok.text[1])
     ) {
         const char* cstr = tok.text.c_str();
 
@@ -591,8 +591,10 @@ void lcc::intercept::Lexer::ExpandMacro(Macro& m) {
 }
 
 void lcc::intercept::Lexer::HandleMacroDefinition() {
-    LCC_ASSERT(tok.kind == Tk::Ident && tok.text == "macro",
-               "HandleMacroDefinition must only be called when lexer state is at `macro`.");
+    LCC_ASSERT(
+        tok.kind == Tk::Ident and tok.text == "macro",
+        "HandleMacroDefinition must only be called when lexer state is at `macro`."
+    );
 
     /// Check if we’re at EOF.
     const auto AtEof = [&] {
@@ -607,9 +609,8 @@ void lcc::intercept::Lexer::HandleMacroDefinition() {
     /// Check if we’re at a non-artificial identifier with
     /// a specific value.
     const auto AtMacroKw = [&](auto&&... names) {
-        return tok.kind == Tk::Ident and
-               not tok.artificial and
-               ((tok.text == names) or ...);
+        return tok.kind == Tk::Ident and not tok.artificial
+           and ((tok.text == names) or ...);
     };
 
     /// At this point, the parser state is at the "macro" token.
@@ -706,8 +707,10 @@ void lcc::intercept::Lexer::HandleMacroDefinition() {
         macro.expansion.push_back(tok);
     }
 
-    LCC_ASSERT(tok.kind == Tk::Ident && tok.text == "endmacro",
-               "At end of macro but token is not endmacro");
+    LCC_ASSERT(
+        tok.kind == Tk::Ident and tok.text == "endmacro",
+        "At end of macro but token is not endmacro"
+    );
 
     /// Yeet 'endmacro'.
     raw_mode = false;
@@ -715,13 +718,13 @@ void lcc::intercept::Lexer::HandleMacroDefinition() {
 }
 
 lcc::intercept::Lexer::MacroExpansion::MacroExpansion(
-    Lexer& l,
-    Macro& m,
+    Lexer& lexer,
+    Macro& macro,
     StringMap<Token> args,
     Location loc
-) : m(&m), it(m.expansion.begin()), bound_arguments(std::move(args)), location(loc) {
-    for (usz i = 0; i < m.definitions.size(); i++)
-        gensyms.push_back(fmt::format("__L{}", l.gensym_counter++));
+) : m(&macro), it(macro.expansion.begin()), bound_arguments(std::move(args)), location(loc) {
+    for (usz i = 0; i < macro.definitions.size(); i++)
+        gensyms.push_back(fmt::format("__L{}", lexer.gensym_counter++));
 }
 
 auto lcc::intercept::Lexer::MacroExpansion::operator++() -> Token {

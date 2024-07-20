@@ -10,7 +10,8 @@
 namespace lcc {
 
 // Don't forget to eventually set e_shnum and e_shstrndx
-static elf64_header default_header() {
+namespace {
+constexpr auto default_header() -> elf64_header {
     elf64_header hdr{};
     hdr.e_ident[EI_MAG0] = 0x7f;
     hdr.e_ident[EI_MAG1] = 'E';
@@ -35,6 +36,26 @@ static elf64_header default_header() {
     return hdr;
 }
 
+/// Append string to given byte buffer and return the index at the
+/// beginning of it.
+auto elf_add_string(std::vector<u8>& string_table, const char* new_string) {
+    LCC_ASSERT(new_string, "Invalid argument (cannot add NULL string to ELF string table)");
+    usz out = string_table.size();
+    while (*new_string)
+        string_table.push_back(u8(*new_string++));
+    string_table.push_back(0); // NULL terminator
+    return u32(out);
+}
+auto elf_add_string(std::vector<u8>& string_table, std::string_view new_string) {
+    usz out = string_table.size();
+    string_table.reserve(new_string.size());
+    string_table.insert(string_table.end(), new_string.begin(), new_string.end());
+    string_table.push_back(0); // NULL terminator
+    return u32(out);
+}
+
+} // namespace
+
 void GenericObject::as_elf(FILE* f) {
     elf64_header hdr = default_header();
     // Section header table entry count
@@ -50,27 +71,16 @@ void GenericObject::as_elf(FILE* f) {
     // NULL entry
     string_table.push_back(0);
 
-    /// Append string to given byte buffer and return the index at the
-    /// beginning of it.
-    auto elf_add_string = [&](const char* new_string) {
-        LCC_ASSERT(new_string, "Invalid argument (cannot add NULL string to ELF string table)");
-        usz out = string_table.size();
-        while (*new_string)
-            string_table.push_back(u8(*new_string++));
-        string_table.push_back(0); // NULL terminator
-        return u32(out);
-    };
-
     using Attr = Section::Attribute;
     // Section headers go in here.
     std::vector<elf64_shdr> shdrs{};
     // NULL entry
-    shdrs.push_back(elf64_shdr());
+    shdrs.emplace_back();
 
     // Symbols go in here.
     std::vector<elf64_sym> syms{};
     // NULL entry.
-    syms.push_back(elf64_sym());
+    syms.emplace_back();
 
     // Byte offset within file that section's data may be placed (must be
     // after all section headers).
@@ -103,7 +113,7 @@ void GenericObject::as_elf(FILE* f) {
         if (section.attribute(Attr::LOAD))
             shdr.sh_flags |= SHF_ALLOC;
 
-        shdr.sh_name = elf_add_string(section.name.data());
+        shdr.sh_name = elf_add_string(string_table, section.name);
 
         // Create symbol for this section
         {
@@ -119,7 +129,7 @@ void GenericObject::as_elf(FILE* f) {
 
     for (auto& sym : symbols) {
         elf64_sym elf_sym{};
-        elf_sym.st_name = elf_add_string(sym.name.data());
+        elf_sym.st_name = elf_add_string(string_table, sym.name);
 
         if (sym.kind != Symbol::Kind::EXTERNAL) {
             // Get index of section by name
@@ -179,7 +189,7 @@ void GenericObject::as_elf(FILE* f) {
     {
         elf64_shdr shdr{};
         shdr.sh_type = SHT_SYMTAB;
-        shdr.sh_name = elf_add_string(".symtab");
+        shdr.sh_name = elf_add_string(string_table, ".symtab");
         shdr.sh_size = syms.size() * sizeof(elf64_sym);
         shdr.sh_offset = data_offset;
 
@@ -202,7 +212,7 @@ void GenericObject::as_elf(FILE* f) {
     {
         elf64_shdr shdr{};
         shdr.sh_type = SHT_RELA;
-        shdr.sh_name = elf_add_string(".rela.text");
+        shdr.sh_name = elf_add_string(string_table, ".rela.text");
         // "If the file has a loadable segment that includes relocation,
         // the sections’ attributes will include the SHF_ALLOC bit;
         // otherwise, that bit will be off."
@@ -227,7 +237,7 @@ void GenericObject::as_elf(FILE* f) {
     {
         elf64_shdr shdr = {};
         shdr.sh_type = SHT_STRTAB;
-        shdr.sh_name = elf_add_string(".strtab");
+        shdr.sh_name = elf_add_string(string_table, ".strtab");
         // FIXME: Ensure no more strings are added to table after this.
         // TODO: Locking vector sort of container needed here as well.
         shdr.sh_size = string_table.size();
@@ -256,10 +266,10 @@ void GenericObject::as_elf(FILE* f) {
         elf_reloc.r_offset = reloc.symbol.byte_offset;
         switch (reloc.kind) {
             case Relocation::Kind::DISPLACEMENT32_PCREL: {
-                auto found = std::find_if(symbols.begin(), symbols.end(), [&](Symbol& symbol) {
+                auto found_symbol = std::find_if(symbols.begin(), symbols.end(), [&](Symbol& symbol) {
                     return symbol.name == reloc.symbol.name;
                 });
-                if (found == symbols.end()) Diag::ICE(
+                if (found_symbol == symbols.end()) Diag::ICE(
                     "Could not find symbol {} referenced by relocation",
                     reloc.symbol.name
                 );

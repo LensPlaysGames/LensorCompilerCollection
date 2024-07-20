@@ -22,7 +22,7 @@ struct ASTPrinter {
     bool use_colour = true;
     Colours C{use_colour};
 
-    ASTPrinter(bool use_colour) : use_colour{use_colour} {}
+    ASTPrinter(bool should_use_colour) : use_colour{should_use_colour} {}
     ~ASTPrinter() {
         if (not out.empty()) fmt::print("{}{}", out, C(Reset));
     }

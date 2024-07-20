@@ -55,6 +55,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
         -Wcast-align      # Casting that changes alignment.
         -Wconversion      # Implicit conversions.
         -Wsign-conversion # Implicit sign conversions.
+        -Werror=shadow    # No shadowing!
         -Wformat=2        # Stricter format checking.
 
         # Disabled warnings.

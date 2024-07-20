@@ -1437,7 +1437,7 @@ void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     //       )
     // )
 
-    else if (auto ty = expr->callee()->type(); ty->is_integer()) {
+    else if (auto callee_ty = expr->callee()->type(); callee_ty->is_integer()) {
         // NOTE: Call of integer with zero arguments by deproceduring should not
         // be possible, but this handles `100();`
         if (expr->args().empty() and not HasSideEffects(expr)) {
@@ -1474,8 +1474,8 @@ void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     }
 
     /// Otherwise, if the type is not already a function type, we can’t call this.
-    else if (not ty->is_function()) {
-        Error(expr->callee()->location(), "Cannot call non-function(-pointer) type {}", ty);
+    else if (not callee_ty->is_function()) {
+        Error(expr->callee()->location(), "Cannot call non-function type {}", callee_ty);
         expr->set_sema_errored();
         return;
     }

@@ -17,24 +17,29 @@ namespace {
 /// Base class for all optimisation passes.
 /// Optimisation pass that runs on an instruction kind.
 struct OptimisationPass {
-    Module* const mod;
+    Module* mod;
 
-    OptimisationPass(Module* mod) : mod(mod) {}
+    OptimisationPass(Module* module) : mod(module) {}
 
     /// Check if this pass has changed the ir.
-    [[nodiscard]] bool changed() const { return has_changed; }
+    [[nodiscard]]
+    auto changed() const -> bool { return has_changed; }
 
 protected:
     /// Helper to create an integer constant.
-    auto MakeInt(aint value) -> IntegerConstant* {
-        return new (*mod) IntegerConstant(IntegerType::Get(mod->context(), value.bits()), value);
+    [[nodiscard]]
+    auto MakeInt(aint value) const -> IntegerConstant* {
+        return new (*mod) IntegerConstant(
+            IntegerType::Get(mod->context(), value.bits()),
+            value
+        );
     }
 
     /// Create a new instruction, replace another instruction with
     /// it, and mark that a change has occurred.
     template <typename Instruction, typename... Args>
     auto Replace(Inst* what, Args&&... args) -> Instruction* {
-        auto i = new (*mod) Instruction(std::forward<Args>(args)...);
+        auto* i = new (*mod) Instruction(std::forward<Args>(args)...);
         what->replace_with(i);
         SetChanged();
         return i;
@@ -44,7 +49,7 @@ protected:
     template <typename Instruction, typename... Args>
     auto Create(Inst* after, Args&&... args) -> Instruction* {
         LCC_ASSERT(after->block(), "Cannot insert after floating instruction");
-        auto i = new (*mod) Instruction(std::forward<Args>(args)...);
+        auto* i = new (*mod) Instruction(std::forward<Args>(args)...);
         after->block()->insert_after(i, after);
         SetChanged();
         return i;
@@ -164,7 +169,7 @@ private:
     /// Handle eq, ne, lt, le, gt, ge.
     template <bool (aint::*Eval)(aint) const>
     void CmpImpl(Inst* i) {
-        auto b = as<BinaryInst>(i);
+        auto* b = as<BinaryInst>(i);
 
         /// A comparison against itself is false for lt, gt, ne and true for le, ge, eq.
         if (b->lhs() == b->rhs()) {
@@ -181,8 +186,8 @@ private:
     /// Handle trunc, sext, zext.
     template <auto Eval>
     void TruncExtImpl(Inst* i) {
-        auto e = as<UnaryInstBase>(i);
-        auto op = cast<IntegerConstant>(e->operand());
+        auto* e = as<UnaryInstBase>(i);
+        auto* op = cast<IntegerConstant>(e->operand());
         if (op) Replace(i, std::invoke(Eval, op->value(), u8(cast<IntegerType>(e->type())->bitwidth())));
     }
 
@@ -191,7 +196,7 @@ public:
         switch (i->kind()) {
             default: return;
             case Value::Kind::Alloca: {
-                auto alloca = as<AllocaInst>(i);
+                auto* alloca = as<AllocaInst>(i);
 
                 /// If all of our uses are stores to us, then this alloca is dead.
                 for (auto u : alloca->users())
@@ -204,8 +209,8 @@ public:
             } break;
 
             case Value::Kind::CondBranch: {
-                auto br = cast<CondBranchInst>(i);
-                auto cond = cast<IntegerConstant>(br->cond());
+                auto* br = cast<CondBranchInst>(i);
+                auto* cond = cast<IntegerConstant>(br->cond());
 
                 /// Collapse if the condition is known at compile time.
                 if (cond) Replace<BranchInst>(i, cond->value() == 1 ? br->then_block() : br->else_block());
@@ -215,9 +220,9 @@ public:
             } break;
 
             case Value::Kind::Add: {
-                auto add = as<AddInst>(i);
-                auto lhs = cast<IntegerConstant>(add->lhs());
-                auto rhs = cast<IntegerConstant>(add->rhs());
+                auto* add = as<AddInst>(i);
+                auto* lhs = cast<IntegerConstant>(add->lhs());
+                auto* rhs = cast<IntegerConstant>(add->rhs());
 
                 /// Evaluate if possible.
                 if (lhs and rhs) Replace(i, lhs->value() + rhs->value());
@@ -226,7 +231,10 @@ public:
                 /// another add whose lhs is a constant and fold with it.
                 else if (lhs) {
                     if (lhs->value() == 0) Replace(i, add->rhs());
-                    else if (auto radd = cast<AddInst>(add->rhs()); radd and is<IntegerConstant>(radd->lhs())) {
+                    else if (
+                        auto radd = cast<AddInst>(add->rhs());
+                        radd and is<IntegerConstant>(radd->lhs())
+                    ) {
                         auto rlhs = cast<IntegerConstant>(radd->lhs());
                         add->lhs(MakeInt(lhs->value() + rlhs->value()));
                         add->rhs(radd->rhs());
@@ -245,45 +253,47 @@ public:
             } break;
 
             case Value::Kind::Sub: {
-                auto sub = as<SubInst>(i);
-                auto lhs = cast<IntegerConstant>(sub->lhs());
-                auto rhs = cast<IntegerConstant>(sub->rhs());
+                auto* sub = as<SubInst>(i);
+                auto* lhs = cast<IntegerConstant>(sub->lhs());
+                auto* rhs = cast<IntegerConstant>(sub->rhs());
 
                 /// If the operands are the same, the result is 0.
-                if (sub->lhs() == sub->rhs()) {
+                if (sub->lhs() == sub->rhs())
                     Replace<IntegerConstant>(i, i->type(), 0);
-                }
 
                 /// Evaluate if possible.
-                else if (lhs and rhs) {
+                else if (lhs and rhs)
                     Replace(i, lhs->value() - rhs->value());
-                }
 
                 /// If the RHS is a constant, fold it or move it to the
                 /// left; the latter case involves rewriting `a - b` to
                 /// `-b + a`.
                 else if (rhs) {
-                    if (rhs->value() == 0) Replace(i, sub->lhs());
+                    if (rhs->value() == 0)
+                        Replace(i, sub->lhs());
                     else Replace<AddInst>(i, MakeInt(-rhs->value()), sub->lhs());
                 }
             } break;
 
             case Value::Kind::Mul: {
-                auto mul = cast<MulInst>(i);
-                auto lhs = cast<IntegerConstant>(mul->lhs());
-                auto rhs = cast<IntegerConstant>(mul->rhs());
+                auto* mul = cast<MulInst>(i);
+                auto* lhs = cast<IntegerConstant>(mul->lhs());
+                auto* rhs = cast<IntegerConstant>(mul->rhs());
 
                 /// Evaluate if possible.
-                if (lhs and rhs) {
+                if (lhs and rhs)
                     Replace(i, lhs->value() * rhs->value());
-                }
 
                 /// Fold if possible. Otherwise, try to see if our rhs is
                 /// another mul whose lhs is a constant and fold with it.
                 else if (lhs) {
-                    if (lhs->value() == 1) Replace(i, mul->rhs());
-                    else if (auto rmul = cast<MulInst>(mul->rhs()); rmul and is<IntegerConstant>(rmul->lhs())) {
-                        auto rlhs = cast<IntegerConstant>(rmul->lhs());
+                    if (lhs->value() == 1)
+                        Replace(i, mul->rhs());
+                    else if (
+                        auto* rmul = cast<MulInst>(mul->rhs());
+                        rmul and is<IntegerConstant>(rmul->lhs())
+                    ) {
+                        auto* rlhs = cast<IntegerConstant>(rmul->lhs());
                         mul->lhs(MakeInt(lhs->value() * rlhs->value()));
                         mul->rhs(rmul->rhs());
                         SetChanged();
@@ -292,7 +302,8 @@ public:
 
                 /// If the rhs is a constant, fold it or move it to the left.
                 else if (rhs) {
-                    if (rhs->value() == 1) Replace(i, mul->lhs());
+                    if (rhs->value() == 1)
+                        Replace(i, mul->lhs());
                     else {
                         mul->swap_operands();
                         SetChanged();
@@ -301,20 +312,20 @@ public:
             } break;
 
             case Value::Kind::Store: {
-                auto s = as<StoreInst>(i);
-                auto ty = s->val()->type();
+                auto* s = as<StoreInst>(i);
+                auto* ty = s->val()->type();
 
                 /// Combine array and struct copies emitted as loads+stores into a memcpy.
                 if (not is<ArrayType, StructType>(ty)) break;
 
                 /// If the load’s only user is this, combine them.
-                auto l = cast<LoadInst>(s->val());
+                auto* l = cast<LoadInst>(s->val());
                 if (not l or l->users().size() > 1) break;
 
                 /// Make sure they’re right next to each other in the
                 /// same block, else intervening operations might change
                 /// the semantics of this.
-                auto b = s->block();
+                auto* b = s->block();
                 if (not s->block() or not l->block()) break;
                 if (s->block() != l->block()) break;
                 if (std::next(rgs::find(b->instructions(), l)) != rgs::find(b->instructions(), s)) break;
@@ -323,7 +334,11 @@ public:
                 Create<IntrinsicInst>(
                     s,
                     IntrinsicKind::MemCopy,
-                    std::vector<Value*>{s->ptr(), l->ptr(), MakeInt(ty->bytes())}
+                    std::vector<Value*>{
+                        s->ptr(),
+                        l->ptr(),
+                        MakeInt(ty->bytes()) //
+                    }
                 );
 
                 /// Finally, erase the load and store.
@@ -332,7 +347,7 @@ public:
             } break;
 
             case Value::Kind::Bitcast: {
-                auto b = as<BitcastInst>(i);
+                auto* b = as<BitcastInst>(i);
 
                 /// Bitcast to the same type is a no-op.
                 if (b->type() == b->operand()->type()) {
@@ -341,7 +356,7 @@ public:
                 }
 
                 /// Fold nested casts.
-                auto nested = cast<BitcastInst>(b->operand());
+                auto* nested = cast<BitcastInst>(b->operand());
                 if (nested) {
                     if (nested->operand()->type() == b->type()) Replace(b, nested->operand());
                     else {
@@ -353,8 +368,8 @@ public:
 
             case Value::Kind::GetElementPtr:
             case Value::Kind::GetMemberPtr: {
-                auto gep = as<GEPBaseInst>(i);
-                auto index = cast<IntegerConstant>(gep->idx());
+                auto* gep = as<GEPBaseInst>(i);
+                auto* index = cast<IntegerConstant>(gep->idx());
 
                 /// GEP w/ 0 is a no-op.
                 if (index and index->value() == 0) Replace(i, gep->ptr());
@@ -418,10 +433,10 @@ private:
         /// (Note that we could do more if we treat converting
         /// pointers to struct members back to a ptr to the struct
         /// itself as UB, but we don’t enforce that atm).
-        for (auto u : a->users()) {
+        for (auto* u : a->users()) {
             /// If an array is accessed dynamically, then we can’t
             /// split it either.
-            if (auto gep = cast<GEPInst>(u)) {
+            if (auto* gep = cast<GEPInst>(u)) {
                 if (not is<IntegerConstant>(gep->idx())) return;
                 continue;
             }
@@ -436,10 +451,10 @@ private:
             ///     entails potentially emitting 2 more memcpys if the
             ///     end of the copy is like halfway through an array
             ///     element or struct member.
-            if (auto m = cast<IntrinsicInst>(u)) {
+            if (auto* m = cast<IntrinsicInst>(u)) {
                 if (m->intrinsic_kind() != IntrinsicKind::MemCopy) return;
                 if (m->operands()[0] != a) return;
-                auto size = cast<IntegerConstant>(m->operands()[2]);
+                auto* size = cast<IntegerConstant>(m->operands()[2]);
                 if (not size or size->value() != a->allocated_type()->bytes()) return;
                 continue;
             }
@@ -447,12 +462,12 @@ private:
             /// Loads and stores are fine, provided they don’t
             /// load or store the entire object, and provided
             /// that we’re not storing the alloca itself.
-            if (auto l = cast<LoadInst>(u)) {
+            if (auto* l = cast<LoadInst>(u)) {
                 if (l->type() == a->allocated_type()) return;
                 continue;
             }
 
-            if (auto s = cast<StoreInst>(u)) {
+            if (auto* s = cast<StoreInst>(u)) {
                 if (s->val() == a) return;
                 if (s->val()->type() == a->allocated_type()) return;
                 continue;
@@ -471,7 +486,7 @@ private:
     /// allocas.
     void SplitArray(AllocaInst* a) {
         /// Split elements as needed.
-        auto elem_type = cast<ArrayType>(a->allocated_type())->element_type();
+        auto* elem_type = cast<ArrayType>(a->allocated_type())->element_type();
         std::unordered_map<u64, AllocaInst*> insts{};
 
         /// Helper to create an alloca for an index.
@@ -482,7 +497,7 @@ private:
 
         /// Replace GEPs and pointer operands of stores and loads.
         for (usz i = 0; i < a->users().size(); /** No increment! **/) {
-            auto u = a->users()[i];
+            auto* u = a->users()[i];
 
             /// Memcpys will be handled once we know what
             /// elements will actually remain in use after this.
@@ -492,7 +507,7 @@ private:
             }
 
             /// Replace GEPs.
-            if (auto gep = cast<GEPInst>(u)) {
+            if (auto* gep = cast<GEPInst>(u)) {
                 auto idx = as<IntegerConstant>(gep->idx())->value();
 
                 /// If the index is negative, then this is an out-of-bounds
@@ -512,18 +527,18 @@ private:
 
             /// Create the alloca for index 0.
             AllocaInst* first = CreateAlloca(0);
-            if (auto l = cast<LoadInst>(u)) l->ptr(first);
+            if (auto* l = cast<LoadInst>(u)) l->ptr(first);
             else as<StoreInst>(u)->ptr(first);
         }
 
         /// Handle Memcpys.
         while (not a->users().empty()) {
-            auto cpy = cast<IntrinsicInst>(a->users().front());
+            auto* cpy = cast<IntrinsicInst>(a->users().front());
 
             /// Use individual loads and stores for all elements that are actually used.
             for (auto&& [idx, inst] : insts) {
-                auto addr = Create<GEPInst>(cpy, elem_type, cpy->operands()[1], MakeInt(idx));
-                auto load = Create<LoadInst>(addr, elem_type, addr);
+                auto* addr = Create<GEPInst>(cpy, elem_type, cpy->operands()[1], MakeInt(idx));
+                auto* load = Create<LoadInst>(addr, elem_type, addr);
                 Create<StoreInst>(load, load, inst);
             }
 
@@ -538,7 +553,7 @@ private:
     /// generally don’t contain that many members, we can do
     /// this eagerly.
     void SplitStruct(AllocaInst* a) {
-        auto stype = as<StructType>(a->allocated_type());
+        auto* stype = as<StructType>(a->allocated_type());
         std::vector<AllocaInst*> insts{stype->member_count()};
         for (auto&& [i, f] : vws::enumerate(stype->members())) {
             insts[usz(i)] = Create<AllocaInst>(
@@ -550,10 +565,10 @@ private:
 
         /// Replace GEPs.
         while (not a->users().empty()) {
-            auto u = a->users().front();
-            if (auto gep = cast<GetMemberPtrInst>(u)) {
+            auto* u = a->users().front();
+            if (auto* gep = cast<GetMemberPtrInst>(u)) {
                 /// Convert out-of-bounds and non-constant GEPs to poison values.
-                auto idx = cast<IntegerConstant>(gep->idx());
+                auto* idx = cast<IntegerConstant>(gep->idx());
                 if (not idx or idx->value().uge(insts.size())) {
                     Replace<PoisonValue>(gep, gep->type());
                     continue;
@@ -565,7 +580,7 @@ private:
             }
 
             /// Replace loads and stores with the first element.
-            if (auto l = cast<LoadInst>(u)) l->ptr(insts[0]);
+            if (auto* l = cast<LoadInst>(u)) l->ptr(insts[0]);
             else as<StoreInst>(u)->ptr(insts[0]);
         }
 
@@ -576,8 +591,8 @@ private:
 
 public:
     void run_on_instruction(Inst* i) {
-        auto a = cast<AllocaInst>(i);
-        if (a) TrySplitAlloca(a);
+        if (auto* a = cast<AllocaInst>(i))
+            TrySplitAlloca(a);
     }
 };
 
@@ -597,9 +612,9 @@ struct StoreFowardingPass : InstructionRewritePass {
     /// This pass can’t handle forwarding stores across branches; the
     /// jump threading code will usually end up combining blocks anyway
     /// if possible, and more complex cases are handled by mem2reg.
-    void enter_block(Block*) { vars.clear(); }
+    void enter_block(Block* /*_*/) { vars.clear(); }
 
-    void run_on_function(Function*) {
+    void run_on_function(Function* /*_*/) {
         for (auto& var : vars) EraseLastStoreIfUnused(var);
     }
 
@@ -611,8 +626,8 @@ struct StoreFowardingPass : InstructionRewritePass {
         }
 
         /// Replace load if possible or cache new value.
-        if (auto l = cast<LoadInst>(i)) {
-            auto a = cast<AllocaInst>(l->ptr());
+        if (auto* l = cast<LoadInst>(i)) {
+            auto* a = cast<AllocaInst>(l->ptr());
             if (not a) return;
             auto var = rgs::find(vars, a, &Var::alloca);
 
@@ -640,16 +655,16 @@ struct StoreFowardingPass : InstructionRewritePass {
         }
 
         /// Update the value.
-        if (auto s = cast<StoreInst>(i)) {
+        if (auto* s = cast<StoreInst>(i)) {
             /// If this store stores the address of the alloca
             /// somewhere else, mark the variable as escaped.
-            if (auto a = cast<AllocaInst>(s->val())) {
+            if (auto* a = cast<AllocaInst>(s->val())) {
                 auto var = rgs::find(vars, a, &Var::alloca);
                 if (var != vars.end()) var->escaped = true;
             }
 
             /// Check if we’re storing to an address.
-            auto a = cast<AllocaInst>(s->ptr());
+            auto* a = cast<AllocaInst>(s->ptr());
             if (not a) return;
             auto var = rgs::find(vars, a, &Var::alloca);
 
@@ -672,9 +687,10 @@ struct StoreFowardingPass : InstructionRewritePass {
         }
 
         /// Any other instruction that uses an alloca escapes that alloca.
-        for (auto a : i->children_of_kind<AllocaInst>()) {
-            Var* var;
-            if (auto it = rgs::find(vars, a, &Var::alloca); it != vars.end()) var = &*it;
+        for (auto* a : i->children_of_kind<AllocaInst>()) {
+            Var* var{};
+            if (auto it = rgs::find(vars, a, &Var::alloca); it != vars.end())
+                var = &*it;
             else var = &vars.emplace_back(a);
             var->escaped = true;
             var->last_store_used = true;
@@ -706,7 +722,7 @@ struct SSAConstructionPass : InstructionRewritePass {
     std::vector<AllocaInst*> allocas{};
 
     void run_on_instruction(Inst* i) {
-        auto a = cast<AllocaInst>(i);
+        auto* a = cast<AllocaInst>(i);
         if (a) allocas.push_back(a);
     }
 
@@ -729,7 +745,7 @@ struct SSAConstructionPass : InstructionRewritePass {
         auto DefinedValue = [&](AllocaInst* a, Inst* def) -> Value* {
             auto d = rgs::find(defs[a], def);
             if (d == defs[a].end()) return nullptr;
-            if (auto s = cast<StoreInst>(*d)) return s->val();
+            if (auto* s = cast<StoreInst>(*d)) return s->val();
             return *d;
         };
 
@@ -737,15 +753,15 @@ struct SSAConstructionPass : InstructionRewritePass {
         /// FIXME: This is currently *very* dumb and inefficient...
         auto ReachingDef = [&](AllocaInst* a, Inst* user) -> Value* {
             /// Search backwards in this block.
-            for (auto i : vws::reverse(user->instructions_before_this())) {
-                auto d = DefinedValue(a, i);
+            for (auto* i : vws::reverse(user->instructions_before_this())) {
+                auto* d = DefinedValue(a, i);
                 if (d) return d;
             }
 
             /// Search dominators.
-            for (auto b : dom_tree.parents(user->block())) {
-                for (auto i : vws::reverse(b->instructions())) {
-                    auto d = DefinedValue(a, i);
+            for (auto* b : dom_tree.parents(user->block())) {
+                for (auto* i : vws::reverse(b->instructions())) {
+                    auto* d = DefinedValue(a, i);
                     if (d) return d;
                 }
             }
@@ -762,19 +778,19 @@ struct SSAConstructionPass : InstructionRewritePass {
                             | vws::transform(&Inst::block);
 
             /// Insert a PHI at each block of DF+(defs).
-            for (auto b : dom_tree.iterated_dom_frontier(def_blocks)) {
-                auto phi = b->create_phi(a->allocated_type(), a->location());
+            for (auto* b : dom_tree.iterated_dom_frontier(def_blocks)) {
+                auto* phi = b->create_phi(a->allocated_type(), a->location());
                 defs[a].push_back(phi);
                 phis.emplace_back(phi, a);
             }
         }
 
         /// Add incoming values for each reaching definition.
-        for (auto b : dom_tree.dfs_preorder()) {
-            for (auto i : b->instructions()) {
+        for (auto* b : dom_tree.dfs_preorder()) {
+            for (auto* i : b->instructions()) {
                 /// If this instruction is a store to an optimisable
                 /// alloca, mark it as the new reaching definition.
-                if (auto s = cast<StoreInst>(i)) {
+                if (auto* s = cast<StoreInst>(i)) {
                     auto a = rgs::find(optimisable, s->ptr());
                     if (a != optimisable.end()) defs[*a].push_back(s);
                 }
@@ -790,9 +806,9 @@ struct SSAConstructionPass : InstructionRewritePass {
             }
 
             /// Update PHIs in successors.
-            for (auto s : b->successors()) {
-                for (auto i : s->instructions()) {
-                    auto phi = cast<PhiInst>(i);
+            for (auto* s : b->successors()) {
+                for (auto* i : s->instructions()) {
+                    auto* phi = cast<PhiInst>(i);
                     if (not phi) break;
 
                     /// This is one of the PHIs we inserted for a specific variable.
@@ -803,11 +819,12 @@ struct SSAConstructionPass : InstructionRewritePass {
         }
 
         /// Lastly, erase all allocas.
-        for (auto a : optimisable) a->erase_cascade();
+        for (auto* a : optimisable) a->erase_cascade();
     }
 
 private:
-    static bool Optimisable(AllocaInst* a) {
+    [[nodiscard]]
+    static auto Optimisable(AllocaInst* a) -> bool {
         /// Allocas of non-aggregate types are not optimised
         /// here so SROA has a chance to split them.
         if (is<StructType, ArrayType>(a->type())) return false;
@@ -816,7 +833,7 @@ private:
         /// (to the alloca) can not be converted either.
         return rgs::all_of(a->users(), [a](Inst* u) {
             if (is<LoadInst>(u)) return true;
-            if (auto s = cast<StoreInst>(u); s and a == s->ptr()) return true;
+            if (auto* s = cast<StoreInst>(u); s and a == s->ptr()) return true;
             return false;
         });
     }
@@ -827,29 +844,33 @@ struct CFGSimplPass : InstructionRewritePass {
     void run_on_function(Function* f) {
         /// We start at 1 because the entry block is always reachable.
         for (usz i = 1; i < f->blocks().size(); /** No increment! **/) {
-            auto b = f->blocks()[i];
+            auto* b = f->blocks()[i];
 
             /// Count how many users of this block are not PHIs.
             Inst* branch = nullptr;
-            for (auto u : b->users()) {
+            for (auto* u : b->users()) {
                 if (not is<PhiInst>(u)) {
-                    if (branch) goto next_block;
+                    if (branch) {
+                        ++i;
+                        continue;
+                    }
                     branch = u;
                 }
             }
 
-            /// If there is only one non-PHI user, and that user
-            /// is a direct branch to this, inline this block into
-            /// the block containing that branch
+            // If there is only one non-PHI user, and that user is a direct branch to
+            // this, inline this block into the block containing that branch
             if (branch) {
-                if (not is<BranchInst>(branch)) goto next_block;
+                if (not is<BranchInst>(branch)) {
+                    ++i;
+                    continue;
+                }
                 branch->block()->merge(b);
             }
-
-            /// Otherwise, the block is unreachable. Remove it from all PHIs.
+            // Otherwise, the block is unreachable. Remove it from all PHIs.
             else {
-                for (auto u : b->users()) {
-                    auto phi = as<PhiInst>(u);
+                for (auto* u : b->users()) {
+                    auto* phi = as<PhiInst>(u);
                     phi->remove_incoming(b);
                 }
 
@@ -857,14 +878,9 @@ struct CFGSimplPass : InstructionRewritePass {
                 b->erase();
             }
 
-            /// Avoid incrementing since we may just have
-            /// removed this block, and incrementing would
-            /// cause use to skip the next one.
+            // Don't increment, since we may just have removed this block, and
+            // incrementing would cause use to skip the next one.
             SetChanged();
-            continue;
-
-        next_block:
-            i++;
         }
     }
 };
@@ -918,11 +934,11 @@ struct DCEPass : InstructionRewritePass {
 struct GlobalDCEPass : ModuleRewritePass {
     void run() {
         for (usz i = 0; i < mod->code().size(); /** No increment! **/) {
-            auto f = mod->code()[i];
+            auto* f = mod->code()[i];
 
             // Check if exported.
             bool exported{false};
-            for (auto n : f->names()) {
+            for (const auto& n : f->names()) {
                 if (IsExportedLinkage(n.linkage)) {
                     exported = true;
                     break;
@@ -943,16 +959,16 @@ struct GlobalDCEPass : ModuleRewritePass {
 
 /// Debugging pass to print the dominator tree of a function.
 struct PrintDOMTreePass : InstructionRewritePass {
-    void run_on_function(Function* f) {
+    static void run_on_function(Function* f) {
         fmt::print("{}", DomTree{f, false}.debug());
     }
 };
 
 struct Optimiser {
-    Module* const mod;
+    Module* mod;
 
     /// TODO: Actually use this.
-    [[maybe_unused]] int const opt_level;
+    [[maybe_unused]] int opt_level;
 
     /// Entry point.
     void run() { // clang-format off
@@ -971,14 +987,14 @@ struct Optimiser {
     void run_passes(std::string_view passes) {
         for (const auto& p : vws::split(passes, ',')) {
             auto s = std::string_view{p};
-            if (s == "sroa") RunPass<SROAPass>();
-            else if (s == "sfwd") RunPass<StoreFowardingPass>();
-            else if (s == "icmb") RunPass<InstCombinePass>();
-            else if (s == "dce") RunPass<DCEPass>();
-            else if (s == "gdce") RunPass<GlobalDCEPass>();
-            else if (s == "ssa") RunPass<SSAConstructionPass>();
-            else if (s == "cfgs") RunPass<CFGSimplPass>();
-            else if (s == "print-dom") RunPass<PrintDOMTreePass>();
+            if (s == "sroa") (void) RunPass<SROAPass>();
+            else if (s == "sfwd") (void) RunPass<StoreFowardingPass>();
+            else if (s == "icmb") (void) RunPass<InstCombinePass>();
+            else if (s == "dce") (void) RunPass<DCEPass>();
+            else if (s == "gdce") (void) RunPass<GlobalDCEPass>();
+            else if (s == "ssa") (void) RunPass<SSAConstructionPass>();
+            else if (s == "cfgs") (void) RunPass<CFGSimplPass>();
+            else if (s == "print-dom") (void) RunPass<PrintDOMTreePass>();
             else if (s == "*") run();
             else Diag::Fatal("Unknown pass '{}'", s);
         }
@@ -988,11 +1004,12 @@ private:
     template <typename... Passes>
     void RunPasses() {
         /// Run all passes so long as at least one of them returns true.
-        while ((int(RunPass<Passes>()) | ...)) {}
+        while (((unsigned int) (RunPass<Passes>()) | ...)) {}
     }
 
     template <typename Pass>
-    bool RunPass() {
+    [[nodiscard]]
+    auto RunPass() -> bool {
         if constexpr (std::derived_from<Pass, InstructionRewritePass>) {
             return RunPassOnInstructions<Pass>();
         } else if constexpr (std::derived_from<Pass, ModuleRewritePass>) {
@@ -1003,9 +1020,10 @@ private:
     };
 
     template <typename Pass>
-    bool RunPassOnInstructions() {
+    [[nodiscard]]
+    auto RunPassOnInstructions() -> bool {
         bool changed = false;
-        for (auto f : mod->code()) {
+        for (auto* f : mod->code()) {
             Pass p{{mod}};
 
             /// Use indices here to avoid iterator invalidation.
@@ -1053,7 +1071,8 @@ private:
     }
 
     template <typename Pass>
-    bool RunPassOnModule() {
+    [[nodiscard]]
+    auto RunPassOnModule() -> bool {
         Pass p{{mod}};
         p.run();
         return p.changed();

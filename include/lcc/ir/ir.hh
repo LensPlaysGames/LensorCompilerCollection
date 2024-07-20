@@ -17,6 +17,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -102,33 +103,36 @@ public:
     };
 
 private:
-    const Kind value_kind;
+    Kind value_kind{};
 
     /// Every value has a type.
-    Type* value_type;
+    Type* value_type{};
 
 protected:
-    Value(Kind kind, Type* ty = Type::UnknownTy)
+    explicit Value(Kind kind, Type* ty = Type::UnknownTy)
         : value_kind(kind), value_type(ty) {}
 
 public:
     virtual ~Value() = default;
 
     /// Disallow allocating these directly.
-    void* operator new(size_t) = delete;
-    void* operator new(size_t sz, Module&) {
+    auto operator new(size_t) -> void* = delete;
+    auto operator new(size_t sz, Module& /*_*/) -> void* {
         return ::operator new(sz);
     }
 
     /// Get the kind of this value for RTTI.
-    Kind kind() const { return value_kind; }
+    [[nodiscard]]
+    auto kind() const -> Kind { return value_kind; }
 
     /// Get the type of this value.
-    Type* type() const { return value_type; }
+    [[nodiscard]]
+    auto type() const -> Type* { return value_type; }
 
     /// Print this value for debugging.
     void print() const;
 
+    [[nodiscard]]
     static auto ToString(Value::Kind v) -> std::string {
         using VK = Value::Kind;
         switch (v) {
@@ -207,14 +211,15 @@ class UseTrackingValue : public Value {
     std::vector<Inst*> user_list;
 
 protected:
-    UseTrackingValue(Kind k, Type* t = Type::UnknownTy) : Value(k, t) {}
+    explicit UseTrackingValue(Kind k, Type* t = Type::UnknownTy) : Value(k, t) {}
 
 public:
     /// Get the users of this value.
+    [[nodiscard]]
     auto users() const -> const std::vector<Inst*>& { return user_list; }
 
     /// RTTI.
-    static bool classof(const Value* v) { return v->kind() >= Value::Kind::Block; }
+    static auto classof(const Value* v) -> bool { return v->kind() >= Value::Kind::Block; }
 };
 
 struct IRName {
@@ -228,16 +233,21 @@ class GlobalVariable : public UseTrackingValue {
     Type* _allocated_type;
 
 public:
-    GlobalVariable(Module* mod, Type* t, std::string name, Linkage linkage, Value* init);
+    explicit GlobalVariable(Module* mod, Type* t, std::string name, Linkage linkage, Value* init);
 
-    Type* allocated_type() { return _allocated_type; }
-    Value* init() { return _init; }
-    auto names() const -> const std::vector<IRName> { return _names; }
+    [[nodiscard]]
+    auto allocated_type() -> Type* { return _allocated_type; }
+    [[nodiscard]]
+    auto init() -> Value* { return _init; }
+    [[nodiscard]]
+    auto names() const -> std::vector<IRName> { return _names; }
 
     /// RTTI.
-    static bool classof(Value* v) { return +v->kind() >= +Kind::GlobalVariable; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return +v->kind() >= +Kind::GlobalVariable; }
 
-    static GlobalVariable* CreateStringPtr(Module* mod, std::string name, std::string_view string_value);
+    [[nodiscard]]
+    static auto CreateStringPtr(Module* mod, std::string name, std::string_view string_value) -> GlobalVariable*;
 };
 
 /// IR instruction.
@@ -249,22 +259,22 @@ class Inst : public UseTrackingValue {
     friend parser::Parser;
 
     /// Associated machine instruction during early codegen.
-    MInst* minst;
+    MInst* minst{};
 
     /// The parent block that this instruction is inserted in.
-    Block* parent;
+    Block* parent{};
 
     /// Source location of this instruction.
-    Location loc;
+    Location _location;
 
 protected:
-    Inst(Kind k, Type* t, Location l = {})
-        : UseTrackingValue(k, t), minst(nullptr), parent(nullptr), loc(l) {}
+    explicit Inst(Kind k, Type* t, Location location = {})
+        : UseTrackingValue(k, t), _location(location) {}
 
     /// Add a use by an instruction.
     static void AddUse(Value* of_value, Inst* by) {
         if (not is<UseTrackingValue>(of_value)) return;
-        auto of = as<UseTrackingValue>(of_value);
+        auto* of = as<UseTrackingValue>(of_value);
         auto it = rgs::find(of->user_list, by);
         if (it != of->user_list.end()) return;
         of->user_list.emplace_back(by);
@@ -280,6 +290,7 @@ protected:
     ///
     /// This is a low-level API. Prefer to use `children()`
     /// instead.
+    [[nodiscard]]
     auto Children() -> Generator<Value**>;
 
     /// Erase this instruction without checking if it
@@ -289,7 +300,7 @@ protected:
     /// Remove a use by an instruction.
     static void RemoveUse(Value* of_value, Inst* by) {
         if (not is<UseTrackingValue>(of_value)) return;
-        auto of = as<UseTrackingValue>(of_value);
+        auto* of = as<UseTrackingValue>(of_value);
         auto it = rgs::find(of->user_list, by);
         if (it == of->user_list.end()) return;
         of->user_list.erase(it);
@@ -304,19 +315,22 @@ protected:
     }
 
 public:
-    virtual ~Inst() = default;
+    ~Inst() override = default;
 
     /// Get the parent block.
+    [[nodiscard]]
     auto block() const -> Block* { return parent; }
 
     /// Iterate over the children of this instruction.
+    [[nodiscard]]
     auto children() const -> Generator<Value*>;
 
     /// Iterate over all children of a certain instruction type.
     template <std::derived_from<Value> Inst>
+    [[nodiscard]]
     auto children_of_kind() const -> Generator<Inst*> {
-        for (auto v : children())
-            if (auto c = cast<Inst>(v))
+        for (auto* v : children())
+            if (auto* c = cast<Inst>(v))
                 co_yield c;
     }
 
@@ -331,14 +345,17 @@ public:
     auto instructions_before_this() -> std::span<Inst*>;
 
     /// Check if this is a terminator instruction.
-    bool is_terminator() const {
+    [[nodiscard]]
+    auto is_terminator() const -> bool {
         return kind() >= Value::Kind::Branch and kind() <= Value::Kind::Unreachable;
     }
 
     /// Get the source location of this instruction.
-    auto location() const -> Location { return loc; }
+    [[nodiscard]]
+    auto location() const -> Location { return _location; }
 
     /// Get the associated machine instruction.
+    [[nodiscard]]
     auto machine_inst() const -> MInst* { return minst; }
 
     /// Set the associated machine instruction.
@@ -371,8 +388,13 @@ public:
     void replace_with(Value* v);
 
     /// RTTI.
-    static bool classof(Value* v) { return +v->kind() >= +Kind::Alloca; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return +v->kind() >= +Kind::Alloca; }
 };
+static_assert(
+    std::has_virtual_destructor_v<Inst>,
+    "IR Inst type must have virtual destructor (so that derived class allocated members may be freed)"
+);
 
 /// A basic block.
 class Block : public UseTrackingValue {
@@ -395,30 +417,34 @@ class Block : public UseTrackingValue {
     /// to simplify dead code elimination and computing predecessors.
 
 public:
-    Block(std::string n = "")
+    explicit Block(std::string n = "")
         : UseTrackingValue(Kind::Block),
           block_name(std::move(n)) {}
 
     /// Get an iterator to the first instruction in this block.
+    [[nodiscard]]
     auto begin() const -> ConstIterator { return {inst_list, inst_list.begin()}; }
 
     /// Get an iterator to the last instruction in this block.
+    [[nodiscard]]
     auto end() const -> ConstIterator { return {inst_list, inst_list.end()}; }
 
     /// Check whether this block has a terminator.
-    bool closed() const { return terminator() != nullptr; }
+    [[nodiscard]]
+    auto closed() const -> bool { return terminator() != nullptr; }
 
     /// Create a PHI node in this block.
     ///
     /// For scheduling purposes, all PHI nodes in a block
     /// *must* be at the very beginning of the block, so
     /// this will insert a new PHI after all existing PHIs.
-    auto create_phi(Type* type, Location loc = {}) -> PhiInst*;
+    auto create_phi(Type* type, Location location = {}) -> PhiInst*;
 
     /// Erase this block and all instructions in it.
     void erase();
 
     /// Get the parent function.
+    [[nodiscard]]
     auto function() const -> Function* { return parent; }
 
     /// Set the parent function.
@@ -426,9 +452,11 @@ public:
 
     /// Check if this block has another block as one
     /// of its predecessors.
-    bool has_predecessor(Block* block) const;
+    [[nodiscard]]
+    auto has_predecessor(Block* block) const -> bool;
 
     /// Get the index of this block in the parent function.
+    [[nodiscard]]
     auto id() const -> usz;
 
     /// Insert an instruction at the end of this block.
@@ -450,6 +478,7 @@ public:
     auto instructions() -> std::vector<Inst*>& { return inst_list; }
 
     /// Get the associated machine block.
+    [[nodiscard]]
     auto machine_block() const -> MBlock* { return mblock; }
 
     /// Set the associated machine block.
@@ -473,12 +502,14 @@ public:
     void merge(Block* b);
 
     /// Get the name of this block.
+    [[nodiscard]]
     auto name() const -> const std::string& { return block_name; }
 
     /// Set the name of this block.
     void name(std::string n) { block_name = std::move(n); }
 
     /// Get the number of predecessors of this block.
+    [[nodiscard]]
     auto predecessor_count() const -> usz;
 
     /// Get the successors of this block.
@@ -486,21 +517,25 @@ public:
     /// If the block’s terminator is a conditional branch whose
     /// then and else blocks are the same, only one successor
     /// will be returned.
+    [[nodiscard]]
     auto successors() const -> Generator<Block*>;
 
     /// Get the number of different blocks this block may branch to.
+    [[nodiscard]]
     auto successor_count() const -> usz;
 
     /// Get the terminator instruction of this block; may return nullptr.
+    [[nodiscard]]
     auto terminator() const -> Inst* {
         if (inst_list.empty()) return nullptr;
-        auto i = inst_list.back();
+        auto* i = inst_list.back();
         if (not i->is_terminator()) return nullptr;
         return i;
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Block; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Block; }
 };
 
 /// An IR function.
@@ -520,7 +555,7 @@ private:
     std::vector<Parameter*> param_list{};
 
     /// The source location of this function.
-    Location loc;
+    Location _location;
 
     /// The parent module of this function.
     Module* mod;
@@ -542,10 +577,11 @@ public:
         FunctionType* ty,
         Linkage linkage,
         CallConv calling_convention,
-        Location l = {}
+        Location location = {}
     );
 
     /// Get an iterator to the first block in this function.
+    [[nodiscard]]
     auto begin() const { return block_list.begin(); }
 
     void append_block(Block* b) {
@@ -554,37 +590,45 @@ public:
     }
 
     /// Get the blocks in this function.
+    [[nodiscard]]
     auto blocks() -> std::vector<Block*>& { return block_list; }
 
     /// Get the calling convention of this function.
+    [[nodiscard]]
     auto call_conv() const -> CallConv { return cc; }
 
     /// Set the calling convention of this function.
     void call_conv(CallConv c) { cc = c; }
 
     /// Get an iterator to the end of the block list.
+    [[nodiscard]]
     auto end() const { return block_list.end(); }
 
     /// Get the entry block of this function, if any.
+    [[nodiscard]]
     auto entry() const -> Block* {
         if (block_list.empty()) return nullptr;
         return block_list.front();
     }
 
     /// Get the source location of this function.
-    auto location() const -> Location { return loc; }
+    [[nodiscard]]
+    auto location() const -> Location { return _location; }
 
     /// Get the associated machine function.
+    [[nodiscard]]
     auto machine_function() const -> MFunction* { return mfunc; }
 
     /// Set the associated machine function.
     void machine_function(MFunction* m) { mfunc = m; }
 
     /// Get the parent module of this function.
+    [[nodiscard]]
     auto module() const -> Module* { return mod; }
 
     // Get the names of this function.
-    auto names() const -> const std::vector<IRName> { return func_names; }
+    [[nodiscard]]
+    auto names() const -> std::vector<IRName> { return func_names; }
 
     // Add a name to this function.
     void add_name(std::string n, Linkage l) {
@@ -596,40 +640,48 @@ public:
     /// \param i The index of the parameter.
     /// \return The parameter value of the i-th parameter upon
     ///     entry to this function.
+    [[nodiscard]]
     auto param(usz i) const -> Parameter* {
         LCC_ASSERT(i < param_list.size(), "Parameter index out of bounds");
         return param_list[i];
     }
 
     /// Get the number of parameters.
+    [[nodiscard]]
     auto param_count() const -> size_t { return param_list.size(); }
 
     // NOTE: For lowering
+    [[nodiscard]]
     auto params() -> std::vector<Parameter*>& { return param_list; }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Function; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Function; }
 };
 
 /// A parameter reference.
 class Parameter : public UseTrackingValue {
-    /// The parameter index.
-    u32 i;
-
     /// Only the Function class should be able to create these.
     friend Function;
     // NOTE: For lowering
     friend Module;
+
+    /// The parameter index.
+    u32 i{};
+
     Parameter(Type* ty, u32 idx) : UseTrackingValue(Kind::Parameter, ty), i(idx) {}
 public:
     /// Get the parameter index.
+    [[nodiscard]]
     auto index() const -> u32 { return i; }
 
     /// NOTE: For lowering
+    [[nodiscard]]
     auto index() -> u32& { return i; }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Parameter; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Parameter; }
 };
 
 /// ============================================================================
@@ -640,16 +692,18 @@ class AllocaInst : public Inst {
     friend Inst;
     friend parser::Parser;
 
-    Type* _allocated_type;
+    Type* _allocated_type{};
 
 public:
-    AllocaInst(Type* ty, Location loc = {})
-        : Inst(Kind::Alloca, Type::PtrTy, loc), _allocated_type(ty) {}
+    explicit AllocaInst(Type* ty, Location location = {})
+        : Inst(Kind::Alloca, Type::PtrTy, location), _allocated_type(ty) {}
 
-    Type* allocated_type() { return _allocated_type; }
+    [[nodiscard]]
+    auto allocated_type() -> Type* { return _allocated_type; }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Alloca; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Alloca; }
 };
 
 /// A call instruction.
@@ -684,42 +738,48 @@ class CallInst : public Inst {
     bool force_inline : 1 = false;
 
     /// Used by the IR Parser.
-    CallInst(FunctionType* ftype, Location loc)
-        : Inst(Kind::Call, ftype->ret(), loc),
-          callee_type(ftype) {}
+    explicit CallInst(FunctionType* ftype, Location location)
+        : Inst(Kind::Call, ftype->ret(), location),
+          callee_type(ftype), cc(CallConv::C) {}
 
 public:
-    CallInst(
+    explicit CallInst(
         Value* callee,
-        FunctionType* callee_type,
-        std::vector<Value*> arguments,
-        Location loc = {},
-        CallConv cc = {}
-    ) : Inst(Kind::Call, callee_type->ret(), loc),
+        FunctionType* callee_ty,
+        std::vector<Value*> arguments_,
+        Location location = {},
+        CallConv calling_convention = {}
+    ) : Inst(Kind::Call, callee_ty->ret(), location),
         callee_value(callee),
-        callee_type(callee_type),
-        arguments(std::move(arguments)),
-        cc(cc) {
+        callee_type(callee_ty),
+        arguments(std::move(arguments_)),
+        cc(calling_convention) {
         AddUse(callee_value, this);
-        for (auto a : this->arguments) AddUse(a, this);
+        for (auto* a : this->arguments) AddUse(a, this);
     }
 
     /// Get the arguments.
+    [[nodiscard]]
     auto args() const -> const std::vector<Value*>& { return arguments; }
 
     /// Get the calling convention.
+    [[nodiscard]]
     auto call_conv() const -> CallConv { return cc; }
 
     /// Get the callee.
+    [[nodiscard]]
     auto callee() const -> Value* { return callee_value; }
 
     /// Get the callee type.
+    [[nodiscard]]
     auto function_type() const -> FunctionType* { return callee_type; }
 
     /// Get whether this is annotated with __builtin_inline.
+    [[nodiscard]]
     auto is_force_inline() const -> bool { return force_inline; }
 
     /// Get whether this is a tail call.
+    [[nodiscard]]
     auto is_tail_call() const -> bool { return tail_call; }
 
     /// Mark that this has to be inlined.
@@ -729,7 +789,8 @@ public:
     void set_tail_call() { tail_call = true; }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Call; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Call; }
 };
 
 /// Backend intrinsic.
@@ -744,23 +805,26 @@ class IntrinsicInst : public Inst {
     std::vector<Value*> operand_list;
 
 public:
-    IntrinsicInst(
-        IntrinsicKind intrinsic,
+    explicit IntrinsicInst(
+        IntrinsicKind intrinsic_,
         std::vector<Value*> operands,
-        Location loc = {}
-    ) : Inst(Kind::Intrinsic, Type::UnknownTy, loc),
-        intrinsic(intrinsic), operand_list(std::move(operands)) {
-        for (auto o : operand_list) AddUse(o, this);
+        Location location = {}
+    ) : Inst(Kind::Intrinsic, Type::UnknownTy, location),
+        intrinsic(intrinsic_), operand_list(std::move(operands)) {
+        for (auto* o : operand_list) AddUse(o, this);
     }
 
     /// Get the intrinsic ID.
+    [[nodiscard]]
     auto intrinsic_kind() const -> IntrinsicKind { return intrinsic; }
 
     /// Get the operands.
+    [[nodiscard]]
     auto operands() const -> const std::vector<Value*>& { return operand_list; }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Intrinsic; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Intrinsic; }
 };
 
 /// Base class for GEP/GMP.
@@ -775,10 +839,10 @@ protected:
     Value* index{};
 
     /// The element type.
-    Type* element_type;
+    Type* element_type{};
 
-    GEPBaseInst(Kind k, Type* elementType, Value* ptr, Value* idx, Location loc = {})
-        : Inst(k, Type::PtrTy, loc),
+    explicit GEPBaseInst(Kind k, Type* elementType, Value* ptr, Value* idx, Location location = {})
+        : Inst(k, Type::PtrTy, location),
           pointer(ptr),
           index(idx),
           element_type(elementType) {
@@ -788,16 +852,20 @@ protected:
     }
 
 public:
+    [[nodiscard]]
     auto base_type() const -> Type* { return element_type; }
 
     /// Get the base pointer.
+    [[nodiscard]]
     auto ptr() const -> Value* { return pointer; }
 
     /// Get the index.
+    [[nodiscard]]
     auto idx() const -> Value* { return index; }
 
     /// RTTI.
-    static bool classof(Value* v) {
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool {
         return v->kind() == Kind::GetElementPtr
             or v->kind() == Kind::GetMemberPtr;
     }
@@ -815,12 +883,12 @@ class GEPInst : public GEPBaseInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    GEPInst(Type* elem, Location loc)
-        : GEPBaseInst(Kind::GetElementPtr, elem, nullptr, nullptr, loc) {}
+    explicit GEPInst(Type* elem, Location location)
+        : GEPBaseInst(Kind::GetElementPtr, elem, nullptr, nullptr, location) {}
 
 public:
-    GEPInst(Type* elementType, Value* arrayPointer, Value* arrayIndex, Location loc = {})
-        : GEPBaseInst(Kind::GetElementPtr, elementType, arrayPointer, arrayIndex, loc) {
+    explicit GEPInst(Type* elementType, Value* arrayPointer, Value* arrayIndex, Location location = {})
+        : GEPBaseInst(Kind::GetElementPtr, elementType, arrayPointer, arrayIndex, location) {
         LCC_ASSERT(
             pointer->type() == Type::PtrTy or is<ArrayType>(pointer->type()),
             "GEPInst may only operate on arrays or opaque pointers, which `{}` is not",
@@ -829,7 +897,8 @@ public:
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::GetElementPtr; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::GetElementPtr; }
 };
 
 // Get the Nth member of struct pointed to by ptr().
@@ -838,12 +907,12 @@ class GetMemberPtrInst : public GEPBaseInst {
     friend parser::Parser;
 
     // NOTE: Used by the IR parser.
-    GetMemberPtrInst(Type* structType, Location loc)
-        : GEPBaseInst(Kind::GetMemberPtr, structType, nullptr, nullptr, loc) {}
+    explicit GetMemberPtrInst(Type* structType, Location location)
+        : GEPBaseInst(Kind::GetMemberPtr, structType, nullptr, nullptr, location) {}
 
 public:
-    GetMemberPtrInst(Type* structType, Value* structPointer, Value* memberIndex, Location loc = {})
-        : GEPBaseInst(Kind::GetMemberPtr, structType, structPointer, memberIndex, loc) {
+    explicit GetMemberPtrInst(Type* structType, Value* structPointer, Value* memberIndex, Location location = {})
+        : GEPBaseInst(Kind::GetMemberPtr, structType, structPointer, memberIndex, location) {
         LCC_ASSERT(
             pointer->type() == Type::PtrTy,
             "GetMemberInst may only operate on opaque pointers, which `{}` is not",
@@ -852,10 +921,12 @@ public:
     }
 
     /// Get the struct type we are calculating the offset of a member of.
+    [[nodiscard]]
     auto struct_type() const -> StructType* { return as<StructType>(element_type); }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::GetMemberPtr; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::GetMemberPtr; }
 };
 
 /// A load instruction.
@@ -867,23 +938,25 @@ class LoadInst : public Inst {
     Value* pointer{};
 
     /// Used by the IR parser.
-    LoadInst(Type* ty, Location loc = {}) : Inst(Kind::Load, ty, loc) {}
+    explicit LoadInst(Type* ty, Location location = {}) : Inst(Kind::Load, ty, location) {}
 
 public:
-    LoadInst(Type* ty, Value* ptr, Location loc = {})
-        : Inst(Kind::Load, ty, loc), pointer(ptr) {
+    explicit LoadInst(Type* ty, Value* ptr, Location location = {})
+        : Inst(Kind::Load, ty, location), pointer(ptr) {
         LCC_ASSERT(ptr->type() == Type::PtrTy, "IR: LoadInst can only load from pointers, which {} is not", *ty);
         AddUse(pointer, this);
     }
 
     /// Get the pointer to load from.
+    [[nodiscard]]
     auto ptr() const -> Value* { return pointer; }
 
     /// Replace the pointer.
     void ptr(Value* v) { UpdateOperand(pointer, v); }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Load; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Load; }
 };
 
 /// A store instruction.
@@ -898,30 +971,33 @@ class StoreInst : public Inst {
     Value* pointer{};
 
     /// Used by the IR parser.
-    StoreInst(Location loc = {}) : Inst(Kind::Store, Type::VoidTy, loc) {}
+    explicit StoreInst(Location location = {}) : Inst(Kind::Store, Type::VoidTy, location) {}
 
 public:
-    StoreInst(Value* val, Value* ptr, Location loc = {})
-        : Inst(Kind::Store, Type::VoidTy, loc), value(val), pointer(ptr) {
+    explicit StoreInst(Value* val, Value* ptr, Location location = {})
+        : Inst(Kind::Store, Type::VoidTy, location), value(val), pointer(ptr) {
         LCC_ASSERT(ptr->type() == Type::PtrTy, "StoreInst can only store to pointers");
         AddUse(value, this);
         AddUse(pointer, this);
     }
 
     /// Get the value to store.
+    [[nodiscard]]
     auto val() const -> Value* { return value; }
 
     /// Replace the value.
     void val(Value* v) { UpdateOperand(value, v); }
 
     /// Get the pointer to store to.
+    [[nodiscard]]
     auto ptr() const -> Value* { return pointer; }
 
     /// Replace the pointer.
     void ptr(Value* v) { UpdateOperand(pointer, v); }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Store; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Store; }
 };
 
 /// PHI instruction.
@@ -948,10 +1024,11 @@ private:
     std::vector<IncomingValue> incoming{};
 
 public:
-    PhiInst(Type* ty, Location loc = {})
-        : Inst(Kind::Phi, ty, loc) {}
+    explicit PhiInst(Type* ty, Location location = {})
+        : Inst(Kind::Phi, ty, location) {}
 
     /// Get an iterator to the start of the incoming values.
+    [[nodiscard]]
     auto begin() const -> ConstIterator { return {incoming, incoming.begin()}; }
 
     /// Remove all operands.
@@ -982,9 +1059,11 @@ public:
     }
 
     /// Get an iterator to the end of the incoming values.
+    [[nodiscard]]
     auto end() const -> ConstIterator { return {incoming, incoming.end()}; }
 
     /// Get the incoming values.
+    [[nodiscard]]
     auto operands() const -> const std::vector<IncomingValue>& { return incoming; }
 
     /// Get the incoming value for a block, if any.
@@ -1045,7 +1124,8 @@ public:
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Phi; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Phi; }
 };
 
 /// ============================================================================
@@ -1062,22 +1142,24 @@ class BranchInst : public Inst {
     Block* target_block{};
 
     /// Used by the IR parser.
-    BranchInst(Location loc = {}) : Inst(Kind::Branch, Type::VoidTy, loc) {}
+    explicit BranchInst(Location location = {}) : Inst(Kind::Branch, Type::VoidTy, location) {}
 
 public:
-    BranchInst(Block* target, Location loc = {})
-        : Inst(Kind::Branch, Type::UnknownTy, loc), target_block(target) {
+    explicit BranchInst(Block* target, Location location = {})
+        : Inst(Kind::Branch, Type::UnknownTy, location), target_block(target) {
         AddUse(target_block, this);
     }
 
     /// Get the target block.
+    [[nodiscard]]
     auto target() const -> Block* { return target_block; }
 
     /// Replace the target with another block.
     void target(Block* b) { UpdateOperand(target_block, b); }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Branch; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Branch; }
 };
 
 /// Conditional branch instruction.
@@ -1089,47 +1171,51 @@ class CondBranchInst : public Inst {
     Value* condition{};
 
     /// The block to branch to if the condition is true.
-    Block* then_{};
+    Block* then{};
 
     /// The block to branch to if the condition is false.
-    Block* else_{};
+    Block* otherwise{};
 
     /// Used by the IR parser.
-    CondBranchInst(Location loc = {}) : Inst(Kind::CondBranch, Type::VoidTy, loc) {}
+    explicit CondBranchInst(Location location = {}) : Inst(Kind::CondBranch, Type::VoidTy, location) {}
 
 public:
-    CondBranchInst(
+    explicit CondBranchInst(
         Value* cond,
         Block* then_,
-        Block* else_,
-        Location loc = {}
-    ) : Inst(Kind::CondBranch, Type::UnknownTy, loc),
-        condition(cond), then_(then_), else_(else_) {
+        Block* otherwise_,
+        Location location = {}
+    ) : Inst(Kind::CondBranch, Type::UnknownTy, location),
+        condition(cond), then(then_), otherwise(otherwise_) {
         AddUse(condition, this);
-        AddUse(then_, this);
-        AddUse(else_, this);
+        AddUse(then, this);
+        AddUse(otherwise, this);
     }
 
     /// Get the condition.
+    [[nodiscard]]
     auto cond() const -> Value* { return condition; }
 
     /// Replace the condition.
     void cond(Value* v) { UpdateOperand(condition, v); }
 
     /// Get the block to branch to if the condition is false.
-    auto else_block() const -> Block* { return else_; }
+    [[nodiscard]]
+    auto else_block() const -> Block* { return otherwise; }
 
     /// Replace the else block.
-    void else_block(Block* b) { UpdateOperand(else_, b); }
+    void else_block(Block* b) { UpdateOperand(otherwise, b); }
 
     /// Get the block to branch to if the condition is true.
-    auto then_block() const -> Block* { return then_; }
+    [[nodiscard]]
+    auto then_block() const -> Block* { return then; }
 
     /// Replace the then block.
-    void then_block(Block* b) { UpdateOperand(then_, b); }
+    void then_block(Block* b) { UpdateOperand(then, b); }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::CondBranch; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::CondBranch; }
 };
 
 /// Return instruction.
@@ -1141,22 +1227,25 @@ class ReturnInst : public Inst {
     Value* value{};
 
 public:
-    ReturnInst(Value* val, Location loc = {})
-        : Inst(Kind::Return, Type::VoidTy, loc), value(val) {
+    explicit ReturnInst(Value* val, Location location = {})
+        : Inst(Kind::Return, Type::VoidTy, location), value(val) {
         if (value) AddUse(value, this);
     }
 
     /// Check if this instruction returns a value.
+    [[nodiscard]]
     auto has_value() const -> bool { return value != nullptr; }
 
     /// Get the value to return. This may be null if this is a void return.
+    [[nodiscard]]
     auto val() const -> Value* { return value; }
 
     /// Replace the value.
     void val(Value* v) { UpdateOperand(value, v); }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Return; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Return; }
 };
 
 /// Unreachable instruction.
@@ -1165,11 +1254,12 @@ class UnreachableInst : public Inst {
     friend parser::Parser;
 
 public:
-    UnreachableInst(Location loc = {})
-        : Inst(Kind::Unreachable, Type::VoidTy, loc) {}
+    explicit UnreachableInst(Location location = {})
+        : Inst(Kind::Unreachable, Type::VoidTy, location) {}
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Unreachable; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Unreachable; }
 };
 
 /// ============================================================================
@@ -1188,7 +1278,7 @@ class BinaryInst : public Inst {
 
 protected:
     /// Assert that two operands have the same type.
-    void AssertSameType(Value* l, Value* r) {
+    static void AssertSameType(Value* l, Value* r) {
         LCC_ASSERT(
             l->type() == r->type(),
             "Left and right side of binary operand (check backtrace for which one) must have the same type, but was {} and {}",
@@ -1198,20 +1288,22 @@ protected:
     }
 
 public:
-    BinaryInst(Kind k, Value* l, Value* r, Type* ty, Location loc = {})
-        : Inst(k, ty, loc), left(l), right(r) {
+    explicit BinaryInst(Kind k, Value* lhs, Value* rhs, Type* ty, Location location = {})
+        : Inst(k, ty, location), left(lhs), right(rhs) {
         /// IR parser may pass nullptr here.
         if (left) AddUse(left, this);
         if (right) AddUse(right, this);
     }
 
     /// Get the left operand.
+    [[nodiscard]]
     auto lhs() const -> Value* { return left; }
 
     /// Replace the left operand.
     void lhs(Value* v) { UpdateOperand(left, v); }
 
     /// Get the right operand.
+    [[nodiscard]]
     auto rhs() const -> Value* { return right; }
 
     /// Replace the right operand.
@@ -1221,7 +1313,8 @@ public:
     void swap_operands() { std::swap(left, right); }
 
     /// RTTI.
-    static bool classof(Value* v) { return +v->kind() >= +Kind::Add; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return +v->kind() >= +Kind::Add; }
 };
 
 /// An add instruction.
@@ -1229,16 +1322,17 @@ class AddInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    AddInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Add, nullptr, nullptr, ty, loc) {}
+    explicit AddInst(Type* ty, Location location = {}) : BinaryInst(Kind::Add, nullptr, nullptr, ty, location) {}
 
 public:
-    AddInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::Add, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit AddInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::Add, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Add; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Add; }
 };
 
 /// A subtract instruction.
@@ -1246,16 +1340,17 @@ class SubInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    SubInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Sub, nullptr, nullptr, ty, loc) {}
+    explicit SubInst(Type* ty, Location location = {}) : BinaryInst(Kind::Sub, nullptr, nullptr, ty, location) {}
 
 public:
-    SubInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::Sub, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit SubInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::Sub, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Sub; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Sub; }
 };
 
 /// A multiply instruction.
@@ -1263,16 +1358,17 @@ class MulInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    MulInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Mul, nullptr, nullptr, ty, loc) {}
+    explicit MulInst(Type* ty, Location location = {}) : BinaryInst(Kind::Mul, nullptr, nullptr, ty, location) {}
 
 public:
-    MulInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::Mul, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit MulInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::Mul, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Mul; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Mul; }
 };
 
 /// A signed divide instruction.
@@ -1280,16 +1376,17 @@ class SDivInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    SDivInst(Type* ty, Location loc = {}) : BinaryInst(Kind::SDiv, nullptr, nullptr, ty, loc) {}
+    explicit SDivInst(Type* ty, Location location = {}) : BinaryInst(Kind::SDiv, nullptr, nullptr, ty, location) {}
 
 public:
-    SDivInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::SDiv, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit SDivInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::SDiv, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::SDiv; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::SDiv; }
 };
 
 /// A signed remainder instruction.
@@ -1297,16 +1394,17 @@ class SRemInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    SRemInst(Type* ty, Location loc = {}) : BinaryInst(Kind::SRem, nullptr, nullptr, ty, loc) {}
+    explicit SRemInst(Type* ty, Location location = {}) : BinaryInst(Kind::SRem, nullptr, nullptr, ty, location) {}
 
 public:
-    SRemInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::SRem, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit SRemInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::SRem, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::SRem; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::SRem; }
 };
 
 /// An unsigned divide instruction.
@@ -1314,16 +1412,17 @@ class UDivInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    UDivInst(Type* ty, Location loc = {}) : BinaryInst(Kind::UDiv, nullptr, nullptr, ty, loc) {}
+    explicit UDivInst(Type* ty, Location location = {}) : BinaryInst(Kind::UDiv, nullptr, nullptr, ty, location) {}
 
 public:
-    UDivInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::UDiv, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit UDivInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::UDiv, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::UDiv; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::UDiv; }
 };
 
 /// An unsigned remainder instruction.
@@ -1331,16 +1430,17 @@ class URemInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    URemInst(Type* ty, Location loc = {}) : BinaryInst(Kind::URem, nullptr, nullptr, ty, loc) {}
+    explicit URemInst(Type* ty, Location location = {}) : BinaryInst(Kind::URem, nullptr, nullptr, ty, location) {}
 
 public:
-    URemInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::URem, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit URemInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::URem, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::URem; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::URem; }
 };
 
 /// A left shift instruction.
@@ -1348,16 +1448,17 @@ class ShlInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    ShlInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Shl, nullptr, nullptr, ty, loc) {}
+    explicit ShlInst(Type* ty, Location location = {}) : BinaryInst(Kind::Shl, nullptr, nullptr, ty, location) {}
 
 public:
-    ShlInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::Shl, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit ShlInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::Shl, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Shl; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Shl; }
 };
 
 /// An arithmetic right shift.
@@ -1365,16 +1466,17 @@ class SarInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    SarInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Sar, nullptr, nullptr, ty, loc) {}
+    explicit SarInst(Type* ty, Location location = {}) : BinaryInst(Kind::Sar, nullptr, nullptr, ty, location) {}
 
 public:
-    SarInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::Sar, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit SarInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::Sar, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Sar; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Sar; }
 };
 
 /// A logical right shift.
@@ -1382,16 +1484,17 @@ class ShrInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    ShrInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Shr, nullptr, nullptr, ty, loc) {}
+    explicit ShrInst(Type* ty, Location location = {}) : BinaryInst(Kind::Shr, nullptr, nullptr, ty, location) {}
 
 public:
-    ShrInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::Shr, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit ShrInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::Shr, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Shr; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Shr; }
 };
 
 /// A bitwise and instruction.
@@ -1399,16 +1502,17 @@ class AndInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    AndInst(Type* ty, Location loc = {}) : BinaryInst(Kind::And, nullptr, nullptr, ty, loc) {}
+    explicit AndInst(Type* ty, Location location = {}) : BinaryInst(Kind::And, nullptr, nullptr, ty, location) {}
 
 public:
-    AndInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::And, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit AndInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::And, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::And; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::And; }
 };
 
 /// A bitwise or instruction.
@@ -1416,16 +1520,17 @@ class OrInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    OrInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Or, nullptr, nullptr, ty, loc) {}
+    explicit OrInst(Type* ty, Location location = {}) : BinaryInst(Kind::Or, nullptr, nullptr, ty, location) {}
 
 public:
-    OrInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::Or, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit OrInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::Or, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Or; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Or; }
 };
 
 /// A bitwise xor instruction.
@@ -1433,16 +1538,17 @@ class XorInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    XorInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Xor, nullptr, nullptr, ty, loc) {}
+    explicit XorInst(Type* ty, Location location = {}) : BinaryInst(Kind::Xor, nullptr, nullptr, ty, location) {}
 
 public:
-    XorInst(Value* l, Value* r, Location loc = {})
-        : BinaryInst(Kind::Or, l, r, l->type(), loc) {
-        AssertSameType(l, r);
+    explicit XorInst(Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(Kind::Or, lhs, rhs, lhs->type(), location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Xor; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Xor; }
 };
 
 /// Base class for comparison instructions; this is just so we
@@ -1451,12 +1557,13 @@ class CompareInst : public BinaryInst {
     friend parser::Parser;
 
 protected:
-    CompareInst(Kind k, Value* l, Value* r, Location loc = {})
-        : BinaryInst(k, l, r, Type::I1Ty, loc) {}
+    explicit CompareInst(Kind k, Value* lhs, Value* rhs, Location location = {})
+        : BinaryInst(k, lhs, rhs, Type::I1Ty, location) {}
 
 public:
     /// RTTI.
-    static bool classof(Value* v) { return +v->kind() >= +Kind::Eq; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return +v->kind() >= +Kind::Eq; }
 };
 
 /// Instruction that compares two values for equality.
@@ -1464,16 +1571,17 @@ class EqInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    EqInst(Location loc = {}) : CompareInst(Kind::Eq, nullptr, nullptr, loc) {}
+    explicit EqInst(Location location = {}) : CompareInst(Kind::Eq, nullptr, nullptr, location) {}
 
 public:
-    EqInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::Eq, l, r, loc) {
-        AssertSameType(l, r);
+    explicit EqInst(Value* lhs, Value* rhs, Location location = {})
+        : CompareInst(Kind::Eq, lhs, rhs, location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Eq; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Eq; }
 };
 
 /// Instruction that compares two values for inequality.
@@ -1481,16 +1589,17 @@ class NeInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    NeInst(Location loc = {}) : CompareInst(Kind::Ne, nullptr, nullptr, loc) {}
+    explicit NeInst(Location location = {}) : CompareInst(Kind::Ne, nullptr, nullptr, location) {}
 
 public:
-    NeInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::Ne, l, r, loc) {
-        AssertSameType(l, r);
+    explicit NeInst(Value* lhs, Value* rhs, Location location = {})
+        : CompareInst(Kind::Ne, lhs, rhs, location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Ne; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Ne; }
 };
 
 /// Instruction that compares two values for less-than.
@@ -1498,32 +1607,34 @@ class SLtInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    SLtInst(Location loc = {}) : CompareInst(Kind::SLt, nullptr, nullptr, loc) {}
+    explicit SLtInst(Location location = {}) : CompareInst(Kind::SLt, nullptr, nullptr, location) {}
 
 public:
-    SLtInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::SLt, l, r, loc) {
-        AssertSameType(l, r);
+    explicit SLtInst(Value* lhs, Value* rhs, Location location = {})
+        : CompareInst(Kind::SLt, lhs, rhs, location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::SLt; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::SLt; }
 };
 
 class ULtInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    ULtInst(Location loc = {}) : CompareInst(Kind::ULt, nullptr, nullptr, loc) {}
+    explicit ULtInst(Location location = {}) : CompareInst(Kind::ULt, nullptr, nullptr, location) {}
 
 public:
-    ULtInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::ULt, l, r, loc) {
-        AssertSameType(l, r);
+    explicit ULtInst(Value* lhs, Value* rhs, Location location = {})
+        : CompareInst(Kind::ULt, lhs, rhs, location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::ULt; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::ULt; }
 };
 
 /// Instruction that compares two values for less-than-or-equal.
@@ -1531,30 +1642,32 @@ class SLeInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    SLeInst(Location loc = {}) : CompareInst(Kind::SLe, nullptr, nullptr, loc) {}
+    explicit SLeInst(Location location = {}) : CompareInst(Kind::SLe, nullptr, nullptr, location) {}
 public:
-    SLeInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::SLe, l, r, loc) {
-        AssertSameType(l, r);
+    explicit SLeInst(Value* lhs, Value* rhs, Location location = {})
+        : CompareInst(Kind::SLe, lhs, rhs, location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::SLe; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::SLe; }
 };
 
 class ULeInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    ULeInst(Location loc = {}) : CompareInst(Kind::ULe, nullptr, nullptr, loc) {}
+    explicit ULeInst(Location location = {}) : CompareInst(Kind::ULe, nullptr, nullptr, location) {}
 public:
-    ULeInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::ULe, l, r, loc) {
-        AssertSameType(l, r);
+    explicit ULeInst(Value* lhs, Value* rhs, Location location = {})
+        : CompareInst(Kind::ULe, lhs, rhs, location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::ULe; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::ULe; }
 };
 
 /// Instruction that compares two values for greater-than.
@@ -1562,32 +1675,34 @@ class SGtInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    SGtInst(Location loc = {}) : CompareInst(Kind::SGt, nullptr, nullptr, loc) {}
+    explicit SGtInst(Location location = {}) : CompareInst(Kind::SGt, nullptr, nullptr, location) {}
 
 public:
-    SGtInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::SGt, l, r, loc) {
-        AssertSameType(l, r);
+    explicit SGtInst(Value* lhs, Value* rhs, Location location = {})
+        : CompareInst(Kind::SGt, lhs, rhs, location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::SGt; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::SGt; }
 };
 
 class UGtInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    UGtInst(Location loc = {}) : CompareInst(Kind::UGt, nullptr, nullptr, loc) {}
+    explicit UGtInst(Location location = {}) : CompareInst(Kind::UGt, nullptr, nullptr, location) {}
 
 public:
-    UGtInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::UGt, l, r, loc) {
-        AssertSameType(l, r);
+    explicit UGtInst(Value* lhs, Value* rhs, Location location = {})
+        : CompareInst(Kind::UGt, lhs, rhs, location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::UGt; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::UGt; }
 };
 
 /// Instruction that compares two values for greater-than-or-equal.
@@ -1595,32 +1710,34 @@ class SGeInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    SGeInst(Location loc = {}) : CompareInst(Kind::SGe, nullptr, nullptr, loc) {}
+    explicit SGeInst(Location location = {}) : CompareInst(Kind::SGe, nullptr, nullptr, location) {}
 
 public:
-    SGeInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::SGe, l, r, loc) {
-        AssertSameType(l, r);
+    explicit SGeInst(Value* lhs, Value* rhs, Location location = {})
+        : CompareInst(Kind::SGe, lhs, rhs, location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::SGe; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::SGe; }
 };
 
 class UGeInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    UGeInst(Location loc = {}) : CompareInst(Kind::UGe, nullptr, nullptr, loc) {}
+    explicit UGeInst(Location location = {}) : CompareInst(Kind::UGe, nullptr, nullptr, location) {}
 
 public:
-    UGeInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::UGe, l, r, loc) {
-        AssertSameType(l, r);
+    explicit UGeInst(Value* lhs, Value* rhs, Location location = {})
+        : CompareInst(Kind::UGe, lhs, rhs, location) {
+        AssertSameType(lhs, rhs);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::UGe; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::UGe; }
 };
 
 /// Unary instructions.
@@ -1631,20 +1748,22 @@ class UnaryInstBase : public Inst {
     Value* op{};
 
 protected:
-    UnaryInstBase(Kind k, Value* v, Type* ty, Location loc = {})
-        : Inst(k, ty, loc), op(v) {
+    explicit UnaryInstBase(Kind k, Value* v, Type* ty, Location location = {})
+        : Inst(k, ty, location), op(v) {
         /// IR parser may pass nullptr here.
         if (op) AddUse(op, this);
     }
 
 public:
     /// Get the operand.
-    Value* operand() const { return op; }
+    [[nodiscard]]
+    auto operand() const -> Value* { return op; }
 
     /// Set the operand.
     void operand(Value* v) { UpdateOperand(op, v); }
 
-    static bool classof(Value* v) {
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool {
         return +v->kind() >= +Kind::ZExt and +v->kind() <= +Kind::Compl;
     }
 };
@@ -1654,14 +1773,15 @@ class CopyInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    CopyInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::Copy, nullptr, ty, loc) {}
+    explicit CopyInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::Copy, nullptr, ty, location) {}
 
 public:
-    CopyInst(Value* v, Location loc = {})
-        : UnaryInstBase(Kind::Copy, v, v->type(), loc) {}
+    explicit CopyInst(Value* v, Location location = {})
+        : UnaryInstBase(Kind::Copy, v, v->type(), location) {}
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Copy; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Copy; }
 };
 
 /// Zero-extend an integer value.
@@ -1669,14 +1789,15 @@ class ZExtInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    ZExtInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::ZExt, nullptr, ty, loc) {}
+    explicit ZExtInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::ZExt, nullptr, ty, location) {}
 
 public:
-    ZExtInst(Value* v, Type* ty, Location loc = {})
-        : UnaryInstBase(Kind::ZExt, v, ty, loc) {}
+    explicit ZExtInst(Value* v, Type* ty, Location location = {})
+        : UnaryInstBase(Kind::ZExt, v, ty, location) {}
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::ZExt; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::ZExt; }
 };
 
 /// Sign-extend an integer value.
@@ -1684,14 +1805,15 @@ class SExtInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    SExtInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::SExt, nullptr, ty, loc) {}
+    explicit SExtInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::SExt, nullptr, ty, location) {}
 
 public:
-    SExtInst(Value* v, Type* ty, Location loc = {})
-        : UnaryInstBase(Kind::SExt, v, ty, loc) {}
+    explicit SExtInst(Value* v, Type* ty, Location location = {})
+        : UnaryInstBase(Kind::SExt, v, ty, location) {}
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::SExt; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::SExt; }
 };
 
 /// Truncate an integer value.
@@ -1699,14 +1821,15 @@ class TruncInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    TruncInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::Trunc, nullptr, ty, loc) {}
+    explicit TruncInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::Trunc, nullptr, ty, location) {}
 
 public:
-    TruncInst(Value* v, Type* ty, Location loc = {})
-        : UnaryInstBase(Kind::Trunc, v, ty, loc) {}
+    explicit TruncInst(Value* v, Type* ty, Location location = {})
+        : UnaryInstBase(Kind::Trunc, v, ty, location) {}
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Trunc; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Trunc; }
 };
 
 /// Bitcast a value to another type.
@@ -1714,18 +1837,19 @@ class BitcastInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    BitcastInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::Bitcast, nullptr, ty, loc) {}
+    explicit BitcastInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::Bitcast, nullptr, ty, location) {}
 
 public:
-    BitcastInst(Value* v, Type* ty, Location loc = {})
-        : UnaryInstBase(Kind::Bitcast, v, ty, loc) {
+    explicit BitcastInst(Value* v, Type* ty, Location location = {})
+        : UnaryInstBase(Kind::Bitcast, v, ty, location) {
         /// Type we’re casting to must have the same size or
         /// be smaller than the type we’re casting from.
         LCC_ASSERT(ty->bits() <= v->type()->bits(), "Cannot bitcast to larger type");
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Bitcast; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Bitcast; }
 };
 
 /// Negate an integer value.
@@ -1733,14 +1857,15 @@ class NegInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    NegInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::Neg, nullptr, ty, loc) {}
+    explicit NegInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::Neg, nullptr, ty, location) {}
 
 public:
-    NegInst(Value* v, Location loc = {})
-        : UnaryInstBase(Kind::Neg, v, v->type(), loc) {}
+    explicit NegInst(Value* v, Location location = {})
+        : UnaryInstBase(Kind::Neg, v, v->type(), location) {}
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Neg; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Neg; }
 };
 
 /// Bitwise complement of an integer value.
@@ -1748,14 +1873,15 @@ class ComplInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    ComplInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::Compl, nullptr, ty, loc) {}
+    explicit ComplInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::Compl, nullptr, ty, location) {}
 
 public:
-    ComplInst(Value* v, Location loc = {})
-        : UnaryInstBase(Kind::Compl, v, v->type(), loc) {}
+    explicit ComplInst(Value* v, Location location = {})
+        : UnaryInstBase(Kind::Compl, v, v->type(), location) {}
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Compl; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Compl; }
 };
 
 /// ============================================================================
@@ -1766,16 +1892,19 @@ class IntegerConstant : public Value {
     aint _value;
 
 public:
-    IntegerConstant(Type* ty, aint value)
-        : Value(Kind::IntegerConstant, ty), _value(value.trunc(u8(as<IntegerType>(ty)->bits()))) {
+    explicit IntegerConstant(Type* ty, aint value)
+        : Value(Kind::IntegerConstant, ty),
+          _value(value.trunc(u8(as<IntegerType>(ty)->bits()))) {
         LCC_ASSERT(as<IntegerType>(ty)->bits() <= 64, "Integer constants must be 64 bits or less");
     }
 
     /// Get the value.
-    aint value() const { return _value; }
+    [[nodiscard]]
+    auto value() const -> aint { return _value; }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::IntegerConstant; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::IntegerConstant; }
 };
 
 /// Packed array.
@@ -1787,41 +1916,48 @@ class ArrayConstant : public Value {
     bool _is_string_literal = false;
 
 public:
-    ArrayConstant(Type* ty, std::vector<char> _data, bool is_string_literal = false)
+    explicit ArrayConstant(Type* ty, std::vector<char> data, bool is_string_literal = false)
         : Value(Kind::ArrayConstant, ty),
-          _data(std::move(_data)),
+          _data(std::move(data)),
           _is_string_literal(is_string_literal) {}
 
     /// Get an iterator to the start of the data.
+    [[nodiscard]]
     auto begin() const { return _data.begin(); }
 
     /// Get the data.
+    [[nodiscard]]
     auto data() const -> const char* { return _data.data(); }
 
     /// Get an iterator to the end of the data.
+    [[nodiscard]]
     auto end() const { return _data.end(); }
 
     /// Whether this is a string literal.
     ///
     /// This only affects how this array constant is printed
     /// and should not be used for anything else.
+    [[nodiscard]]
     auto is_string_literal() const -> bool { return _is_string_literal; }
 
     /// Get the size.
+    [[nodiscard]]
     auto size() const -> size_t { return _data.size(); }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::ArrayConstant; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::ArrayConstant; }
 };
 
 /// Poison value.
 class PoisonValue : public Value {
 public:
-    PoisonValue(Type* ty)
+    explicit PoisonValue(Type* ty)
         : Value(Kind::Poison, ty) {}
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Poison; }
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::Poison; }
 };
 
 } // namespace lcc

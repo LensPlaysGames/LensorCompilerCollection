@@ -183,20 +183,20 @@ private:
 } // namespace
 } // namespace lcc
 
-lcc::DomTree::DomTree(Function* f, bool compute_dominance_frontiers) : f(f) {
-    if (f->blocks().empty()) return;
+lcc::DomTree::DomTree(Function* function, bool compute_dominance_frontiers) : f(function) {
+    if (function->blocks().empty()) return;
 
     /// Build dominator tree.
-    DomTreeBuilder{idoms, children, f}.Build();
+    DomTreeBuilder{idoms, children, function}.Build();
 
     /// Compute dominance frontiers.
     if (not compute_dominance_frontiers) return;
-    for (auto [i, a] : vws::enumerate(f->blocks())) {
+    for (auto [i, a] : vws::enumerate(function->blocks())) {
         for (auto b : a->successors()) {
             for (Block* x = a; not strictly_dominates(x, b);) {
                 auto xid = x->id();
                 df[xid].push_back(b);
-                x = f->blocks()[idoms[xid]];
+                x = function->blocks()[idoms[xid]];
             }
         }
     }

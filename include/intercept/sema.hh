@@ -17,13 +17,13 @@ class Sema {
     FuncDecl* curr_func;
 
     /// Whether to use colours in diagnostics.
-    bool use_colours;
+    bool _use_colours;
 
-    Sema(Context* ctx, Module& mod, bool use_colours)
+    Sema(Context* ctx, Module& module, bool use_colours)
         : context(ctx),
-          mod(mod),
+          mod(module),
           curr_func(mod.top_level_func()),
-          use_colours(use_colours) {}
+          _use_colours(use_colours) {}
 public:
     /// Perform semantic analysis on the given module.
     ///
@@ -127,7 +127,7 @@ private:
     /// Format a type.
     template <typename Ty>
     requires requires (Ty ty) { cast<Type>(ty); }
-    auto Format(Ty ty) -> std::string { return ty->string(use_colours); }
+    auto Format(Ty ty) -> std::string { return ty->string(_use_colours); }
 
     /// Formatting anything else just passes it through unchanged.
     template <typename Ty>

@@ -15,6 +15,7 @@ namespace lcc {
 /// Note: IR types are immutable and cached and uniqued in the
 /// context. Two IR types are equal, iff their pointers are equal.
 class Type {
+    friend class lcc::Init;
     friend class lcc::Context;
 
 public:
@@ -32,7 +33,7 @@ public:
 
 protected:
     /// Construct a type.
-    explicit Type(Kind kind) : kind(kind) {}
+    explicit constexpr Type(Kind kind_) : kind(kind_) {}
 
 public:
     virtual ~Type() = default;
@@ -73,6 +74,7 @@ public:
 };
 
 class ArrayType : public Type {
+    friend class lcc::Init;
     friend class lcc::Context;
 
     usz _length;
@@ -96,6 +98,7 @@ public:
 
 /// A function type.
 class FunctionType : public Type {
+    friend class lcc::Init;
     friend class lcc::Context;
 
     /// The return type of this function.
@@ -104,14 +107,14 @@ class FunctionType : public Type {
     /// The parameter types of this function.
     std::vector<Type*> param_types;
 
-    bool is_variadic;
+    bool _variadic{false};
 
 private:
-    FunctionType(Type* ret, std::vector<Type*> params, bool is_variadic = false)
+    FunctionType(Type* ret, std::vector<Type*> params, bool variadic = false)
         : Type(Kind::Function),
           return_type(ret),
           param_types(std::move(params)),
-          is_variadic(is_variadic) {}
+          _variadic(variadic) {}
 
 public:
     /// Get or create a function type.
@@ -127,19 +130,20 @@ public:
     auto params() -> std::vector<Type*>& { return param_types; }
 
     /// True if this function type is (C-style) variadic, false otherwise.
-    bool variadic() const { return is_variadic; }
+    bool variadic() const { return _variadic; }
 
     /// RTTI.
     static bool classof(const Type* t) { return t->kind == Kind::Function; }
 };
 
 class IntegerType : public Type {
+    friend class lcc::Init;
     friend class lcc::Context;
 
     usz _width;
 
 private:
-    IntegerType(usz width) : Type(Kind::Integer), _width(width) {}
+    constexpr IntegerType(usz width) : Type(Kind::Integer), _width(width) {}
 
 public:
     static auto Get(Context* ctx, usz width) -> IntegerType*;
@@ -153,6 +157,7 @@ public:
 };
 
 class StructType : public Type {
+    friend class lcc::Init;
     friend class lcc::Context;
 
     std::vector<Type*> _members;

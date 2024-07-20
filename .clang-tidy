@@ -1,0 +1,36 @@
+# ================
+# DISABLED CHECKS AND WHY
+# ================
+# readability-braces-around-statement: We allow `if` with no braces.
+# readability-identifier-length: We do a lot of algorithm stuffs, and single letter variables are common.
+# readability-implicit-bool-conversion: Explicity comparing against nullptr isn't really helpful.
+# google-readability-todo: We do not like (or require) TODO attribution.
+# google-readability-casting: The compiler is smarter than me.
+# fuchsia-trailing-return: Opposite of modernize-use-trailing-return.
+# fuchsia-default-argument: Disallowing default arguments entirely is dumb.
+# fuchsia-overloaded-operator: Disallowing operator overloading entirely is dumb.
+# fuchsia-statically-constructed-objects: Disallowing static objects entirely is dumb.
+# bugprone-easily-swappable-parameters: What the hell do you want me to do about it?
+# misc-non-private-member-variables-in-classes: Structs with helpers exist, among other things.
+# misc-no-recursion: Recursive descent parsers, tree structures, etc. all lend themselves to recursion.
+# cppcoreguidelines-avoid-do-while: No!
+Checks: <
+    *
+    clang-analyzer*
+    clang-diagnostic*
+    -*braces-around-statement*
+    -*identifier-length*
+    -*implicit-bool-conversion*
+    -bugprone-easily-swappable-parameters
+    -llvm*
+    -altera*
+    -android*
+    -google-readability-todo
+    -google-readability-casting
+    -fuchsia-trailing-return
+    -fuchsia-default-argument*
+    -fuchsia-overloaded-operator
+    -fuchsia-statically-constructed-objects
+    -*non-private-member-variables-in-classes
+    -misc-no-recursion
+    -*avoid-do-while*

@@ -57,8 +57,8 @@ class Lexer : public syntax::Lexer<InterceptToken> {
     void HandleMacroDefinition();
 
 protected:
-    Lexer(Context* context, File* file)
-        : syntax::Lexer<Token>(context, file) { NextToken(); }
+    Lexer(Context* ctx, File* file)
+        : syntax::Lexer<Token>(ctx, file) { NextToken(); }
 
     /// Note: Calling LookAhead() invalidates the addresses of
     /// previous lookaheads, if this requires more tokens to be

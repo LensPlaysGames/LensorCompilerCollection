@@ -112,12 +112,12 @@ struct Lexer {
 
 template <typename TToken>
 class SpanLexer : public Lexer<TToken> {
-    std::string_view source;
+    std::string_view _source;
 
 protected:
     SpanLexer(Context* context, std::string_view source)
         : Lexer<TToken>(context, source),
-          source(source) {
+          _source(source) {
         this->NextChar();
     }
 
@@ -128,22 +128,26 @@ protected:
 
 template <typename TToken>
 class FileLexer : public Lexer<TToken> {
-    File* file;
+    File* _file;
 
 protected:
     FileLexer(Context* context, File* file)
         : Lexer<TToken>(context, file),
-          file(file) {
+          _file(file) {
         this->NextChar();
     }
 
     using Lexer<TToken>::Error;
     using Lexer<TToken>::Warning;
 
-    auto FileId() const { return file->file_id(); }
+    auto FileId() const { return _file->file_id(); }
 
     auto CurrentLocation() const {
-        return Location{Lexer<TToken>::CurrentOffset(), (u16) 1, (u16) file->file_id()};
+        return Location{
+            Lexer<TToken>::CurrentOffset(),
+            (decltype(Location::len)) 1,
+            (decltype(Location::file_id)) _file->file_id() //
+        };
     }
 };
 } // namespace lcc::syntax

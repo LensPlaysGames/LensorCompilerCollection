@@ -135,7 +135,7 @@ enum struct FuncAttr {
     ReturnsTwice,
 };
 
-constexpr bool IsExportedLinkage(Linkage link) {
+constexpr auto IsExportedLinkage(Linkage link) -> bool {
     switch (link) {
         case Linkage::LocalVar:
         case Linkage::Internal:
@@ -151,7 +151,7 @@ constexpr bool IsExportedLinkage(Linkage link) {
     LCC_UNREACHABLE();
 }
 
-constexpr bool IsImportedLinkage(Linkage link) {
+constexpr auto IsImportedLinkage(Linkage link) -> bool {
     switch (link) {
         case Linkage::LocalVar:
         case Linkage::Internal:

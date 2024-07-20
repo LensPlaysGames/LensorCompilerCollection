@@ -30,10 +30,10 @@ public:
     }
 
 protected:
-    explicit IRPrinter(bool use_colour) : use_colour(use_colour) {}
+    explicit IRPrinter(bool use_colour) : _use_colour(use_colour) {}
 
-    bool use_colour;
-    utils::Colours C{use_colour};
+    bool _use_colour;
+    utils::Colours C{_use_colour};
     using enum utils::Colour;
 
     /// Couldn’t decide on a colour for temporaries, so...

@@ -3,6 +3,7 @@
 
 namespace lcc {
 class File;
+class Init;
 class Context;
 class Module;
 class Value;
@@ -13,6 +14,6 @@ class MInst;
 class MBlock;
 class MFunction;
 class Type;
-}
+} // namespace lcc
 
 #endif // LCC_FORWARD_HH

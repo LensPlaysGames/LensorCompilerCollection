@@ -75,7 +75,7 @@ using f64 = double;
 
 #define LCC_UNREACHABLE() LCC_ASSERT(false, "Unreachable")
 
-#define LCC_TODO(...) LCC_ASSERT(false, "TODO" __VA_OPT__(": {}" , fmt::format(__VA_ARGS__)))
+#define LCC_TODO(...) LCC_ASSERT(false, "TODO" __VA_OPT__(": {}", fmt::format(__VA_ARGS__)))
 
 template <typename>
 concept always_false = false;
@@ -291,7 +291,7 @@ enum struct Colour {
 /// \endcode
 struct Colours {
     bool use_colours;
-    constexpr Colours(bool use_colours) : use_colours{use_colours} {}
+    constexpr Colours(bool should_use_colours) : use_colours{should_use_colours} {}
     constexpr auto operator()(Colour c) const -> std::string_view {
         if (not use_colours) return "";
         switch (c) {
@@ -322,17 +322,17 @@ constexpr usz MaxBitValue(usz bits) {
     /// Example for 8 bits:
     ///
     /// 0000'0001 | 1
-    /// 1000'0000 | b   := << bits - 1 [== (a) << 7]
+    /// 1000'0000 | b := 1 << bits - 1
     /// 0111'1111 | (b - 1)
     /// 1111'1111 | res := b | (b - 1)
     ///
-    /// Note: the fastest way of doing this on x86_64
-    /// is actually this `-1zu >> -bits`, but that’s
-    /// *super* illegal to write in C++; fortunately,
-    /// the compiler can figure out what we’re doing
-    /// here and will generate the same code.
-    auto b = 1zu << (bits - 1zu);
-    return b | (b - 1zu);
+    /// Note: the fastest way of doing this on x86_64 is actually this
+    ///   `-1zu >> -bits`,
+    /// but that’s *super* illegal to write in C++; fortunately, the
+    /// compiler can figure out what we’re doing here and will generate the
+    /// same code.
+    auto b = usz(1) << (bits - usz(1));
+    return b | (b - usz(1));
 }
 
 /// Determine the width of a number.
@@ -351,9 +351,9 @@ void ReplaceAll(
 ///   auto f = [] <typename T> (int x) { ... };
 ///   invoke_template<int>(f, 42);
 /// \endcode
-template <typename ...TemplateArgs, typename ...Args, typename Templ>
-auto invoke_template(Templ&& t, Args&& ...args) -> decltype(auto) {
-    return std::forward<Templ>(t).template operator() <TemplateArgs...>(std::forward<Args>(args)...);
+template <typename... TemplateArgs, typename... Args, typename Templ>
+auto invoke_template(Templ&& t, Args&&... args) -> decltype(auto) {
+    return std::forward<Templ>(t).template operator()<TemplateArgs...>(std::forward<Args>(args)...);
 }
 
 /// Convert a range to a container.

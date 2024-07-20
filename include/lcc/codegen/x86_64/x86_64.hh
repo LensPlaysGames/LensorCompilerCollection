@@ -7,8 +7,7 @@
 #include <string>
 #include <string_view>
 
-namespace lcc {
-namespace x86_64 {
+namespace lcc::x86_64 {
 
 enum struct Opcode : u32 {
     Poison = u32(lcc::MInst::Kind::ArchStart),
@@ -80,7 +79,7 @@ enum struct RegisterId : u32 {
     RETURN = 0x210,
 };
 
-std::string opcode_to_string(usz opcode);
+auto opcode_to_string(usz opcode) -> std::string;
 
 namespace regs {
 template <char r>
@@ -115,7 +114,7 @@ constexpr auto Special(usz size) -> std::string_view {
         case 8: return ConstexprFormat<"{}{}l", s[0], s[1]>();
     }
 }
-} // namespace x86_64::regs
+} // namespace regs
 
 constexpr auto ToString(Opcode op) -> std::string_view {
     switch (op) {
@@ -188,7 +187,6 @@ constexpr auto ToString(RegisterId id) -> std::string_view {
     return ToString(id, 64);
 }
 
-} // namespace x86_64
-} // namespace lcc
+} // namespace lcc::x86_64
 
 #endif /* LCC_CODEGEN_X86_64_HH */

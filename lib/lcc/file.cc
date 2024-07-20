@@ -43,7 +43,7 @@ auto lcc::File::TempPath(std::string_view extension) -> fs::path {
     /// And some random letters too.
     /// Do NOT use `char` for this because it’s signed on some systems (including mine),
     /// which completely breaks the modulo operation below... Thanks a lot, C.
-    std::array<u8, 8> rand{};
+    std::array<char, 8> rand{};
     rgs::generate(rand, [&] { return rd() % 26 + 'a'; });
 
     /// Create a unique file name.
@@ -52,7 +52,7 @@ auto lcc::File::TempPath(std::string_view extension) -> fs::path {
         pid,
         tid,
         now,
-        std::string_view{(char*) rand.data(), rand.size()}
+        std::string_view{rand}
     );
 
     /// Append it to the temporary directory.
@@ -64,15 +64,15 @@ auto lcc::File::TempPath(std::string_view extension) -> fs::path {
     return f;
 }
 
-bool lcc::File::Write(const void* data, usz size, const fs::path& file) {
-    auto f = std::fopen(file.string().c_str(), "wb");
+auto lcc::File::Write(const void* data, usz size, const fs::path& file) -> bool {
+    auto* f = std::fopen(file.string().c_str(), "wb");
     if (not f) return false;
     defer { std::fclose(f); };
     for (;;) {
         auto written = std::fwrite(data, 1, size, f);
         if (written == size) break;
         if (written < 1) return false;
-        data = (char*) data + written;
+        data = ((const char*) data) + written;
         size -= written;
     }
     return true;
@@ -83,8 +83,8 @@ void lcc::File::WriteOrTerminate(const void* data, usz size, const fs::path& fil
         Diag::Fatal("Failed to write to file '{}': {}", file.string(), std::strerror(errno));
 }
 
-lcc::File::File(Context& ctx, fs::path name, std::vector<char>&& contents)
-    : ctx(ctx), file_path(std::move(name)), contents(std::move(contents)) {}
+lcc::File::File(Context& context, fs::path name, std::vector<char>&& contents)
+    : _context(context), _file_path(std::move(name)), _contents(std::move(contents)) {}
 
 auto lcc::File::Read(const fs::path& path) -> std::vector<char> {
     return LoadFileData(path);

@@ -43,7 +43,7 @@ class CheckedIterator {
     }
 
 public:
-    CheckedIterator(ContainerType& c, IterType it) : container(std::addressof(c)), it(it) {
+    CheckedIterator(ContainerType& c, IterType it_) : container(std::addressof(c)), it(it_) {
         end = container->end();
     }
 

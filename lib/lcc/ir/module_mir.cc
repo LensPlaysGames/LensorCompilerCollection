@@ -13,66 +13,70 @@
 
 namespace lcc {
 
-static auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
+namespace {
+constexpr auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
+    using Kind = Value::Kind;
+    using MKind = MInst::Kind;
     switch (kind) {
         // Not unary or binary instructions
-        case Value::Kind::Function:
-        case Value::Kind::Block:
-        case Value::Kind::IntegerConstant:
-        case Value::Kind::ArrayConstant:
-        case Value::Kind::Poison:
-        case Value::Kind::GlobalVariable:
-        case Value::Kind::Parameter:
-        case Value::Kind::Copy:
-        case Value::Kind::Alloca:
-        case Value::Kind::Call:
-        case Value::Kind::GetElementPtr:
-        case Value::Kind::GetMemberPtr:
-        case Value::Kind::Intrinsic:
-        case Value::Kind::Load:
-        case Value::Kind::Phi:
-        case Value::Kind::Store:
-        case Value::Kind::Branch:
-        case Value::Kind::CondBranch:
-        case Value::Kind::Return:
-        case Value::Kind::Unreachable:
+        case Kind::Function:
+        case Kind::Block:
+        case Kind::IntegerConstant:
+        case Kind::ArrayConstant:
+        case Kind::Poison:
+        case Kind::GlobalVariable:
+        case Kind::Parameter:
+        case Kind::Copy:
+        case Kind::Alloca:
+        case Kind::Call:
+        case Kind::GetElementPtr:
+        case Kind::GetMemberPtr:
+        case Kind::Intrinsic:
+        case Kind::Load:
+        case Kind::Phi:
+        case Kind::Store:
+        case Kind::Branch:
+        case Kind::CondBranch:
+        case Kind::Return:
+        case Kind::Unreachable:
             LCC_UNREACHABLE();
 
         // Unary
-        case Value::Kind::ZExt: return MInst::Kind::ZExt;
-        case Value::Kind::SExt: return MInst::Kind::SExt;
-        case Value::Kind::Trunc: return MInst::Kind::Trunc;
-        case Value::Kind::Bitcast: return MInst::Kind::Bitcast;
-        case Value::Kind::Neg: return MInst::Kind::Neg;
-        case Value::Kind::Compl: return MInst::Kind::Compl;
+        case Kind::ZExt: return MKind::ZExt;
+        case Kind::SExt: return MKind::SExt;
+        case Kind::Trunc: return MKind::Trunc;
+        case Kind::Bitcast: return MKind::Bitcast;
+        case Kind::Neg: return MKind::Neg;
+        case Kind::Compl: return MKind::Compl;
 
         // Binary
-        case Value::Kind::Add: return MInst::Kind::Add;
-        case Value::Kind::Sub: return MInst::Kind::Sub;
-        case Value::Kind::Mul: return MInst::Kind::Mul;
-        case Value::Kind::SDiv: return MInst::Kind::SDiv;
-        case Value::Kind::UDiv: return MInst::Kind::UDiv;
-        case Value::Kind::SRem: return MInst::Kind::SRem;
-        case Value::Kind::URem: return MInst::Kind::URem;
-        case Value::Kind::Shl: return MInst::Kind::Shl;
-        case Value::Kind::Sar: return MInst::Kind::Sar;
-        case Value::Kind::Shr: return MInst::Kind::Shr;
-        case Value::Kind::And: return MInst::Kind::And;
-        case Value::Kind::Or: return MInst::Kind::Or;
-        case Value::Kind::Xor: return MInst::Kind::Xor;
-        case Value::Kind::Eq: return MInst::Kind::Eq;
-        case Value::Kind::Ne: return MInst::Kind::Ne;
-        case Value::Kind::SLt: return MInst::Kind::SLt;
-        case Value::Kind::SLe: return MInst::Kind::SLe;
-        case Value::Kind::SGt: return MInst::Kind::SGt;
-        case Value::Kind::SGe: return MInst::Kind::SGe;
-        case Value::Kind::ULt: return MInst::Kind::ULt;
-        case Value::Kind::ULe: return MInst::Kind::ULe;
-        case Value::Kind::UGt: return MInst::Kind::UGt;
-        case Value::Kind::UGe: return MInst::Kind::UGe;
+        case Kind::Add: return MKind::Add;
+        case Kind::Sub: return MKind::Sub;
+        case Kind::Mul: return MKind::Mul;
+        case Kind::SDiv: return MKind::SDiv;
+        case Kind::UDiv: return MKind::UDiv;
+        case Kind::SRem: return MKind::SRem;
+        case Kind::URem: return MKind::URem;
+        case Kind::Shl: return MKind::Shl;
+        case Kind::Sar: return MKind::Sar;
+        case Kind::Shr: return MKind::Shr;
+        case Kind::And: return MKind::And;
+        case Kind::Or: return MKind::Or;
+        case Kind::Xor: return MKind::Xor;
+        case Kind::Eq: return MKind::Eq;
+        case Kind::Ne: return MKind::Ne;
+        case Kind::SLt: return MKind::SLt;
+        case Kind::SLe: return MKind::SLe;
+        case Kind::SGt: return MKind::SGt;
+        case Kind::SGe: return MKind::SGe;
+        case Kind::ULt: return MKind::ULt;
+        case Kind::ULe: return MKind::ULe;
+        case Kind::UGt: return MKind::UGt;
+        case Kind::UGe: return MKind::UGe;
     }
     LCC_UNREACHABLE();
 }
+} // namespace
 
 auto Module::mir() -> std::vector<MFunction> {
     if (_ctx->should_print_mir())
@@ -88,6 +92,12 @@ auto Module::mir() -> std::vector<MFunction> {
     const auto assign_virtual_register = [&](Value* v) {
         if (virts[v]) return; // don't double-assign registers
         switch (v->kind()) {
+            // Instructions that can never produce a value
+            case Value::Kind::Store:
+            case Value::Kind::Branch:
+            case Value::Kind::CondBranch:
+            case Value::Kind::Return:
+            case Value::Kind::Unreachable:
             // Non-instructions
             case Value::Kind::Function:
             case Value::Kind::Block:
@@ -96,14 +106,6 @@ auto Module::mir() -> std::vector<MFunction> {
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
             case Value::Kind::Parameter:
-                return;
-
-            // Instructions that can never produce a value
-            case Value::Kind::Store:
-            case Value::Kind::Branch:
-            case Value::Kind::CondBranch:
-            case Value::Kind::Return:
-            case Value::Kind::Unreachable:
                 return;
 
             default:
@@ -128,41 +130,42 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Parameter:
                         LCC_UNREACHABLE();
 
-                    // Instructions with no *IR* operands
+                    // Instructions that do not produce a value and do not have operands that
+                    // produce a value.
+                    case Value::Kind::Branch:
+                    // Instructions with zero *IR* operands
                     case Value::Kind::Alloca:
                     case Value::Kind::Unreachable:
                         break;
 
-                    case Value::Kind::Branch: break;
-
-                    case Value::Kind::Copy: {
+                    case Value::Kind::Copy:
                         assign_virtual_register(as<CopyInst>(instruction)->operand());
-                    } break;
+                        break;
 
-                    case Value::Kind::CondBranch: {
+                    case Value::Kind::CondBranch:
                         assign_virtual_register(as<CondBranchInst>(instruction)->cond());
-                    } break;
+                        break;
 
                     case Value::Kind::Return: {
-                        auto ret = as<ReturnInst>(instruction);
+                        auto* ret = as<ReturnInst>(instruction);
                         if (ret->has_value()) assign_virtual_register(ret->val());
                     } break;
 
                     case Value::Kind::Call: {
-                        auto call = as<CallInst>(instruction);
+                        auto* call = as<CallInst>(instruction);
                         assign_virtual_register(call->callee());
                         for (auto& arg : call->args())
                             assign_virtual_register(arg);
                     } break;
 
                     case Value::Kind::GetElementPtr: {
-                        auto gep = as<GEPInst>(instruction);
+                        auto* gep = as<GEPInst>(instruction);
                         assign_virtual_register(gep->ptr());
                         assign_virtual_register(gep->idx());
                     } break;
 
                     case Value::Kind::GetMemberPtr: {
-                        auto gmp = as<GetMemberPtrInst>(instruction);
+                        auto* gmp = as<GetMemberPtrInst>(instruction);
                         assign_virtual_register(gmp->ptr());
                         assign_virtual_register(gmp->idx());
                     } break;
@@ -176,7 +179,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Store: {
-                        auto store = as<StoreInst>(instruction);
+                        auto* store = as<StoreInst>(instruction);
                         assign_virtual_register(store->ptr());
                         assign_virtual_register(store->val());
                     } break;
@@ -195,7 +198,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Trunc:
                     case Value::Kind::Neg:
                     case Value::Kind::Compl: {
-                        auto unary = as<UnaryInstBase>(instruction);
+                        auto* unary = as<UnaryInstBase>(instruction);
                         assign_virtual_register(unary->operand());
                     } break;
 
@@ -223,7 +226,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::ULe:
                     case Value::Kind::UGt:
                     case Value::Kind::UGe: {
-                        auto binary = as<BinaryInst>(instruction);
+                        auto* binary = as<BinaryInst>(instruction);
                         assign_virtual_register(binary->lhs());
                         assign_virtual_register(binary->rhs());
                     } break;
@@ -252,7 +255,7 @@ auto Module::mir() -> std::vector<MFunction> {
     const auto MOperandValueReference = [&](Function* f_ir, MFunction& f, Value* v) -> MOperand {
         // Find MInst if possible, add to use count.
         usz regsize{0};
-        if (auto inst = MInstByVirtualRegister(virts[v])) {
+        if (auto* inst = MInstByVirtualRegister(virts[v])) {
             inst->add_use();
             regsize = inst->regsize();
         }
@@ -276,21 +279,25 @@ auto Module::mir() -> std::vector<MFunction> {
                 if (_ctx->target()->is_arch_x86_64()) {
                     if (_ctx->target()->is_platform_windows()) {
                         if (param->type()->bytes() <= 8 and param->index() < 4) {
-                            static constexpr x86_64::RegisterId reg_by_param_index[4]{
+                            static constexpr std::array<x86_64::RegisterId, 4> reg_by_param_index{
                                 x86_64::RegisterId::RCX,
                                 x86_64::RegisterId::RDX,
                                 x86_64::RegisterId::R8,
-                                x86_64::RegisterId::R9};
+                                x86_64::RegisterId::R9 //
+                            };
                             return MOperandRegister(
-                                +reg_by_param_index[param->index()],
+                                +reg_by_param_index.at(param->index()),
                                 uint(param->type()->bits())
                             );
-                        } else LCC_ASSERT(false, "TODO: Handle x64cc memory parameter");
+                        }
+
+                        LCC_ASSERT(false, "TODO: Handle x64cc memory parameter");
+
                     } else if (_ctx->target()->is_cconv_sysv()) {
                         usz sysv_registers_used = 0;
                         i32 sysv_memory_parameter_offset = 0;
                         for (usz i = 0; i < param->index(); ++i) {
-                            auto p = f_ir->param(i);
+                            auto* p = f_ir->param(i);
                             if (p->type()->bytes() <= 8 and sysv_registers_used < 6)
                                 ++sysv_registers_used;
                             else if (p->type()->bytes() <= 16 and sysv_registers_used < 5)
@@ -299,23 +306,24 @@ auto Module::mir() -> std::vector<MFunction> {
                             else sysv_memory_parameter_offset += i32(p->type()->bytes());
                         }
 
-                        static constexpr x86_64::RegisterId reg_by_param_index[6]{
+                        static constexpr std::array<x86_64::RegisterId, 6> reg_by_param_index{
                             x86_64::RegisterId::RDI,
                             x86_64::RegisterId::RSI,
                             x86_64::RegisterId::RDX,
                             x86_64::RegisterId::RCX,
                             x86_64::RegisterId::R8,
-                            x86_64::RegisterId::R9};
+                            x86_64::RegisterId::R9 //
+                        };
 
                         // Single register parameter
                         if (param->type()->bytes() <= 8 and sysv_registers_used < 6) {
                             return MOperandRegister(
-                                +reg_by_param_index[param->index()],
+                                +reg_by_param_index.at(sysv_registers_used),
                                 uint(param->type()->bits())
                             );
                         }
                         // Multiple register parameter
-                        else if (param->type()->bytes() <= 16 and sysv_registers_used < 5)
+                        if (param->type()->bytes() <= 16 and sysv_registers_used < 5)
                             LCC_ASSERT(false, "Cannot handle multiple register parameter in this way");
                         else {
                             // Return Local with positive offset into parent stack frame.
@@ -331,11 +339,15 @@ auto Module::mir() -> std::vector<MFunction> {
                         }
                     }
                 }
-                LCC_UNREACHABLE();
+                Diag::ICE("It appears we haven't handled the target properly, sorry");
             } break;
 
             case Value::Kind::Alloca: {
-                auto found = std::find(f.locals().begin(), f.locals().end(), as<AllocaInst>(v));
+                auto found = std::find(
+                    f.locals().begin(),
+                    f.locals().end(),
+                    as<AllocaInst>(v)
+                );
                 if (found == f.locals().end()) {
                     Diag::ICE("MIR Generation: encountered reference to local before it has been declared");
                 }
@@ -346,7 +358,10 @@ auto Module::mir() -> std::vector<MFunction> {
                 return MOperandGlobal{as<GlobalVariable>(v)};
 
             case Value::Kind::IntegerConstant:
-                return MOperandImmediate{*as<IntegerConstant>(v)->value(), uint(v->type()->bits())};
+                return MOperandImmediate{
+                    *as<IntegerConstant>(v)->value(),
+                    uint(v->type()->bits()) //
+                };
 
             case Value::Kind::ArrayConstant:
                 LCC_ASSERT(false, "TODO: MIR generation from array constant");
@@ -406,14 +421,14 @@ auto Module::mir() -> std::vector<MFunction> {
     // that generates MIR, for here there be dragons.
 
     // TODO: if memcpy already in module, use that
-    auto memcpy_ty = FunctionType::Get(
+    auto* memcpy_ty = FunctionType::Get(
         _ctx,
         Type::VoidTy,
         {Type::PtrTy,
          Type::PtrTy,
          IntegerType::Get(_ctx, 32)}
     );
-    auto memcpy_function = new (*this) Function(
+    auto* memcpy_function = new (*this) Function(
         this,
         "memcpy",
         memcpy_ty,
@@ -424,7 +439,7 @@ auto Module::mir() -> std::vector<MFunction> {
     // To avoid iterator invalidation when any of these vectors are resizing,
     // we "pre-construct" functions and blocks.
     for (auto& function : code()) {
-        funcs.push_back(MFunction(function->call_conv()));
+        funcs.emplace_back(function->call_conv());
         auto& f = funcs.back();
         f.names() = function->names();
         f.location(function->location());
@@ -464,8 +479,11 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     // Instructions
                     case Value::Kind::Copy: {
-                        auto copy_ir = as<CopyInst>(instruction);
-                        auto copy = MInst(MInst::Kind::Copy, {virts[instruction], uint(copy_ir->type()->bits())});
+                        auto* copy_ir = as<CopyInst>(instruction);
+                        auto copy = MInst(
+                            MInst::Kind::Copy,
+                            {virts[instruction], uint(copy_ir->type()->bits())}
+                        );
                         copy.location(copy_ir->location());
                         copy.add_operand(MOperandValueReference(function, f, copy_ir->operand()));
                         bb.add_instruction(copy);
@@ -477,7 +495,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Phi: {
-                        auto phi_ir = as<PhiInst>(instruction);
+                        auto* phi_ir = as<PhiInst>(instruction);
 
                         if (phi_ir->operands().empty()) {
                             if (not phi_ir->users().empty()) {
@@ -486,9 +504,12 @@ auto Module::mir() -> std::vector<MFunction> {
                             break;
                         }
 
-                        auto phi = MInst(MInst::Kind::Phi, {virts[instruction], uint(phi_ir->type()->bits())});
+                        auto phi = MInst(
+                            MInst::Kind::Phi,
+                            {virts[instruction], uint(phi_ir->type()->bits())}
+                        );
                         phi.location(phi_ir->location());
-                        for (auto& op : phi_ir->operands()) {
+                        for (const auto& op : phi_ir->operands()) {
                             phi.add_operand(MOperandValueReference(function, f, op.block));
                             phi.add_operand(MOperandValueReference(function, f, op.value));
                         }
@@ -496,12 +517,12 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Call: {
-                        auto call_ir = as<CallInst>(instruction);
+                        auto* call_ir = as<CallInst>(instruction);
 
                         usz arg_stack_bytes_used = 0;
                         if (_ctx->target()->is_arch_x86_64()) {
                             if (_ctx->target()->is_platform_windows()) {
-                                std::vector<usz> arg_regs = {
+                                constexpr std::array<usz, 4> arg_regs = {
                                     +x86_64::RegisterId::RCX,
                                     +x86_64::RegisterId::RDX,
                                     +x86_64::RegisterId::R8,
@@ -510,7 +531,10 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
                                     if (usz(arg_i) < arg_regs.size() and arg->type()->bytes() <= 8) {
-                                        auto copy = MInst(MInst::Kind::Copy, {arg_regs[usz(arg_i)], 64});
+                                        auto copy = MInst(
+                                            MInst::Kind::Copy,
+                                            {arg_regs.at(usz(arg_i)), 64}
+                                        );
                                         copy.location(call_ir->location());
                                         copy.add_operand(MOperandValueReference(function, f, arg));
                                         bb.add_instruction(copy);
@@ -529,7 +553,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                 }
 
                             } else if (_ctx->target()->is_cconv_sysv()) {
-                                std::vector<usz> arg_regs = {
+                                constexpr std::array<usz, 6> arg_regs = {
                                     +x86_64::RegisterId::RDI,
                                     +x86_64::RegisterId::RSI,
                                     +x86_64::RegisterId::RDX,
@@ -561,9 +585,9 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                         // Get a reference to a pointer to the argument.
                                         Value* arg_ptr{nullptr};
-                                        if (auto load = cast<LoadInst>(arg))
+                                        if (auto* load = cast<LoadInst>(arg))
                                             arg_ptr = load->ptr();
-                                        else if (auto alloca = cast<AllocaInst>(arg))
+                                        else if (auto* alloca = cast<AllocaInst>(arg))
                                             arg_ptr = alloca;
                                         else LCC_ASSERT(
                                             false,
@@ -574,7 +598,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                         auto byte_count = arg->type()->bytes();
 
                                         // sub $<size>, %rsp
-                                        auto stack_pointer_reg = Register{usz(x86_64::RegisterId::RSP), 64};
+                                        constexpr Register stack_pointer_reg{+x86_64::RegisterId::RSP, 64};
                                         auto sub = MInst(MInst::Kind::Sub, stack_pointer_reg);
                                         sub.location(call_ir->location());
                                         sub.add_operand(stack_pointer_reg);
@@ -607,7 +631,10 @@ auto Module::mir() -> std::vector<MFunction> {
                                             bb.add_instruction(copy);
                                         }
 
-                                        auto call = MInst(MInst::Kind::Call, {usz(x86_64::RegisterId::RETURN), 0});
+                                        auto call = MInst(
+                                            MInst::Kind::Call,
+                                            {usz(x86_64::RegisterId::RETURN), 0}
+                                        );
                                         call.location(call_ir->location());
                                         call.add_operand(memcpy_function);
                                         bb.add_instruction(call);
@@ -618,18 +645,24 @@ auto Module::mir() -> std::vector<MFunction> {
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
                                     if (arg_regs_used < arg_reg_total and arg->type()->bytes() <= 8) {
                                         // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
-                                        auto copy = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], uint(arg->type()->bits())});
+                                        auto copy = MInst(MInst::Kind::Copy, {arg_regs.at(arg_regs_used++), uint(arg->type()->bits())});
                                         copy.location(call_ir->location());
                                         copy.add_operand(MOperandValueReference(function, f, arg));
                                         bb.add_instruction(copy);
                                     } else if (arg_regs_used < arg_reg_total - 1 and arg->type()->bytes() <= 16) {
-                                        auto load_a = MInst(MInst::Kind::Load, {arg_regs[arg_regs_used++], 64});
-                                        auto load_b = MInst(MInst::Kind::Load, {arg_regs[arg_regs_used++], uint(arg->type()->bits() - 64)});
+                                        auto load_a = MInst(
+                                            MInst::Kind::Load,
+                                            {arg_regs.at(arg_regs_used++), 64}
+                                        );
+                                        auto load_b = MInst(
+                                            MInst::Kind::Load,
+                                            {arg_regs.at(arg_regs_used++), uint(arg->type()->bits() - 64)}
+                                        );
                                         load_a.location(call_ir->location());
                                         load_b.location(call_ir->location());
 
-                                        if (auto load_arg = cast<LoadInst>(arg)) {
-                                            if (auto alloca = cast<AllocaInst>(load_arg->ptr())) {
+                                        if (auto* load_arg = cast<LoadInst>(arg)) {
+                                            if (auto* alloca = cast<AllocaInst>(load_arg->ptr())) {
                                                 load_a.add_operand(MOperandValueReference(function, f, alloca));
 
                                                 auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
@@ -667,17 +700,23 @@ auto Module::mir() -> std::vector<MFunction> {
                             }
                         } else (LCC_ASSERT(false, "Unhandled architecture in gMIR generation from IR call"));
 
-                        auto call = MInst(MInst::Kind::Call, {virts[instruction], uint(call_ir->function_type()->ret()->bits())});
+                        auto call = MInst(
+                            MInst::Kind::Call,
+                            {virts[instruction], uint(call_ir->function_type()->ret()->bits())}
+                        );
                         call.location(call_ir->location());
                         call.add_operand(MOperandValueReference(function, f, call_ir->callee()));
                         bb.add_instruction(call);
 
                         if (arg_stack_bytes_used) {
                             LCC_ASSERT(_ctx->target()->is_arch_x86_64(), "Handle architecture when resetting stack after a call");
-                            auto stack_fixup = MInst(usz(x86_64::Opcode::Add), {usz(x86_64::RegisterId::RSP), 64});
+                            auto stack_fixup = MInst(
+                                +x86_64::Opcode::Add,
+                                {+x86_64::RegisterId::RSP, 64}
+                            );
                             stack_fixup.location(call_ir->location());
                             stack_fixup.add_operand(MOperandImmediate(arg_stack_bytes_used));
-                            stack_fixup.add_operand(Register{usz(x86_64::RegisterId::RSP), 64});
+                            stack_fixup.add_operand(MOperandRegister{+x86_64::RegisterId::RSP, 64});
                             bb.add_instruction(stack_fixup);
                         }
                     } break;
@@ -711,7 +750,10 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                 usz arg_regs_used = 0;
                                 for (auto op : intrinsic->operands()) {
-                                    auto copy = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], uint(op->type()->bits())});
+                                    auto copy = MInst(
+                                        MInst::Kind::Copy,
+                                        {arg_regs.at(arg_regs_used++), uint(op->type()->bits())}
+                                    );
                                     copy.location(intrinsic->location());
                                     copy.add_operand(MOperandValueReference(function, f, op));
                                     bb.add_instruction(copy);
@@ -731,10 +773,10 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::GetElementPtr: {
-                        auto gep_ir = as<GEPInst>(instruction);
-                        auto reg = Register{virts[instruction], uint(gep_ir->type()->bits())};
+                        auto* gep_ir = as<GEPInst>(instruction);
+                        Register reg{virts[instruction], uint(gep_ir->type()->bits())};
 
-                        if (auto idx = cast<IntegerConstant>(gep_ir->idx())) {
+                        if (auto* idx = cast<IntegerConstant>(gep_ir->idx())) {
                             usz offset = gep_ir->base_type()->bytes() * idx->value().value();
 
                             if (not offset) {
@@ -808,7 +850,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Branch: {
-                        auto branch_ir = as<BranchInst>(instruction);
+                        auto* branch_ir = as<BranchInst>(instruction);
                         // A branch does not produce a useable value, and as such it's register
                         // size is zero.
                         auto branch = MInst(MInst::Kind::Branch, {virts[instruction], 0});
@@ -816,15 +858,17 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto op = MOperandValueReference(function, f, branch_ir->target());
                         branch.add_operand(op);
                         bb.add_instruction(branch);
+
+                        // MIR Control Flow Graph
                         if (std::holds_alternative<MOperandBlock>(op)) {
-                            MOperandBlock block = std::get<MOperandBlock>(op);
-                            bb.add_successor(block->machine_block()->name());
-                            block->machine_block()->add_predecessor(bb.name());
+                            MOperandBlock destination_block = std::get<MOperandBlock>(op);
+                            bb.add_successor(destination_block->machine_block()->name());
+                            destination_block->machine_block()->add_predecessor(bb.name());
                         }
                     } break;
 
                     case Value::Kind::CondBranch: {
-                        auto branch_ir = as<CondBranchInst>(instruction);
+                        auto* branch_ir = as<CondBranchInst>(instruction);
                         // A branch does not produce a useable value, and as such it's register
                         // size is zero.
                         auto branch = MInst(MInst::Kind::CondBranch, {virts[instruction], 0});
@@ -835,15 +879,17 @@ auto Module::mir() -> std::vector<MFunction> {
                         branch.add_operand(then_op);
                         branch.add_operand(else_op);
                         bb.add_instruction(branch);
+
+                        // MIR Control Flow Graph
                         if (std::holds_alternative<MOperandBlock>(then_op)) {
-                            MOperandBlock block = std::get<MOperandBlock>(then_op);
-                            bb.add_successor(block->machine_block()->name());
-                            block->machine_block()->add_predecessor(bb.name());
+                            MOperandBlock then_block = std::get<MOperandBlock>(then_op);
+                            bb.add_successor(then_block->machine_block()->name());
+                            then_block->machine_block()->add_predecessor(bb.name());
                         }
                         if (std::holds_alternative<MOperandBlock>(else_op)) {
-                            MOperandBlock block = std::get<MOperandBlock>(else_op);
-                            bb.add_successor(block->machine_block()->name());
-                            block->machine_block()->add_predecessor(bb.name());
+                            MOperandBlock else_block = std::get<MOperandBlock>(else_op);
+                            bb.add_successor(else_block->machine_block()->name());
+                            else_block->machine_block()->add_predecessor(bb.name());
                         }
                     } break;
 
@@ -856,10 +902,10 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Store: {
-                        auto store_ir = as<StoreInst>(instruction);
+                        auto* store_ir = as<StoreInst>(instruction);
 
                         // Special case lowering of storing multiple register parameter.
-                        if (auto param = cast<Parameter>(store_ir->val())) {
+                        if (auto* param = cast<Parameter>(store_ir->val())) {
                             // TODO FOR FUN: Functions marked internal we can do all the fucky wucky
                             // to, to make more efficient-like.
                             // FIXME: What does f.calling_convention() (C, Glint) have to do
@@ -874,24 +920,25 @@ auto Module::mir() -> std::vector<MFunction> {
                                         sysv_registers_used += 2;
                                 }
 
-                                static constexpr x86_64::RegisterId reg_by_param_index[6]{
+                                static constexpr std::array<x86_64::RegisterId, 6> reg_by_param_index{
                                     x86_64::RegisterId::RDI,
                                     x86_64::RegisterId::RSI,
                                     x86_64::RegisterId::RDX,
                                     x86_64::RegisterId::RCX,
                                     x86_64::RegisterId::R8,
-                                    x86_64::RegisterId::R9};
+                                    x86_64::RegisterId::R9 //
+                                };
 
                                 // Multiple register parameter
                                 if (param->type()->bytes() > 8 and param->type()->bytes() <= 16 and sysv_registers_used < 5) {
-                                    if (auto alloca = cast<AllocaInst>(store_ir->ptr())) {
+                                    if (auto* alloca = cast<AllocaInst>(store_ir->ptr())) {
                                         // Multiple register parameter stored into alloca
                                         auto reg_a = MOperandRegister(
-                                            +reg_by_param_index[sysv_registers_used++],
+                                            +reg_by_param_index.at(sysv_registers_used++),
                                             64
                                         );
                                         auto reg_b = MOperandRegister(
-                                            +reg_by_param_index[sysv_registers_used++],
+                                            +reg_by_param_index.at(sysv_registers_used++),
                                             uint(param->type()->bits() - 64)
                                         );
 
@@ -930,7 +977,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Load: {
-                        auto load_ir = as<LoadInst>(instruction);
+                        auto* load_ir = as<LoadInst>(instruction);
                         auto load = MInst(MInst::Kind::Load, {virts[instruction], uint(load_ir->type()->bits())});
                         load.location(load_ir->location());
                         load.add_operand(MOperandValueReference(function, f, load_ir->ptr()));
@@ -938,8 +985,8 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Return: {
-                        auto ret_ir = as<ReturnInst>(instruction);
-                        auto func_type = as<FunctionType>(function->type());
+                        auto* ret_ir = as<ReturnInst>(instruction);
+                        auto* func_type = as<FunctionType>(function->type());
                         auto ret_type_bytes = func_type->ret()->bytes();
 
                         // SysV return in two registers
@@ -975,7 +1022,10 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         usz regsize = 0;
                         if (ret_ir->has_value()) regsize = ret_ir->val()->type()->bits();
-                        auto ret = MInst(MInst::Kind::Return, {virts[instruction], uint(regsize)});
+                        auto ret = MInst(
+                            MInst::Kind::Return,
+                            {virts[instruction], uint(regsize)}
+                        );
                         ret.location(ret_ir->location());
                         if (ret_ir->has_value())
                             ret.add_operand(MOperandValueReference(function, f, ret_ir->val()));
@@ -989,7 +1039,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Bitcast:
                     case Value::Kind::Neg:
                     case Value::Kind::Compl: {
-                        auto unary_ir = as<UnaryInstBase>(instruction);
+                        auto* unary_ir = as<UnaryInstBase>(instruction);
                         auto unary = MInst(ir_nary_inst_kind_to_mir(unary_ir->kind()), {virts[instruction], uint(unary_ir->type()->bits())});
                         unary.location(unary_ir->location());
                         unary.add_operand(MOperandValueReference(function, f, unary_ir->operand()));
@@ -1020,7 +1070,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::ULe:
                     case Value::Kind::UGt:
                     case Value::Kind::UGe: {
-                        auto binary_ir = as<BinaryInst>(instruction);
+                        auto* binary_ir = as<BinaryInst>(instruction);
                         auto binary = MInst(ir_nary_inst_kind_to_mir(binary_ir->kind()), {virts[instruction], uint(binary_ir->type()->bits())});
                         binary.location(binary_ir->location());
                         binary.add_operand(MOperandValueReference(function, f, binary_ir->lhs()));
@@ -1060,7 +1110,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         copy.location(minst.location());
 
                         usz uses = minst.use_count();
-                        while (uses && uses--) copy.add_use();
+                        while (uses and uses--) copy.add_use();
 
                         if (std::holds_alternative<MOperandImmediate>(op)) {
                             copy.add_operand(std::get<MOperandImmediate>(op));
@@ -1074,7 +1124,7 @@ auto Module::mir() -> std::vector<MFunction> {
                             copy.add_operand(std::get<MOperandFunction>(op));
                         } else if (std::holds_alternative<MOperandBlock>(op)) {
                             copy.add_operand(std::get<MOperandBlock>(op));
-                        }
+                        } else LCC_ASSERT(false, "Unhandled MIR operand alternative");
 
                         phi_operand_block->add_instruction(copy, true);
 

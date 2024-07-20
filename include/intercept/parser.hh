@@ -31,8 +31,9 @@ private:
         Parser* parser;
         Scope* scope;
 
-        ScopeRAII(Parser* parser, Scope* parent = nullptr)
-            : parser(parser), scope(new(*parser->mod) Scope(parent ? parent : parser->CurrScope())) {
+        ScopeRAII(Parser* parser_, Scope* parent = nullptr)
+            : parser(parser_),
+              scope(new(*parser_->mod) Scope(parent ? parent : parser_->CurrScope())) {
             parser->scope_stack.push_back(scope);
         }
 
@@ -57,7 +58,7 @@ private:
         }
     };
 
-    Parser(Context* context, File* file) : Lexer(context, file) {}
+    Parser(Context* ctx, File* file) : Lexer(ctx, file) {}
 
     /// Check if we’re at one of a set of tokens.
     [[nodiscard]] static bool Is(InterceptToken* tk, auto... tks) { return ((tk->kind == tks) or ...); }
