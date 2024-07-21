@@ -282,6 +282,221 @@ void union {
 
 
 ================
+Enum, empty
+================
+void :enum {};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Single Member
+================
+void :enum {
+  x
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Single Member, Comma
+================
+void :enum {
+  x,
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Single Member, Semicolon
+================
+void :enum {
+  x;
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Single Member, Initialised
+================
+void :enum {
+  x :: 0
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Single Member, Initialised, Comma
+================
+void :enum {
+  x :: 0,
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Single Member, Initialised, Semicolon
+================
+void :enum {
+  x :: 0;
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Multiple Member
+================
+void :enum {
+  x
+  y
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Multiple Member, Commas
+================
+void :enum {
+  x,
+  y,
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Multiple Member, Comma-separated
+================
+void :enum {
+  x,
+  y
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Multiple Member, Semicolons
+================
+void :enum {
+  x;
+  y;
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Multiple Member, Semicolon-separated
+================
+void :enum {
+  x;
+  y
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Two Member, Both Initialised, Commas
+================
+void :enum {
+  x :: 0,
+  y :: 0,
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Two Member, Both Initialised, Comma-separated
+================
+void :enum {
+  x :: 0,
+  y :: 0
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Two Member, Both Initialised, Semicolons
+================
+void :enum {
+  x :: 0;
+  y :: 0;
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
+Enum, Two Member, Both Initialised, Semicolon-separated
+================
+void :enum {
+  x :: 0;
+  y :: 0
+};
+0;
+---
+(block
+ (cast (t_enum))
+ (return (integer_literal)))
+
+
+================
 Function :int()
 ================
 void :int();

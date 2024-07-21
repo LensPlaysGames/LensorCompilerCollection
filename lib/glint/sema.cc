@@ -2395,7 +2395,7 @@ void lcc::glint::Sema::AnalyseUnary(UnaryExpr* u) {
 /// ===========================================================================
 ///  Analysing Types
 /// ===========================================================================
-bool lcc::glint::Sema::Analyse(Type** type_ptr) {
+auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
     auto* type = *type_ptr;
 
     // Don’t analyse the same type twice.
@@ -2703,71 +2703,133 @@ bool lcc::glint::Sema::Analyse(Type** type_ptr) {
         /// Calculate enumerator values.
         case Type::Kind::Enum: {
             auto* e = as<EnumType>(type);
-            LCC_ASSERT(e->underlying_type(), "Enum type has NULL underlying type");
+            LCC_ASSERT(
+                e->underlying_type(),
+                "Enum type has NULL underlying type"
+            );
 
-            // What the fuck whoever wrote this why are they so worried about the
-            // program crashing whatever that means it sounds like they had a bug in
-            // their program and just didn't want to debug it and did all these weird
-            // hacks just to make it work... What in the fuck lol.
-
-            /// If the underlying type is invalid, default to int so we don’t crash.
             if (not Analyse(&e->underlying_type())) {
                 e->set_sema_errored();
-                e->underlying_type() = Type::Int;
+                return false;
             }
 
-            { // Check that all enumerators are unique.
+            if (not e->underlying_type()->is_integer(true)) {
+                Error(
+                    e->location(),
+                    "Disallowed underlying type of enum (sorry!).\n"
+                    "Only integer or integer-like types are allowed, currently."
+                );
+                e->set_sema_errored();
+                return false;
+            }
+
+            { // Error on duplicate enumerators.
                 std::unordered_set<std::string> names;
                 for (auto& val : e->enumerators()) {
                     if (not names.insert(val->name()).second) {
                         Error(val->location(), "Duplicate enumerator '{}'", val->name());
                         e->set_sema_errored();
+                        return false;
                     }
                 }
             }
 
             // Assign enumerator values to all enumerators.
-            isz next_val = 0;
+            isz next_val = -1; //< For enums with integer underlying type.
             for (auto& val : e->enumerators()) {
                 val->type(e);
 
-                /// Set the value if there is none.
+                // For enums with integer underlying type, set the value if there is none.
+                // Easy!
                 if (not val->init()) {
-                    val->init() = new (mod) ConstantExpr(e, next_val, val->location());
-                    val->set_sema_done();
-                }
-
-                /// Analyse the value and evaluate it as an integer; if
-                /// either one fails, default the value to 0 so we don’t
-                /// crash.
-                else {
-                    aint res;
-                    bool converted{false};
-                    if (not Analyse(&val->init())
-                        or not(converted = Convert(&val->init(), e->underlying_type()))
-                        or not EvaluateAsInt(val->init(), e->underlying_type(), res)) {
-                        if (val->init()->ok() and not converted) Error(
-                            val->init()->location(),
-                            "Type {} of initialiser is not convertible to {}",
-                            val->init()->type(),
-                            e->underlying_type()
-                        );
-
-                        val->init() = new (mod) ConstantExpr(e, aint(), val->location());
-                        val->set_sema_errored();
-                    } else {
-                        InsertImplicitCast(&val->init(), e);
-                        val->init() = new (mod) ConstantExpr(val->init(), EvalResult{res});
+                    if (e->underlying_type()->is_integer(true)) {
+                        val->init() = new (mod) ConstantExpr(e, ++next_val, val->location());
                         val->set_sema_done();
-                        next_val = isz(as<ConstantExpr>(val->init())->value().as_int().zext(64).value());
+                        continue;
                     }
+                    Error(
+                        val->location(),
+                        "Unhandled underlying type given no init expression provided.\n"
+                        "Compiler is too dumb to make a {}\n",
+                        e->underlying_type()
+                    );
+                    val->set_sema_errored();
+                    return false;
                 }
 
-                next_val++;
-                if (val->ok()) {
-                    auto d = e->scope()->declare(context, auto{val->name()}, val);
-                    LCC_ASSERT(not d.is_diag());
+                // User provided a value.
+                // Harder.
+
+                // Make sure the expression is well-formed, and has a type.
+                if (not Analyse(&val->init())) {
+                    Error(
+                        val->init()->location(),
+                        "Invalid init expression for {} within enumerator declaration",
+                        val->name()
+                    );
+                    val->set_sema_errored();
+                    return false;
                 }
+
+                // Convert the expression to the underlying type of the enum.
+                if (not Convert(&val->init(), e->underlying_type())) {
+                    // If the enum is associated with a declaration, print that name in the
+                    // error message (name association is important for the developer!).
+                    if (e->decl()) {
+                        Error(
+                            val->init()->location(),
+                            "Init expression for {} within enumerator declaration {}",
+                            val->name(),
+                            e->decl()->name()
+                        );
+                        Note(
+                            e->decl()->location(),
+                            "Declared here"
+                        );
+                    } else {
+                        Error(
+                            val->init()->location(),
+                            "Init expression for {} within enumerator definition",
+                            val->name()
+                        );
+                        Note(
+                            e->location(),
+                            "Defined here"
+                        );
+                    }
+
+                    val->set_sema_errored();
+                    return false;
+                }
+
+                // Evaluate the expression at compile-time. If we can't, it's a fatal
+                // error---enums are named constants.
+                EvalResult res{0};
+                if (not val->init()->evaluate(context, res, false)) {
+                    Error(
+                        val->init()->location(),
+                        "Init expression for {} within enumerator is not a constant expression\n"
+                        "This means the compiler is unable to calculate the value at compile-time.\n"
+                        "Try using an integer constant like `69', if stuck.\n",
+                        val->name()
+                    );
+                    val->set_sema_errored();
+                    return false;
+                }
+
+                // Replace init expression with the constant expression that represents it
+                // (with cached value).
+                val->init() = new (mod) ConstantExpr(val->init(), res);
+                val->set_sema_done();
+
+                // For enums with integer underlying type, set the next value the compiler
+                // will assign automatically if no init expression is provided.
+                if (e->underlying_type()->is_integer(true))
+                    next_val = decltype(next_val)(res.as_int().value()) + 1;
+
+                // Declare the enumerator member in the enum's scope.
+                auto d = e->scope()->declare(context, std::string(val->name()), val);
+                LCC_ASSERT(d, "Failed to declare enumerator member");
             }
         } break;
     }
