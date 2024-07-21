@@ -1,3 +1,119 @@
+* TODO [REQUIRED] Figure out How Dynamic Arrays, Fixed Arrays, and Array Views Interact, Then Implement It
+
+So, from a useability standpoint, all of these should be convertible between each other... (ish). No matter what, both fixed and dynamic arrays should convert to views (obviously).
+
+So, we should be able to take a fixed array and create a dynamic array temporary (remember, just a data+size+capacity struct) implicitly. This allows us to pass a string literal to a function that expects a ~[byte]~, that way the function doesn't care if you allocated it on the heap or what. If the function appends and ends up doing a grow operation, this is okay. It will copy the data from the old place into a newly allocated place. This does mean we can't use realloc, but, I'm not too worried about that. We will probably eventually have a custom little built-in allocator for dynamic arrays, or maybe even include allocators based on the dynamic arrays you use in your program. Anyway, I'm getting ahead of myself.
+
+- Fixed Array :: Element Type + Size at compile-time, just a block of memory at runtime.
+- Dynamic Array :: Element Type at compile-time, struct with a data pointer, size integer, and capacity integer.
+- Array View :: Element Type at compile-time, struct with a data pointer and size integer.
+
+Or, in Glint (array of =int='s).
+#+begin_src glint-ts
+  fixarray : [int 2];
+  fixarray :: struct {
+    \0: int;
+    \1: int;
+  };
+
+  dynarray : [int];
+  dynarray :: struct {
+    data: int.ptr; ;; dynamically allocated elsewhere
+    size: uint;
+    capacity: uint;
+  };
+
+  ;; Er, no syntax or anything for this yet. Pretend!
+  array_view : [int].view;
+  array_view :: struct {
+    data: int.ptr;
+    size: uint;
+  };
+#+end_src
+
+With a fixed array, we know the size (and therefore capacity) at compile-time. So, we could initialise a dynamic array from a fixed array very easily; same for an array view.
+
+So, a fixed array is definitely and always convertible to both dynamic arrays and array views.
+
+With a dynamic array, we have the most data at runtime, but the least at compile-time. We /could/ implicitly convert from a dynamic array to a fixed array at runtime; all we'd have to do is pass the data pointer, basically, as that's the array of data in memory. The problem is that there is no way to guarantee the validity of the members. So, if we created a fixed array =[int 69]= from a dynamic array =[int]= with size 42, the last 27 members would be ... zeroed out? undefined? The compiler wouldn't be able to tell you not to access indices past this, so you'd have to implement your own check for whether or not it's "over", and at that point why not just use a dynamic array.
+
+So, I don't think a dynamic array should be convertible to a fixed array, and definitely not implicitly. In contrast, I /do/ think a dynamic array should be convertible to a view; it's the same thing but without the ability to modify it.
+
+Implicit Conversions:
+- Fixed Array :: Array View, Dynamic Array
+- Dynamic Array :: Array View
+
+Explicit Conversions:
+- Array View :: Dynamic Array
+
+* TODO [REQUIRED] Initialisation
+
+MAKE EVERYTHING ZERO BY DEFAULT.
+
+In the future we can do initialisation from struct member init expressions and stuff like that but just making everything zero (except for dynamic arrays, those are special) will make things a lot more obvious, I think.
+#+begin_src glint-ts
+  foo :int; ;; returns 0 every time!
+#+end_src
+
+Then, I'd also like to make sure compound literals work okay for initialisation.
+#+begin_src glint-ts
+  my_t : struct {
+    x :int;
+    y :int;
+  };
+
+  foo :my_t !{ 69, 420 };
+#+end_src
+
+Also this is unrelated and a small thing but I think a comma after an expression should disallow the next expressions from being treated as arguments in a call expression, but it should be allowed to separate arguments themselves with commas...
+#+begin_src glint-ts
+  foo :int(x:int y:int) x+y;
+
+  foo 34 35; ;; CALL foo ARGS (MULTIPLY 34 35);
+  foo 34, 35; ;; CALL foo ARGS (34) (35);
+  foo, 34 35; ;; CALL foo NOARGS; MULTIPLY 34 35;
+
+  some_t :struct {
+    x :int
+    y :int
+  };
+  ;; equivalent
+  bar :: some_t 69, 420;
+  boz :some_t !{69, 420};
+
+  some_t_operation :!(s :some_t) 2(s.x) + s.y;
+  ;; should work
+  some_t_operation !{69, 420};
+  some_t_operation bar;
+  some_t_operation !{bar};
+  some_t_operation (some_t 69 420);
+#+end_src
+
+Basically, a comma after an expression will disallow that expression from collecting arguments and becoming a callee of a call expression. Note that through deproceduring it still may (and probably will) implicitly become a call, just without arguments (usually the intended behaviour, especially in compound literals).
+
+We should have a special error for someone trying to call the infer type to instantiate something and point the developer to use a compound literal instead. We might be able to suggest a fix, even.
+
+* TODO [Syntactic Candy] Variable initialized w/ Anonymous Struct
+
+This doesn't make a ton of sense as far as the AST (a type expression producing a value of that type is kind of funky) but for this very specific case it would mean it "just works" how you would expect it to.
+
+#+begin_src glint-ts
+  my_var :: struct {
+     x: int;
+     y: int;
+  };
+
+  my_var.x; ;; Notice how this is an instance of the struct vs the type itself.
+#+end_src
+
+* TODO [Minor] Error on Append to Parameter of Non-reference Dynamic Array Type
+
+Most of the time someone appends to a parameter, they want that reflected at the call site, but a non-reference dynamic array parameter is a local copy.
+
+** Bug in Current Implementation
+
+Plus, if they did append to it and end up reallocating, the caller would have no way of knowing the data was freed out from under them. So, if we want to pass dynamic arrays by value, we would have to copy the underlying data AND the dynamic array itself to form a parameter that wouldn't touch the original at the call site. That's fine, but, we currently aren't doing that, so there will be big bugs.
+
 * TODO [Feature] Exported Alias for Custom Object File Symbols
 
 Current issue: gstd_read is too verbose for the language itself, but juuuust verbose enough for C usage. So we want one name visible from C, =gstd_read=, and another visible form Glint, =read= (which will probably be Glint name mangled).
@@ -52,6 +168,22 @@ print contents.data;
 #+end_src
 
 The above program shouldn't leak any memory; contents is allocated within =read=, and deallocated after use.
+
+* TODO [Feature] =!= As "Infer Type" Type.
+
+#+begin_src glint-ts
+  ;; equivalent
+  foo :! 69;
+  bar :: 69;
+#+end_src
+
+Obviously that's not that useful, let's look at when it is.
+
+#+begin_src glint-ts
+  foo :!(x:int y:int) x+y;
+#+end_src
+
+Deduced return type of a function! Cool!
 
 * POSSIBLE [Feature] Warn on Dynamic Array Creation Within Loop Control Flow
 
