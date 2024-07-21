@@ -12,7 +12,11 @@
 #include <glint/parser.hh>
 #include <glint/sema.hh>
 
+#include <algorithm>
 #include <filesystem>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 
 static lcc::utils::Colours C{true};
 using lcc::utils::Colour;
@@ -30,8 +34,11 @@ const lcc::Target* default_target =
 /// Default format
 const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
 
-struct GlintTest : Test {
-    void run() {
+bool option_print;
+
+struct GlintTest : langtest::Test {
+    bool should_print{option_print};
+    auto run() -> bool {
         LCC_ASSERT(not name.empty(), "Refusing to run test with empty name");
 
         // Parse test source as Glint
@@ -49,9 +56,15 @@ struct GlintTest : Test {
         bool failed_check{false};
         bool ast_matches{true};
         bool ir_matches{true};
+
+        // Parse Glint source code using the Glint parser into a Glint module for Glint fun.
         auto mod = lcc::glint::Parser::Parse(&context, source);
         if (not context.has_error()) {
             // Perform type-checking
+            // TODO: It would be interesting to be able to distinguish a checked AST
+            // vs an unchecked ones, have tests for both cases. That means you could
+            // verify your type-checker transforms certain things in a specific way
+            // (like adding a return expression).
             lcc::glint::Sema::Analyse(&context, *mod, true);
             if (not context.has_error()) {
                 // TODO: Only confirm AST conforms to expected match tree iff test is NOT
@@ -175,7 +188,7 @@ struct GlintTest : Test {
                                     ) {
                                         auto* expected_child = *expected_children.begin();
                                         auto* got_child = *got_children.begin();
-                                        if (auto* expected_child_inst = cast<lcc::Inst>(expected_child)) {
+                                        if (auto* expected_child_inst = lcc::cast<lcc::Inst>(expected_child)) {
                                             if (expected_to_got[expected_child_inst] != got_child) {
                                                 ir_matches = false;
 
@@ -211,12 +224,19 @@ struct GlintTest : Test {
             } else failed_check = true;
         } else failed_parse = true;
 
-        fmt::print("  {}: ", name);
-        if (not ast_matches or not ir_matches or failed_parse or failed_check) {
-            fmt::print("{}FAIL{}\n", C(Colour::Red), C(Colour::Reset));
+        // TODO: Handle expected to fail to parse, to fail to check sort of tests.
+        bool passed = ast_matches and ir_matches
+                  and not failed_parse and not failed_check;
+
+        // NOTE: Even if we shouldn't print, the parsing/semantic analysis that
+        // failed almost certainly printed something of some kind, so we are kind
+        // of forced to print something just to delineate what that output came
+        // from.
+        if (not passed) {
+            fmt::print("  {}: {}FAIL{}\n\n", name, C(Colour::Red), C(Colour::Reset));
             if (not ast_matches) {
                 std::string expected = matcher.print();
-                std::string got = print_node<lcc::glint::Expr>(mod->top_level_function()->body());
+                std::string got = langtest::print_node<lcc::glint::Expr>(mod->top_level_function()->body());
 
                 // find_different_from_begin()
                 size_t diff_begin{0};
@@ -242,19 +262,76 @@ struct GlintTest : Test {
                 fmt::print("EXPECTED: {}\n", expected);
                 fmt::print("GOT:      {}\n", got);
             }
-        } else fmt::print("{}PASS{}\n", C(Colour::Green), C(Colour::Reset));
+        }
+
+        if (should_print and passed) {
+            fmt::print("  {}: {}PASS{}\n", name, C(Colour::Green), C(Colour::Reset));
+        }
+
+        return passed;
     }
 };
 
-int main(int argc, const char** argv) {
-    for (int i = 1; i < argc; ++i)
-        LCC_ASSERT(false, "No command line options are accepted at the moment");
+void help() {
+    fmt::print(
+        "Glint Programming Language Test Runner\n"
+        "USAGE: glinttests [FLAGS]\n"
+        "FLAGS:\n"
+        "  -h, --help  ::  Show this help\n"
+        "  -a, --all   ::  Print messages for every test\n"
+    );
+}
 
-    for (auto entry : std::filesystem::directory_iterator("ast")) {
-        if (entry.is_regular_file()) {
-            fmt::print("{}:\n", entry.path().lexically_normal().filename().string());
-            process_ast_test_file<GlintTest>(entry.path());
+int main(int argc, const char** argv) {
+    for (int i = 1; i < argc; ++i) {
+        std::string_view arg{argv[i]};
+        if (arg.starts_with("-h") or arg.starts_with("--h") or arg.starts_with("-?")) {
+            help();
+            return 0;
         }
+        if (arg.starts_with("-a") or arg.starts_with("--all")) {
+            option_print = true;
+            continue;
+        }
+        LCC_ASSERT(
+            false,
+            "Unhandled command line option `{}'.\n"
+            "Use -h for more info.",
+            arg
+        );
+    }
+
+    langtest::TestContext out{};
+    for (const auto& entry : std::filesystem::directory_iterator("ast")) {
+        if (entry.is_regular_file()) {
+            if (option_print)
+                fmt::print("{}:\n", entry.path().lexically_normal().filename().string());
+            out.merge(langtest::process_ast_test_file<GlintTest>(entry.path()));
+        }
+    }
+
+    if (out.count_passed() == out.count()) {
+        fmt::print(
+            "~~~~~~~~~~~~~~~~~~~~~~~~\n"
+            "{}    ALL TESTS PASSED{}\n"
+            "~~~~~~~~~~~~~~~~~~~~~~~~\n",
+            C(lcc::utils::Colour::Green),
+            C(lcc::utils::Colour::Reset)
+        );
+    } else {
+        fmt::print(
+            "STATS:\n"
+            "  TESTS:   {}\n"
+            "  {}PASSED:  {}{}\n"
+            "  {}FAILED:  {}{}\n",
+            out.count(),
+            C(lcc::utils::Colour::Green),
+            out.count_passed(),
+            C(lcc::utils::Colour::Reset),
+            C(lcc::utils::Colour::Red),
+            out.count_failed(),
+            C(lcc::utils::Colour::Reset)
+        );
     }
 
     return 0;

@@ -1,3 +1,4 @@
+#include <fmt/format.h>
 #include <lcc/context.hh>
 #include <lcc/format.hh>
 #include <lcc/target.hh>
@@ -5,36 +6,28 @@
 
 #include <concepts>
 #include <filesystem>
+#include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <vector>
 
 // TODO: Would be cool to have >= syntax to start a "continuation" test
 // possible instead of `---` and the expected AST. Basically, allow for
 // the language to assert that multiple tests have the same output.
 
-// TODO: Use something like this for stat-trak language testing framework
-class TestContext {
-    size_t _count;
-    size_t _count_failed;
+// TODO: Would be cool to have a distinction between checked vs unchecked
+// ASTs, that way the language could assert that an expression is
+// transformed in a certain way after semantic analysis.
 
-public:
-    size_t count() const { return _count; }
-    size_t count_failed() const { return _count_failed; }
-    size_t count_passed() const { return _count - _count_failed; }
-
-    void record_test(bool passed = true) {
-        ++_count;
-        if (not passed) ++_count_failed;
-    }
-};
+namespace langtest {
 
 struct MatchTree {
     std::string_view name;
     std::vector<MatchTree> children{};
 
     [[nodiscard]]
-    std::string print() {
+    auto print() -> std::string {
         std::string out{};
         out += fmt::format("({}", name);
         for (auto child : children) {
@@ -43,6 +36,36 @@ struct MatchTree {
         }
         out += ')';
         return out;
+    }
+};
+
+struct Test {
+    std::string_view name;
+    std::string_view source;
+    std::string_view ir;
+    MatchTree matcher;
+};
+
+class TestContext {
+    size_t _count;
+    size_t _count_failed;
+
+public:
+    [[nodiscard]]
+    auto count() const -> size_t { return _count; }
+    [[nodiscard]]
+    auto count_failed() const -> size_t { return _count_failed; }
+    [[nodiscard]]
+    auto count_passed() const -> size_t { return _count - count_failed(); }
+
+    void merge(const TestContext& other) {
+        _count += other._count;
+        _count_failed += other._count_failed;
+    }
+
+    void record_test(bool passed) {
+        ++_count;
+        if (not passed) ++_count_failed;
     }
 };
 
@@ -58,14 +81,14 @@ concept langtest_node_has_children = requires (T node) {
 };
 template <typename T>
 concept langtest_node_requirements
-    = langtest_node_has_name<T> && langtest_node_has_children<T>;
+    = langtest_node_has_name<T> and langtest_node_has_children<T>;
 
 /// NOTE: print_node() constructs a matcher from a given AST; may be good to
 /// utilise this functionality to create initial expected output of test.
 template <typename TNode>
 requires langtest_node_requirements<TNode>
 [[nodiscard]]
-std::string print_node(TNode* e) {
+auto print_node(TNode* e) -> std::string {
     std::string out{};
     out += fmt::format("({}", e->langtest_name());
     auto children = e->langtest_children();
@@ -80,7 +103,7 @@ std::string print_node(TNode* e) {
 template <typename TNode>
 requires langtest_node_requirements<TNode>
 [[nodiscard]]
-bool perform_match(TNode* e, MatchTree& t) {
+auto perform_match(TNode* e, MatchTree& t) -> bool {
     auto name = e->langtest_name();
     if (name != t.name) {
         // TODO: Record test failure, somewhere/somehow
@@ -109,7 +132,12 @@ bool perform_match(TNode* e, MatchTree& t) {
     return children_match;
 }
 
-void parse_matchtree(std::span<char> contents, const size_t fsize, size_t& i, MatchTree& match) {
+void parse_matchtree(
+    std::span<char> contents,
+    const size_t fsize,
+    size_t& i,
+    MatchTree& match
+) {
     // Get to beginning of list
     while (i < fsize and contents[i] != '(' and contents[i] != '=')
         ++i;
@@ -119,7 +147,7 @@ void parse_matchtree(std::span<char> contents, const size_t fsize, size_t& i, Ma
         return;
     }
 
-    // Eat '('
+    // Eat list opening symbol
     ++i;
 
     // Eat whitespace
@@ -133,8 +161,11 @@ void parse_matchtree(std::span<char> contents, const size_t fsize, size_t& i, Ma
 
     size_t begin_match{i};
 
-    while (i < fsize and not isspace(contents[i]) and not std::string_view("()=-").contains(contents[i]))
-        ++i;
+    while (
+        i < fsize
+        and not isspace(contents[i])
+        and not std::string_view("()=-").contains(contents[i])
+    ) ++i;
 
     match.name = {
         contents.begin() + lcc::isz(begin_match),
@@ -163,15 +194,13 @@ void parse_matchtree(std::span<char> contents, const size_t fsize, size_t& i, Ma
     ++i;
 }
 
-struct Test {
-    std::string_view name;
-    std::string_view source;
-    std::string_view ir;
-    MatchTree matcher;
-};
-
 /// @param[out] test
-bool parse_test(std::span<char> contents, const size_t fsize, size_t& i, Test& test) {
+auto parse_test(
+    std::span<char> contents,
+    const size_t fsize,
+    size_t& i,
+    Test& test
+) -> bool {
     { // Parse test name
         // Skip '=' line
         while (i < fsize and contents[i] != '\n')
@@ -234,7 +263,6 @@ bool parse_test(std::span<char> contents, const size_t fsize, size_t& i, Test& t
     }
 
     { // Parse test expected AST
-
         // Skip until start of expectation
         while (i < fsize and contents[i] != '(')
             ++i;
@@ -255,7 +283,11 @@ bool parse_test(std::span<char> contents, const size_t fsize, size_t& i, Test& t
 
         // Skip until start of expectation, or start of another test.
         bool bol{true};
-        while (i < fsize and not(bol and contents[i] == '-') and not(bol and contents[i] == '=')) {
+        while (
+            i < fsize
+            and not(bol and contents[i] == '-')
+            and not(bol and contents[i] == '=')
+        ) {
             bol = contents[i] == '\n';
             ++i;
         }
@@ -297,7 +329,25 @@ bool parse_test(std::span<char> contents, const size_t fsize, size_t& i, Test& t
 }
 
 template <typename TTest>
-void parse_tests(std::span<char> contents) {
+concept langtest_test_has_run = requires (TTest test) {
+    test.run();
+    requires std::convertible_to<decltype(test.run()), bool>;
+};
+template <typename TTest>
+concept langtest_test_derived_from_test = requires (TTest test) {
+    requires std::derived_from<TTest, Test>;
+};
+template <typename TTest>
+concept langtest_test_requirements
+    = langtest_test_has_run<TTest> and langtest_test_derived_from_test<TTest>;
+
+template <typename TTest>
+requires langtest_test_requirements<TTest>
+auto parse_and_run_tests(
+    std::span<char> contents
+) -> TestContext {
+    TestContext context{};
+
     auto fsize = contents.size();
     bool bol = true;
     // Parse tests (first line starting with '=' marks the start of a test)
@@ -307,23 +357,28 @@ void parse_tests(std::span<char> contents) {
         if (bol and c == '=') {
             TTest test{};
             if (parse_test(contents, fsize, i, test))
-                test.run();
+                context.record_test(test.run());
             bol = true;
         } else bol = c == '\n';
     }
+
+    return context;
 }
 
 template <typename TTest>
-void process_ast_test_file(const std::filesystem::path& path) {
+requires langtest_test_requirements<TTest>
+auto process_ast_test_file(
+    const std::filesystem::path& path
+) -> TestContext {
     // Read file
     auto path_str = path.string();
-    auto f = fopen(path_str.data(), "rb");
+    auto* f = fopen(path_str.data(), "rb");
     if (not f) {
         fmt::print("ERROR opening file {}\n", path_str);
-        return;
+        return {};
     }
     fseek(f, 0, SEEK_END);
-    size_t fsize = size_t(ftell(f));
+    auto fsize = size_t(ftell(f));
     fseek(f, 0, SEEK_SET);
     std::vector<char> contents{};
     contents.resize(fsize);
@@ -341,5 +396,7 @@ void process_ast_test_file(const std::filesystem::path& path) {
     }
     fclose(f);
 
-    parse_tests<TTest>(contents);
+    return parse_and_run_tests<TTest>(contents);
 }
+
+} // namespace langtest
