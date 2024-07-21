@@ -241,7 +241,7 @@ void lcc::glint::Sema::ConvertOrError(Expr** expr, Type* to) {
 
 auto lcc::glint::Sema::ConvertToCommonType(Expr** a, Expr** b) -> bool {
     // An integer literal should always be converted into the type of the
-    // other side, favoring the left hand side when ambiguous.
+    // other side.
     bool a_is_literal = is<IntegerLiteral>(*a);
     bool b_is_literal = is<IntegerLiteral>(*b);
     bool both_literals = a_is_literal and b_is_literal;
@@ -252,6 +252,10 @@ auto lcc::glint::Sema::ConvertToCommonType(Expr** a, Expr** b) -> bool {
             return Convert(b, (*a)->type());
     }
     return Convert(a, (*b)->type()) or Convert(b, (*a)->type());
+}
+
+auto lcc::glint::Sema::TryConvert(Expr** expr, Type* type) -> int {
+    return ConvertImpl<false>(expr, type);
 }
 
 auto lcc::glint::Sema::DeclTypeDecay(Type* type) -> Type* {
@@ -547,10 +551,6 @@ auto lcc::glint::Sema::Ref(Type* ty) -> ReferenceType* {
     return as<ReferenceType>(ref);
 }
 
-auto lcc::glint::Sema::TryConvert(Expr** expr, Type* type) -> int {
-    return ConvertImpl<false>(expr, type);
-}
-
 void lcc::glint::Sema::WrapWithCast(Expr** expr_ptr, Type* type, CastKind kind) {
     Expr* expr = new (mod) CastExpr(
         *expr_ptr,
@@ -723,8 +723,7 @@ void lcc::glint::Sema::AnalyseModule() {
                 import.name,
                 fmt::join(paths_tried, "\n")
             );
-            Diag::Note(
-                context,
+            Note(
                 import.location,
                 "Imported here"
             );
@@ -918,7 +917,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         }
 
         case Expr::Kind::While: {
-            auto l = as<Loop>(expr);
+            auto* l = as<Loop>(expr);
             Analyse(&l->condition());
             if (not Convert(&l->condition(), Type::Bool)) Error(
                 l->location(),
@@ -934,8 +933,8 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         /// the return expression.
         case Expr::Kind::Return: {
             /// Check the return value.
-            auto r = as<ReturnExpr>(expr);
-            auto ret_type = as<FuncType>(curr_func->type())->return_type();
+            auto* r = as<ReturnExpr>(expr);
+            auto* ret_type = as<FuncType>(curr_func->type())->return_type();
             if (r->value()) Analyse(&r->value(), ret_type);
 
             // NOTE: Just for forget-to-free diagnostics.

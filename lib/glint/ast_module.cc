@@ -39,8 +39,7 @@ lcc::glint::Module::Module(
             },
 
             /// We currently set main() to return `int` since that’s natural for
-            /// most programs. In the future, our runtime should define main() and
-            /// this function should be something that’s called by it.
+            /// most programs.
             Type::Int,
             {},
             {},
@@ -92,7 +91,7 @@ auto lcc::glint::Module::intern(std::string_view str) -> usz {
 
 // FIXME: This should probably be backwards for big endian machines, afaik.
 template <typename T>
-std::array<lcc::u8, sizeof(T) / sizeof(lcc::u8)> to_bytes(const T object) {
+auto to_bytes(const T object) -> std::array<lcc::u8, sizeof(T) / sizeof(lcc::u8)> {
     std::array<lcc::u8, sizeof(T)> out{};
     const lcc::u8* begin = reinterpret_cast<const lcc::u8*>(&object);
     const lcc::u8* end = begin + (sizeof(T));
@@ -103,13 +102,17 @@ std::array<lcc::u8, sizeof(T) / sizeof(lcc::u8)> to_bytes(const T object) {
 // FIXME: This should probably be backwards for big endian machines, afaik.
 // requires std::is_trivially_constructible?
 template <typename T>
-T from_bytes(std::array<lcc::u8, sizeof(T)> bytes) {
+auto from_bytes(std::array<lcc::u8, sizeof(T)> bytes) -> T {
     T out{};
     std::copy(bytes.begin(), bytes.end(), &out);
     return out;
 }
 
-lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache, Type* ty) {
+auto lcc::glint::Module::serialise(
+    std::vector<u8>& out,
+    std::vector<Type*>& cache,
+    Type* ty
+) -> lcc::u16 {
     auto found = rgs::find(cache, ty);
     if (found != cache.end())
         return u16(found - cache.begin());
@@ -463,7 +466,10 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
     return out;
 }
 
-bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadata_blob) {
+auto lcc::glint::Module::deserialise(
+    lcc::Context* context,
+    std::vector<u8> module_metadata_blob
+) -> bool {
     // We need at least enough bytes for a header, for a zero-exports module
     // (if that is even allowed past sema).
     if (module_metadata_blob.size() < sizeof(ModuleDescription::Header))
@@ -497,33 +503,46 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
     // NOTE: Big issue here is forward references. i.e. a pointer type at
     // index 3 that stores a pointee type index of 4. So, we need to know the
     // Type* of any given index /before/ we start parsing any of the types.
-    // This is sort of difficult in C++ with stupid fucking inheritance.
     struct BasicFixup {
-        // Type index of the type that needs fixing up.
+        // Type index of the type that needs fixing up. This index will be
+        // overwritten with the type at the replacement type index.
         ModuleDescription::TypeIndex fixup_type_index;
-        BasicFixup(ModuleDescription::TypeIndex index)
-            : fixup_type_index(index) {}
+        ModuleDescription::TypeIndex replacement_type_index;
+        /// FIXUP is replaced with REPLACEMENT
+        BasicFixup(
+            u16 zero_index,
+            ModuleDescription::TypeIndex fixup_index,
+            ModuleDescription::TypeIndex replacement_index
+        ) : fixup_type_index(zero_index + fixup_index),
+            replacement_type_index(zero_index + replacement_index) {}
     };
-    struct PointerFixup : BasicFixup {
-        ModuleDescription::TypeIndex pointee_type_index;
 
-        PointerFixup(
-            ModuleDescription::TypeIndex fixup_type,
-            ModuleDescription::TypeIndex pointee_type
-        ) : BasicFixup(fixup_type),
-            pointee_type_index(pointee_type) {}
+    auto validate_fixup = [this, types_zero_index](const BasicFixup& fixup) {
+        constexpr auto low_msg
+            = "You probably forgot to account for the non-zero zero index into the types container.";
+        constexpr auto high_msg
+            = "You really messed up creating a fixup that is entirely out of range of the types container.";
+        LCC_ASSERT(
+            fixup.fixup_type_index >= types_zero_index,
+            low_msg
+        );
+        LCC_ASSERT(
+            fixup.replacement_type_index >= types_zero_index,
+            low_msg
+        );
+        LCC_ASSERT(
+            fixup.fixup_type_index < types.size(),
+            high_msg
+        );
+        LCC_ASSERT(
+            fixup.replacement_type_index < types.size(),
+            high_msg
+        );
     };
-    struct ReferenceFixup : BasicFixup {
-        ModuleDescription::TypeIndex referent_type_index;
 
-        ReferenceFixup(
-            ModuleDescription::TypeIndex fixup_type,
-            ModuleDescription::TypeIndex referent_type
-        ) : BasicFixup(fixup_type),
-            referent_type_index(referent_type) {}
-    };
-    std::vector<PointerFixup> ptr_fixups{};
-    std::vector<ReferenceFixup> ref_fixups{};
+    std::vector<BasicFixup> ptr_fixups{};
+    std::vector<BasicFixup> ref_fixups{};
+
     for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
         auto tag = module_metadata_blob.at(type_offset++);
         auto kind = Type::Kind(tag);
@@ -536,13 +555,13 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                     length_array[i] = module_metadata_blob.at(type_offset++);
                 u32 length = from_bytes<u32>(length_array);
 
-                LCC_ASSERT(name().size(), "Deserialised named type has zero-length name");
+                LCC_ASSERT(not name().empty(), "Deserialised named type has zero-length name");
 
                 std::string deserialised_name{};
                 for (u32 i = 0; i < length; ++i)
                     deserialised_name += char(module_metadata_blob.at(type_offset++));
 
-                LCC_ASSERT(deserialised_name.size(), "Deserialised named type has empty name");
+                LCC_ASSERT(not deserialised_name.empty(), "Deserialised named type has empty name");
 
                 // FIXME: This may need to be top level scope, not entirely sure the
                 // semantics of this yet.
@@ -595,13 +614,15 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                 auto ref_type_index = from_bytes<ModuleDescription::TypeIndex>(ref_type_index_array);
 
                 // Normally done in operator new of Type, but we do it manually here since
-                // we can't new the pointer type until.
+                // we can't new the pointer type until we have the pointer to the element
+                // type, and we (may) have not deserialised that yet.
                 types.push_back(nullptr);
 
                 if (kind == Type::Kind::Pointer)
-                    ptr_fixups.push_back({type_index, ref_type_index});
+                    ptr_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
                 else if (kind == Type::Kind::Reference)
-                    ref_fixups.push_back({type_index, ref_type_index});
+                    ref_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
+                else LCC_TODO("Unhandled type kind in element type deserialisation");
             } break;
 
             // IntegerType: bitwidth :u16, is_signed :u8
@@ -635,12 +656,12 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                 LCC_TODO("DESERIALISE: Implement ArrayType fixups and make one of those");
             } break;
 
-                // FunctionType:
-                //     attributes :u32
-                //     param_count :u16
-                //     param_types :TypeIndex[param_count]
-                //     return_type :TypeIndex
-                //     param_names :(param_name_length :u16, param_name :u8[param_name_length])[param_count]
+            // FunctionType:
+            //     attributes :u32
+            //     param_count :u16
+            //     param_types :TypeIndex[param_count]
+            //     return_type :TypeIndex
+            //     param_names :(param_name_length :u16, param_name :u8[param_name_length])[param_count]
             case Type::Kind::Function: {
                 static constexpr auto attributes_size = sizeof(u32);
                 std::array<u8, attributes_size> attributes_array{};
@@ -721,15 +742,26 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
         }
     }
 
-    for (auto ptr_fixup : ptr_fixups) {
-        LCC_ASSERT(ptr_fixup.fixup_type_index < types.size());
-        LCC_ASSERT(ptr_fixup.pointee_type_index < types.size());
-        types[ptr_fixup.fixup_type_index] = types[ptr_fixup.pointee_type_index];
+    for (auto fixup : ptr_fixups) {
+        validate_fixup(fixup);
+        // NOTE: Since new adds the newed type to the types container, we end up
+        // with the same type duplicated, so we have to remove the one that gets
+        // added automatically...
+        int types_size = int(types.size());
+        types[fixup.fixup_type_index] = new (*this) PointerType(
+            types[fixup.replacement_type_index]
+        );
+        types.erase(types.begin() + types_size);
     }
-    for (auto ref_fixup : ref_fixups) {
-        LCC_ASSERT(ref_fixup.fixup_type_index < types.size());
-        LCC_ASSERT(ref_fixup.referent_type_index < types.size());
-        types[ref_fixup.fixup_type_index] = types[ref_fixup.referent_type_index];
+
+    for (auto fixup : ref_fixups) {
+        validate_fixup(fixup);
+        int types_size = int(types.size());
+        types[fixup.fixup_type_index] = new (*this) ReferenceType(
+            types[fixup.replacement_type_index],
+            {}
+        );
+        types.erase(types.begin() + types_size);
     }
 
     // Starting after the header, begin parsing declarations. Stop after
@@ -765,14 +797,14 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                 );
                 auto type_decl = new (*this) TypeDecl(this, name, as<DeclaredType>(ty), {});
                 type_decl->set_sema_done();
-                auto decl = scope->declare(ctx, std::string(name), type_decl);
+                auto decl = scope->declare(context, std::string(name), type_decl);
             } break;
 
             // Created from Expr::Kind::TypeAliasDecl
             case ModuleDescription::DeclarationHeader::Kind::TYPE_ALIAS: {
                 auto* type_alias_decl = new (*this) TypeAliasDecl(name, ty, {});
                 type_alias_decl->set_sema_done();
-                auto decl = scope->declare(ctx, std::string(name), type_alias_decl);
+                auto decl = scope->declare(context, std::string(name), type_alias_decl);
             } break;
 
             // Created from Expr::Kind::VarDecl
@@ -780,7 +812,7 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                 // FIXME: Should possibly be reexported.
                 auto* var_decl = new (*this) VarDecl(name, ty, nullptr, this, Linkage::Imported, {});
                 var_decl->set_sema_done();
-                auto decl = scope->declare(ctx, std::string(name), var_decl);
+                auto decl = scope->declare(context, std::string(name), var_decl);
             } break;
 
             // Created from Expr::Kind::FuncDecl
@@ -791,7 +823,7 @@ bool lcc::glint::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_m
                 );
                 auto* func_decl = new (*this) FuncDecl(name, as<FuncType>(ty), nullptr, scope, this, Linkage::Imported, {});
                 func_decl->set_sema_done();
-                auto decl = scope->declare(ctx, std::string(name), func_decl);
+                auto decl = scope->declare(context, std::string(name), func_decl);
             } break;
 
             // Created from Expr::Kind::EnumeratorDecl
