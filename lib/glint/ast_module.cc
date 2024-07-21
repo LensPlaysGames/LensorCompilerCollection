@@ -216,6 +216,10 @@ auto lcc::glint::Module::serialise(
             };
             // Probably don't need all of these. If we run out of bits, we could
             // remove some that aren't needed.
+            static_assert(
+                +FuncAttr::COUNT == 11,
+                "Exhaustive handling of function attributes in module deserialisation"
+            );
             set_attr_bit(FuncAttr::Const);
             set_attr_bit(FuncAttr::Discardable);
             set_attr_bit(FuncAttr::Flatten);
@@ -434,7 +438,7 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
 
     // TODO: Make name serialisable
     LCC_ASSERT(
-        name().size(),
+        not name().empty(),
         "Cannot serialise unnamed module"
     );
     serialised_name.insert(
@@ -521,7 +525,7 @@ auto lcc::glint::Module::deserialise(
         constexpr auto low_msg
             = "You probably forgot to account for the non-zero zero index into the types container.";
         constexpr auto high_msg
-            = "You really messed up creating a fixup that is entirely out of range of the types container.";
+            = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
         LCC_ASSERT(
             fixup.fixup_type_index >= types_zero_index,
             low_msg
@@ -532,16 +536,98 @@ auto lcc::glint::Module::deserialise(
         );
         LCC_ASSERT(
             fixup.fixup_type_index < types.size(),
-            high_msg
+            high_msg,
+            fixup.fixup_type_index,
+            types.size()
         );
         LCC_ASSERT(
             fixup.replacement_type_index < types.size(),
-            high_msg
+            high_msg,
+            fixup.replacement_type_index,
+            types.size()
+        );
+    };
+
+    struct FunctionFixup {
+        // Type index of the type that needs fixing up. This index will be
+        // overwritten with the type at the replacement type index.
+        u32 function_attributes;
+        ModuleDescription::TypeIndex function_type_index;
+        ModuleDescription::TypeIndex return_type_index;
+        std::vector<ModuleDescription::TypeIndex> param_type_indices;
+        std::vector<std::string> param_names;
+        /// FIXUP is replaced with REPLACEMENT
+        FunctionFixup(
+            u16 zero_index,
+            ModuleDescription::TypeIndex function_index,
+            ModuleDescription::TypeIndex return_index,
+            std::vector<ModuleDescription::TypeIndex> param_types,
+            std::vector<std::string> param_names_,
+            u32 attributes
+        ) : function_attributes(attributes), function_type_index(zero_index + function_index),
+            return_type_index(zero_index + return_index),
+            param_type_indices(std::move(param_types)),
+            param_names(std::move(param_names_)) {
+            for (auto& index : param_type_indices)
+                index += zero_index;
+        }
+    };
+
+    auto validate_function_fixup = [this, types_zero_index](const FunctionFixup& fixup) {
+        constexpr auto low_msg
+            = "You probably forgot to account for the non-zero zero index into the types container.";
+        constexpr auto high_msg
+            = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
+
+        // Bounds-check index to be replaced with a function type.
+        LCC_ASSERT(
+            fixup.function_type_index >= types_zero_index,
+            low_msg
+        );
+        LCC_ASSERT(
+            fixup.function_type_index < types.size(),
+            high_msg,
+            fixup.function_type_index,
+            types.size()
+        );
+
+        // Bounds-check return type index.
+        LCC_ASSERT(
+            fixup.return_type_index >= types_zero_index,
+            low_msg
+        );
+        LCC_ASSERT(
+            fixup.return_type_index < types.size(),
+            high_msg,
+            fixup.return_type_index,
+            types.size()
+        );
+
+        // Bounds-check all parameter indices.
+        for (auto param_i : fixup.param_type_indices) {
+            LCC_ASSERT(
+                param_i >= types_zero_index,
+                low_msg
+            );
+            LCC_ASSERT(
+                param_i < types.size(),
+                high_msg,
+                param_i,
+                types.size()
+            );
+        }
+
+        // Parameter names and type indices have to map 1:1 (same amount)
+        LCC_ASSERT(
+            fixup.param_type_indices.size() == fixup.param_names.size(),
+            "Mismatch in deserialised type and name count"
         );
     };
 
     std::vector<BasicFixup> ptr_fixups{};
     std::vector<BasicFixup> ref_fixups{};
+    std::vector<BasicFixup> dynarray_fixups{};
+    std::vector<FunctionFixup> function_fixups{};
 
     for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
         auto tag = module_metadata_blob.at(type_offset++);
@@ -549,7 +635,7 @@ auto lcc::glint::Module::deserialise(
         switch (kind) {
             // NamedType: length :u32, name :u8[length]
             case Type::Kind::Named: {
-                static constexpr auto length_size = sizeof(u32);
+                constexpr auto length_size = sizeof(u32);
                 std::array<u8, length_size> length_array{};
                 for (unsigned i = 0; i < length_size; ++i)
                     length_array[i] = module_metadata_blob.at(type_offset++);
@@ -592,7 +678,7 @@ auto lcc::glint::Module::deserialise(
 
             // FFIType: ffi_kind :u16
             case Type::Kind::FFIType: {
-                static constexpr auto ffi_kind_size = sizeof(u16);
+                constexpr auto ffi_kind_size = sizeof(u16);
                 std::array<u8, ffi_kind_size> length_array{};
                 for (unsigned i = 0; i < ffi_kind_size; ++i)
                     length_array[i] = module_metadata_blob.at(type_offset++);
@@ -601,13 +687,11 @@ auto lcc::glint::Module::deserialise(
                 FFIType::Make(*this, ffi_kind, {});
             } break;
 
-            case Type::Kind::DynamicArray:
-                LCC_TODO("DESERIALISE: A dynamic array is just like a pointer or reference, but I need to implement a fixup list for them and just haven't yet");
-
             // PointerType, ReferenceType: type_index :TypeIndex
+            case Type::Kind::DynamicArray:
             case Type::Kind::Pointer:
             case Type::Kind::Reference: {
-                static constexpr auto ref_type_index_size = sizeof(ModuleDescription::TypeIndex);
+                constexpr auto ref_type_index_size = sizeof(ModuleDescription::TypeIndex);
                 std::array<u8, ref_type_index_size> ref_type_index_array{};
                 for (unsigned i = 0; i < ref_type_index_size; ++i)
                     ref_type_index_array[i] = module_metadata_blob.at(type_offset++);
@@ -622,12 +706,14 @@ auto lcc::glint::Module::deserialise(
                     ptr_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
                 else if (kind == Type::Kind::Reference)
                     ref_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
+                else if (kind == Type::Kind::DynamicArray)
+                    dynarray_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
                 else LCC_TODO("Unhandled type kind in element type deserialisation");
             } break;
 
             // IntegerType: bitwidth :u16, is_signed :u8
             case Type::Kind::Integer: {
-                static constexpr auto bitwidth_size = sizeof(u16);
+                constexpr auto bitwidth_size = sizeof(u16);
                 std::array<u8, bitwidth_size> bitwidth_array{};
                 for (unsigned i = 0; i < bitwidth_size; ++i)
                     bitwidth_array[i] = module_metadata_blob.at(type_offset++);
@@ -639,13 +725,13 @@ auto lcc::glint::Module::deserialise(
 
             // ArrayType: element_type_index :TypeIndex, element_count :u64
             case Type::Kind::Array: {
-                static constexpr auto element_type_index_size = sizeof(ModuleDescription::TypeIndex);
+                constexpr auto element_type_index_size = sizeof(ModuleDescription::TypeIndex);
                 std::array<u8, element_type_index_size> element_type_index_array{};
                 for (unsigned i = 0; i < element_type_index_size; ++i)
                     element_type_index_array[i] = module_metadata_blob.at(type_offset++);
                 auto element_type_index = from_bytes<ModuleDescription::TypeIndex>(element_type_index_array);
 
-                static constexpr auto element_count_size = sizeof(u64);
+                constexpr auto element_count_size = sizeof(u64);
                 std::array<u8, element_count_size> element_count_array{};
                 for (unsigned i = 0; i < element_count_size; ++i)
                     element_count_array[i] = module_metadata_blob.at(type_offset++);
@@ -663,22 +749,24 @@ auto lcc::glint::Module::deserialise(
             //     return_type :TypeIndex
             //     param_names :(param_name_length :u16, param_name :u8[param_name_length])[param_count]
             case Type::Kind::Function: {
-                static constexpr auto attributes_size = sizeof(u32);
+                // Attributes
+                constexpr auto attributes_size = sizeof(u32);
                 std::array<u8, attributes_size> attributes_array{};
                 for (unsigned i = 0; i < attributes_size; ++i)
                     attributes_array[i] = module_metadata_blob.at(type_offset++);
                 auto attributes = from_bytes<u32>(attributes_array);
 
-                static constexpr auto param_count_size = sizeof(u16);
+                // Parameter Count
+                constexpr auto param_count_size = sizeof(u16);
                 std::array<u8, param_count_size> param_count_array{};
                 for (unsigned i = 0; i < param_count_size; ++i)
                     param_count_array[i] = module_metadata_blob.at(type_offset++);
                 auto param_count = from_bytes<u16>(param_count_array);
 
-                // Parameter Type indices
+                // Parameter Type Indices
                 std::vector<ModuleDescription::TypeIndex> param_type_indices{};
                 for (usz param_index = 0; param_index < param_count; ++param_index) {
-                    static constexpr auto param_type_index_size = sizeof(ModuleDescription::TypeIndex);
+                    constexpr auto param_type_index_size = sizeof(ModuleDescription::TypeIndex);
                     std::array<u8, param_type_index_size> param_type_index_array{};
                     for (unsigned i = 0; i < param_type_index_size; ++i)
                         param_type_index_array[i] = module_metadata_blob.at(type_offset++);
@@ -687,16 +775,17 @@ auto lcc::glint::Module::deserialise(
                     param_type_indices.emplace_back(param_type_index);
                 }
 
-                static constexpr auto return_type_index_size = sizeof(ModuleDescription::TypeIndex);
+                // Return Type Index
+                constexpr auto return_type_index_size = sizeof(ModuleDescription::TypeIndex);
                 std::array<u8, return_type_index_size> return_type_index_array{};
                 for (unsigned i = 0; i < return_type_index_size; ++i)
                     return_type_index_array[i] = module_metadata_blob.at(type_offset++);
                 auto return_type_index = from_bytes<ModuleDescription::TypeIndex>(return_type_index_array);
 
-                // Parameter names
+                // Parameter Names
                 std::vector<std::string> param_names{};
                 for (usz param_index = 0; param_index < param_count; ++param_index) {
-                    static constexpr auto param_name_length_size = sizeof(u16);
+                    constexpr auto param_name_length_size = sizeof(u16);
                     std::array<u8, param_name_length_size> param_name_length_array{};
                     for (unsigned i = 0; i < param_name_length_size; ++i)
                         param_name_length_array[i] = module_metadata_blob.at(type_offset++);
@@ -704,18 +793,21 @@ auto lcc::glint::Module::deserialise(
 
                     std::string param_name{};
                     param_name.reserve(param_name_length);
-                    for (unsigned i = 0; i < param_name_length_size; ++i)
+                    for (unsigned i = 0; i < param_name_length; ++i)
                         param_name += char(module_metadata_blob.at(type_offset++));
 
-                    param_names.emplace_back(param_name);
+                    param_names.emplace_back(std::move(param_name));
                 }
 
-                (void) attributes;
-                (void) param_count;
-                (void) param_type_indices;
-                (void) return_type_index;
-                (void) param_names;
-                LCC_TODO("DESERIALISE: Function type (fixup nightmare)");
+                types.push_back(nullptr);
+                function_fixups.emplace_back(
+                    types_zero_index,
+                    type_index,
+                    return_type_index,
+                    std::move(param_type_indices),
+                    std::move(param_names),
+                    attributes
+                );
             } break;
 
             // StructType:
@@ -746,7 +838,8 @@ auto lcc::glint::Module::deserialise(
         validate_fixup(fixup);
         // NOTE: Since new adds the newed type to the types container, we end up
         // with the same type duplicated, so we have to remove the one that gets
-        // added automatically...
+        // added automatically... If we just left it, we would try to delete it
+        // twice, and that causes it's own whole host of errors.
         int types_size = int(types.size());
         types[fixup.fixup_type_index] = new (*this) PointerType(
             types[fixup.replacement_type_index]
@@ -761,6 +854,63 @@ auto lcc::glint::Module::deserialise(
             types[fixup.replacement_type_index],
             {}
         );
+        types.erase(types.begin() + types_size);
+    }
+
+    for (auto fixup : dynarray_fixups) {
+        validate_fixup(fixup);
+        int types_size = int(types.size());
+        types[fixup.fixup_type_index] = new (*this) DynamicArrayType(
+            types[fixup.replacement_type_index],
+            nullptr
+        );
+        types.erase(types.begin() + types_size);
+    }
+
+    for (auto fixup : function_fixups) {
+        validate_function_fixup(fixup);
+        int types_size = int(types.size());
+
+        std::vector<FuncType::Param> params{};
+        usz param_i{0};
+        for (auto param_type_index : fixup.param_type_indices) {
+            params.emplace_back(
+                fixup.param_names.at(param_i),
+                types[param_type_index],
+                Location{}
+            );
+            ++param_i;
+        }
+
+        auto* function = new (*this) FuncType(
+            std::move(params),
+            types[fixup.return_type_index],
+            {},
+            {}
+        );
+        types[fixup.function_type_index] = function;
+
+        const auto set_attr = [fixup, function](FuncAttr f) {
+            if (fixup.function_attributes & (u32(1) << u32(f)))
+                function->set_attr(f);
+        };
+
+        static_assert(
+            +FuncAttr::COUNT == 11,
+            "Exhaustive handling of function attributes in module deserialisation"
+        );
+        set_attr(FuncAttr::Const);
+        set_attr(FuncAttr::Discardable);
+        set_attr(FuncAttr::Flatten);
+        set_attr(FuncAttr::Inline);
+        set_attr(FuncAttr::NoInline);
+        set_attr(FuncAttr::NoMangle);
+        set_attr(FuncAttr::NoOpt);
+        set_attr(FuncAttr::NoReturn);
+        set_attr(FuncAttr::Pure);
+        set_attr(FuncAttr::ReturnsTwice);
+        set_attr(FuncAttr::Used);
+
         types.erase(types.begin() + types_size);
     }
 
@@ -819,7 +969,8 @@ auto lcc::glint::Module::deserialise(
             case ModuleDescription::DeclarationHeader::Kind::FUNCTION: {
                 LCC_ASSERT(
                     is<FuncType>(ty),
-                    "Cannot create FuncDecl when deserialised type is not a function"
+                    "Cannot create FuncDecl when deserialised type, {}, is not a function",
+                    *ty
                 );
                 auto* func_decl = new (*this) FuncDecl(name, as<FuncType>(ty), nullptr, scope, this, Linkage::Imported, {});
                 func_decl->set_sema_done();

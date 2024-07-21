@@ -43,6 +43,7 @@ enum struct FuncAttr {
     Pure,
     ReturnsTwice,
     Used,
+    COUNT
 };
 
 enum struct TokenKind {
