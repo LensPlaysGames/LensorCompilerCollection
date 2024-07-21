@@ -1816,7 +1816,19 @@ template <>
 struct fmt::formatter<lcc::glint::Type> : formatter<string_view> {
     template <typename FormatContext>
     auto format(const lcc::glint::Type& t, FormatContext& ctx) {
-        return fmt::format_to(ctx.out(), "{}", t.string());
+        // TODO: It'd be nice if this was controllable, somehow.
+        static constexpr bool use_colour = true;
+        return fmt::format_to(ctx.out(), "{}", t.string(use_colour));
+    }
+};
+
+template <>
+struct fmt::formatter<lcc::glint::Type*> : formatter<string_view> {
+    template <typename FormatContext>
+    auto format(const lcc::glint::Type* t, FormatContext& ctx) {
+        // TODO: It'd be nice if this was controllable, somehow.
+        static constexpr bool use_colour = true;
+        return fmt::format_to(ctx.out(), "{}", t->string(use_colour));
     }
 };
 
