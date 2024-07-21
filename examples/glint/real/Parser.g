@@ -16,7 +16,7 @@ TokenKind : enum {
     SLASH;
 };
 
-binop_precedence: Boolean(k: TokenKind) {
+binop_precedence: bool(k: TokenKind) {
     if k = TokenKind.PLUS or k = TokenKind.HYPHEN
         return 1;
     if k = TokenKind.ASTERISK or k = TokenKind.SLASH
@@ -29,7 +29,7 @@ Token : struct {
     location: Location;
 };
 
-is_digit : Boolean(c: Byte) {
+is_digit : bool(c: byte) {
     return c = b"0" or c = b"1"
         or c = b"2" or c = b"3"
         or c = b"4" or c = b"5"
@@ -37,13 +37,13 @@ is_digit : Boolean(c: Byte) {
         or c = b"8" or c = b"9";
 };
 
-is_whitespace : Boolean(c: Byte) {
+is_whitespace : bool(c: byte) {
     return c = b" " or c = b"\n"
         or c = b"\r" or c = b"\t"
         or c = b"\f" or c = b"\v";
 };
 
-lex : Token(input: [Byte].ref, start: usz.ref) {
+lex : Token(input: [byte].ref, start: usz.ref) {
     if not input.size or start >= input.size
         return Token TokenKind.NONE (Location 0 0);
 
@@ -112,7 +112,7 @@ Node : struct {
     children: [Node];
 };
 
-parse : Node(input: [Byte].ref, prec: uint) {
+parse : Node(input: [byte].ref, prec: uint) {
     out :: Node NodeKind.ROOT !{};
 
     offset : usz 0;

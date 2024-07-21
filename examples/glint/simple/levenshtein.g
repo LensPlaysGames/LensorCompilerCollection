@@ -1,11 +1,11 @@
-foo :[Byte]() {
-    should_warn :[Byte];
-    shouldnt_warn :[Byte];
+foo :[byte]() {
+    should_warn :[byte];
+    shouldnt_warn :[byte];
     return shouldnt_warn;
 };
 
-dynamic :[Byte];
+dynamic :[byte];
 
-dynarray :[Byte];
+dynarray :[byte];
 -dyanrrya;
 0;

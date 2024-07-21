@@ -1,6 +1,6 @@
 module SimpleFile;
 
-external fopen: void.ptr(path: Byte.ptr, mode: Byte.ptr);
+external fopen: void.ptr(path: byte.ptr, mode: byte.ptr);
 external fread: cusize(buffer: void.ptr, element_size: cint, element_count: cint, handle: void.ptr) discardable;
 external fwrite: cusize(buffer: void.ptr, element_size: cint, element_count: cint, handle: void.ptr) discardable;
 external fclose: void(handle: void.ptr);
@@ -8,7 +8,7 @@ external fclose: void(handle: void.ptr);
 external ftell: clong(handle: void.ptr);
 external fseek: cint(handle: void.ptr, offset: clong, origin: cint) discardable;
 
-export gstd_read: [Byte](path: [Byte]) {
+export gstd_read: [byte](path: [byte]) {
     handle :: fopen path.data, "rb"[0];
 
     ;; These are C macros, because of course they are.
@@ -20,7 +20,7 @@ export gstd_read: [Byte](path: [Byte]) {
     size :: ftell handle;
     fseek handle 0 SEEK_SET;
 
-    contents : [Byte size];
+    contents : [byte size];
 
     nread :: fread contents.data 1 (cint size) handle;
     contents.size := (u32 nread);
@@ -30,7 +30,7 @@ export gstd_read: [Byte](path: [Byte]) {
     return contents;
 };
 
-export gstd_write: Bool(path: [Byte], contents: [Byte]) discardable {
+export gstd_write: bool(path: [byte], contents: [byte]) discardable {
     handle :: fopen path.data "wb"[0];
     fwrite contents.data 1 (cint contents.size) handle;
     fclose handle;
