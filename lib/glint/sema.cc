@@ -101,7 +101,8 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
     /// Strip reference from `from` if need be.
     if (auto* ref = cast<ReferenceType>(from)) {
         score += 1;
-        if constexpr (PerformConversion) LValueToRValue(expr_ptr);
+        if constexpr (PerformConversion)
+            LValueToRValue(expr_ptr);
     }
 
     // Function types can be converted to their corresponding function pointer
@@ -151,6 +152,24 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         // but, uhhh, we can't really do that right now without an expression of
         // that type due to how Convert works ... I wonder what idiot built it
         // that way.
+        if (not Type::Equal(from_arr->element_type(), to_arr->element_type()))
+            return ConversionImpossible;
+
+        if constexpr (PerformConversion)
+            InsertImplicitCast(expr_ptr, to);
+        return Score(1);
+    }
+
+    if (from->is_array() and to->is_dynamic_array()) {
+        auto* from_arr = as<ArrayType>(from);
+        auto* to_arr = as<DynamicArrayType>(to);
+
+        // FIXME: We kind of need to check that the base types are convertible,
+        // but, uhhh, we can't really do that right now without an expression of
+        // that type due to how Convert works ... I wonder what idiot built it
+        // that way.
+        if (not Type::Equal(from_arr->element_type(), to_arr->element_type()))
+            return ConversionImpossible;
 
         if constexpr (PerformConversion)
             InsertImplicitCast(expr_ptr, to);
@@ -200,10 +219,11 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
 
             /// Unsigned to Unsigned Conversion
             auto bits = to->size(context);
-            if (from->is_unsigned_int(context)
+            if (
+                from->is_unsigned_int(context)
                 and bits < 64
-                and val > u64(utils::MaxBitValue(bits)))
-                return ConversionImpossible;
+                and val > u64(utils::MaxBitValue(bits))
+            ) return ConversionImpossible;
 
             if constexpr (PerformConversion) {
                 InsertImplicitCast(expr_ptr, to);
@@ -806,21 +826,32 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     if (not ty->return_type()->is_void()) {
         Expr** last{};
         if (auto block = cast<BlockExpr>(decl->body())) {
-            if (block->children().empty()) {
-                // For anything except the top-level function, if there is an expected
-                // return value, there has to be one, otherwise it's an error.
-                if (decl->name() != "main") {
+            // For anything except the top-level function, if there is an expected
+            // return value, there has to be one, otherwise it's an error.
+            if (decl->name() != "main") {
+                if (block->children().empty()) {
                     Error(decl->location(), "Function `{}` has non-void return type, and must return a value", decl->name());
                     return;
                 }
+            }
 
-                // For the top level function of executable programs, a return value is be
-                // created if a valid one is not present.
+            // For the top level function of Glint programs, a return value is
+            // created if a valid one is not present.
+            if (block->children().empty()) {
                 auto inserted_return_value = new (mod) IntegerLiteral(0, {});
                 block->add(new (mod) ReturnExpr(inserted_return_value, {}));
             }
 
             last = block->last_expr();
+
+            // For the top level function of GLint programs, a return value is created
+            // if a valid one is not present. This includes if the last value is not
+            // convertible to the return type of main.
+            if (not Convert(last, ty->return_type())) {
+                auto inserted_return_value = new (mod) IntegerLiteral(0, {});
+                block->add(new (mod) ReturnExpr(inserted_return_value, {}));
+                last = block->last_expr();
+            }
         } else last = &decl->body();
 
         if (is<ReturnExpr>(*last)) return;
@@ -832,7 +863,6 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
                 (*last)->type(),
                 ty->return_type()
             );
-            context->set_error();
             return;
         }
 
@@ -1805,10 +1835,65 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         return;
     }
 
-    /// Otherwise, if the type is not already a function type, we can’t call this.
+    // Otherwise, if the type is not already a function type, we can’t call this.
     else if (not callee_ty->is_function()) {
-        Error(expr->callee()->location(), "Cannot call non-function(-pointer) type {}", callee_ty);
+        auto e = Error(expr->callee()->location(), "Cannot call non-function type {}", callee_ty);
         expr->set_sema_errored();
+
+        // So, when writing Glint, if you leave out a semi-colon separator (you
+        // devil, you), it can turn a regular expression into a call. So, if we
+        // detect that this uncallable callee expression is on one line and the
+        // first argument is on an entirely different line, we can suggest adding
+        // a semi-colon after the callee expression.
+        if (not expr->args().empty()) {
+            auto callee_location = expr->callee()->location();
+            auto first_arg_location = expr->args()[0]->location();
+            if (callee_location.is_valid() and first_arg_location.is_valid()) {
+                auto callee_location_info = callee_location.seek_line_column(context);
+                auto first_arg_location_info = first_arg_location.seek_line_column(context);
+                if (callee_location_info.line != first_arg_location_info.line) {
+                    // TODO: I would love to be able to fix this for them and just emit a
+                    // warning, but here's the issue I ran into: if we just replace *expr_ptr
+                    // with a block expression with the callee and then the arguments, it
+                    // often forms an invalid AST as the argument expressions should be
+                    // inserted /after/ we return the callee expression by itself. So, for
+                    // this to work, we'd need to replace *expr_ptr with the callee
+                    // expression, and somehow push the argument expressions onto some sort of
+                    // stack to fetch from later. Because that is so complicated and bug-prone
+                    // to implement, I'll wait until I really feel like it.
+                    // Attempt to get to location one-past end of callee expression.
+
+                    Location rightmost_location = callee_location;
+
+                    if (expr->callee()->kind() == Expr::Kind::VarDecl) {
+                        auto* var_decl = as<VarDecl>(expr->callee());
+                        if (var_decl->init())
+                            rightmost_location = var_decl->init()->location();
+                        else rightmost_location = var_decl->type()->location();
+                    }
+                    if (expr->callee()->kind() == Expr::Kind::FuncDecl) {
+                        auto* func_decl = as<FuncDecl>(expr->callee());
+                        if (func_decl->body())
+                            rightmost_location = as<FuncDecl>(expr->callee())->body()->location();
+                        else rightmost_location = func_decl->type()->location();
+                    }
+
+                    // Limit location to length of one, discarding the beginning (fold right).
+                    if (rightmost_location.len > 1) {
+                        rightmost_location.pos += rightmost_location.len - 1;
+                        rightmost_location.len = 1;
+                    }
+
+                    e.attach(Note(
+                        rightmost_location,
+                        "You probablly forgot a ';' around here somewhere. "
+                        "We thought about inserting it for you but got worried you'd get annoyed."
+                    ));
+                    return;
+                }
+            }
+        }
+
         return;
     }
 
@@ -1832,12 +1917,27 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     /// type. This is all handled transparently by Convert().
     for (usz i = 0, end = std::min(expr->args().size(), func_type->params().size()); i < end; i++) {
         LValueToRValue(expr->args().data() + i);
-        if (not Convert(expr->args().data() + i, func_type->params()[i].type)) Error(
-            expr->args()[i]->location(),
-            "Type of argument {} is not convertible to parameter type {}",
-            expr->args()[i]->type(),
-            func_type->params()[i].type
-        );
+        if (not Convert(expr->args().data() + i, func_type->params()[i].type)) {
+            // got
+            auto* from = expr->args()[i]->type();
+            // expected
+            auto* to = func_type->params()[i].type;
+
+            if (from->is_dynamic_array() and to->is_array()) {
+                Error(
+                    expr->args()[i]->location(),
+                    "Creation of a fixed array has to be done manually, with elements copied in from a dynamic array.\n"
+                    "This way, /you/ can ensure that /all/ of the array's elements are initialised.\n",
+                    from,
+                    to
+                );
+            } else Error(
+                expr->args()[i]->location(),
+                "Type of argument {} is not convertible to parameter type {}",
+                from,
+                to
+            );
+        }
     }
 }
 

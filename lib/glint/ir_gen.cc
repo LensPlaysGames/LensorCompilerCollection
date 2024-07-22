@@ -768,9 +768,18 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 return;
             }
 
+            // FIXED ARRAY TO DYNAMIC ARRAY
+            if (cast->operand()->type()->is_array() and cast->type()->is_dynamic_array()) {
+                LCC_TODO("IRGen fixed array to dynamic array cast");
+                // TODO: We have to create a whole temporary and everything. We probably
+                // want to do at least part of this in sema to make our lives easier here.
+            }
+
+            // TODO: FIXED ARRAY TO ARRAY VIEW
+            // TODO: DYNAMIC ARRAY TO ARRAY VIEW
+
             if (cast->is_lvalue_to_rvalue()) {
-                // SAFE/CHECKED SUM TYPE ACCESS (disabled, I don't know if I even want
-                // this + there is definitely a bug in it or surrounding code)
+                // SAFE/CHECKED SUM TYPE ACCESS
                 if (
                     auto* m = lcc::cast<MemberAccessExpr>(cast->operand());
                     int_module.sum_type_bad_access_check()
