@@ -1159,12 +1159,7 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<void> {
     // know about any weirdness going on can install a classic "print message
     // and crash" handler. This is sort of like operator overloading but on a
     // module, I guess, lol.
-    constexpr auto sum_t_bad_access_check{
-        // Module::DontCheck
-        Module::DoSumTypeBadAccessCheck //
-    };
-
-    std::string module_name{""};
+    std::string module_name;
     auto module_kind = Module::IsAnExecutable;
 
     if (At(Tk::Ident) and tok.text == "module" and not tok.artificial) {
@@ -1179,8 +1174,7 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<void> {
     mod = std::make_unique<Module>(
         f,
         module_name,
-        module_kind,
-        sum_t_bad_access_check
+        module_kind
     );
 
     while (At(Tk::Semicolon)) NextToken();

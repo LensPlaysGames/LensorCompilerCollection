@@ -186,11 +186,6 @@ private:
     // and an executable program.
     bool _is_module{false};
 
-    // If this is true, then runtime access checks will be inserted for sum
-    // types. Otherwise, it's on you, kid. Note that this means a custom
-    // handler will not be called, even if one is defined.
-    bool _sum_type_bad_access_check{true};
-
     File* _file;
 
     std::vector<Ref> _imports{};
@@ -207,15 +202,10 @@ public:
         IsNotAnExecutable = true,
         IsAnExecutable = false
     };
-    enum SumTypeBadAccessCheckStatus : bool {
-        DontCheck = false,
-        DoSumTypeBadAccessCheck = true
-    };
     Module(
         File* file,
         std::string module_name,
-        ModuleStatus is_logical_module,
-        SumTypeBadAccessCheckStatus sum_type_bad_access_check
+        ModuleStatus is_logical_module
     );
 
     ~Module();
@@ -269,14 +259,6 @@ public:
     [[nodiscard]]
     auto is_module() const -> bool {
         return _is_module;
-    }
-
-    [[nodiscard]]
-    auto sum_type_bad_access_check() const -> bool {
-        return _sum_type_bad_access_check;
-    }
-    void sum_type_bad_access_check(bool check) {
-        _sum_type_bad_access_check = check;
     }
 
     /// Obtain a module metadata blob describing this Glint module.

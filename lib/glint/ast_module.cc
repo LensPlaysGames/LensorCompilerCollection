@@ -16,12 +16,11 @@
 lcc::glint::Module::Module(
     File* file,
     std::string module_name,
-    Module::ModuleStatus is_logical_module,
-    Module::SumTypeBadAccessCheckStatus sum_type_bad_access_check
+    Module::ModuleStatus is_logical_module
 ) : _name{std::move(module_name)},
     _is_module{is_logical_module},
-    _sum_type_bad_access_check{sum_type_bad_access_check},
-    _file{file} {
+    _file{file} //
+{
     FuncType* ty{};
 
     /// Create the type of the top-level function.

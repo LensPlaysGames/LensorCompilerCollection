@@ -779,12 +779,17 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             // TODO: DYNAMIC ARRAY TO ARRAY VIEW
 
             if (cast->is_lvalue_to_rvalue()) {
-                // SAFE/CHECKED SUM TYPE ACCESS
+                // SUM TYPE ACCESS
                 if (
                     auto* m = lcc::cast<MemberAccessExpr>(cast->operand());
-                    int_module.sum_type_bad_access_check()
-                    and m and m->object()->type()->is_sum_type()
+                    m and m->object()->type()->is_sum_type()
                 ) {
+                    // TODO: This should become a builtin function we call, and eventually
+                    // that function should be able to be defined in the Glint program itself
+                    // for a given sum type; this way bad accesses can be handled by returning
+                    // a default value, calling exit, or doing whatever weird and whacky shit
+                    // users are wont to do.
+
                     // The following
                     //   foo : sum { x :cint 0, y :uint 0 };
                     // turns into
