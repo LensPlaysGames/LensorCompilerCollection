@@ -238,9 +238,9 @@ void Module::lower() {
                                     memcpy_operands,
                                     load->location()
                                 );
-                                load->replace_with(memcpy_inst);
 
-                                store->erase();
+                                store->replace_with(memcpy_inst);
+                                load->erase();
                             } else {
                                 // Possiblities:
                                 // - generate builtin memcpy for backend to handle
@@ -248,7 +248,7 @@ void Module::lower() {
                                 //   incremented
                                 // - just copy the ptr instead, and everywhere that uses a load should
                                 //   handle the fact that over-sized loads will be pointers instead.
-                                auto copy = new (*this) CopyInst(load->ptr());
+                                auto* copy = new (*this) CopyInst(load->ptr());
                                 load->replace_with(copy);
                             }
                         } break;
@@ -269,10 +269,11 @@ void Module::lower() {
 
                             // Change type of val to pointer, if it isn't already.
                             // TODO: Does this apply to values other than Parameter? Does it need to?
-                            if (auto param = cast<Parameter>(store->val()))
+                            if (auto param = cast<Parameter>(store->val())) {
                                 store->val(
                                     new (*this) Parameter(Type::PtrTy, param->index())
                                 );
+                            }
 
                             if (store->val()->type() != Type::PtrTy) {
                                 store->print();
@@ -292,12 +293,14 @@ void Module::lower() {
                                     IntegerType::Get(context(), x86_64::GeneralPurposeBitwidth),
                                     byte_count
                                 )};
-                            auto memcpy_inst = new (*this) IntrinsicInst(
+                            auto* memcpy_inst = new (*this) IntrinsicInst(
                                 IntrinsicKind::MemCopy,
                                 memcpy_operands,
                                 store->location()
                             );
+
                             store->replace_with(memcpy_inst);
+
                         } break;
                         default: break;
                     }
