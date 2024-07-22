@@ -630,6 +630,23 @@ public:
     [[nodiscard]]
     auto names() const -> std::vector<IRName> { return func_names; }
 
+    [[nodiscard]]
+    auto has_name(std::string_view name) const {
+        auto found = std::find_if(
+            func_names.begin(),
+            func_names.end(),
+            [&](const IRName& candidate) { return candidate.name == name; }
+        );
+        return found != func_names.end();
+    }
+
+    [[nodiscard]]
+    auto has_one_of_names(const std::vector<IRName>& function_names) const {
+        return rgs::any_of(function_names, [this](const IRName& n) {
+            return has_name(n.name);
+        });
+    }
+
     // Add a name to this function.
     void add_name(std::string n, Linkage l) {
         func_names.push_back({std::move(n), l});

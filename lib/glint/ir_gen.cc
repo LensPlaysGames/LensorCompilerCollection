@@ -14,9 +14,8 @@
 #include <utility>
 #include <vector>
 
-namespace lcc {
+namespace lcc::glint {
 
-namespace glint {
 void IRGen::insert(lcc::Inst* inst) {
     LCC_ASSERT(inst, "Invalid argument");
     LCC_ASSERT(ctx, "Invalid context");
@@ -247,24 +246,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                                 default_dynamic_array_capacity * dynamic_array_t->element_type()->size_in_bytes(ctx)
                             );
                         }
-                        auto* malloc_ty = FunctionType::Get(
-                            ctx,
-                            lcc::Type::PtrTy,
-                            {lcc::IntegerType::Get(ctx, ctx->target()->ffi.size_of_long_long)}
-                        );
-                        // TODO: Only add function if it hasn't been added already (doesn't
-                        // matter, just messy).
-                        auto* malloc_func = new (*module) Function(
-                            module,
-                            "malloc",
-                            malloc_ty,
-                            Linkage::Imported,
-                            CallConv::C,
-                            {}
-                        );
+
+                        auto malloc_func = module->function_by_name("malloc");
+                        LCC_ASSERT(malloc_func, "Glint IRGen couldn't find `malloc'");
                         auto* malloc_call = new (*module) CallInst(
-                            malloc_func,
-                            malloc_ty,
+                            *malloc_func,
+                            as<FunctionType>(malloc_func->type()),
                             {alloc_size_bytes}
                         );
                         insert(malloc_call);
@@ -342,24 +329,11 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         insert(data_ptr);
                         insert(data_load);
 
-                        auto* free_ty = FunctionType::Get(
-                            ctx,
-                            lcc::Type::PtrTy,
-                            {lcc::IntegerType::Get(ctx, ctx->target()->ffi.size_of_long_long)}
-                        );
-                        // TODO: Only add function if it hasn't been added already (doesn't
-                        // matter, just messy).
-                        auto* free_func = new (*module) Function(
-                            module,
-                            "free",
-                            free_ty,
-                            Linkage::Imported,
-                            CallConv::C,
-                            {}
-                        );
+                        auto free_func = module->function_by_name("free");
+                        LCC_ASSERT(free_func, "Glint IRGen couldn't find `free'");
                         auto* free_call = new (*module) CallInst(
-                            free_func,
-                            free_ty,
+                            *free_func,
+                            as<FunctionType>(free_func->type()),
                             {data_load}
                         );
                         insert(free_call);
@@ -802,8 +776,6 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     int_module.sum_type_bad_access_check()
                     and m and m->object()->type()->is_sum_type()
                 ) {
-                    // LCC_TODO("Generate IR to load {} from {}", m->name(), *m->object()->type());
-
                     // The following
                     //   foo : sum { x :cint 0, y :uint 0 };
                     // turns into
@@ -877,24 +849,11 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         // `puts("\nGLINT: Bad Sum Type Access\n");` before we do
 
                         constexpr u8 rc = 7;
-                        auto* exit_ty = FunctionType::Get(
-                            ctx,
-                            lcc::Type::VoidTy,
-                            {lcc::IntegerType::Get(ctx, ctx->target()->ffi.size_of_int)}
-                        );
-                        // TODO: Only add function if it hasn't been added already (doesn't
-                        // matter, just messy).
-                        auto* exit_func = new (*module) Function(
-                            module,
-                            "exit",
-                            exit_ty,
-                            Linkage::Imported,
-                            CallConv::C,
-                            {}
-                        );
+                        auto exit_func = module->function_by_name("exit");
+                        LCC_ASSERT(exit_func, "Glint IRGen couldn't find `exit'");
                         auto* exit_call = new (*module) CallInst(
-                            exit_func,
-                            exit_ty,
+                            *exit_func,
+                            as<FunctionType>(exit_func->type()),
                             {new (*module) IntegerConstant(Convert(ctx, Type::UInt), rc)}
                         );
                         insert(exit_call);
@@ -1312,8 +1271,70 @@ auto IRGen::Generate(Context* context, glint::Module& mod) -> lcc::Module* {
     // We must /create/ *all* functions first, before generating the IR for
     // *any* of them. This is because a NameRef in one function may reference
     // another function, and we want all functions to be resolveable.
-    for (auto f : mod.functions()) ir_gen.create_function(f);
-    for (auto f : mod.functions()) ir_gen.generate_function(f);
+    for (auto* f : mod.functions())
+        ir_gen.create_function(f);
+
+    // BUILT-INS
+    // For example, you could read files and parse LCC IR built-ins if you
+    // wanted to do that. Or write it in strings, but I don't think that'd be
+    // very nice as compared to building it in memory.
+    // TODO: Add builtins here like malloc, free, exit, whatever else we
+    // insert a ton of up there. Also need to abstract the dynamic array
+    // initialisation stuff into a builtin probably oh and definitely the
+    // "grow" functionality and stuff like that.
+
+    { // malloc
+        auto* malloc_ty = FunctionType::Get(
+            context,
+            lcc::Type::PtrTy,
+            {lcc::IntegerType::Get(context, context->target()->ffi.size_of_long_long)}
+        );
+        // Registers in module, so, yes this does something.
+        new (*ir_gen.module) Function(
+            ir_gen.module,
+            "malloc",
+            malloc_ty,
+            Linkage::Imported,
+            CallConv::C,
+            {}
+        );
+    }
+
+    { // free
+        auto* free_ty = FunctionType::Get(
+            context,
+            lcc::Type::PtrTy,
+            {lcc::IntegerType::Get(context, context->target()->ffi.size_of_long_long)}
+        );
+        new (*ir_gen.module) Function(
+            ir_gen.module,
+            "free",
+            free_ty,
+            Linkage::Imported,
+            CallConv::C,
+            {}
+        );
+    }
+
+    { // exit
+        auto* exit_ty = FunctionType::Get(
+            context,
+            lcc::Type::VoidTy,
+            {lcc::IntegerType::Get(context, context->target()->ffi.size_of_int)}
+        );
+        new (*ir_gen.module) Function(
+            ir_gen.module,
+            "exit",
+            exit_ty,
+            Linkage::Imported,
+            CallConv::C,
+            {}
+        );
+    }
+
+    // Generate IR for functions defined in the Glint module.
+    for (auto* f : mod.functions())
+        ir_gen.generate_function(f);
 
     if (mod.is_module()) {
         Section metadata_blob{};
@@ -1339,5 +1360,4 @@ auto IRGen::Generate(Context* context, glint::Module& mod) -> lcc::Module* {
     return ir_gen.mod();
 }
 
-} // namespace glint
-} // namespace lcc
+} // namespace lcc::glint
