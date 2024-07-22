@@ -103,6 +103,11 @@ struct Lexer {
         return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
     }
 
+    template <typename... Args>
+    Diag Note(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Note(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
+
     static bool IsSpace(char c) { return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\f' or c == '\v'; }
     static bool IsAlpha(char c) { return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z'); }
     static bool IsDigit(char c) { return c >= '0' and c <= '9'; }

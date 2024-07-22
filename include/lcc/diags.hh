@@ -11,6 +11,10 @@
 #include <vector>
 
 namespace lcc {
+
+// TODO: "fix" diagnostic which inserts suggested text into a given source
+// line, and may optionally apply the fix.
+
 /// A diagnostic. The diagnostic is issued when the destructor is called.
 struct Diag {
     /// Diagnostic severity.
@@ -106,7 +110,7 @@ public:
     ///     before this one. Otherwise, it will be printed after this
     ///     one.
     /// \param diag The diagnostic to attach.
-    void attach(bool print_before, Diag&& diag) {
+    void attach(Diag&& diag, bool print_before = false) {
         attached.emplace_back(std::move(diag), print_before);
     }
 

@@ -296,7 +296,7 @@ auto lcc::glint::Parser::ParseBlock(
 
                 // Error(location, "Expected ';'")
                 Warning(location, "Expected ';'")
-                    .attach(false, Diag::Note(context, tok.location, "Before this"));
+                    .attach(Diag::Note(context, tok.location, "Before this"));
             }
         }
         if (not expr) return expr.diag();
@@ -1092,7 +1092,7 @@ auto lcc::glint::Parser::ParseIdentExpr() -> Result<Expr*> {
                 text,
                 text
             );
-            err.attach(false, Diag::Note(context, decl->location(), "Original declaration here"));
+            err.attach(Note(decl->location(), "Original declaration here"));
             return err;
         }
     }
@@ -1673,7 +1673,7 @@ void lcc::glint::Parser::ParseTopLevel() {
 
                 Error(location, "Expected ';'")
 
-                    .attach(false, Diag::Note(context, tok.location, "Before this"));
+                    .attach(Note("Before this"));
             }
         }
         if (expr)

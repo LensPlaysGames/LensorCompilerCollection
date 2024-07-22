@@ -287,7 +287,7 @@ auto intc::Parser::ParseBlock(
 
                 // Error(location, "Expected ';'")
                 Warning(location, "Expected ';'")
-                    .attach(false, Diag::Note(context, tok.location, "Before this"));
+                    .attach(Diag::Note(context, tok.location, "Before this"));
             }
         }
         if (not expr) return expr.diag();
@@ -1214,7 +1214,7 @@ void intc::Parser::ParseTopLevel() {
 
                 // Error(location, "Expected ';'")
                 Warning(location, "Expected ';'")
-                    .attach(false, Diag::Note(context, tok.location, "Before this"));
+                    .attach(Diag::Note(context, tok.location, "Before this"));
             }
         }
         if (expr) mod->add_top_level_expr(expr.value());

@@ -2128,14 +2128,10 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
                 expr->name(),
                 least_distance_decl->name()
             )
-                .attach(
-                    false,
-                    Diag::Note(
-                        context,
-                        least_distance_decl->location(),
-                        "Declared here"
-                    )
-                );
+                .attach(Note(
+                    least_distance_decl->location(),
+                    "Declared here"
+                ));
             expr->target(least_distance_decl);
             expr->type(least_distance_decl->type());
             if (least_distance_decl->is_lvalue()) expr->set_lvalue();
@@ -2148,14 +2144,10 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         // the user that they may have forgotten to make it static.
         auto top_level = mod.top_level_scope()->find(expr->name());
         if (not top_level.empty()) {
-            err.attach(
-                false,
-                Diag::Note(
-                    context,
-                    top_level.at(0)->location(),
-                    "A declaration exists at the top-level. Did you mean to make it 'static'?"
-                )
-            );
+            err.attach(Note(
+                top_level.at(0)->location(),
+                "A declaration exists at the top-level. Did you mean to make it 'static'?"
+            ));
         }
 
         bool short_name = least_distance_decl and least_distance_decl->name().size() < 5;
@@ -2165,15 +2157,11 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         // maximum distance. Without this, things like `bar` get suggested to be
         // replaced with `fas`, and that just doesn't really make sense to me.
         if (least_distance_decl and (not short_name or least_distance <= short_name_distance_max)) {
-            err.attach(
-                false,
-                Diag::Note(
-                    context,
-                    least_distance_decl->location(),
-                    "Maybe you meant '{}', defined here?",
-                    least_distance_decl->name()
-                )
-            );
+            err.attach(Note(
+                least_distance_decl->location(),
+                "Maybe you meant '{}', defined here?",
+                least_distance_decl->name()
+            ));
         }
 
         expr->set_sema_errored();
@@ -2436,16 +2424,12 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                     break;
                 }
 
-                auto err = Error(n->location(), "'{}' is not a type", n->name());
-                err.attach(
-                    false,
-                    Diag::Note(
-                        context,
+                Error(n->location(), "'{}' is not a type", n->name())
+                    .attach(Note(
                         syms.at(0)->location(),
                         "Because of declaration here",
                         n->name()
-                    )
-                );
+                    ));
 
                 n->set_sema_errored();
                 break;

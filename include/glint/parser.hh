@@ -109,10 +109,13 @@ private:
         return Diag::Warning(context, where, fmt, std::forward<Args>(args)...);
     }
 
-    /// Issue an error at the location of the current token.
-    using Lexer::Error;
+    template <typename... Args>
+    Diag Note(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Note(context, where, fmt, std::forward<Args>(args)...);
+    }
 
-    /// Issue a warning at the location of the current token.
+    using Lexer::Error;
+    using Lexer::Note;
     using Lexer::Warning;
 
     auto ParseBlock() -> Result<BlockExpr*>;
