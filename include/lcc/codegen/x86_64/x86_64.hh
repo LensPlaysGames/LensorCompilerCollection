@@ -9,6 +9,9 @@
 
 namespace lcc::x86_64 {
 
+constexpr usz GeneralPurposeBitwidth = 64;
+constexpr usz GeneralPurposeBytewidth = 8;
+
 enum struct Opcode : u32 {
     Poison = u32(lcc::MInst::Kind::ArchStart),
     Return,           // ret

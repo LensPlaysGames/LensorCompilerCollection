@@ -164,17 +164,18 @@ void Module::lower() {
                 // instead be a memcpy into this pointer.
             }
 
-            for (auto block : function->blocks()) {
+            for (auto* block : function->blocks()) {
                 for (size_t inst_i = 0; inst_i < block->instructions().size(); ++inst_i) {
                     auto*& instruction = block->instructions().at(inst_i);
                     switch (instruction->kind()) {
                         case Value::Kind::Return: {
-                            auto ret = as<ReturnInst>(instruction);
+                            auto* ret = as<ReturnInst>(instruction);
+
                             // For large return types, we memcpy the returned value into the pointer
                             // passed as the hidden first arugument.
                             if (not ret_t_tworeg and ret_t_large) {
-                                auto dest_ptr = ret_v_large;
-                                auto source_ptr = ret->val();
+                                auto* dest_ptr = ret_v_large;
+                                auto* source_ptr = ret->val();
                                 if (not source_ptr->type()->is_ptr())
                                     Diag::ICE("IR ReturnInst returns large value but operand is not of pointer type");
 
@@ -182,31 +183,42 @@ void Module::lower() {
                                 std::vector<Value*> memcpy_operands{
                                     dest_ptr,
                                     source_ptr,
-                                    new (*this) IntegerConstant(IntegerType::Get(context(), 64), byte_count)};
-                                auto memcpy_inst = new (*this) IntrinsicInst(IntrinsicKind::MemCopy, memcpy_operands, ret->location());
+                                    new (*this) IntegerConstant(
+                                        IntegerType::Get(context(), x86_64::GeneralPurposeBitwidth),
+                                        byte_count
+                                    ) //
+                                };
+                                auto* memcpy_inst = new (*this) IntrinsicInst(
+                                    IntrinsicKind::MemCopy,
+                                    memcpy_operands,
+                                    ret->location()
+                                );
                                 ret->replace_with(memcpy_inst);
                                 block->insert_after(new (*this) ReturnInst(nullptr), memcpy_inst);
                             }
                         } break;
 
                         case Value::Kind::Load: {
-                            auto load = as<LoadInst>(instruction);
+                            auto* load = as<LoadInst>(instruction);
 
-                            // Less than or equal to 8 bytes; nothing to change.
-                            if (load->type()->bits() <= 64) continue;
+                            // Less than or equal to size of general purpose register; no change.
+                            if (load->type()->bits() <= x86_64::GeneralPurposeBitwidth) continue;
 
                             // If this is an over-large load but it is used by a call, assume the
                             // calling convention allows for it and it will be handled in MIR.
                             // NOTE: Taken advantage of by SysV (see both parameter handling above as
                             // well as argument handling in MIR generation).
-                            if (load->users().size() and is<CallInst>(load->users().at(0))) continue;
+                            if (
+                                not load->users().empty()
+                                and is<CallInst>(load->users().at(0))
+                            ) continue;
 
                             auto users = load->users();
                             if (users.size() == 1 and users[0]->kind() == Value::Kind::Store) {
-                                auto store = as<StoreInst>(users[0]);
+                                auto* store = as<StoreInst>(users[0]);
 
-                                auto source_ptr = load->ptr();
-                                auto dest_ptr = store->ptr();
+                                auto* source_ptr = load->ptr();
+                                auto* dest_ptr = store->ptr();
 
                                 LCC_ASSERT(load->type()->bytes() == store->val()->type()->bytes());
                                 auto byte_count = load->type()->bytes();
@@ -214,8 +226,18 @@ void Module::lower() {
                                 std::vector<Value*> memcpy_operands{
                                     dest_ptr,
                                     source_ptr,
-                                    new (*this) IntegerConstant(IntegerType::Get(context(), 64), byte_count)};
-                                auto memcpy_inst = new (*this) IntrinsicInst(IntrinsicKind::MemCopy, memcpy_operands, load->location());
+                                    new (*this) IntegerConstant(
+                                        IntegerType::Get(
+                                            context(),
+                                            x86_64::GeneralPurposeBitwidth
+                                        ),
+                                        byte_count
+                                    )};
+                                auto memcpy_inst = new (*this) IntrinsicInst(
+                                    IntrinsicKind::MemCopy,
+                                    memcpy_operands,
+                                    load->location()
+                                );
                                 load->replace_with(memcpy_inst);
 
                                 store->erase();
@@ -234,19 +256,32 @@ void Module::lower() {
                         case Value::Kind::Store: {
                             auto store = as<StoreInst>(instruction);
 
-                            // Less than or equal to 8 bytes; nothing to change.
-                            if (store->val()->type()->bits() <= 64) continue;
+                            // Less than or equal to size of general purpose register; no change.
+                            if (store->val()->type()->bits() <= x86_64::GeneralPurposeBitwidth)
+                                continue;
                             auto byte_count = store->val()->type()->bytes();
+
+                            // Return in multiple registers (handled in MIR generation)
+                            if (
+                                context()->target()->is_cconv_sysv()
+                                and store->val()->type()->bits() <= 2 * x86_64::GeneralPurposeBitwidth
+                            ) continue;
 
                             // Change type of val to pointer, if it isn't already.
                             // TODO: Does this apply to values other than Parameter? Does it need to?
                             if (auto param = cast<Parameter>(store->val()))
-                                store->val(new (*this) Parameter(Type::PtrTy, param->index()));
+                                store->val(
+                                    new (*this) Parameter(Type::PtrTy, param->index())
+                                );
 
-                            LCC_ASSERT(
-                                store->val()->type() == Type::PtrTy,
-                                "Cannot lower store to memcpy when value is not of pointer type"
-                            );
+                            if (store->val()->type() != Type::PtrTy) {
+                                store->print();
+                                LCC_ASSERT(
+                                    store->val()->type() == Type::PtrTy,
+                                    "Cannot lower store to memcpy when value is not of pointer type (it's {})",
+                                    store->val()->type()->string(context()->use_colour_diagnostics())
+                                );
+                            }
 
                             // Generate builtin memcpy
                             std::vector<Value*> memcpy_operands{
@@ -254,10 +289,14 @@ void Module::lower() {
                                 // The value should have already been lowered to a pointer.
                                 store->val(),
                                 new (*this) IntegerConstant(
-                                    IntegerType::Get(context(), 64),
+                                    IntegerType::Get(context(), x86_64::GeneralPurposeBitwidth),
                                     byte_count
                                 )};
-                            auto memcpy_inst = new (*this) IntrinsicInst(IntrinsicKind::MemCopy, memcpy_operands, store->location());
+                            auto memcpy_inst = new (*this) IntrinsicInst(
+                                IntrinsicKind::MemCopy,
+                                memcpy_operands,
+                                store->location()
+                            );
                             store->replace_with(memcpy_inst);
                         } break;
                         default: break;
