@@ -174,7 +174,7 @@ if (ENABLE_ASAN)
 endif()
 
 # ============================================================================
-#  libfmt and include dirs.
+#  Dependencies
 # ============================================================================
 # Find libfmt.
 include(FetchContent)
@@ -270,6 +270,7 @@ target_link_libraries(object PRIVATE options)
 # Add the main lcc library.
 add_library(
   liblcc STATIC
+  include/lcc/calling_conventions/sysv_x86_64.hh
   include/lcc/codegen/isel.hh
   include/lcc/codegen/gnu_as_att_assembly.hh
   include/lcc/codegen/mir.hh
