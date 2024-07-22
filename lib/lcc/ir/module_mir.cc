@@ -1,3 +1,4 @@
+#include <lcc/calling_conventions/sysv_x86_64.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/context.hh>
@@ -553,16 +554,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                 }
 
                             } else if (_ctx->target()->is_cconv_sysv()) {
-                                constexpr std::array<usz, 6> arg_regs = {
-                                    +x86_64::RegisterId::RDI,
-                                    +x86_64::RegisterId::RSI,
-                                    +x86_64::RegisterId::RDX,
-                                    +x86_64::RegisterId::RCX,
-                                    +x86_64::RegisterId::R8,
-                                    +x86_64::RegisterId::R9,
-                                };
-
-                                const usz arg_reg_total = arg_regs.size();
+                                constexpr usz arg_reg_total = cconv::sysv::arg_regs.size();
 
                                 // Hande all arguments that are passed in memory first, before register arguments.
                                 usz arg_regs_used = 0;
@@ -613,19 +605,19 @@ auto Module::mir() -> std::vector<MFunction> {
                                         // TODO: If memcpy sets return register we may end up having a bad time.
 
                                         { // Destination argument (stack pointer)
-                                            auto copy = MInst(MInst::Kind::Copy, {arg_regs[0], 64});
+                                            auto copy = MInst(MInst::Kind::Copy, {cconv::sysv::arg_regs[0], 64});
                                             copy.location(call_ir->location());
                                             copy.add_operand(stack_pointer_reg);
                                             bb.add_instruction(copy);
                                         }
                                         { // Source argument
-                                            auto copy = MInst(MInst::Kind::Copy, {arg_regs[1], 64});
+                                            auto copy = MInst(MInst::Kind::Copy, {cconv::sysv::arg_regs[1], 64});
                                             copy.location(call_ir->location());
                                             copy.add_operand(MOperandValueReference(function, f, arg_ptr));
                                             bb.add_instruction(copy);
                                         }
                                         { // Size argument
-                                            auto copy = MInst(MInst::Kind::Copy, {arg_regs[2], 64});
+                                            auto copy = MInst(MInst::Kind::Copy, {cconv::sysv::arg_regs[2], 64});
                                             copy.location(call_ir->location());
                                             copy.add_operand(MOperandImmediate(byte_count));
                                             bb.add_instruction(copy);
@@ -645,18 +637,21 @@ auto Module::mir() -> std::vector<MFunction> {
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
                                     if (arg_regs_used < arg_reg_total and arg->type()->bytes() <= 8) {
                                         // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
-                                        auto copy = MInst(MInst::Kind::Copy, {arg_regs.at(arg_regs_used++), uint(arg->type()->bits())});
+                                        auto copy = MInst(
+                                            MInst::Kind::Copy,
+                                            {cconv::sysv::arg_regs.at(arg_regs_used++), uint(arg->type()->bits())}
+                                        );
                                         copy.location(call_ir->location());
                                         copy.add_operand(MOperandValueReference(function, f, arg));
                                         bb.add_instruction(copy);
                                     } else if (arg_regs_used < arg_reg_total - 1 and arg->type()->bytes() <= 16) {
                                         auto load_a = MInst(
                                             MInst::Kind::Load,
-                                            {arg_regs.at(arg_regs_used++), 64}
+                                            {cconv::sysv::arg_regs.at(arg_regs_used++), 64}
                                         );
                                         auto load_b = MInst(
                                             MInst::Kind::Load,
-                                            {arg_regs.at(arg_regs_used++), uint(arg->type()->bits() - 64)}
+                                            {cconv::sysv::arg_regs.at(arg_regs_used++), uint(arg->type()->bits() - 64)}
                                         );
                                         load_a.location(call_ir->location());
                                         load_b.location(call_ir->location());
@@ -736,14 +731,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                         +x86_64::RegisterId::R9,
                                     };
                                 } else if (_ctx->target()->is_cconv_sysv()) {
-                                    arg_regs = {
-                                        +x86_64::RegisterId::RDI,
-                                        +x86_64::RegisterId::RSI,
-                                        +x86_64::RegisterId::RDX,
-                                        +x86_64::RegisterId::RCX,
-                                        +x86_64::RegisterId::R8,
-                                        +x86_64::RegisterId::R9,
-                                    };
+                                    arg_regs = utils::to_vec(cconv::sysv::arg_regs);
                                 } else {
                                     Diag::ICE("Unhandled target in argument lowering for memcpy intrinsic");
                                 }
@@ -920,25 +908,16 @@ auto Module::mir() -> std::vector<MFunction> {
                                         sysv_registers_used += 2;
                                 }
 
-                                static constexpr std::array<x86_64::RegisterId, 6> reg_by_param_index{
-                                    x86_64::RegisterId::RDI,
-                                    x86_64::RegisterId::RSI,
-                                    x86_64::RegisterId::RDX,
-                                    x86_64::RegisterId::RCX,
-                                    x86_64::RegisterId::R8,
-                                    x86_64::RegisterId::R9 //
-                                };
-
                                 // Multiple register parameter
                                 if (param->type()->bytes() > 8 and param->type()->bytes() <= 16 and sysv_registers_used < 5) {
                                     if (auto* alloca = cast<AllocaInst>(store_ir->ptr())) {
                                         // Multiple register parameter stored into alloca
                                         auto reg_a = MOperandRegister(
-                                            +reg_by_param_index.at(sysv_registers_used++),
+                                            +cconv::sysv::arg_regs.at(sysv_registers_used++),
                                             64
                                         );
                                         auto reg_b = MOperandRegister(
-                                            +reg_by_param_index.at(sysv_registers_used++),
+                                            +cconv::sysv::arg_regs.at(sysv_registers_used++),
                                             uint(param->type()->bits() - 64)
                                         );
 
