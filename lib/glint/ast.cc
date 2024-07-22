@@ -131,8 +131,12 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
         case Kind::Reference:
             return ctx->target()->align_of_pointer;
 
+        // DynamicArray and ArrayView both convert to structs, so we just use the
+        // struct's size.
         case Kind::DynamicArray:
             return as<DynamicArrayType>(this)->size(ctx);
+        case Kind::ArrayView:
+            return as<ArrayViewType>(this)->size(ctx);
 
         case Kind::Array: return elem()->align(ctx);
         case Kind::Struct: return as<StructType>(this)->alignment();
@@ -151,6 +155,9 @@ auto lcc::glint::Type::elem() const -> Type* {
         case Kind::Array: return as<ArrayType>(this)->element_type();
         case Kind::DynamicArray:
             return as<DynamicArrayType>(this)->element_type();
+
+        case Kind::ArrayView:
+            return as<ArrayViewType>(this)->element_type();
 
         case Kind::Enum:
             return as<EnumType>(this)->underlying_type();
@@ -303,7 +310,10 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
             return ctx->target()->size_of_pointer;
 
         case Kind::DynamicArray:
-            return Type::VoidPtr->size(ctx) + DynamicArrayType::IntegerWidth * 2;
+            return Type::VoidPtr->size(ctx) + 2 * DynamicArrayType::IntegerWidth;
+
+        case Kind::ArrayView:
+            return Type::VoidPtr->size(ctx) + ArrayViewType::IntegerWidth;
 
         case Kind::Sum:
             return SumType::IntegerWidth + as<SumType>(this)->byte_size();
@@ -365,6 +375,9 @@ bool lcc::glint::Type::Equal(const Type* a, const Type* b) {
         }
 
         case Kind::DynamicArray:
+            return Type::Equal(a->elem(), b->elem());
+
+        case Kind::ArrayView:
             return Type::Equal(a->elem(), b->elem());
 
         case Kind::Function: {
@@ -536,6 +549,7 @@ std::string lcc::glint::Expr::name() const {
                 case Type::Kind::Pointer: return "t_ptr";
                 case Type::Kind::Reference: return "t_ref";
                 case Type::Kind::DynamicArray: return "t_dynarray";
+                case Type::Kind::ArrayView: return "t_view";
                 case Type::Kind::Array: return "t_fixarray";
                 case Type::Kind::Function: return "t_function";
                 case Type::Kind::Sum: return "t_sum";
@@ -1074,6 +1088,17 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
             );
         }
 
+        case Kind::ArrayView: {
+            auto* arr = as<ArrayViewType>(this);
+            return fmt::format(
+                "{}[{}{} view]{}",
+                C(type_colour),
+                arr->element_type()->string(use_colours),
+                C(type_colour),
+                C(Reset)
+            );
+        }
+
         case Kind::Array: {
             auto* arr = as<ArrayType>(this);
             LCC_ASSERT(arr->size(), "ArrayType has NULL size expression");
@@ -1196,4 +1221,19 @@ auto lcc::glint::SumType::struct_type(Module& mod) -> StructType* {
     }
 
     return _cached_struct;
+}
+
+auto lcc::glint::ObjectDecl::mangled_name() const -> std::string {
+    // TODO: If we import it from a Glint module, we want to mangle still. If
+    // it is external then we don't want to mangle. Currently, both of these
+    // just get imported linkage (not enough info).
+    if (
+        auto* func_decl = cast<FuncDecl>(this);
+        func_decl and func_decl->function_type()->has_attr(FuncAttr::NoMangle)
+    ) {
+        return name();
+    }
+
+    // TODO: Include type representation
+    return fmt::format("_XGlint{}", name());
 }

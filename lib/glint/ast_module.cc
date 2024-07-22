@@ -45,6 +45,9 @@ lcc::glint::Module::Module(
         };
     }
 
+    // Don't mangle name of top level function.
+    ty->set_attr(FuncAttr::NoMangle);
+
     Location loc{};
     if (file) {
         loc = Location{
@@ -304,7 +307,23 @@ auto lcc::glint::Module::serialise(
             *underlying_type_ptr = underlying_type;
         } break;
 
-        // DynamicArrayType: element_type_index :TypeIndex
+        // ArrayViewType: element_type_index :TypeIndex
+        case Type::Kind::ArrayView: {
+            auto* type = as<ArrayViewType>(ty);
+
+            // Write `element_type_index: TypeIndex`, keeping track of byte index into
+            // binary metadata blob where it can be found again.
+            auto element_type_index_offset = out.size();
+            auto element_type_index = ModuleDescription::TypeIndex(-1);
+            auto type_index_bytes = to_bytes(element_type_index);
+            out.insert(out.end(), type_index_bytes.begin(), type_index_bytes.end());
+
+            auto element_type = serialise(out, cache, type->element_type());
+
+            auto* element_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + element_type_index_offset);
+            *element_type_ptr = element_type;
+        } break;
+
         case Type::Kind::DynamicArray: {
             auto* type = as<DynamicArrayType>(ty);
 
@@ -626,6 +645,7 @@ auto lcc::glint::Module::deserialise(
     std::vector<BasicFixup> ptr_fixups{};
     std::vector<BasicFixup> ref_fixups{};
     std::vector<BasicFixup> dynarray_fixups{};
+    std::vector<BasicFixup> view_fixups{};
     std::vector<FunctionFixup> function_fixups{};
 
     for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
@@ -687,13 +707,14 @@ auto lcc::glint::Module::deserialise(
             } break;
 
             // PointerType, ReferenceType: type_index :TypeIndex
+            case Type::Kind::ArrayView:
             case Type::Kind::DynamicArray:
             case Type::Kind::Pointer:
             case Type::Kind::Reference: {
                 constexpr auto ref_type_index_size = sizeof(ModuleDescription::TypeIndex);
                 std::array<u8, ref_type_index_size> ref_type_index_array{};
                 for (unsigned i = 0; i < ref_type_index_size; ++i)
-                    ref_type_index_array[i] = module_metadata_blob.at(type_offset++);
+                    ref_type_index_array.at(i) = module_metadata_blob.at(type_offset++);
                 auto ref_type_index = from_bytes<ModuleDescription::TypeIndex>(ref_type_index_array);
 
                 // Normally done in operator new of Type, but we do it manually here since
@@ -707,6 +728,8 @@ auto lcc::glint::Module::deserialise(
                     ref_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
                 else if (kind == Type::Kind::DynamicArray)
                     dynarray_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
+                else if (kind == Type::Kind::ArrayView)
+                    view_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
                 else LCC_TODO("Unhandled type kind in element type deserialisation");
             } break;
 
@@ -862,6 +885,15 @@ auto lcc::glint::Module::deserialise(
         types[fixup.fixup_type_index] = new (*this) DynamicArrayType(
             types[fixup.replacement_type_index],
             nullptr
+        );
+        types.erase(types.begin() + types_size);
+    }
+
+    for (auto fixup : view_fixups) {
+        validate_fixup(fixup);
+        int types_size = int(types.size());
+        types[fixup.fixup_type_index] = new (*this) ArrayViewType(
+            types[fixup.replacement_type_index]
         );
         types.erase(types.begin() + types_size);
     }

@@ -80,6 +80,20 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             return lcc::StructType::Get(ctx, std::move(member_types));
         }
 
+        case Type::Kind::ArrayView: {
+            const auto& t_view = as<ArrayViewType>(in);
+            auto struct_type = t_view->struct_type();
+            if (not struct_type) {
+                Diag::ICE(
+                    "Glint Type-checker should have set DynamicArrayType's cached type (by calling struct_type()), but it appears to be nullptr at time of IRGen"
+                );
+            }
+            std::vector<lcc::Type*> member_types{};
+            for (const auto& m : struct_type->members())
+                member_types.push_back(Convert(ctx, m.type));
+            return lcc::StructType::Get(ctx, std::move(member_types));
+        }
+
         case Type::Kind::Sum: {
             const auto& t_sum = as<SumType>(in);
             auto struct_type = t_sum->struct_type();
@@ -96,7 +110,7 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 
         case Type::Kind::Union: {
             const auto& t_union = as<UnionType>(in);
-            auto array_type = t_union->array_type();
+            auto* array_type = t_union->array_type();
             if (not array_type) {
                 Diag::ICE(
                     "Glint Type-checker should have set UnionType's cached type (by calling array_type()), but it appears to be nullptr at time of IRGen"
@@ -123,9 +137,12 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 }
 
 void glint::IRGen::create_function(glint::FuncDecl* f) {
+    auto name = f->function_type()->has_attr(FuncAttr::NoMangle)
+                  ? f->name()
+                  : f->mangled_name();
     generated_ir[f] = new (*module) Function(
         module,
-        f->mangled_name(),
+        name,
         as<FunctionType>(Convert(ctx, f->type())),
         f->linkage(),
         f->call_conv(),
@@ -156,7 +173,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
         // Will be inlined anywhere it is used; a no-op for actual generation.
         case K::IntegerLiteral: {
-            auto* literal = new (*module) lcc::IntegerConstant(Convert(ctx, expr->type()), as<IntegerLiteral>(expr)->value());
+            auto* literal = new (*module) lcc::IntegerConstant(
+                Convert(ctx, expr->type()),
+                as<IntegerLiteral>(expr)->value()
+            );
             generated_ir[expr] = literal;
         } break;
 
@@ -164,7 +184,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             const auto& decl = as<VarDecl>(expr);
             switch (decl->linkage()) {
                 case Linkage::LocalVar: {
-                    auto* alloca = new (*module) AllocaInst(Convert(ctx, decl->type()), expr->location());
+                    auto* alloca = new (*module) AllocaInst(
+                        Convert(ctx, decl->type()),
+                        expr->location()
+                    );
                     insert(alloca);
 
                     // Initialise dynamic arrays
@@ -311,7 +334,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             switch (unary_expr->op()) {
                 case TokenKind::Exclam: {
                     auto* zero_imm = new (*module) lcc::IntegerConstant(lcc::IntegerType::Get(ctx, ctx->target()->size_of_pointer), 0);
-                    auto zero_imm_bitcast = new (*module) lcc::BitcastInst(zero_imm, lcc::Type::PtrTy);
+                    auto* zero_imm_bitcast = new (*module) lcc::BitcastInst(zero_imm, lcc::Type::PtrTy);
                     auto* eq = new (*module) EqInst(generated_ir[unary_expr->operand()], zero_imm_bitcast, expr->location());
                     generated_ir[expr] = eq;
                     insert(zero_imm_bitcast);
@@ -775,8 +798,81 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 // want to do at least part of this in sema to make our lives easier here.
             }
 
-            // TODO: FIXED ARRAY TO ARRAY VIEW
-            // TODO: DYNAMIC ARRAY TO ARRAY VIEW
+            // FIXED ARRAY TO ARRAY VIEW
+            bool from_array_ref = (cast->operand()->type()->is_pointer() or cast->operand()->type()->is_reference()) and cast->operand()->type()->elem()->is_array();
+            if ((from_array_ref or cast->operand()->type()->is_array()) and cast->type()->is_view()) {
+                LCC_ASSERT(
+                    cast->operand()->is_lvalue() or cast->operand()->type()->is_reference(),
+                    "Sorry, but to cast an rvalue fixed size array to an array view would require making a temporary for the array (to get an lvalue for the view), and /then/ making a temporary for the view. Because of this, it's not handled, so, make a variable and then a view from that. Thanks."
+                );
+
+                // We have to create a whole temporary and everything.
+
+                // alloca underlying struct of view
+                auto* view_struct = as<ArrayViewType>(cast->type());
+                auto* alloca = new (*module) AllocaInst(Convert(ctx, view_struct));
+
+                // copy operand ptr and store that into view ptr member.
+                auto* gmp_ptr = new (*module) GetMemberPtrInst(
+                    Convert(ctx, view_struct),
+                    alloca,
+                    new (*module) IntegerConstant(
+                        Convert(ctx, Type::UInt),
+                        0
+                    )
+                );
+                // TODO: If we were to handle non-lvalue case, this would need to copy the
+                // pointer to the temporary.
+                auto* copy_ptr = new (*module) CopyInst(generated_ir[cast->operand()]);
+                auto* store_ptr = new (*module) StoreInst(
+                    copy_ptr,
+                    gmp_ptr
+                );
+
+                // store array dimension into view size member.
+                auto* gmp_size = new (*module) GetMemberPtrInst(
+                    Convert(ctx, view_struct),
+                    alloca,
+                    new (*module) IntegerConstant(
+                        Convert(ctx, Type::UInt),
+                        1
+                    )
+                );
+                auto* array_type = cast->operand()->type();
+                if (from_array_ref) array_type = array_type->elem();
+                auto* store_size = new (*module) StoreInst(
+                    new (*module) IntegerConstant(
+                        Convert(ctx, Type::UInt),
+                        as<ArrayType>(array_type)->dimension()
+                    ),
+                    gmp_size
+                );
+
+                // load from alloca to get array view value.
+                auto* load = new (*module) LoadInst(Convert(ctx, view_struct), alloca);
+
+                insert(alloca);
+
+                insert(gmp_ptr);
+                insert(copy_ptr);
+                insert(store_ptr);
+
+                insert(gmp_size);
+                insert(store_size);
+
+                insert(load);
+
+                generated_ir[expr] = load;
+
+                return;
+            }
+
+            // DYNAMIC ARRAY TO ARRAY VIEW
+            if (cast->operand()->type()->is_dynamic_array() and cast->type()->is_view()) {
+                LCC_TODO("IRGen dynamic array to array view cast");
+                // TODO: We have to create a whole temporary and everything. We probably
+                // want to do at least part of this in sema to make our lives easier here.
+            }
 
             if (cast->is_lvalue_to_rvalue()) {
                 // SUM TYPE ACCESS

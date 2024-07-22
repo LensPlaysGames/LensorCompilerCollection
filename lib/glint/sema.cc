@@ -64,7 +64,36 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
     if (to->is_void()) return NoOp;
 
     /// Any type can be converted to itself.
-    if (Type::Equal(from, to)) return NoOp;
+    if (Type::Equal(from, to)) {
+        // lvalue expression must be converted to rvalue if we want a value of the given type.
+        if ((*expr_ptr)->is_lvalue()) {
+            if constexpr (PerformConversion)
+                LValueToRValue(expr_ptr);
+            return Score(1);
+        }
+
+        return NoOp;
+    }
+
+    // Fixed Array to Array View
+    bool from_array_ref = (from->is_pointer() or from->is_reference()) and from->elem()->is_array();
+    if ((from->is_array() or from_array_ref) and to->is_view()) {
+        auto* from_elem = from->elem();
+        if (from_array_ref) from_elem = from_elem->elem();
+
+        // TODO: If fixed array isn't an lvalue, then we need to create a
+        // temporary and everything for it (I think).
+
+        // Underlying types have to be convertible. This checks if they are equal,
+        // since we can only check if convertible if we have an expression (which
+        // we don't). Gotta change stupid API built by stupid people.
+        if (not Type::Equal(from_elem, to->elem()))
+            return ConversionImpossible;
+
+        if constexpr (PerformConversion)
+            InsertImplicitCast(expr_ptr, to);
+        return Score(1);
+    }
 
     /// All conversions beside reference binding require lvalue-to-rvalue conversion.
     if (to->is_reference() and Type::Equal(from, to->elem())) {
@@ -139,6 +168,12 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
     }
 
     // Array to array conversions.
+    // FIXME: We kind of need to check that the base types are convertible,
+    // but, uhhh, we can't really do that right now without an expression of
+    // that type due to how Convert works ... I wonder what idiot built it
+    // that way.
+
+    // Fixed Array to Fixed Array
     if (from->is_array() and to->is_array()) {
         auto* from_arr = as<ArrayType>(from);
         auto* to_arr = as<ArrayType>(to);
@@ -147,11 +182,6 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         // it wouldn't fit and that conversion is impossible.
         if (from_arr->dimension() > to_arr->dimension())
             return ConversionImpossible;
-
-        // FIXME: We kind of need to check that the base types are convertible,
-        // but, uhhh, we can't really do that right now without an expression of
-        // that type due to how Convert works ... I wonder what idiot built it
-        // that way.
         if (not Type::Equal(from_arr->element_type(), to_arr->element_type()))
             return ConversionImpossible;
 
@@ -160,15 +190,19 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         return Score(1);
     }
 
-    if (from->is_array() and to->is_dynamic_array()) {
-        auto* from_arr = as<ArrayType>(from);
-        auto* to_arr = as<DynamicArrayType>(to);
+    // Dynamic Array to Array View
+    if (from->is_dynamic_array() and to->is_view()) {
+        if (not Type::Equal(from->elem(), to->elem()))
+            return ConversionImpossible;
 
-        // FIXME: We kind of need to check that the base types are convertible,
-        // but, uhhh, we can't really do that right now without an expression of
-        // that type due to how Convert works ... I wonder what idiot built it
-        // that way.
-        if (not Type::Equal(from_arr->element_type(), to_arr->element_type()))
+        if constexpr (PerformConversion)
+            InsertImplicitCast(expr_ptr, to);
+        return Score(1);
+    }
+
+    // Fixed Array to Dynamic Array
+    if (from->is_array() and to->is_dynamic_array()) {
+        if (not Type::Equal(from->elem(), to->elem()))
             return ConversionImpossible;
 
         if constexpr (PerformConversion)
@@ -825,7 +859,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     /// expression of the block rather than just the block itself.
     if (not ty->return_type()->is_void()) {
         Expr** last{};
-        if (auto block = cast<BlockExpr>(decl->body())) {
+        if (auto* block = cast<BlockExpr>(decl->body())) {
             // For anything except the top-level function, if there is an expected
             // return value, there has to be one, otherwise it's an error.
             if (decl->name() != "main") {
@@ -833,13 +867,13 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
                     Error(decl->location(), "Function `{}` has non-void return type, and must return a value", decl->name());
                     return;
                 }
-            }
-
-            // For the top level function of Glint programs, a return value is
-            // created if a valid one is not present.
-            if (block->children().empty()) {
-                auto inserted_return_value = new (mod) IntegerLiteral(0, {});
-                block->add(new (mod) ReturnExpr(inserted_return_value, {}));
+            } else {
+                // For the top level function of Glint programs, a return value is
+                // created if a valid one is not present.
+                if (block->children().empty()) {
+                    auto inserted_return_value = new (mod) IntegerLiteral(0, {});
+                    block->add(new (mod) ReturnExpr(inserted_return_value, {}));
+                }
             }
 
             last = block->last_expr();
@@ -847,7 +881,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             // For the top level function of GLint programs, a return value is created
             // if a valid one is not present. This includes if the last value is not
             // convertible to the return type of main.
-            if (not Convert(last, ty->return_type())) {
+            if (decl->name() == "main" and not Convert(last, ty->return_type())) {
                 auto inserted_return_value = new (mod) IntegerLiteral(0, {});
                 block->add(new (mod) ReturnExpr(inserted_return_value, {}));
                 last = block->last_expr();
@@ -1336,6 +1370,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             if (not struct_type and is<DynamicArrayType>(stripped_object_type))
                 struct_type = as<DynamicArrayType>(stripped_object_type)->struct_type(mod);
 
+            if (not struct_type and is<ArrayViewType>(stripped_object_type))
+                struct_type = as<ArrayViewType>(stripped_object_type)->struct_type(mod);
+
             if (not struct_type) {
                 Error(
                     m->object()->location(),
@@ -1535,6 +1572,12 @@ void lcc::glint::Sema::AnalyseBinary(BinaryExpr* b) {
 
             /// Result type is the pointer type or a pointer to the array element.
             b->type(is<PointerType>(ty) ? ty : Ptr(as<ArrayType>(ty)->element_type()));
+
+            // An lvalue to a pointer subscript means we have to do lvalue to rvalue
+            // conversion on that pointer, so we can subscript from it's value (not
+            // from the location the pointer is at).
+            if (is<PointerType>(ty) and b->lhs()->is_lvalue())
+                LValueToRValue(&b->lhs());
 
             /// The RHS must be an integer.
             LValueToRValue(&b->rhs());
@@ -1746,7 +1789,13 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     // If the callee is a type expression, this is a type instantiation.
     // TODO: This NameRefExpr check is probably a sign of something more
     // sinister going on, but I can't exactly pinpoint it right now.
-    if (is<TypeExpr>(expr->callee()) or (is<NameRefExpr>(expr->callee()) and is<TypeDecl>(as<NameRefExpr>(expr->callee())->target()))) {
+    if (
+        is<TypeExpr>(expr->callee())
+        or ( //
+            is<NameRefExpr>(expr->callee())
+            and is<TypeDecl>(as<NameRefExpr>(expr->callee())->target())
+        )
+    ) {
         const usz s = expr->args().size();
         for (usz i = 0; i < s; ++i)
             LValueToRValue(expr->args().data() + i);
@@ -1916,7 +1965,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     /// lvalue-to-rvalue conversion only if the parameter type is not a reference
     /// type. This is all handled transparently by Convert().
     for (usz i = 0, end = std::min(expr->args().size(), func_type->params().size()); i < end; i++) {
-        LValueToRValue(expr->args().data() + i);
+        // LValueToRValue(expr->args().data() + i);
         if (not Convert(expr->args().data() + i, func_type->params()[i].type)) {
             // got
             auto* from = expr->args()[i]->type();
@@ -2608,6 +2657,29 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                     a->set_sema_errored();
                 }
             }
+        } break;
+
+        // Apply decltype decay to the element type, prohibit arrays of
+        // references, and, if there is an initial size expression, analyse that.
+        // Also set cached struct type for IRGen by calling struct_type().
+        case Type::Kind::ArrayView: {
+            auto* a = as<ArrayViewType>(type);
+            LCC_ASSERT(a->element_type(), "ArrayViewType has NULL element type");
+            Analyse(&a->element_type());
+            a->element_type(DeclTypeDecay(a->element_type()));
+
+            auto* elem = a->element_type();
+            if (is<ReferenceType>(elem)) {
+                if (elem->ok()) Error(
+                    a->location(),
+                    "Cannot create dynamic array of reference type {}",
+                    elem
+                );
+                a->set_sema_errored();
+            }
+
+            // Cache struct type for IRGen.
+            (void) a->struct_type(mod);
         } break;
 
         // Apply decltype decay to the element type, prohibit arrays of

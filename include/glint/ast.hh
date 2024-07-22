@@ -227,10 +227,6 @@ public:
     /// Get the functions that are part of this module.
     auto functions() -> std::vector<FuncDecl*>& { return _functions; }
 
-    /// Get the global scope.
-    [[nodiscard]]
-    auto global_scope() const -> Scope* { return scopes[0]; }
-
     /// Get the module imports.
     auto imports() -> std::vector<Ref>& { return _imports; }
 
@@ -241,38 +237,41 @@ public:
     /// Print the AST of this module.
     void print(bool use_colour);
 
-    /// Get the top-level function.
+    /// Get the global scope.
     [[nodiscard]]
-    auto top_level_function() const -> FuncDecl* { return _top_level_function; }
+    auto global_scope() const -> Scope* { return scopes[0]; }
 
     /// Get the top-level scope.
     [[nodiscard]]
     auto top_level_scope() const -> Scope* { return scopes[1]; }
 
+    /// Get the top-level function.
+    [[nodiscard]]
+    auto top_level_function() const { return _top_level_function; }
+
     /// Get a function name that is unique within this module.
-    auto unique_function_name() -> std::string { return fmt::format("_XGlint__lambda_{}", _lambda_counter++); }
+    auto unique_function_name() { return fmt::format("_XGlint__lambda_{}", _lambda_counter++); }
 
     // Get the name of this module
     [[nodiscard]]
     auto name() const -> std::string_view { return _name; }
 
     [[nodiscard]]
-    auto is_module() const -> bool {
-        return _is_module;
-    }
+    auto is_module() const { return _is_module; }
 
-    /// Obtain a module metadata blob describing this Glint module.
+    /// Obtain a binary blob describing this Glint module.
     [[nodiscard]]
     auto serialise() -> std::vector<u8>;
+
     // Serialise type into given out parameter and append type to cache iff it
     // is not already in the cache. Return the index within the cache of the
     // given type.
     [[nodiscard]]
     auto serialise(std::vector<u8>& out, std::vector<Type*>& cache, Type*) -> lcc::u16;
+
     /// Deserialise a module metadata blob into `this`.
     /// \return a boolean value denoting `true` iff deserialisation succeeded.
-    /// NOTE: Only call this on new modules, as it does not clear out old
-    /// module before deserialising into `this`.
+    /// NOTE: Does not clear out old module before deserialising into `this`.
     [[nodiscard]]
     auto deserialise(lcc::Context*, std::vector<u8> module_metadata_blob) -> bool;
 
@@ -492,6 +491,7 @@ public:
         Reference,
         DynamicArray,
         Array,
+        ArrayView,
         Function,
         Sum,
         Union,
@@ -501,7 +501,7 @@ public:
     };
 
 private:
-    const Kind _kind;
+    Kind _kind;
 
 protected:
     constexpr Type(Kind kind, Location location)
@@ -512,7 +512,7 @@ public:
 
     void* operator new(size_t) = delete;
     void* operator new(size_t sz, Module& mod) {
-        auto ptr = ::operator new(sz);
+        auto* ptr = ::operator new(sz);
         mod.types.push_back(static_cast<Type*>(ptr));
         return ptr;
     }
@@ -536,6 +536,9 @@ public:
 
     /// Check if this is a dynamic array type.
     bool is_dynamic_array() const { return _kind == Kind::DynamicArray; }
+
+    /// Check if this is a view type.
+    bool is_view() const { return _kind == Kind::ArrayView; }
 
     /// Check if this is the builtin \c bool type.
     bool is_bool() const;
@@ -647,6 +650,7 @@ static constexpr auto ToString(Type::Kind k) {
         case Type::Kind::Reference: return "ref";
         case Type::Kind::DynamicArray: return "dynamic_array";
         case Type::Kind::Array: return "array";
+        case Type::Kind::ArrayView: return "array_view";
         case Type::Kind::Function: return "function";
         case Type::Kind::Sum: return "sum";
         case Type::Kind::Union: return "union";
@@ -952,18 +956,57 @@ public:
     static bool classof(const Type* type) { return type->kind() == Kind::Array; }
 };
 
+class ArrayViewType : public TypeWithOneElement {
+    static constexpr auto K = Kind::ArrayView;
+
+    StructType* _cached_struct{nullptr};
+
+public:
+    static constexpr usz IntegerWidth = 64;
+
+    ArrayViewType(Type* element_type, Location location = {})
+        : TypeWithOneElement(K, location, element_type) {}
+
+    auto struct_type(Module& mod) -> StructType* {
+        if (not _cached_struct) {
+            _cached_struct = new (mod) StructType(
+                mod.global_scope(),
+                {
+                    {"data", new (mod) PointerType(element_type()), {}},
+                    {"size", new (mod) IntegerType(IntegerWidth, false, {}), {}} //
+                },
+                location()
+            );
+            for (auto m : _cached_struct->members())
+                m.type->set_sema_done();
+            _cached_struct->set_sema_done();
+        }
+
+        return _cached_struct;
+    }
+
+    /// Caller needs to make sure to check the return value is not nullptr.
+    [[nodiscard]]
+    auto struct_type() { return _cached_struct; }
+
+    static auto classof(const Type* type) -> bool { return type->kind() == K; }
+};
+
 class DynamicArrayType : public TypeWithOneElement {
+    static constexpr auto K = Kind::DynamicArray;
+
     Expr* _initial_size;
     StructType* _cached_struct{nullptr};
 
 public:
-    static constexpr int IntegerWidth = 32;
+    static constexpr usz IntegerWidth = 32;
 
     DynamicArrayType(Type* element_type, Expr* size, Location location = {})
-        : TypeWithOneElement(Kind::DynamicArray, location, element_type), _initial_size(size) {}
+        : TypeWithOneElement(K, location, element_type), _initial_size(size) {}
 
     auto initial_size() -> Expr*& { return _initial_size; }
-    Expr* initial_size() const { return _initial_size; }
+    [[nodiscard]]
+    auto initial_size() const -> Expr* { return _initial_size; }
 
     auto struct_type(Module& mod) -> StructType* {
         if (not _cached_struct) {
@@ -974,9 +1017,8 @@ public:
                  {"capacity", new (mod) IntegerType(IntegerWidth, false, {}), {}}},
                 location()
             );
-            _cached_struct->members().at(0).type->set_sema_done();
-            _cached_struct->members().at(1).type->set_sema_done();
-            _cached_struct->members().at(2).type->set_sema_done();
+            for (auto m : _cached_struct->members())
+                m.type->set_sema_done();
             _cached_struct->set_sema_done();
         }
 
@@ -984,11 +1026,10 @@ public:
     }
 
     /// Caller needs to make sure to check the return value is not nullptr.
-    auto struct_type() -> StructType* {
-        return _cached_struct;
-    }
+    [[nodiscard]]
+    auto struct_type() { return _cached_struct; }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::DynamicArray; }
+    static auto classof(const Type* type) -> bool { return type->kind() == K; }
 };
 
 // Automagical tagged union, basically.
@@ -1312,15 +1353,15 @@ protected:
 
 public:
     /// Get the mangled name of this declaration.
-    auto mangled_name() const -> std::string {
-        // FIXME: Mangle.
-        return name();
-    }
+    [[nodiscard]]
+    auto mangled_name() const -> std::string;
 
     /// Get the module this declaration is in.
-    auto module() const -> Module* { return _mod; }
+    [[nodiscard]]
+    auto module() const { return _mod; }
 
     /// Get the linkage of this declaration.
+    [[nodiscard]]
     auto linkage() const { return _linkage; }
 
     /// Set the linkage of this declaration.
@@ -1386,29 +1427,55 @@ public:
         set_sema_done();
     }
 
+    [[nodiscard]]
     auto body() -> Expr*& { return _body; }
+
+    [[nodiscard]]
     auto body() const -> Expr* { return _body; }
 
+    [[nodiscard]]
     auto call_conv() const -> CallConv { return _cc; }
 
-    auto return_type() const -> Type* {
-        return as<FuncType>(type())->return_type();
+    [[nodiscard]]
+    auto function_type() const -> FuncType* {
+        // TODO: I don't think a FuncDecl can have a function pointer type, but,
+        // if it can, handle that here.
+        LCC_ASSERT(
+            is<FuncType>(type()),
+            "Glint FuncDecl underlying type isn't a FuncType (it's {}). If this is a function pointer, let me know and I'll fix it---TIA.",
+            type()->string()
+        );
+        return as<FuncType>(type());
     }
 
+    [[nodiscard]]
+    auto return_type() const -> Type* {
+        return function_type()->return_type();
+    }
+
+    [[nodiscard]]
     auto param_types() const {
         return as<FuncType>(type())->params() | vws::transform([](auto& p) { return p.type; });
     }
 
+    [[nodiscard]]
     auto param_decls() -> std::vector<VarDecl*>& { return _params; }
+
+    [[nodiscard]]
     auto param_decls() const -> const std::vector<VarDecl*>& { return _params; }
 
     auto scope(Scope* scope) { _scope = scope; }
+
+    [[nodiscard]]
     auto scope() const -> Scope* { return _scope; }
 
+    [[nodiscard]]
     auto dangling_dynarrays() -> std::vector<Decl*>& { return _dangling_dynarrays; }
+
+    [[nodiscard]]
     auto dangling_dynarrays() const -> std::vector<Decl*> { return _dangling_dynarrays; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::FuncDecl; }
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::FuncDecl; }
 };
 
 class TypeDecl : public Decl {

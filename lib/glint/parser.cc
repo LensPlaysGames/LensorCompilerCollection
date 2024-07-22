@@ -1478,22 +1478,27 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                     location
                 );
             } else {
-                auto size_expr = ParseExpr();
-                if (not size_expr) return size_expr.diag();
-                // TODO: Better check for if expression is compile-time known
-                EvalResult out{};
-                if (size_expr->evaluate(context, out, false)) {
-                    // FIXED ARRAY because size expression is compile-time-known.
-                    size_expr = new (*mod) ConstantExpr(*size_expr, out);
-                    ty = new (*mod) ArrayType(*type, *size_expr, type->location());
+                if (At(Tk::Ident) and tok.text == "view") {
+                    NextToken();
+                    ty = new (*mod) ArrayViewType(*type, location);
                 } else {
-                    // DYNAMIC ARRAY because size expression is NOT compile-time-known.
-                    ty = new (*mod) DynamicArrayType(
-                        *type,
-                        *size_expr,
-                        location
-                    );
+                    auto size_expr = ParseExpr();
+                    if (not size_expr) return size_expr.diag();
+                    EvalResult out{};
+                    if (size_expr->evaluate(context, out, false)) {
+                        // FIXED ARRAY because size expression is compile-time-known.
+                        size_expr = new (*mod) ConstantExpr(*size_expr, out);
+                        ty = new (*mod) ArrayType(*type, *size_expr, type->location());
+                    } else {
+                        // DYNAMIC ARRAY because size expression is NOT compile-time-known.
+                        ty = new (*mod) DynamicArrayType(
+                            *type,
+                            *size_expr,
+                            location
+                        );
+                    }
                 }
+
                 if (not Consume(Tk::RBrack))
                     return Error("Expected ]");
             }
@@ -1599,8 +1604,11 @@ auto lcc::glint::Parser::ParseFuncDecl(
     auto body = ParseFuncBody(is_external);
     if (not body) return Diag();
 
+    // External implies no mangling.
+    if (is_external) type->set_attr(FuncAttr::NoMangle);
+
     /// Create the function.
-    auto func = new (*mod) FuncDecl(
+    auto* func = new (*mod) FuncDecl(
         name,
         type,
         (*body).first,
@@ -1623,8 +1631,8 @@ void lcc::glint::Parser::ParseTopLevel() {
     /// Create the global and top-level scope. The top-level scope is a bit of
     /// a weird one because it only contains the local variables of the top-level
     /// functions. Everything else at the top-level goes in the global scope.
-    auto global = new (*mod) Scope(nullptr);
-    auto top_level = new (*mod) Scope(global);
+    auto* global = new (*mod) Scope(nullptr);
+    auto* top_level = new (*mod) Scope(global);
 
     /// Set up the rest of the parser state.
     scope_stack.push_back(global);
