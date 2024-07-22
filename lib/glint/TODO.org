@@ -24,7 +24,11 @@ Or, in Glint (array of =int='s).
   };
 
   ;; Er, no syntax or anything for this yet. Pretend!
-  array_view : [int].view;
+  array_view : [int view];
+  ;; or maybe ![int];
+  ;; or maybe [int].view;
+  ;; or maybe [int]v;
+  ;; or maybe view[int];
   array_view :: struct {
     data: int.ptr;
     size: uint;
