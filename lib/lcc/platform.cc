@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <string_view>
 
@@ -42,6 +43,21 @@ void lcc::platform::PrintBacktrace() {
     // Skip PrintBacktrace() entry
     int skip_value = 1;
 
+    char** trace_symbols = backtrace_symbols(&trace[0], size);
+    if (not trace_symbols) {
+        fmt::print("Could not pretty print backtrace: backtrace_symbols() from execinfo.h returned NULL");
+        for (int i = 0; i < n; ++i)
+            fmt::print("{}: {:p}\n", i, trace[i]);
+    }
+
+    // Try to figure out if this is an ICE and, if it is, skip to where that
+    // was called from.
+    for (int i = 0; i < n and i < 8; ++i) {
+        std::string_view trace_symbol_view{trace_symbols[i]};
+        if (trace_symbol_view.contains("ICE"))
+            skip_value = i + 1;
+    }
+
     // Use addr2line like a sane person
     if constexpr (backtrace_addr2line) {
         // Sounds crazy, but since program counter points to one past the
@@ -77,27 +93,16 @@ void lcc::platform::PrintBacktrace() {
     }
     // JUST LINUX <execinfo.h> BACKTRACE
     else {
-        char** trace_symbols = backtrace_symbols(trace, size);
-        if (not trace_symbols) {
-            fmt::print("Could not pretty print backtrace: backtrace_symbols() from execinfo.h returned NULL");
-            for (int i = 0; i < n; ++i)
-                fmt::print("{}: {:p}\n", i, trace[i]);
-        }
-
-        // Try to figure out if this is an ICE and, if it is, skip to where that
-        // was called from.
-        if (n > 7 and fmt::format("{}", trace_symbols[7]).contains("ICE"))
-            skip_value = 7;
-
         std::vector<std::string> trace_strings;
         trace_strings.reserve(lcc::usz(n));
         for (int i = skip_value; i < n; i++)
             trace_strings.emplace_back(trace_symbols[i]);
 
-        free(trace_symbols);
-
         std::string_view long_path_marker{"/lcc"};
-        if (trace_strings.size() and trace_strings.at(0).contains(long_path_marker)) {
+        if (
+            not trace_strings.empty()
+            and trace_strings.at(0).contains(long_path_marker)
+        ) {
             for (auto& s : trace_strings) {
                 auto skip = s.find(long_path_marker);
                 if (skip != std::string::npos)
@@ -108,6 +113,8 @@ void lcc::platform::PrintBacktrace() {
         for (auto [index, s] : vws::enumerate(trace_strings))
             fmt::print("{}: {}\n", index, s);
     }
+
+    free(trace_symbols);
 #endif
 }
 
