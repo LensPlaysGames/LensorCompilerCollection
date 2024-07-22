@@ -745,7 +745,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         } break;
 
         case K::Cast: {
-            auto cast = as<CastExpr>(expr);
+            auto* cast = as<CastExpr>(expr);
             generate_expression(cast->operand());
 
             lcc::Type* t_to{nullptr};
@@ -876,7 +876,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     return;
                 }
 
-                auto load = new (*module) LoadInst(t_to, generated_ir[cast->operand()], expr->location());
+                auto* load = new (*module) LoadInst(t_to, generated_ir[cast->operand()], expr->location());
                 generated_ir[expr] = load;
                 insert(load);
                 return;
@@ -893,17 +893,17 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             bool from_signed = cast->operand()->type()->is_signed_int(ctx);
 
             if (from_sz == to_sz) {
-                auto bitcast = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+                auto* bitcast = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
                 generated_ir[expr] = bitcast;
                 insert(bitcast);
             } else if (from_sz < to_sz) {
                 // smaller to larger: sign extend if needed, otherwise zero extend.
                 if (from_signed) {
-                    auto sign_extend = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+                    auto* sign_extend = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
                     generated_ir[expr] = sign_extend;
                     insert(sign_extend);
                 } else {
-                    auto zero_extend = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+                    auto* zero_extend = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
                     generated_ir[expr] = zero_extend;
                     insert(zero_extend);
                 }
@@ -911,12 +911,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 // larger to smaller: truncate.
                 // but not for bools. bools need != 0 emitted instead.
                 if (cast->type() == Type::Bool) {
-                    auto zero_imm = new (*module) IntegerConstant(generated_ir[cast->operand()]->type(), 0);
-                    auto ne = new (*module) NeInst(generated_ir[cast->operand()], zero_imm, cast->location());
+                    auto* zero_imm = new (*module) IntegerConstant(generated_ir[cast->operand()]->type(), 0);
+                    auto* ne = new (*module) NeInst(generated_ir[cast->operand()], zero_imm, cast->location());
                     generated_ir[expr] = ne;
                     insert(ne);
                 } else {
-                    auto truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+                    auto* truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
                     generated_ir[expr] = truncate;
                     insert(truncate);
                 }
@@ -1260,7 +1260,7 @@ auto IRGen::Generate(Context* context, glint::Module& mod) -> lcc::Module* {
 
     /// TODO: Move this into a function?
     for (const auto& str : mod.strings) {
-        auto var = GlobalVariable::CreateStringPtr(
+        auto* var = GlobalVariable::CreateStringPtr(
             ir_gen.module,
             fmt::format(".str.{}", ir_gen.total_string++),
             str

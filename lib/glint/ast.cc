@@ -617,40 +617,40 @@ std::vector<lcc::glint::Expr*> lcc::glint::Expr::children() const {
             return {as<lcc::glint::AlignofExpr>(this)->expr()};
 
         case Kind::VarDecl: {
-            auto v = as<lcc::glint::VarDecl>(this);
+            auto* v = as<lcc::glint::VarDecl>(this);
             if (v->init()) return {v->init()};
             return {};
         } break;
 
         case Kind::NameRef: {
-            auto n = as<lcc::glint::NameRefExpr>(this);
+            auto* n = as<lcc::glint::NameRefExpr>(this);
             if (n->target())
                 return {n->target()};
             return {};
         }
 
         case Kind::Block: {
-            auto b = as<BlockExpr>(this);
+            auto* b = as<lcc::glint::BlockExpr>(this);
             return b->children();
         }
 
         case Kind::Unary: {
-            auto u = as<UnaryExpr>(this);
+            auto* u = as<lcc::glint::UnaryExpr>(this);
             return {u->operand()};
         }
 
         case Kind::Binary: {
-            auto b = as<BinaryExpr>(this);
+            auto b = as<lcc::glint::BinaryExpr>(this);
             return {b->lhs(), b->rhs()};
         }
     }
     LCC_UNREACHABLE();
 }
 
-std::string lcc::glint::Expr::langtest_name() const {
+auto lcc::glint::Expr::langtest_name() const -> std::string {
     return name();
 }
-std::vector<lcc::glint::Expr*> lcc::glint::Expr::langtest_children() const {
+auto lcc::glint::Expr::langtest_children() const -> std::vector<lcc::glint::Expr*> {
     // Return function body as child of function declaration.
     if (auto* func_decl = cast<FuncDecl>(this))
         return {func_decl->body()};
@@ -666,7 +666,7 @@ auto lcc::glint::EnumeratorDecl::value() const -> aint {
              : as<IntegerLiteral>(init())->value();
 }
 
-std::string lcc::glint::ToString(lcc::glint::Expr::Kind k) {
+auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
     switch (k) {
         case lcc::glint::Expr::Kind::While: return "while";
         case lcc::glint::Expr::Kind::For: return "for";
@@ -731,7 +731,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
         using K = lcc::glint::Expr::Kind;
         switch (e->kind()) {
             case K::FuncDecl: {
-                auto f = as<lcc::glint::FuncDecl>(e);
+                auto* f = as<lcc::glint::FuncDecl>(e);
                 PrintLinkage(f->linkage());
                 PrintBasicHeader("FuncDecl", e);
                 out += fmt::format(
@@ -744,7 +744,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             }
 
             case K::VarDecl: {
-                auto v = as<lcc::glint::VarDecl>(e);
+                auto* v = as<lcc::glint::VarDecl>(e);
                 PrintLinkage(v->linkage());
                 PrintBasicHeader("VarDecl", e);
                 out += fmt::format(
@@ -759,7 +759,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             }
 
             case K::EnumeratorDecl: {
-                auto v = as<lcc::glint::EnumeratorDecl>(e);
+                auto* v = as<lcc::glint::EnumeratorDecl>(e);
                 PrintBasicHeader("EnumeratorDecl", e);
                 out += fmt::format(
                     " {}{} {}{}\n",
@@ -771,7 +771,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                 return;
             }
             case K::Binary: {
-                auto b = as<lcc::glint::BinaryExpr>(e);
+                auto* b = as<lcc::glint::BinaryExpr>(e);
                 PrintBasicHeader("BinaryExpr", e);
                 out += fmt::format(
                     " {}{} {}",
@@ -785,7 +785,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             }
 
             case K::Unary: {
-                auto u = as<lcc::glint::UnaryExpr>(e);
+                auto* u = as<lcc::glint::UnaryExpr>(e);
                 PrintBasicHeader("UnaryExpr", e);
                 out += fmt::format(
                     " {}{} {}",
@@ -799,7 +799,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             }
 
             case K::IntegerLiteral: {
-                auto i = as<lcc::glint::IntegerLiteral>(e);
+                auto* i = as<lcc::glint::IntegerLiteral>(e);
                 PrintBasicHeader("IntegerLiteral", e);
                 out += fmt::format(
                     " {}{} {}\n",
@@ -811,7 +811,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             }
 
             case K::NameRef: {
-                auto n = as<lcc::glint::NameRefExpr>(e);
+                auto* n = as<lcc::glint::NameRefExpr>(e);
                 PrintBasicHeader("NameRefExpr", e);
                 out += fmt::format(
                     " {}{} {}",
@@ -825,7 +825,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             }
 
             case K::Cast: {
-                auto c = as<lcc::glint::CastExpr>(e);
+                auto* c = as<lcc::glint::CastExpr>(e);
                 PrintBasicHeader("CastExpr", e);
                 switch (c->cast_kind()) {
                     case lcc::glint::CastKind::SoftCast: out += fmt::format(" {}Soft ", C(key_detail_colour)); break;
@@ -892,7 +892,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
         // Only print function bodies at the top level.
         if (e->kind() == lcc::glint::Expr::Kind::FuncDecl) return;
 
-        if (auto n = cast<lcc::glint::NameRefExpr>(e)) {
+        if (auto* n = cast<lcc::glint::NameRefExpr>(e)) {
             // TODO: Get rid of tempset if we don't need it here.
             tempset print_children_of_children = false;
             PrintChildren(n->children(), leading_text);
@@ -908,10 +908,10 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
     /// Print a top-level node.
     void PrintTopLevelNode(const lcc::glint::Expr* e) {
         PrintHeader(e);
-        if (auto f = cast<lcc::glint::FuncDecl>(e)) {
+        if (auto* f = cast<lcc::glint::FuncDecl>(e)) {
             printed_functions.insert(f);
-            if (auto body = const_cast<lcc::glint::FuncDecl*>(f)->body()) {
-                if (auto block = cast<lcc::glint::BlockExpr>(body)) {
+            if (auto* body = const_cast<lcc::glint::FuncDecl*>(f)->body()) {
+                if (auto* block = cast<lcc::glint::BlockExpr>(body)) {
                     PrintChildren(block->children(), "");
                 } else {
                     lcc::glint::Expr* children[] = {const_cast<lcc::glint::FuncDecl*>(f)->body()};
@@ -931,7 +931,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
 
     void print(lcc::glint::Module* mod) {
         printed_functions.insert(mod->top_level_function());
-        if (auto funcbody = cast<lcc::glint::BlockExpr>(mod->top_level_function()->body())) {
+        if (auto* funcbody = cast<lcc::glint::BlockExpr>(mod->top_level_function()->body())) {
             for (auto* node : funcbody->children())
                 PrintTopLevelNode(node);
         } else PrintTopLevelNode(mod->top_level_function()->body());
@@ -956,7 +956,7 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
             /// function type, we need to use parentheses here to preserve
             /// precedence.
             bool has_arr_or_func = false;
-            auto el = elem();
+            auto* el = elem();
             for (;;) {
                 switch (el->kind()) {
                     default: break;
@@ -988,7 +988,7 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
         }
         case Kind::Reference: {
             bool has_func = false;
-            auto el = elem();
+            auto* el = elem();
             for (;;) {
                 switch (el->kind()) {
                     default: break;
@@ -1019,12 +1019,12 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
         }
 
         case Kind::Integer: {
-            auto i = as<IntegerType>(this);
+            auto* i = as<IntegerType>(this);
             return fmt::format("{}{}{}{}", C(type_colour), i->is_signed() ? "s" : "u", i->bit_width(), C(Reset));
         }
 
         case Kind::Struct: {
-            auto decl = as<StructType>(this)->decl();
+            auto* decl = as<StructType>(this)->decl();
             return fmt::format(
                 "{}struct {}{}",
                 C(type_colour),
@@ -1034,7 +1034,7 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
         }
 
         case Kind::Sum: {
-            auto decl = as<SumType>(this)->decl();
+            auto* decl = as<SumType>(this)->decl();
             return fmt::format(
                 "{}sum {}{}",
                 C(type_colour),
@@ -1044,7 +1044,7 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
         }
 
         case Kind::Union: {
-            auto decl = as<UnionType>(this)->decl();
+            auto* decl = as<UnionType>(this)->decl();
             return fmt::format(
                 "{}union {}{}",
                 C(type_colour),
@@ -1054,7 +1054,7 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
         }
 
         case Kind::Enum: {
-            auto decl = as<EnumType>(this)->decl();
+            auto* decl = as<EnumType>(this)->decl();
             return fmt::format(
                 "{}enum {}{}",
                 C(type_colour),
@@ -1064,7 +1064,7 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
         }
 
         case Kind::DynamicArray: {
-            auto arr = as<DynamicArrayType>(this);
+            auto* arr = as<DynamicArrayType>(this);
             return fmt::format(
                 "{}[{}{}]{}",
                 C(type_colour),
@@ -1075,9 +1075,9 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
         }
 
         case Kind::Array: {
-            auto arr = as<ArrayType>(this);
+            auto* arr = as<ArrayType>(this);
             LCC_ASSERT(arr->size(), "ArrayType has NULL size expression");
-            if (auto sz = cast<ConstantExpr>(arr->size())) {
+            if (auto* sz = cast<ConstantExpr>(arr->size())) {
                 return fmt::format(
                     "{}[{} {}{}{}]{}",
                     C(type_colour),
@@ -1128,9 +1128,9 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
             LCC_UNREACHABLE();
 
         case Kind::Function: {
-            auto f = as<FuncType>(this);
+            const auto* f = as<FuncType>(this);
             std::string out = fmt::format("{}{}(", f->return_type()->string(use_colours), C(ASTPrinter::base_colour));
-            for (auto& arg : f->params()) {
+            for (const auto& arg : f->params()) {
                 if (&arg != &f->params().front()) out += fmt::format("{}, ", C(ASTPrinter::base_colour));
                 out += fmt::format("{}{}{}", C(ASTPrinter::name_colour), arg.name, C(ASTPrinter::base_colour));
                 if (not arg.name.empty()) out += " : ";
