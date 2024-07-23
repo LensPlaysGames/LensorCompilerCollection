@@ -401,7 +401,7 @@ int main(int argc, const char** argv) {
         else if (specified_language == "glint" or (specified_language == "default" and path_str.ends_with(".g"))) {
             /// Parse the file.
             auto mod = lcc::glint::Parser::Parse(&context, file);
-            if (options.ast) mod->print(use_colour);
+            if (options.ast and mod) mod->print(use_colour);
             if (context.has_error()) return; // the error condition is handled by the caller already
             if (options.stopat_syntax) return;
 
