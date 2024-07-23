@@ -881,8 +881,12 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             // For the top level function of GLint programs, a return value is created
             // if a valid one is not present. This includes if the last value is not
             // convertible to the return type of main.
-            if (decl->name() == "main" and not Convert(last, ty->return_type())) {
-                auto inserted_return_value = new (mod) IntegerLiteral(0, {});
+            if (
+                decl->name() == "main"
+                and not is<ReturnExpr>(*last)
+                and not Convert(last, ty->return_type())
+            ) {
+                auto* inserted_return_value = new (mod) IntegerLiteral(0, {});
                 block->add(new (mod) ReturnExpr(inserted_return_value, {}));
                 last = block->last_expr();
             }
