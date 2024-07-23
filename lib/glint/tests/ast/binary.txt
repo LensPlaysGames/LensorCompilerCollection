@@ -1,0 +1,352 @@
+================
+Arithmetic, Addition
+================
+
+34 + 35;
+
+---
+
+(block
+ (return
+  (binary_add
+   (integer_literal)
+   (integer_literal))))
+
+================
+Arithmetic, Subtraction
+================
+
+70 - 1;
+
+---
+
+(block
+ (return
+  (binary_subtract
+   (integer_literal)
+   (integer_literal))))
+
+================
+Arithmetic, Multiplication
+================
+
+17 * 4;
+
+---
+
+(block
+ (return
+  (binary_multiply
+   (integer_literal)
+   (integer_literal))))
+
+
+================
+Arithmetic, Division
+================
+
+138 / 2;
+
+---
+
+(block
+ (return
+  (binary_divide
+   (integer_literal)
+   (integer_literal))))
+
+
+================
+Arithmetic, Remainder
+================
+
+325 % 256;
+
+---
+
+(block
+ (return
+  (binary_modulo
+   (integer_literal)
+   (integer_literal))))
+
+
+================
+Logical, Equality
+================
+
+0x1a = 26;
+
+---
+
+(block
+ (return
+  (cast
+   (binary_equal
+    (integer_literal)
+    (integer_literal)))))
+
+
+================
+Logical, Inequality
+================
+
+0x1b != 26;
+
+---
+
+(block
+ (return
+  (cast
+   (binary_notequal
+    (integer_literal)
+    (integer_literal)))))
+
+
+================
+Logical, Less Than
+================
+
+0x1a < 27;
+
+---
+
+(block
+ (return
+  (cast
+   (binary_lessthan
+    (integer_literal)
+    (integer_literal)))))
+
+
+================
+Logical, Less Than or Equal
+================
+
+0x1a <= 27;
+
+---
+
+(block
+ (return
+  (cast
+   (binary_lessthan_orequal
+    (integer_literal)
+    (integer_literal)))))
+
+
+================
+Logical, Greater Than
+================
+
+0x1b > 26;
+
+---
+
+(block
+ (return
+  (cast
+   (binary_greaterthan
+    (integer_literal)
+    (integer_literal)))))
+
+
+================
+Logical, Greater Than
+================
+
+0x1a >= 27;
+
+---
+
+(block
+ (return
+  (cast
+   (binary_greaterthan_orequal
+    (integer_literal)
+    (integer_literal)))))
+
+
+================
+Logical, Greater Than
+================
+
+0x1a >= 27;
+
+---
+
+(block
+ (return
+  (cast
+   (binary_greaterthan_orequal
+    (integer_literal)
+    (integer_literal)))))
+
+
+================
+Logical, Conjunction
+================
+
+69 and 420;
+
+---
+
+(block
+ (return
+  (cast
+   (binary_and
+    (cast (integer_literal))
+    (cast (integer_literal))))))
+
+
+================
+Logical, Disjunction
+================
+
+69 or 420;
+
+---
+
+(block
+ (return
+  (cast
+   (binary_or
+    (cast (integer_literal))
+    (cast (integer_literal))))))
+
+
+================
+Bitwise, Left Shift
+================
+
+;; 1   a   4
+;; 1   10  4
+;; 000110100100
+;; shr
+;; 000011010010
+;;     13  2
+;;     d   2
+0xd2 << 1;
+
+---
+
+(block
+ (return
+   (binary_shl
+    (integer_literal)
+    (integer_literal))))
+
+
+================
+Bitwise, Right Shift
+================
+
+;; 4   5
+;; 01000101
+;; shl
+;; 10001010
+;; 8   10
+;; 8   a
+0x8a >> 1;
+
+---
+
+(block
+ (return
+   (binary_shr
+    (integer_literal)
+    (integer_literal))))
+
+
+================
+Bitwise, Conjunction
+================
+
+0xc5 & 0x45;
+
+---
+
+(block
+ (return
+   (binary_bitand
+    (integer_literal)
+    (integer_literal))))
+
+
+================
+Bitwise, Disjunction
+================
+
+0x40 | 5;
+
+---
+
+(block
+ (return
+   (binary_bitor
+    (integer_literal)
+    (integer_literal))))
+
+
+================
+Bitwise, Exclusive Disjunction
+================
+
+0x45 ^ 8;
+
+---
+
+(block
+ (return
+   (binary_bitxor
+    (integer_literal)
+    (integer_literal))))
+
+
+================
+Declaration, Type Inferred
+================
+
+v :: 0x45;
+
+---
+
+(block
+ (return
+   (cast
+    (variable_declaration
+     (integer_literal)))))
+
+
+================
+Declaration, Type Declared
+================
+
+v :int 0x45;
+
+---
+
+(block
+ (return
+   (cast
+    (variable_declaration
+     (integer_literal)))))
+
+
+================
+Assignment
+================
+
+v :: 0o644;
+v := 69;
+
+---
+
+(block
+ (variable_declaration
+  (integer_literal))
+ (return
+   (cast
+    (binary_assignment
+     (name)
+     (integer_literal)))))
