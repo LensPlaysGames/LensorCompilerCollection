@@ -675,10 +675,16 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         // Lambda expression.
         case Tk::Lambda: {
             auto loc = tok.location;
+            // Yeet 'lambda'
             NextToken();
+
             auto ty = ParseType();
-            if (ty and not is<FuncType>(*ty)) return Error("Type of lambda must be a function type");
+            if (not ty) return ty.diag();
+
             auto* func_ty = cast<FuncType>(*ty);
+            if (not func_ty)
+                return Error("Type of lambda must be a function type");
+
             lhs = ParseFuncDecl("", func_ty, false);
             lhs->location({loc, lhs->location()});
         } break;

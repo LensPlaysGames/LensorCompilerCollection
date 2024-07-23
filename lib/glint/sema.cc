@@ -201,6 +201,8 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
     }
 
     // Fixed Array to Dynamic Array
+    // TODO: We probably want to disallow this being an implicit cast (but
+    // explicit should be allowed).
     if (from->is_array() and to->is_dynamic_array()) {
         if (not Type::Equal(from->elem(), to->elem()))
             return ConversionImpossible;
@@ -907,11 +909,9 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         LValueToRValue(last);
 
         // Insert a `ReturnExpr` which returns `last`.
-        if (is<BlockExpr>(decl->body())) {
+        if (is<BlockExpr>(decl->body()))
             *last = new (mod) ReturnExpr(*last, {});
-        } else {
-            decl->body() = new (mod) ReturnExpr(*last, {});
-        }
+        else decl->body() = new (mod) ReturnExpr(*last, {});
     } else {
         if (auto block = cast<BlockExpr>(decl->body())) {
             if (not block->children().size() or not is<ReturnExpr>(*block->last_expr()))

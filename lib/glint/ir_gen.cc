@@ -813,6 +813,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 auto* alloca = new (*module) AllocaInst(Convert(ctx, view_struct));
 
                 // copy operand ptr and store that into view ptr member.
+                // TODO: get member by name
                 auto* gmp_ptr = new (*module) GetMemberPtrInst(
                     Convert(ctx, view_struct),
                     alloca,
@@ -830,6 +831,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 );
 
                 // store array dimension into view size member.
+                // TODO: get member by name
                 auto* gmp_size = new (*module) GetMemberPtrInst(
                     Convert(ctx, view_struct),
                     alloca,
@@ -869,9 +871,116 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             // DYNAMIC ARRAY TO ARRAY VIEW
             if (cast->operand()->type()->is_dynamic_array() and cast->type()->is_view()) {
-                LCC_TODO("IRGen dynamic array to array view cast");
-                // TODO: We have to create a whole temporary and everything. We probably
-                // want to do at least part of this in sema to make our lives easier here.
+                LCC_ASSERT(
+                    cast->operand()->is_lvalue() or cast->operand()->type()->is_reference(),
+                    "Sorry, but to cast an rvalue dynamic array to an array view would require making a temporary for the dynamic array (to get an lvalue to copy from for the view), and /then/ making a temporary for the view and storing into that. Because of this, it's not handled, so, make a variable and then a view from that. Thanks."
+                );
+
+                // We have to create a whole temporary and everything.
+
+                // IR PSEUDOCODE
+                // %0 == cast operand
+                //
+                //   %1 = alloca @view
+                //   %2 = gmp @dynarray from %0 at ".data"
+                //   %3 = load ptr %2
+                //   %4 = gmp @view from %1 at ".data"
+                //   store ptr %3 into %4
+                //   %5 = gmp @dynarray from %0 at ".size"
+                //   %6 = load i32 %5
+                //   %7 = zext i64 %6
+                //   %8 = gmp @view from %1 at ".size"
+                //   store ptr %7 into %8
+                //
+                // TODO: It sure would be cool to be able to write snippets to insert like
+                // this with the ability to somehow parameterise/templatise on given
+                // type and value inputs.
+
+                auto* dynarray = as<DynamicArrayType>(cast->operand()->type());
+
+                // alloca underlying struct of view
+                auto* view_struct = as<ArrayViewType>(cast->type());
+                auto* alloca = new (*module) AllocaInst(Convert(ctx, view_struct));
+
+                // load ptr from ".data" dynamic array and store that into view ptr member.
+                auto* gmp_data_ptr = new (*module) GetMemberPtrInst(
+                    Convert(ctx, dynarray->struct_type()),
+                    generated_ir[cast->operand()],
+                    new (*module) IntegerConstant(
+                        Convert(ctx, Type::UInt),
+                        0
+                    )
+                );
+                auto* load_data_ptr = new (*module) LoadInst(
+                    lcc::Type::PtrTy,
+                    gmp_data_ptr
+                );
+
+                auto* gmp_ptr = new (*module) GetMemberPtrInst(
+                    Convert(ctx, view_struct),
+                    alloca,
+                    new (*module) IntegerConstant(
+                        Convert(ctx, Type::UInt),
+                        0
+                    )
+                );
+                auto* store_ptr = new (*module) StoreInst(
+                    load_data_ptr,
+                    gmp_ptr
+                );
+
+                // Store dynamic array size into view size member.
+
+                // load integer from ".size" dynamic array member and store that into view size member.
+                auto* gmp_data_size = new (*module) GetMemberPtrInst(
+                    Convert(ctx, dynarray->struct_type()),
+                    generated_ir[cast->operand()],
+                    new (*module) IntegerConstant(
+                        Convert(ctx, Type::UInt),
+                        0
+                    )
+                );
+                auto* load_data_size = new (*module) LoadInst(
+                    Convert(ctx, dynarray->struct_type()->members()[1].type),
+                    gmp_data_size
+                );
+                // TODO: Do a cast type thing if the loaded data size isn't the same type
+                // as the size of the view size member we are storing it into.
+
+                // TODO: get member by name
+                auto* gmp_size = new (*module) GetMemberPtrInst(
+                    Convert(ctx, view_struct),
+                    alloca,
+                    new (*module) IntegerConstant(
+                        Convert(ctx, Type::UInt),
+                        1
+                    )
+                );
+                auto* store_size = new (*module) StoreInst(
+                    load_data_size,
+                    gmp_size
+                );
+
+                // load from alloca to get array view value.
+                auto* load = new (*module) LoadInst(Convert(ctx, view_struct), alloca);
+
+                insert(alloca);
+
+                insert(gmp_data_ptr);
+                insert(load_data_ptr);
+                insert(gmp_ptr);
+                insert(store_ptr);
+
+                insert(gmp_data_size);
+                insert(load_data_size);
+                insert(gmp_size);
+                insert(store_size);
+
+                insert(load);
+
+                generated_ir[expr] = load;
+
+                return;
             }
 
             if (cast->is_lvalue_to_rvalue()) {
