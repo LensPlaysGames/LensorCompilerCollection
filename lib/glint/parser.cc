@@ -303,6 +303,8 @@ auto lcc::glint::Parser::ParseBlock(
         exprs.push_back(expr.value());
     }
 
+    loc = {loc, tok.location};
+
     /// Yeet "}".
     if (not Consume(Tk::RBrace)) return Error("Expected }}");
     return new (*mod) BlockExpr(std::move(exprs), loc);
@@ -675,9 +677,8 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             auto loc = tok.location;
             NextToken();
             auto ty = ParseType();
-            // FIXME: Isn't this supposed to be if (*not* ty)?? or (ty and ...)?
-            if (ty or not is<FuncType>(*ty)) return Error("Type of lambda must be a function type");
-            auto func_ty = cast<FuncType>(ty.value());
+            if (ty and not is<FuncType>(*ty)) return Error("Type of lambda must be a function type");
+            auto* func_ty = cast<FuncType>(*ty);
             lhs = ParseFuncDecl("", func_ty, false);
             lhs->location({loc, lhs->location()});
         } break;
@@ -824,7 +825,8 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         lhs = new (*mod) BinaryExpr(op, *lhs, *rhs, {lhs->location(), rhs->location()});
     }
 
-    // "()" after an expression is always a call.
+    // "()" after an expression is always a call with no arguments to the
+    // preceding expression.
     if (At(Tk::LParen) and Is(LookAhead(1), Tk::RParen)) {
         lhs = new (*mod) CallExpr(
             lhs.value(),
@@ -843,7 +845,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
     // a lambda or a number.
     else if (
         not single_expression
-        and (lhs->kind() == Expr::Kind::NameRef or lhs->kind() == Expr::Kind::Type or lhs->kind() == Expr::Kind::FuncDecl or lhs->kind() == Expr::Kind::IntegerLiteral)
+        and (is<NameRefExpr>(*lhs) or is<TypeExpr>(*lhs) or is<IntegerLiteral>(*lhs) or (is<FuncDecl>(*lhs) and as<FuncDecl>(*lhs)->name().empty()))
     ) {
         std::vector<Expr*> args;
 
@@ -1657,15 +1659,24 @@ void lcc::glint::Parser::ParseTopLevel() {
                 if (expr.value()->location().is_valid())
                     location = expr.value()->location();
 
-                // Attempt to get the location that is as close to where the semi-colon should be.
-                if (expr->kind() == Expr::Kind::VarDecl) {
-                    auto var_decl = as<VarDecl>(expr.value());
+                // Attempt to get the location that is as close to where the semi-colon
+                // should be.
+
+                // For a variable declaration, choose the init expression, if it's
+                // available, or the type.
+                if (auto* var_decl = cast<VarDecl>(*expr)) {
                     if (var_decl->init())
                         location = var_decl->init()->location();
                     else location = var_decl->type()->location();
                 }
-                if (expr->kind() == Expr::Kind::FuncDecl and as<FuncDecl>(expr.value())->body())
-                    location = as<FuncDecl>(expr.value())->body()->location();
+
+                // For a function declaration, choose the body location, if it's
+                // available, or the type.
+                if (auto* fdecl = cast<FuncDecl>(*expr)) {
+                    if (fdecl->body())
+                        location = fdecl->body()->location();
+                    else location = fdecl->type()->location();
+                }
 
                 // Limit location to length of one, discarding the beginning (fold right).
                 if (location.len > 1) {
