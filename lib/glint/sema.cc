@@ -75,6 +75,8 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         return NoOp;
     }
 
+    // Casting to an array view can be done from an lvalue.
+
     // Fixed Array to Array View
     bool from_array_ref = (from->is_pointer() or from->is_reference()) and from->elem()->is_array();
     if ((from->is_array() or from_array_ref) and to->is_view()) {
@@ -88,6 +90,17 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         // since we can only check if convertible if we have an expression (which
         // we don't). Gotta change stupid API built by stupid people.
         if (not Type::Equal(from_elem, to->elem()))
+            return ConversionImpossible;
+
+        if constexpr (PerformConversion)
+            InsertImplicitCast(expr_ptr, to);
+        return Score(1);
+    }
+
+    // Dynamic Array to Array View
+    // TODO: Handle .ptr, .ref variations
+    if (from->is_dynamic_array() and to->is_view()) {
+        if (not Type::Equal(from->elem(), to->elem()))
             return ConversionImpossible;
 
         if constexpr (PerformConversion)
@@ -183,16 +196,6 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         if (from_arr->dimension() > to_arr->dimension())
             return ConversionImpossible;
         if (not Type::Equal(from_arr->element_type(), to_arr->element_type()))
-            return ConversionImpossible;
-
-        if constexpr (PerformConversion)
-            InsertImplicitCast(expr_ptr, to);
-        return Score(1);
-    }
-
-    // Dynamic Array to Array View
-    if (from->is_dynamic_array() and to->is_view()) {
-        if (not Type::Equal(from->elem(), to->elem()))
             return ConversionImpossible;
 
         if constexpr (PerformConversion)
