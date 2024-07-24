@@ -259,8 +259,13 @@ void emit_gnu_att_assembly(
                     and is_reg_reg(instruction)
                 ) {
                     auto [lhs, rhs] = extract_reg_reg(instruction);
-                    if (lhs.size != rhs.size)
-                        Diag::ICE("Move from register to register has mismatched sizes");
+                    if (lhs.size != rhs.size) {
+                        Diag::ICE(
+                            "Move from register to register has mismatched sizes in basic block {} in function {}",
+                            block.name(),
+                            function.names().at(0).name
+                        );
+                    }
                 }
 
                 // ================================
