@@ -453,7 +453,7 @@ struct Inst {
 template <typename... instructions>
 struct InstList {
     static constexpr usz size() {
-        return (sizeof(instructions), ...);
+        return sizeof...(instructions);
     }
 
     static constexpr void foreach (auto&& lambda) {
@@ -485,7 +485,7 @@ struct PatternList {
         // NOTE: If you modify block.instructions() in any way, you are going to
         // have a bad time.
         std::vector<MInst*> instructions{};
-        // Any instructions we allocte are stored here, so that we can free them
+        // Any instructions we allocate are stored here, so that we can free them
         // after everything has been inserted as a value. Ideally we wouldn't have
         // to do this, but I can't make a vector of references, sadly.
         std::vector<MInst*> pool{};

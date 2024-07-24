@@ -5,9 +5,7 @@
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
 
-namespace lcc {
-namespace isel {
-namespace x86_64 {
+namespace lcc::isel::x86_64 {
 // Just a NOTE: I don't like having lcc::x86_64 /and/ lcc::isel::x86_64,
 // but I don't like having isel split up across all the arch namespaces
 // either.
@@ -349,7 +347,25 @@ using z_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::ZExt), Register<>>>,
     InstList<Inst<Clobbers<>, usz(Opcode::MoveZeroExtended), o<0>, i<0>>>>;
 
+// clang-format off
+// This doesn't really work, as far as I can tell. Not exactly sure yet,
+// could be o<1> in input pattern not being resolved, could be order of
+// patterns, could be a bug in counting the longest pattern.
+using collapse_local_reg_move_reg = Pattern<
+    InstList<
+        Inst<Clobbers<>, +x86_64::Opcode::LoadEffectiveAddress, Local<>, Register<>>,
+        Inst<Clobbers<>, +x86_64::Opcode::MoveDereferenceLHS, o<1>, Register<>>
+    >,
+    InstList<
+        Inst<Clobbers<>, +x86_64::Opcode::MoveDereferenceLHS, o<0>, o<3>>
+    >
+>;
+
+// clang-format on
+
 using AllPatterns = PatternList<
+    collapse_local_reg_move_reg,
+
     ret,
     ret_imm,
     ret_reg,
@@ -446,8 +462,6 @@ using AllPatterns = PatternList<
     eq_imm_imm,
     ne_imm_imm>;
 
-} // namespace x86_64
-} // namespace isel
-} // namespace lcc
+} // namespace lcc::isel::x86_64
 
 #endif /* LCC_CODEGEN_ISEL_X86_64_PATTERNS_HH */
