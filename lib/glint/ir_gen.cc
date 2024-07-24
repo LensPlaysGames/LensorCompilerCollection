@@ -937,7 +937,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     generated_ir[cast->operand()],
                     new (*module) IntegerConstant(
                         Convert(ctx, Type::UInt),
-                        0
+                        1
                     )
                 );
                 auto* load_data_size = new (*module) LoadInst(
