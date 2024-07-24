@@ -58,6 +58,7 @@ enum struct TokenKind {
     RBrace,
 
     BangLBrace, // !{
+    // HashLBrace, // #{
 
     Comma,     // ,
     Colon,     // :
@@ -89,6 +90,7 @@ enum struct TokenKind {
 
     // PlusPlus,    // ++
     // MinusMinus,  // --
+    // StarStar,    // **
     // PlusEq,      // +=
     // MinusEq,     // -=
     // StarEq,      // *=
@@ -151,8 +153,8 @@ enum struct TokenKind {
 };
 
 enum class CastKind {
-    SoftCast,           ///< Explicit cast using \c as.
-    HardCast,           ///< Explicit cast using \c as!.
+    SoftCast,           ///< Explicit cast.
+    HardCast,           ///< Explicit cast.
     ImplicitCast,       ///< Implicit conversion.
     LValueToRValueConv, ///< Lvalue-to-rvalue conversion.
     LValueToReference,  ///< Lvalue-to-reference conversion.
@@ -584,8 +586,11 @@ public:
     /// Check if this is an unsigned integer type.
     bool is_unsigned_int(const Context* ctx) const;
 
-    /// Check if this is the builtin \c void type.
+    /// Check if this is the builtin void type.
     bool is_void() const;
+
+    /// Check if this is the builtin overload set type.
+    bool is_overload_set() const;
 
     /// Get the size of this type. It may be target-dependent,
     /// which is why this takes a context parameter.

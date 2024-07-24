@@ -247,7 +247,9 @@ bool lcc::glint::Type::is_unsigned_int(const Context* ctx) const {
     return is_byte();
 }
 
-bool lcc::glint::Type::is_void() const { return ::is_builtin(this, BuiltinType::BuiltinKind::Void); }
+auto lcc::glint::Type::is_void() const -> bool { return ::is_builtin(this, BuiltinType::BuiltinKind::Void); }
+/// Check if this is the builtin overload set type.
+auto lcc::glint::Type::is_overload_set() const -> bool { return ::is_builtin(this, BuiltinType::BuiltinKind::OverloadSet); };
 
 auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
     LCC_ASSERT(
@@ -342,7 +344,7 @@ auto lcc::glint::Type::strip_references() -> Type* {
     return ty;
 }
 
-bool lcc::glint::Type::Equal(const Type* a, const Type* b) {
+auto lcc::glint::Type::Equal(const Type* a, const Type* b) -> bool {
     if (a == b) return true;
     if (a->kind() != b->kind()) return false;
 

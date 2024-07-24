@@ -1606,8 +1606,7 @@ auto lcc::glint::Parser::ParseFuncDecl(
     std::string name,
     FuncType* type,
     bool is_external
-)
-    -> Result<FuncDecl*> {
+) -> Result<FuncDecl*> {
     /// Parse attributes and the function body.
     auto body = ParseFuncBody(is_external);
     if (not body) return Diag();

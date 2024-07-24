@@ -1137,7 +1137,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
         /// Analyse local and global variable declarations.
         case Expr::Kind::VarDecl: {
-            auto v = as<VarDecl>(expr);
+            auto* v = as<VarDecl>(expr);
 
             /// If this has an initialiser, analyse it.
             if (v->init()) {
@@ -1452,17 +1452,20 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
                     /// Compare the parameters.
                     usz k = 0;
-                    for (; k < oi_params.size(); k++)
+                    for (; k < oi_params.size(); ++k) {
                         if (not Type::Equal(oi_params[isz(k)], oj_params[isz(k)]))
                             break;
+                    }
 
                     /// If all of them are equal, then we have a problem.
-                    if (k != oi_params.size()) {
+                    if (k == oi_params.size()) {
                         Error(
                             oi->location(),
-                            "Overload set contains two overloads with the same parameter types"
+                            "Overload set contains two overloads with the same parameter types, {} and {}",
+                            oi_params[isz(k)],
+                            oj_params[isz(k)]
                         );
-                        Diag::Note(context, oj->location(), "Conflicting overload is here");
+                        Note(oj->location(), "Conflicting overload is here");
                         expr->set_sema_errored();
                     }
                 }
@@ -1781,16 +1784,250 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     }
 
     /// If the callee is an overload set, perform overload resolution.
-    if (is<OverloadSet>(expr->callee())) {
+    if (is<OverloadSet>(expr->callee()) or expr->callee()->type()->is_overload_set()) {
         /// If any of the arguments errored, we can’t resolve this.
         if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
             expr->set_sema_errored();
             return;
         }
 
-        /// TODO: Overload resolution.
-        // See `docs/function_overload_resolution.org`
-        Diag::ICE("Sorry, overload resolution is currently not implemented. Annoy the developer if you don't want it.");
+        std::vector<FuncDecl*> O;
+        if (is<OverloadSet>(expr->callee())) {
+            O = as<OverloadSet>(expr->callee())->overloads();
+        } else if (expr->callee()->type()->is_overload_set()) {
+            LCC_ASSERT(is<NameRefExpr>(expr->callee()));
+
+            auto* set = as<NameRefExpr>(expr->callee())->target();
+            LCC_ASSERT(is<OverloadSet>(set));
+
+            O = as<OverloadSet>(set)->overloads();
+        }
+        std::vector<FuncDecl*> O_unchanged = O;
+
+        // *** 0
+        //
+        // Skip anything that is not a function reference, or any function
+        // references previously resolved.
+
+        // *** 1
+        //
+        // Collect all functions with the same name as the function being
+        // resolved into an *overload set* O. We cannot filter out any
+        // functions just yet.
+        //
+        // If the overload set size is zero, it is an error (no function may be resolved).
+        //
+        // It is advisable to ensure any invariants you require across function
+        // overloads, given the semantics of the language. For example, in
+        // Intercept, all overloads of a function must have the same return type.
+
+        // *** 2
+        //
+        // If the parent expression is a call expression, and the function being
+        // resolved is the callee of the call, then:
+
+        // **** 2a
+        //
+        // Typecheck all arguments of the call that are not unresolved function
+        // references themselves. Note: This takes care of resolving nested calls.
+
+        // **** 2b
+        //
+        // Remove from O all functions that have a different number of
+        // parameters than the call expression has arguments.
+        std::vector<FuncDecl*> invalid{};
+        for (auto* f : O) {
+            if (f->param_types().size() != expr->args().size()) {
+                Note(
+                    f->location(),
+                    "Candidate {} removed because parameter count doesn't match given arguments: {} vs {}",
+                    f->type(),
+                    f->param_types().size(),
+                    expr->args().size()
+                );
+                invalid.emplace_back(f);
+            }
+        }
+        for (auto* f : invalid) std::erase(O, f);
+        invalid.clear();
+
+        // **** 2c
+        //
+        // Let A_1, ... A_n be the arguments of the call expression.
+        //
+        // For candidate C in O, let P_1, ... P_n be the parameters of C. For each
+        // argument A_i of the call, iff it is not an unresolved function, check
+        // if it is convertible to P_i. Remove C from O if it is not. Note down
+        // the number of A_i’s that required a (series of) implicit conversions to
+        // their corresponding P_i’s. Also collect unresolved function references.
+
+        // For candidate C in O,
+        for (auto* C : O) {
+            // let P_... be the parameters of C.
+            for (auto* P : C->param_types()) {
+                // For each argument A_i,
+                for (auto*& A : expr->args()) {
+                    // check if it is convertible to P_i.
+                    auto conversion_score = TryConvert(&A, P);
+                    // TODO: Record score to choose lowest if multiple in overload set at the
+                    // end. Currently approximated via type equal check.
+                    if (conversion_score < 0) {
+                        // Note(
+                        //     A->location(),
+                        //     "Argument type {} is not convertible to parameter type {}\n",
+                        //     A->type(),
+                        //     P
+                        // );
+
+                        // Remove C from O if it is not.
+                        invalid.emplace_back(C);
+                    }
+                }
+            }
+        }
+        for (auto* f : invalid) std::erase(O, f);
+        invalid.clear();
+
+        // **** 2e
+        //
+        // If there are unresolved function references:
+
+        // ***** 2eα
+        //
+        // Collect their overload sets.
+
+        // ***** 2eβ
+        //
+        // Remove from O all candidates C that do no accept any overload of this
+        // argument as a parameter.
+
+        // ***** 2eγ
+        //
+        // Remove from O all functions except those with the least number of
+        // implicit conversions as per step 2d.
+
+        // ***** 2eδ
+        //
+        // Resolve the function being resolved.
+
+        // ***** 2eε
+        //
+        // For each argument, remove from its overload set all candidates that are
+        // not equivalent to the type of the corresponding parameter of the
+        // resolved function.
+
+        // ***** 2eζ
+        //
+        // Resolve the argument.
+
+        // **** 2f
+        //
+        // Remove from O all functions except those with the least number of
+        // implicit conversions as per step 2d.
+
+        // *** 3
+        //
+        // Otherwise, depending on the type of the parent expression:
+
+        // **** 3a
+        //
+        // If the parent expression is a unary prefix expression with operator
+        // address-of, then replace the parent expression with the unresolved
+        // function and go to step 2/3 depending on the type of the new parent.
+
+        // **** 3b
+        //
+        // If the parent expression is a declaration, and the lvalue is not of
+        // function pointer type, this is a type error. Otherwise, remove from O
+        // all functions that are not equivalent to the lvalue being assigned to.
+
+        // **** 3c
+        //
+        // If the parent expression is an assignment expression, then if we are
+        // the LHS, then this is a type error, as we cannot assign to a function
+        // reference.
+        //
+        // If the lvalue is not of function pointer type, this is a type error.
+        //
+        // Otherwise, remove from O all functions that are not equivalent to the lvalue being assigned to.
+
+        // **** 3d
+        //
+        // If the parent expression is a return expression, and the return type of
+        // the function F containing that return expression is not of function
+        // pointer type, this is a type error. Otherwise, remove from O all
+        // functions that are not equivalent to the return type of F.
+
+        // **** 3e
+        //
+        // If the parent expression is a cast expression, and the result type of
+        // the cast is a function or function pointer type, remove from O all
+        // functions that are not equivalent to that type.
+
+        // **** 3f
+        //
+        // Otherwise, do nothing.
+
+        // FIXME: See step 2c for more info.
+        // This is a last hail-mary attempt to narrow down an overload set not
+        // just to convertible arguments, but to ones that are exactly equal.
+        // But don't remove all of them!
+        if (O.size() > 1) {
+            for (auto* C : O) {
+                for (auto* P : C->param_types()) {
+                    for (auto* A : expr->args()) {
+                        if (not Type::Equal(A->type(), P)) {
+                            // Note(
+                            //     A->location(),
+                            //     "Argument type {} is not equal to parameter type {}\n",
+                            //     A->type(),
+                            //     P
+                            // );
+
+                            // Remove C from O if it is not.
+                            invalid.emplace_back(C);
+                        }
+                    }
+                }
+            }
+            // Only remove if we won't be removing all of them.
+            if (invalid.size() != O.size())
+                for (auto* f : invalid) std::erase(O, f);
+            invalid.clear();
+        }
+
+        // *** 4
+        //
+        // Resolve the function reference.
+        //
+        // For the most part, entails finding the one function that is still
+        // marked viable in the overload set.
+
+        if (not invalid.empty()) {
+            Diag::ICE("Overload resolution has leftover invalid. This usually means the developer has forgotten to remove them from the overload set, so make sure that is happening and then clear the invalid list.");
+            LCC_UNREACHABLE();
+        }
+
+        if (O.size() != 1) {
+            if (O.empty()) {
+                Error(
+                    expr->location(),
+                    "Given arguments didn't match any of the possible candidates in the overload set"
+                );
+            } else {
+                Error(
+                    expr->location(),
+                    "Unresolved function overload: ambiguous, here are the possible candidates"
+                );
+            }
+
+            for (auto* C : O_unchanged)
+                Note(C->location(), "Candidate defined here");
+
+            return;
+        }
+
+        expr->callee() = O.at(0);
     }
 
     // If the callee is a type expression, this is a type instantiation.
