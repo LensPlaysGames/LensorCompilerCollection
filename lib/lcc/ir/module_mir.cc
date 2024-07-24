@@ -574,7 +574,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                 }
 
                             } else if (_ctx->target()->is_cconv_sysv()) {
-                                // Hande all arguments that are passed in memory first, before register arguments.
+                                // Handle all arguments that are passed in memory first, before register arguments.
                                 usz arg_regs_used = 0;
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
                                     if (
@@ -592,8 +592,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                     else {
                                         // Memory parameter
                                         // Basically just allocate a temporary on the stack, memcpy (or similar)
-                                        // into that. CURRENT ISSUE: Alloca gets folded into one `sub` at the top
-                                        // of each function, but we need the stack pointer set explicitly...
+                                        // into that.
 
                                         // Remove the original argument; we will be building it by hand.
                                         auto arg_mir = MOperandValueReference(function, f, arg);
@@ -994,36 +993,26 @@ auto Module::mir() -> std::vector<MFunction> {
                             // FIXME: What does f.calling_convention() (C, Glint) have to do
                             // with any of this?
                             if (_ctx->target()->is_arch_x86_64() and _ctx->target()->is_cconv_sysv()) {
-                                usz sysv_registers_used = 0;
-                                for (usz i = 0; i < param->index(); ++i) {
-                                    auto p = function->param(i);
-                                    if (
-                                        p->type()->bytes() <= x86_64::GeneralPurposeBytewidth
-                                        and sysv_registers_used < cconv::sysv::arg_regs.size()
-                                    )
-                                        ++sysv_registers_used;
+                                auto param_description = cconv::sysv::parameter_description(function);
 
-                                    else if (
-                                        p->type()->bytes() <= 2 * x86_64::GeneralPurposeBytewidth
-                                        and sysv_registers_used < cconv::sysv::arg_regs.size() - 1
-                                    )
-                                        sysv_registers_used += 2;
-                                }
+                                auto arg_regs_used_before_parameter = param_description.info.at(param->index()).arg_regs_used;
 
                                 // Multiple register parameter
                                 if (
+                                    // The parameter value has to fit within two registers (and not one).
                                     param->type()->bytes() > x86_64::GeneralPurposeBytewidth
                                     and param->type()->bytes() <= 2 * x86_64::GeneralPurposeBytewidth
-                                    and sysv_registers_used < cconv::sysv::arg_regs.size() - 1
+                                    // There has to be two registers available, obviously.
+                                    and arg_regs_used_before_parameter < cconv::sysv::arg_regs.size() - 1
                                 ) {
                                     if (auto* alloca = cast<AllocaInst>(store_ir->ptr())) {
                                         // Multiple register parameter stored into alloca
                                         auto reg_a = MOperandRegister(
-                                            +cconv::sysv::arg_regs.at(sysv_registers_used++),
+                                            +cconv::sysv::arg_regs.at(arg_regs_used_before_parameter++),
                                             x86_64::GeneralPurposeBitwidth
                                         );
                                         auto reg_b = MOperandRegister(
-                                            +cconv::sysv::arg_regs.at(sysv_registers_used++),
+                                            +cconv::sysv::arg_regs.at(arg_regs_used_before_parameter++),
                                             uint(param->type()->bits() - x86_64::GeneralPurposeBitwidth)
                                         );
 
@@ -1236,7 +1225,13 @@ auto Module::mir() -> std::vector<MFunction> {
                         if (std::holds_alternative<MOperandImmediate>(op)) {
                             copy.add_operand(std::get<MOperandImmediate>(op));
                         } else if (std::holds_alternative<MOperandRegister>(op)) {
-                            copy.add_operand(std::get<MOperandRegister>(op));
+                            auto reg_op = std::get<MOperandRegister>(op);
+                            // SEARCH TERMS: zero register, zero size, zero size register, zero sized register, register zero size, register size
+                            // Moves between mismatches register sizes are generally no good. And zero
+                            // sized registers are also no good. Hope this works!
+                            if (not reg_op.size) reg_op.size = uint(minst.regsize());
+                            else reg_op.size = std::min(uint(minst.regsize()), reg_op.size);
+                            copy.add_operand(reg_op);
                         } else if (std::holds_alternative<MOperandLocal>(op)) {
                             copy.add_operand(std::get<MOperandLocal>(op));
                         } else if (std::holds_alternative<MOperandGlobal>(op)) {
