@@ -2,7 +2,7 @@
 
 * Lensor Compiler Collection
 
-Now written in C++, LCC started as a compiler written in C for just one hobby language, ~Intercept~. Over the course of a few years, it has grown into a compiler collection, with a whole host of frontends created and maintained by the growing and thriving community.
+Now written in C++, LCC started as a compiler written in C for just one hobby language, ~Intercept~. Over the course of a few years, it has grown into a compiler collection.
 
 ** Usage
 
@@ -34,12 +34,12 @@ Finally, build an executable from the build tree.
 
 ** Implemented Languages
 
-- Glint
+- Glint | Low Level, Higher Order
 
 In the future, we hope to support
 
 - some of C
-- YOUR language :)
+- YOUR language :) (it's easy, really)
 
 *** Targeting LCC IR
 
