@@ -39,7 +39,7 @@ sum_t : sum { number:cint length:uint };
 
   ;; Would error due to multiple member expressions in sum type compound.
   ;; literal initialisation expression.
-  foo :: sum_t !{ .length 420 };
+  ;; foo :: sum_t !{ .number 69, .length 420 };
 };
 
 {

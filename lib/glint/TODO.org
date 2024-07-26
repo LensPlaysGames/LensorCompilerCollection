@@ -1,10 +1,28 @@
-Just for me:
+* TODO [REQUIRED] Make Concrete the Dynamic Array Type
 
-- What does inserting a temporary even look like? Is it in the AST? In the IR? I dunno tbh.
+Creation Operations:
+- Explicit Declaration
 
-- Get HIGHER next time. You'll enjoy it.
+- NOTE: If we allow implicit conversions to create a temporary dynamic array, we will have to deal with freeing it automatically (assuming we want it to be nice to use vs just functional).
+#+begin_src glint-ts
+  print_bytes : void(:[byte]) { ... };
+  print_bytes "huzzah!";
+#+end_src
+Basically, as you can see, if we were to create a dynamic array temporary from the fixed array here, it would be created, and then the programmer would never even have the ability to free it (it's an unnamed temporary created by the compiler). So, I think we should just disallow this, and if they want a dynamic array, they have to explicitly make one.
 
-* TODO [REQUIRED] Sum Type, Dynamic Array, Array View, and Fixed Array Initialisation from Compound Literal
+Modify Operations:
+- Prepend, Insert Front, via =~==;
+  - Handle Single Element on rhs
+  - Handle Another Dynamic Array on rhs
+- Append, Insert Back, via =+==;
+  - Handle Single Element on rhs
+  - Handle Another Dynamic Array on rhs
+- TODO: How to insert at index?
+
+Deletion Operations:
+- Unary Prefix Minus =-=
+
+* DONE [REQUIRED] Sum Type, Dynamic Array, Array View, and Fixed Array Initialisation from Compound Literal
 
 Sum Type
 #+begin_src glint-ts
@@ -96,7 +114,7 @@ Inverse:
 Explicit Conversions:
 - Array View :: Dynamic Array
 
-* DONE [REQUIRED] Initialisation
+* TODO [REQUIRED] Zero Initialisation
 
 MAKE EVERYTHING ZERO BY DEFAULT.
 
