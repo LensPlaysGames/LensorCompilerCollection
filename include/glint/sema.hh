@@ -53,21 +53,28 @@ private:
     template <typename Ty>
     using format_type_t = typename format_type<Ty>::type;
 
-    bool Analyse(Type** type);
-    bool Analyse(Expr** expr, Type* expected_type = nullptr);
-    void AnalyseBinary(BinaryExpr* expr);
+    [[nodiscard]]
+    auto Analyse(Type** type) -> bool;
+    [[nodiscard]]
+    auto Analyse(Expr** expr, Type* expected_type = nullptr) -> bool;
+    // expr_ptr points to binary expression `b`
+    void AnalyseBinary(Expr** expr_ptr, BinaryExpr* b);
+    // expr_ptr points to call expression `expr`
     void AnalyseCall(Expr** expr_ptr, CallExpr* expr);
     void AnalyseCast(CastExpr* expr);
     void AnalyseFunctionBody(FuncDecl* decl);
     void AnalyseFunctionSignature(FuncDecl* decl);
+    // expr_ptr points to intrinsic call expression `expr`
     void AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr);
     void AnalyseModule();
     void AnalyseNameRef(NameRefExpr* expr);
-    void AnalyseUnary(UnaryExpr* expr);
+    // expr_ptr points to unary expression `u`
+    void AnalyseUnary(Expr** expr_ptr, UnaryExpr* u);
 
     /// Analyse an expression and discard it.
     /// \see Discard.
-    bool AnalyseAndDiscard(Expr** expr);
+    [[nodiscard]]
+    auto AnalyseAndDiscard(Expr** expr) -> bool;
 
     /// Attempt to convert an expression to a given type.
     ///
@@ -80,11 +87,13 @@ private:
     /// \param type The type to convert to.
     /// \return Whether the conversion succeeded.
     /// \see TryConvert().
-    [[nodiscard]] bool Convert(Expr** expr, Type* type);
+    [[nodiscard]]
+    auto Convert(Expr** expr, Type* type) -> bool;
 
     /// Do not call this directly. Call \c Convert() or \c TryConvert() instead.
     template <bool PerformConversion>
-    int ConvertImpl(Expr** expr_ptr, Type* to);
+    [[nodiscard]]
+    auto ConvertImpl(Expr** expr_ptr, Type* to) -> int;
 
     /// Like Convert(), but issue an error if the conversion fails.
     ///
@@ -99,14 +108,17 @@ private:
     /// \param b The second expression.
     /// \return Whether the conversion succeeded.
     /// \see ConvertToCommonType()
-    [[nodiscard]] bool ConvertToCommonType(Expr** a, Expr** b);
+    [[nodiscard]]
+    auto ConvertToCommonType(Expr** a, Expr** b) -> bool;
 
     /// Convert a type to a type that is legal in a declaration.
+    [[nodiscard]]
     auto DeclTypeDecay(Type* type) -> Type*;
 
     /// Apply deproceduring conversion. This may insert a call.
     /// \return Whether a call was inserted.
-    bool Deproceduring(Expr** expr);
+    [[nodiscard]]
+    auto Deproceduring(Expr** expr) -> bool;
 
     /// Mark an expression as discarded. Depending on the expression, this
     /// will do several things, such as deproceduring, checking unused results
@@ -119,26 +131,27 @@ private:
     /// Wrapper that stringifies any types that are passed in and passes
     /// everything to \c Diag::Error.
     template <typename... Args>
-    Diag Error(Location loc, fmt::format_string<format_type_t<Args>...> fmt, Args&&... args) {
+    auto Error(Location loc, fmt::format_string<format_type_t<Args>...> fmt, Args&&... args) {
         return Diag::Error(context, loc, fmt, Format<Args>(std::forward<Args>(args))...);
     }
 
     /// Wrapper that stringifies any types that are passed in and passes
     /// everything to \c Diag::Warning.
     template <typename... Args>
-    Diag Warning(Location loc, fmt::format_string<format_type_t<Args>...> fmt, Args&&... args) {
+    auto Warning(Location loc, fmt::format_string<format_type_t<Args>...> fmt, Args&&... args) {
         return Diag::Warning(context, loc, fmt, Format<Args>(std::forward<Args>(args))...);
     }
 
     /// Wrapper that stringifies any types that are passed in and passes
     /// everything to \c Diag::Note.
     template <typename... Args>
-    Diag Note(Location loc, fmt::format_string<format_type_t<Args>...> fmt, Args&&... args) {
+    auto Note(Location loc, fmt::format_string<format_type_t<Args>...> fmt, Args&&... args) {
         return Diag::Note(context, loc, fmt, Format<Args>(std::forward<Args>(args))...);
     }
 
     /// Evaluate a constant expression and ensure it is an integer.
-    bool EvaluateAsInt(Expr* expr, Type* int_type, aint& out);
+    [[nodiscard]]
+    auto EvaluateAsInt(Expr* expr, Type* int_type, aint& out) -> bool;
 
     /// Format a type.
     template <typename Ty>
@@ -153,7 +166,8 @@ private:
     }
 
     /// Check if an expression has side effects.
-    static bool HasSideEffects(Expr* expr);
+    [[nodiscard]]
+    static auto HasSideEffects(Expr* expr) -> bool;
 
     /// Dereference an expression, potentially yielding an lvalue.
     ///
@@ -163,14 +177,16 @@ private:
     ///     2. produces an lvalue if possible.
     ///
     /// \return Whether the result is an lvalue.
-    bool ImplicitDereference(Expr** expr);
+    [[nodiscard]]
+    auto ImplicitDereference(Expr** expr) -> bool;
 
     /// De-reference an expression, potentially yielding an lvalue.
     ///
     /// Does not do anything to pointers.
     ///
     /// \return Whether the result is an lvalue.
-    bool ImplicitDe_Reference(Expr** expr);
+    [[nodiscard]]
+    auto ImplicitDe_Reference(Expr** expr) -> bool;
 
     /// Insert an implicit cast of an expression to a type.
     ///
@@ -231,21 +247,21 @@ private:
     /// to the location of the expression.
     void WrapWithCast(Expr** expr, Type* type, CastKind kind);
 
-    bool try_get_metadata_blob_from_gmeta(
+    auto try_get_metadata_blob_from_gmeta(
         const Module::Ref& import,
         const std::string& include_dir,
         std::vector<std::string>& paths_tried
-    );
-    bool try_get_metadata_blob_from_object(
+    ) -> bool;
+    auto try_get_metadata_blob_from_object(
         const Module::Ref& import,
         const std::string& include_dir,
         std::vector<std::string>& paths_tried
-    );
-    bool try_get_metadata_blob_from_assembly(
+    ) -> bool;
+    auto try_get_metadata_blob_from_assembly(
         const Module::Ref& import,
         const std::string& include_dir,
         std::vector<std::string>& paths_tried
-    );
+    ) -> bool;
 };
 } // namespace lcc::glint
 

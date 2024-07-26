@@ -1,0 +1,23 @@
+* Instead of Repetitive Type Boilerplate with Inheritance, Use Sum Types
+
+Encoding meaning in the designation of a type itself vs within a larger encapsulating type. Best described by example.
+#+begin_src c++-ts
+class type {
+  ...
+};
+class function_type : type {
+  vector arguments;
+  ...
+};
+class integer_type ...
+#+end_src
+You get the gist. This bloats immensely fast, exponentially, where adding a trivial type like an integer requires an entire class wrapping it.
+
+In Glint, sum types let us represent these sort of structures. Do this instead.
+#+begin_src glint-ts
+type : sum {
+  function :[argument];
+  integer :int;
+};
+#+end_src
+And I didn't even need to `...` anything, that's all of it. No enum required. Only as many type declarations as you actually need.

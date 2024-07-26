@@ -1,3 +1,44 @@
+Just for me:
+
+- What does inserting a temporary even look like? Is it in the AST? In the IR? I dunno tbh.
+
+- Get HIGHER next time. You'll enjoy it.
+
+* TODO [REQUIRED] Sum Type, Dynamic Array, Array View, and Fixed Array Initialisation from Compound Literal
+
+Sum Type
+#+begin_src glint-ts
+result_t : sum {
+  error :[byte view];
+  data :[byte vie
+};
+
+foo :result_t() {
+  return !{ .error "" }
+}
+#+end_src
+
+In general, this sort of "=.member expression= form" should also work with struct and union types.
+
+
+Dynamic Array
+Array View
+#+begin_src glint-ts
+  data :: [byte] !{ 84, 73, 84, 83, 0 };
+  ;; ...
+  span :[byte view] !{ data.data, data.size };
+  data_again :[byte] !{ span.data, span.size };
+#+end_src
+
+For dynamic arrays, we will initialise the array with the given elements and size and whathaveyou and suchlike and whatnot and so on, UNLESS the first element has a type equal to a pointer to the element type of the dynamic array, in which case it will copy from there in memory N elements (given as the next argument).
+
+
+Fixed Array
+#+begin_src glint-ts
+  sum_args :[int 4] !{ 34, 17, 17, 1 };
+#+end_src
+
+
 * TODO [REQUIRED] Figure out How Dynamic Arrays, Fixed Arrays, and Array Views Interact, Then Implement It
 
 So, from a useability standpoint, all of these should be convertible between each other... (ish). No matter what, both fixed and dynamic arrays should convert to views (obviously).
@@ -47,10 +88,15 @@ Implicit Conversions:
 - Fixed Array :: Array View, Dynamic Array
 - Dynamic Array :: Array View
 
+Inverse:
+- Fixed Array
+- Dynamic Array :: Fixed Array
+- Array View :: Fixed Array
+
 Explicit Conversions:
 - Array View :: Dynamic Array
 
-* TODO [REQUIRED] Initialisation
+* DONE [REQUIRED] Initialisation
 
 MAKE EVERYTHING ZERO BY DEFAULT.
 
@@ -216,3 +262,17 @@ Basically, =t_big= is a struct and so sema is thinking that it is okay to pass a
 To clarify again, the above should error during type-checking due to t_big being a type expression that resolves to t_big rather than a value of type t_big.
 
 The type of =t_big= is currently the type it represents, but I think the type needs to be something like =type= and the value needs to be the actual type it represents.
+
+** Another version of the same thing
+
+#+begin_src glint-ts
+sum_t : sum {
+    x : cint;
+    y : uint;
+};
+
+example :: 0;
+foo :: sum_t;
+#+end_src
+
+I often miswrite this sort of program because of initialising a type-inferred variable and then instantiating a sum type. What I'd like this to become is a typed declaration with no initialiser, which will require sema to identify initialising expressions that refer explicitly to types, and do the replacement.

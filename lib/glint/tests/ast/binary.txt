@@ -350,3 +350,193 @@ v := 69;
     (binary_assignment
      (name)
      (integer_literal)))))
+
+
+================
+Enhanced Assignment, Addition
+================
+
+v :: 0o42;
+v += 35;
+
+---
+
+(block
+ (variable_declaration
+  (integer_literal))
+ (return
+   (cast
+    (binary_assignment
+     (name)
+     (binary_add
+      (cast (name))
+      (integer_literal))))))
+
+
+================
+Enhanced Assignment, Subtraction
+================
+
+v :: 0x2c6;
+v -= 641;
+
+---
+
+(block
+ (variable_declaration
+  (integer_literal))
+ (return
+   (cast
+    (binary_assignment
+     (name)
+     (binary_subtract
+      (cast (name))
+      (integer_literal))))))
+
+
+================
+Enhanced Assignment, Multiplication
+================
+
+v :: 52;
+v *= 8;
+
+---
+
+(block
+ (variable_declaration
+  (integer_literal))
+ (return
+   (cast
+    (binary_assignment
+     (name)
+     (binary_multiply
+      (cast (name))
+      (integer_literal))))))
+
+
+================
+Enhanced Assignment, Division
+================
+
+v :: 325;
+v /= 256;
+
+---
+
+(block
+ (variable_declaration
+  (integer_literal))
+ (return
+   (cast
+    (binary_assignment
+     (name)
+     (binary_divide
+      (cast (name))
+      (integer_literal))))))
+
+
+================
+Enhanced Assignment, Modulo (Remainder)
+================
+
+v :: 325;
+v %= 256;
+
+---
+
+(block
+ (variable_declaration
+  (integer_literal))
+ (return
+   (cast
+    (binary_assignment
+     (name)
+     (binary_modulo
+      (cast (name))
+      (integer_literal))))))
+
+
+================
+Enhanced Assignment, Bitwise And (Conjunction)
+================
+
+v :: 325;
+v &= 69;
+
+---
+
+(block
+ (variable_declaration
+  (integer_literal))
+ (return
+   (cast
+    (binary_assignment
+     (name)
+     (binary_bitand
+      (cast (name))
+      (integer_literal))))))
+
+
+================
+Enhanced Assignment, Bitwise Or (Disjunction)
+================
+
+v :: 64;
+v |= 5;
+
+---
+
+(block
+ (variable_declaration
+  (integer_literal))
+ (return
+   (cast
+    (binary_assignment
+     (name)
+     (binary_bitor
+      (cast (name))
+      (integer_literal))))))
+
+
+================
+Enhanced Assignment, Bitwise Xor
+================
+
+v :: 325;
+v ^= 256;
+
+---
+
+(block
+ (variable_declaration
+  (integer_literal))
+ (return
+   (cast
+    (binary_assignment
+     (name)
+     (binary_bitxor
+      (cast (name))
+      (integer_literal))))))
+
+
+;; ================
+;; Enhanced Assignment, Prepend
+;; ================
+;;
+;; v :[byte];
+;; v ~= 69;
+;; @v.data[0];
+;;
+;; ---
+;;
+;; (block
+;;  (variable_declaration
+;;   (integer_literal))
+;;  (return
+;;    (cast
+;;     (binary_assignment
+;;      (name)
+;;      (binary_bitxor
+;;       (cast (name))
+;;       (integer_literal))))))

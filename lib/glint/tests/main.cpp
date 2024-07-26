@@ -301,15 +301,8 @@ int main(int argc, const char** argv) {
         }
     }
 
-    if (out.count_passed() == out.count()) {
-        fmt::print(
-            "~~~~~~~~~~~~~~~~~~~~~~~~\n"
-            "{}    ALL TESTS PASSED{}\n"
-            "~~~~~~~~~~~~~~~~~~~~~~~~\n",
-            C(lcc::utils::Colour::Green),
-            C(lcc::utils::Colour::Reset)
-        );
-    } else {
+    // Print stats if CLI options request it or if all tests did not pass.
+    if (option_print or out.count_passed() != out.count()) {
         fmt::print(
             "STATS:\n"
             "  TESTS:   {}\n"
@@ -321,6 +314,14 @@ int main(int argc, const char** argv) {
             C(lcc::utils::Colour::Reset),
             C(lcc::utils::Colour::Red),
             out.count_failed(),
+            C(lcc::utils::Colour::Reset)
+        );
+    } else {
+        fmt::print(
+            "~~~~~~~~~~~~~~~~~~~~~~~~\n"
+            "{}    ALL TESTS PASSED{}\n"
+            "~~~~~~~~~~~~~~~~~~~~~~~~\n",
+            C(lcc::utils::Colour::Green),
             C(lcc::utils::Colour::Reset)
         );
     }

@@ -18,20 +18,6 @@
 #include <utility>
 #include <vector>
 
-/// ===========================================================================
-///  Helpers
-/// ===========================================================================
-auto lcc::glint::Sema::AnalyseAndDiscard(Expr** expr) -> bool {
-    if (not Analyse(expr)) return false;
-    Discard(expr);
-    return true;
-}
-
-auto lcc::glint::Sema::Convert(Expr** expr, Type* type) -> bool {
-    if ((*expr)->sema_errored()) return true;
-    return ConvertImpl<true>(expr, type) >= 0;
-}
-
 /// For an explanation of the return value of this function, see
 /// the comment on the declaration of TryConvert().
 template <bool PerformConversion>
@@ -49,7 +35,7 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
 #define from ((*expr_ptr)->type())
 
     /// Cannot convert if the types contain errors.
-    if (from->sema_errored() or to->sema_errored())
+    if (from->is_unknown() or from->sema_errored() or to->is_unknown() or to->sema_errored())
         return TypesContainErrors;
 
     /// This is so we don’t forget that we’ve applied lvalue-to-rvalue
@@ -317,6 +303,17 @@ auto lcc::glint::Sema::TryConvert(Expr** expr, Type* type) -> int {
     return ConvertImpl<false>(expr, type);
 }
 
+auto lcc::glint::Sema::Convert(Expr** expr, Type* type) -> bool {
+    if ((*expr)->sema_errored()) return true;
+    return ConvertImpl<true>(expr, type) >= 0;
+}
+
+auto lcc::glint::Sema::AnalyseAndDiscard(Expr** expr) -> bool {
+    if (not Analyse(expr)) return false;
+    Discard(expr);
+    return true;
+}
+
 auto lcc::glint::Sema::DeclTypeDecay(Type* type) -> Type* {
     return type->is_function() ? Ptr(type) : type;
 }
@@ -340,7 +337,9 @@ auto lcc::glint::Sema::Deproceduring(Expr** expr_ptr) -> bool {
 
     /// Otherwise, insert a call.
     *expr_ptr = new (mod) CallExpr(expr, {}, expr->location());
-    Analyse(expr_ptr);
+    // Whether or not the inserted call is valid, we did insert it, so we
+    // return true either way.
+    (void) Analyse(expr_ptr);
     return true;
 }
 
@@ -443,7 +442,7 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
             return HasSideEffects(as<MemberAccessExpr>(expr)->object());
 
         case Expr::Kind::CompoundLiteral:
-            return rgs::any_of(as<CompoundLiteral>(expr)->values(), HasSideEffects);
+            return rgs::any_of(as<CompoundLiteral>(expr)->children(), HasSideEffects);
 
         case Expr::Kind::Block:
             return rgs::any_of(as<BlockExpr>(expr)->children(), HasSideEffects);
@@ -600,13 +599,19 @@ void lcc::glint::Sema::LValueToRValue(Expr** expr, bool strip_ref) {
 
 auto lcc::glint::Sema::Ptr(Type* ty) -> PointerType* {
     Type* ptr = new (mod) PointerType(ty, ty->location());
-    Analyse(&ptr);
+    // If we fail to analyse the type, it is still valid to return as a
+    // pointer type (it just will have it's error flag set and won't be able
+    // to be used, really).
+    (void) Analyse(&ptr);
     return as<PointerType>(ptr);
 }
 
 auto lcc::glint::Sema::Ref(Type* ty) -> ReferenceType* {
     Type* ref = new (mod) ReferenceType(ty, ty->location());
-    Analyse(&ref);
+    // If we fail to analyse the type, it is still valid to return as a
+    // pointer type (it just will have it's error flag set and won't be able
+    // to be used, really).
+    (void) Analyse(&ref);
     return as<ReferenceType>(ref);
 }
 
@@ -618,7 +623,9 @@ void lcc::glint::Sema::WrapWithCast(Expr** expr_ptr, Type* type, CastKind kind) 
         (*expr_ptr)->location()
     );
 
-    Analyse(&expr);
+    if (not Analyse(&expr))
+        Diag::ICE("Glint Semantic Analysis failed to wrap expression with cast");
+
     *expr_ptr = expr;
 }
 
@@ -803,7 +810,7 @@ void lcc::glint::Sema::AnalyseModule() {
 
 void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     tempset curr_func = decl;
-    auto ty = as<FuncType>(decl->type());
+    auto* ty = as<FuncType>(decl->type());
 
     /// If the function has no body, then we’re done.
     if (not decl->body()) return;
@@ -832,23 +839,33 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         );
 
         LCC_ASSERT(decl->scope()->declare(context, auto(param.name), as<VarDecl>(d)).is_value());
-        Analyse(&d);
+        if (not Analyse(&d)) {
+            // Continue to analyse the rest of the parameters
+            if (not decl->sema_errored())
+                decl->set_sema_errored();
+        }
         decl->param_decls().push_back(as<VarDecl>(d));
     }
 
     // Gets rid of parameter dynamic array declarations that were falsely
     // recorded as dangling (parameters owned by caller).
+    // TODO: Probably should disallow dynamic array parameters entirely? I
+    // don't really see when it would be needed.
     decl->dangling_dynarrays().clear();
 
-    /// Analyse the body.
-    Analyse(&decl->body(), ty->return_type());
+    // If any of the parameters failed to type-check, the body will likely be
+    // full of uses of the parameters, and those will all cause a whole bunch
+    // of errors that won't be relevant once the programmer fixes the error in
+    // the parameter declaration(s).
+    if (not decl->ok()) return;
 
-    if (context->has_error()) return;
+    /// Analyse the body.
+    (void) Analyse(&decl->body(), ty->return_type());
 
     // Report every dynamic array declared in this function (and that is not
     // returned) which doesn't have NoLongerViable status (aka freed).
     // Parameters are owned by caller, don't count those.
-    for (auto dynarray : decl->dangling_dynarrays()) {
+    for (auto* dynarray : decl->dangling_dynarrays()) {
         // TODO: Maybe a warning?
         Error(
             dynarray->location(),
@@ -864,32 +881,31 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     /// expression of the block rather than just the block itself.
     if (not ty->return_type()->is_void()) {
         Expr** last{};
+
         if (auto* block = cast<BlockExpr>(decl->body())) {
             // For anything except the top-level function, if there is an expected
             // return value, there has to be one, otherwise it's an error.
-            if (decl->name() != "main") {
-                if (block->children().empty()) {
+            // For the top level function of Glint programs, a return value is
+            // created if a valid one is not present.
+            if (block->children().empty()) {
+                if (decl->name() != "main") {
                     Error(decl->location(), "Function `{}` has non-void return type, and must return a value", decl->name());
                     return;
                 }
-            } else {
-                // For the top level function of Glint programs, a return value is
-                // created if a valid one is not present.
-                if (block->children().empty()) {
-                    auto inserted_return_value = new (mod) IntegerLiteral(0, {});
-                    block->add(new (mod) ReturnExpr(inserted_return_value, {}));
-                }
+
+                auto* inserted_return_value = new (mod) IntegerLiteral(0, {});
+                block->add(new (mod) ReturnExpr(inserted_return_value, {}));
             }
 
             last = block->last_expr();
 
-            // For the top level function of GLint programs, a return value is created
+            // For the top level function of Glint programs, a return value is created
             // if a valid one is not present. This includes if the last value is not
             // convertible to the return type of main.
             if (
                 decl->name() == "main"
                 and not is<ReturnExpr>(*last)
-                and not Convert(last, ty->return_type())
+                and TryConvert(last, ty->return_type()) <= 0
             ) {
                 auto* inserted_return_value = new (mod) IntegerLiteral(0, {});
                 block->add(new (mod) ReturnExpr(inserted_return_value, {}));
@@ -916,8 +932,8 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             *last = new (mod) ReturnExpr(*last, {});
         else decl->body() = new (mod) ReturnExpr(*last, {});
     } else {
-        if (auto block = cast<BlockExpr>(decl->body())) {
-            if (not block->children().size() or not is<ReturnExpr>(*block->last_expr()))
+        if (auto* block = cast<BlockExpr>(decl->body())) {
+            if (block->children().empty() or not is<ReturnExpr>(*block->last_expr()))
                 block->add(new (mod) ReturnExpr(nullptr, {}));
         } else {
             // TODO: If a function with void return type and a non-block body
@@ -935,12 +951,15 @@ void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
     if (decl->name().empty()) decl->name(mod.unique_function_name());
 
     /// Typecheck the function type.
-    Analyse(decl->type_ref());
+    if (not Analyse(decl->type_ref())) {
+        decl->set_sema_errored();
+        return;
+    }
 
     /// Used attribute is ignored on functions that aren’t internal. If
     /// the function is internal, then set the linkage to used so it isn’t
     /// deleted by the optimiser.
-    auto ty = as<FuncType>(decl->type());
+    auto* ty = as<FuncType>(decl->type());
     if (ty->has_attr(FuncAttr::Used)) {
         if (decl->linkage() != Linkage::Internal)
             Warning(decl->location(), "'used' has no effect on this function");
@@ -967,36 +986,52 @@ void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
 /// \param expected_type The type used for top-down inference. May be null.
 /// \return (*expr_ptr)->ok().
 auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
-    auto expr = *expr_ptr;
+    auto* expr = *expr_ptr;
 
     /// Don’t analyse the same expression twice.
-    if (expr->sema() != SemaNode::State::NotAnalysed) return expr->ok();
+    if (expr->sema() != SemaNode::State::NotAnalysed)
+        return expr->ok();
+
     expr->set_sema_in_progress();
 
     /// Analyse the type if there is one.
-    if (auto tc = cast<TypedExpr>(expr))
-        Analyse(tc->type_ref());
+    if (auto* tc = cast<TypedExpr>(expr)) {
+        if (not Analyse(tc->type_ref()))
+            return false;
+    }
 
     /// Analyse the expression itself.
     switch (expr->kind()) {
         /// The condition of a loop must be convertible to bool.
         case Expr::Kind::For: {
-            auto f = as<ForExpr>(expr);
-            AnalyseAndDiscard(&f->init());
-            AnalyseAndDiscard(&f->increment());
+            auto* f = as<ForExpr>(expr);
+            if (not AnalyseAndDiscard(&f->init())) {
+                expr->set_sema_errored();
+                return false;
+            }
+            if (not AnalyseAndDiscard(&f->increment())) {
+                expr->set_sema_errored();
+                return false;
+            }
             [[fallthrough]];
         }
 
         case Expr::Kind::While: {
             auto* l = as<Loop>(expr);
-            Analyse(&l->condition());
+            if (not Analyse(&l->condition())) {
+                expr->set_sema_errored();
+                return false;
+            };
             if (not Convert(&l->condition(), Type::Bool)) Error(
                 l->location(),
                 "Invalid type for loop condition: {}",
                 l->condition()->type()
             );
             LValueToRValue(&l->condition());
-            AnalyseAndDiscard(&l->body());
+            if (not AnalyseAndDiscard(&l->body())) {
+                expr->set_sema_errored();
+                return false;
+            }
         } break;
 
         /// For return expressions, make sure that the type of the
@@ -1006,7 +1041,10 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             /// Check the return value.
             auto* r = as<ReturnExpr>(expr);
             auto* ret_type = as<FuncType>(curr_func->type())->return_type();
-            if (r->value()) Analyse(&r->value(), ret_type);
+            if (r->value() and not Analyse(&r->value(), ret_type)) {
+                expr->set_sema_errored();
+                return false;
+            }
 
             // NOTE: Just for forget-to-free diagnostics.
             // If returned value is a dynamic array, remove that dynamic array's
@@ -1040,8 +1078,11 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         /// The condition of an if statement must be convertible to bool, and
         /// its type is the common type of the two branches.
         case Expr::Kind::If: {
-            auto i = as<IfExpr>(expr);
-            Analyse(&i->condition());
+            auto* i = as<IfExpr>(expr);
+            if (not Analyse(&i->condition())) {
+                expr->set_sema_errored();
+                return false;
+            }
             if (not Convert(&i->condition(), Type::Bool)) {
                 Error(
                     i->condition()->location(),
@@ -1052,8 +1093,14 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             LValueToRValue(&i->condition());
 
             /// Analyse the branches.
-            Analyse(&i->then());
-            if (i->otherwise()) Analyse(&i->otherwise());
+            if (not Analyse(&i->then())) {
+                expr->set_sema_errored();
+                return false;
+            }
+            if (i->otherwise() and not Analyse(&i->otherwise())) {
+                expr->set_sema_errored();
+                return false;
+            };
 
             if (not i->then()->ok() or (i->otherwise() and not i->otherwise()->ok()))
                 i->set_sema_errored();
@@ -1141,25 +1188,27 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             /// If this has an initialiser, analyse it.
             if (v->init()) {
-                /// Obviously, we can only perform top-down type inference
-                /// if we’re not already performing bottom-up inference. If
-                /// the type is known, make sure that we use a type that is
-                /// legal in a declaration for inference.
+                // Obviously, we can only perform top-down type inference if we’re not
+                // already performing bottom-up inference. If the type is known, make sure
+                // that we use a type that is legal in a declaration for inference.
                 const bool infer_type = v->type()->is_unknown();
-                Analyse(
-                    &v->init(),
-                    infer_type ? nullptr : DeclTypeDecay(v->type())
-                );
 
-                /// If we’re using type inference, break if there was an
-                /// error since we can’t validate the type of this if we
-                /// don’t know it. Otherwise, set the type of this to the
-                /// type of the initialiser.
+                if (
+                    not Analyse(
+                        &v->init(),
+                        infer_type ? nullptr : DeclTypeDecay(v->type())
+                    )
+                ) v->set_sema_errored();
+
+                // If we're using type inference, set the type of the expression to the
+                // type of the initialising expression; unless there was an error, in
+                // which case we error out.
                 if (infer_type) {
-                    if (v->init()->ok()) v->type(v->init()->type());
+                    if (v->init()->ok())
+                        v->type(v->init()->type());
                     else {
                         v->set_sema_errored();
-                        break;
+                        return false;
                     }
                 }
             }
@@ -1173,14 +1222,66 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             /// its type is well-formed; it’s just the initialiser that has
             /// a problem.
             if (v->init()) {
-                if (not Convert(&v->init(), v->type())) Error(
-                    v->init()->location(),
-                    "Type of initialiser, {}, is not convertible to variable type {}",
-                    v->init()->type(),
-                    v->type()
-                );
+                // An untyped compound literal initialiser is allowed for typed
+                // declarations.
+                auto* c = cast<CompoundLiteral>(v->init());
+                if (c and c->type()->is_unknown())
+                    *c->type_ref() = v->type();
 
-                LValueToRValue(&v->init());
+                auto* s = cast<SumType>(v->type());
+                // compound literal initialiser for sum type
+                // foo :sum_t !{ .member expression }
+                // foo :sum_t; foo.member := expression;
+                if (c and s) {
+                    auto member = c->values().at(0);
+                    usz member_index = usz(-1);
+                    // TODO: Get index of named member
+                    for (usz i = 0; i < s->members().size(); ++i) {
+                        if (s->members().at(i).name == member.name) {
+                            member_index = i;
+                            break;
+                        }
+                    }
+                    LCC_ASSERT(
+                        member_index != usz(-1),
+                        "Member {} does not exist in sum type",
+                        member.name
+                    );
+
+                    std::vector<Expr*> replacement;
+
+                    v->init() = nullptr;
+                    replacement.push_back(v);
+
+                    auto* member_access = new (mod) MemberAccessExpr(
+                        v,
+                        member.name,
+                        v->location()
+                    );
+                    member_access->finalise(s->struct_type(), member_index);
+                    member_access->type(s);
+
+                    replacement.push_back(new (mod) BinaryExpr(
+                        TokenKind::ColonEq,
+                        member_access,
+                        c->values().at(0).value,
+                        v->location()
+                    ));
+
+                    *expr_ptr = new (mod) BlockExpr(replacement, v->location());
+                    // Perform conversions (like lvalue to rvalue).
+                    (void) Analyse(expr_ptr);
+                } else {
+                    if (not Convert(&v->init(), v->type())) Error(
+                        v->init()->location(),
+                        "Type of initialiser, {}, is not convertible to variable type {}",
+                        v->init()->type(),
+                        v->type()
+                    );
+
+                    // FIXME: This needed? Convert above should insert this.
+                    LValueToRValue(&v->init());
+                }
             }
 
             if (v->type()->is_dynamic_array())
@@ -1190,25 +1291,168 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         } break;
 
         /// These are handled by the code that also handles enums.
-        case Expr::Kind::EnumeratorDecl: LCC_UNREACHABLE();
+        case Expr::Kind::EnumeratorDecl:
+            Diag::ICE(context, expr->location(), "Invalid semantic analysis of enumerator declaration (should have been handled in enum handling)");
+            LCC_UNREACHABLE();
 
         case Expr::Kind::CompoundLiteral: {
             auto* c = as<CompoundLiteral>(expr);
 
             /// Analyse all subexpressions.
-            for (auto*& child : c->values()) {
-                if (Analyse(&child)) LValueToRValue(&child);
+            for (auto& member : c->values()) {
+                if (Analyse(&member.value))
+                    LValueToRValue(&member.value);
                 else c->set_sema_errored();
             }
 
-            if (not c->type() and not expected_type) {
+            if (c->sema_errored()) break;
+
+            if ((not c->type() or c->type()->is_unknown()) and not expected_type) {
+                // fmt::print("c->type():{}\n", fmt::ptr(c->type()));
+                // if (c->type()) fmt::print("*c->type():{}\n", *c->type());
+                // fmt::print("expected_type:{}\n", fmt::ptr(expected_type));
+                // if (expected_type) fmt::print("*expected_type:{}\n", *expected_type);
+
                 Error(
                     c->location(),
                     "Cannot infer type of Untyped Compound Literal"
                 );
+                c->set_sema_errored();
             }
-            // TODO: If both c->type() and expected_type, Convert to expected_type.
-            LCC_ASSERT(Analyse(c->type_ref()));
+            // If both c->type() and expected_type, Convert to expected_type.
+            else if ((c->type() and not c->type()->is_unknown()) and expected_type) {
+                if (not Convert(expr_ptr, expected_type)) {
+                    Error(
+                        c->location(),
+                        "Type of compound literal {} is not convertible to expected type {}",
+                        c->type(),
+                        expected_type
+                    );
+                    c->set_sema_errored();
+                }
+            }
+
+            if (not Analyse(c->type_ref())) {
+                Diag::ICE(context, c->location(), "Failed to analyse type of compound literal");
+                LCC_UNREACHABLE();
+            }
+
+            // Ensure named members exist in represented type.
+            if (auto* union_t = cast<UnionType>(c->type())) {
+                LCC_TODO("Compound literal to union");
+            } else if (auto* array_t = cast<ArrayType>(c->type())) {
+                if (c->values().size() != array_t->dimension()) {
+                    Error(
+                        c->location(),
+                        "Compound literal for array type must have number of member expressions equal to array dimension {}, but got {} instead\n",
+                        array_t->dimension(),
+                        c->values().size()
+                    );
+                    c->set_sema_errored();
+                    break;
+                }
+                for (auto& m : c->values()) {
+                    if (not Convert(&m.value, array_t->element_type())) {
+                        Error(
+                            m.value->location(),
+                            "Every member of a compound literal for an array type must be convertible to the array element type, but {} is not convertible to {}",
+                            m.value->type(),
+                            array_t->element_type()
+                        );
+                        c->set_sema_errored();
+                    }
+                }
+            } else if (auto* sum_t = cast<SumType>(c->type())) {
+                if (c->values().size() != 1) {
+                    Error(
+                        c->location(),
+                        "Compound literal for a sum type must have a *single*, named member expression"
+                    );
+                    c->set_sema_errored();
+                    break;
+                }
+
+                auto& member = c->values().at(0);
+                if (member.name.empty()) {
+                    std::string valid_names{};
+                    for (const auto& m : sum_t->members()) {
+                        valid_names += m.name;
+                        valid_names += ", ";
+                    }
+                    LCC_ASSERT(
+                        not valid_names.empty(),
+                        "Sum type {} has no members!",
+                        *c->type()
+                    );
+                    // Get rid of trailing comma and space.
+                    valid_names.pop_back();
+                    valid_names.pop_back();
+                    Error(
+                        member.value->location(),
+                        "Compound literal for {} must have a single, *named* member expression.\n"
+                        "Otherwise, we wouldn't know which member you mean to initialise.\n"
+                        "Possible names: {}",
+                        c->type(),
+                        valid_names
+                    );
+                    c->set_sema_errored();
+                    break;
+                }
+
+            } else if (auto* struct_t = cast<StructType>(c->type())) {
+                // TODO: Reorder children based on member indices of underlying struct
+                // type so that IRGen doesn't have to jump around.
+                std::vector<CompoundLiteral::Member> new_order{};
+                new_order.reserve(c->values().size());
+                for (usz i = 0; i < c->values().size(); ++i) {
+                    const auto& member = c->values().at(i);
+                    isz struct_member_index = isz(i);
+                    if (not member.name.empty()) {
+                        struct_member_index = struct_t->member_index_by_name(member.name);
+                        if (struct_member_index == StructType::Member::BadIndex) {
+                            Error(
+                                member.value->location(),
+                                "Named member {} of compound literal does not correspond to any member of {}",
+                                member.name,
+                                c->type()
+                            );
+                            c->set_sema_errored();
+                            continue;
+                        }
+                    }
+                    new_order.insert(
+                        std::min(new_order.begin() + struct_member_index, new_order.end()),
+                        CompoundLiteral::Member{member}
+                    );
+                }
+
+                LCC_ASSERT(
+                    new_order.size() == c->values().size(),
+                    "Messed up sorting of named compound literal member expressions"
+                );
+                c->values() = new_order;
+
+            } else {
+                // Even if the member is named, the name wouldn't mean anything anyway
+                // (since the represented type doesn't support the concept of named
+                // members, i.e. an integer), so we replace the compound literal with a
+                // single member expression with that expression.
+                if (c->values().size() == 1) {
+                    *expr_ptr = c->values().at(0).value;
+                    break;
+                }
+
+                for (const auto& member : c->values()) {
+                    if (not member.name.empty()) {
+                        Warning(
+                            member.value->location(),
+                            "Ignoring name of compound literal member, as {} does not support the concept of named members",
+                            c->type()
+                        );
+                    }
+                }
+            }
+
         } break;
 
         /// LHS must be a (pointer to a) struct, and the identifier must
@@ -1251,7 +1495,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 }
 
                 /// Handle accessing enumerators.
-                if (auto e = cast<EnumType>(t->type())) {
+                if (auto* e = cast<EnumType>(t->type())) {
                     auto it = rgs::find_if(
                         e->enumerators(),
                         [&](auto&& en) { return en->name() == m->name(); }
@@ -1338,8 +1582,6 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 // fmt::print("\nOOHWEE\n");
                 // mod.print(true);
 
-                // LCC_TODO("SumType Member Access AST Generation");
-
                 // The following
                 //   foo : sum { x :cint 0, y :uint 0 };
                 // turns into
@@ -1411,7 +1653,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
         case Expr::Kind::Sizeof: {
             auto* sizeof_expr = as<SizeofExpr>(expr);
-            Analyse(sizeof_expr->expr_ref());
+            (void) Analyse(sizeof_expr->expr_ref());
 
             aint value{};
             if (auto* typed_expr = cast<TypedExpr>(sizeof_expr->expr()))
@@ -1423,7 +1665,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
         case Expr::Kind::Alignof: {
             auto* alignof_expr = as<AlignofExpr>(expr);
-            Analyse(alignof_expr->expr_ref());
+            (void) Analyse(alignof_expr->expr_ref());
 
             aint value{};
             if (auto* typed_expr = cast<TypedExpr>(alignof_expr->expr()))
@@ -1474,12 +1716,12 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
         /// Unary prefix and postfix expressions.
         case Expr::Kind::Unary:
-            AnalyseUnary(as<UnaryExpr>(expr));
+            AnalyseUnary(expr_ptr, as<UnaryExpr>(expr));
             break;
 
         /// Binary expressions.
         case Expr::Kind::Binary:
-            AnalyseBinary(as<BinaryExpr>(expr));
+            AnalyseBinary(expr_ptr, as<BinaryExpr>(expr));
             break;
 
         /// Reference to a declared entity.
@@ -1506,11 +1748,13 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
     }
 
     /// Do *not* use `expr` here, as it may have been replaced by something else.
-    if (not(*expr_ptr)->sema_done_or_errored()) (*expr_ptr)->set_sema_done();
+    if (not(*expr_ptr)->sema_done_or_errored())
+        (*expr_ptr)->set_sema_done();
+
     return (*expr_ptr)->ok();
 }
 
-void lcc::glint::Sema::AnalyseBinary(BinaryExpr* b) {
+void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
     // Give up if there is an error in either operand.
     if (not Analyse(&b->lhs()) or not Analyse(&b->rhs())) {
         b->set_sema_errored();
@@ -1518,14 +1762,151 @@ void lcc::glint::Sema::AnalyseBinary(BinaryExpr* b) {
     }
 
     switch (b->op()) {
-        default: Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
+        case TokenKind::RightArrow:
+            Error(
+                b->location(),
+                "Sorry, but the {} doesn't do anything yet.",
+                ToString(b->op())
+            );
+            break;
+
+        case TokenKind::PlusEq:
+            *expr_ptr = new (mod) BinaryExpr(
+                TokenKind::ColonEq,
+                b->lhs(),
+                new (mod) BinaryExpr(
+                    TokenKind::Plus,
+                    b->lhs(),
+                    b->rhs(),
+                    b->location()
+                ),
+                b->location()
+            );
+            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            break;
+
+        case TokenKind::MinusEq:
+            *expr_ptr = new (mod) BinaryExpr(
+                TokenKind::ColonEq,
+                b->lhs(),
+                new (mod) BinaryExpr(
+                    TokenKind::Minus,
+                    b->lhs(),
+                    b->rhs(),
+                    b->location()
+                ),
+                b->location()
+            );
+            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            break;
+
+        case TokenKind::StarEq:
+            *expr_ptr = new (mod) BinaryExpr(
+                TokenKind::ColonEq,
+                b->lhs(),
+                new (mod) BinaryExpr(
+                    TokenKind::Star,
+                    b->lhs(),
+                    b->rhs(),
+                    b->location()
+                ),
+                b->location()
+            );
+            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            break;
+
+        case TokenKind::SlashEq:
+            *expr_ptr = new (mod) BinaryExpr(
+                TokenKind::ColonEq,
+                b->lhs(),
+                new (mod) BinaryExpr(
+                    TokenKind::Slash,
+                    b->lhs(),
+                    b->rhs(),
+                    b->location()
+                ),
+                b->location()
+            );
+            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            break;
+
+        case TokenKind::PercentEq:
+            *expr_ptr = new (mod) BinaryExpr(
+                TokenKind::ColonEq,
+                b->lhs(),
+                new (mod) BinaryExpr(
+                    TokenKind::Percent,
+                    b->lhs(),
+                    b->rhs(),
+                    b->location()
+                ),
+                b->location()
+            );
+            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            break;
+
+        case TokenKind::AmpersandEq:
+            *expr_ptr = new (mod) BinaryExpr(
+                TokenKind::ColonEq,
+                b->lhs(),
+                new (mod) BinaryExpr(
+                    TokenKind::Ampersand,
+                    b->lhs(),
+                    b->rhs(),
+                    b->location()
+                ),
+                b->location()
+            );
+            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            break;
+
+        case TokenKind::PipeEq:
+            *expr_ptr = new (mod) BinaryExpr(
+                TokenKind::ColonEq,
+                b->lhs(),
+                new (mod) BinaryExpr(
+                    TokenKind::Pipe,
+                    b->lhs(),
+                    b->rhs(),
+                    b->location()
+                ),
+                b->location()
+            );
+            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            break;
+
+        case TokenKind::CaretEq:
+            *expr_ptr = new (mod) BinaryExpr(
+                TokenKind::ColonEq,
+                b->lhs(),
+                new (mod) BinaryExpr(
+                    TokenKind::Caret,
+                    b->lhs(),
+                    b->rhs(),
+                    b->location()
+                ),
+                b->location()
+            );
+            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            break;
+
+        case TokenKind::TildeEq:
+            if (not b->lhs()->type()->is_dynamic_array()) {
+                Error(
+                    b->location(),
+                    "Lhs of prepend operator {} must be a dynamic array, but is {} instead",
+                    ToString(b->op()),
+                    b->lhs()->type()
+                );
+            }
+            LCC_TODO("Sema dynamic array prepend with {}", ToString(b->op()));
 
         case TokenKind::And:
         case TokenKind::Or: {
             LValueToRValue(&b->lhs());
             LValueToRValue(&b->rhs());
-            auto lhs = b->lhs()->type();
-            auto rhs = b->rhs()->type();
+            auto* lhs = b->lhs()->type();
+            auto* rhs = b->rhs()->type();
 
             /// Both types must be integers or booleans.
             if (not lhs->is_integer(true) or not rhs->is_integer(true)) {
@@ -1568,7 +1949,7 @@ void lcc::glint::Sema::AnalyseBinary(BinaryExpr* b) {
 
         /// Pointer or array subscript.
         case TokenKind::LBrack: {
-            ImplicitDe_Reference(&b->lhs());
+            (void) ImplicitDe_Reference(&b->lhs());
             auto* ty = b->lhs()->type();
             if (not is<PointerType, ArrayType>(ty)) {
                 Error(
@@ -1690,7 +2071,7 @@ void lcc::glint::Sema::AnalyseBinary(BinaryExpr* b) {
         /// Assignment.
         case TokenKind::ColonEq: {
             LValueToRValue(&b->rhs());
-            ImplicitDe_Reference(&b->lhs());
+            (void) ImplicitDe_Reference(&b->lhs());
             if (not b->lhs()->is_lvalue()) {
                 Error(b->location(), "LHS of assignment must be an lvalue");
                 b->set_sema_errored();
@@ -1738,6 +2119,68 @@ void lcc::glint::Sema::AnalyseBinary(BinaryExpr* b) {
             }
 
         } break;
+
+        // Handled elsewhere
+        case TokenKind::ColonColon:
+        // NOT a binary operator
+        case TokenKind::Invalid:
+        case TokenKind::Eof:
+        case TokenKind::LParen:
+        case TokenKind::RParen:
+        case TokenKind::RBrack:
+        case TokenKind::LBrace:
+        case TokenKind::RBrace:
+        case TokenKind::BangLBrace:
+        case TokenKind::Comma:
+        case TokenKind::Colon:
+        case TokenKind::Semicolon:
+        case TokenKind::Dot:
+        case TokenKind::Tilde:
+        case TokenKind::Exclam:
+        case TokenKind::At:
+        case TokenKind::Hash:
+        case TokenKind::PlusPlus:
+        case TokenKind::MinusMinus:
+        case TokenKind::StarStar:
+        case TokenKind::Ident:
+        case TokenKind::Number:
+        case TokenKind::String:
+        case TokenKind::If:
+        case TokenKind::Else:
+        case TokenKind::While:
+        case TokenKind::Void:
+        case TokenKind::Byte:
+        case TokenKind::Bool:
+        case TokenKind::External:
+        case TokenKind::True:
+        case TokenKind::False:
+        case TokenKind::Int:
+        case TokenKind::UInt:
+        case TokenKind::ArbitraryInt:
+        case TokenKind::Sizeof:
+        case TokenKind::Alignof:
+        case TokenKind::Has:
+        case TokenKind::For:
+        case TokenKind::Return:
+        case TokenKind::Export:
+        case TokenKind::Struct:
+        case TokenKind::Enum:
+        case TokenKind::Union:
+        case TokenKind::Sum:
+        case TokenKind::Lambda:
+        case TokenKind::CShort:
+        case TokenKind::CUShort:
+        case TokenKind::CInt:
+        case TokenKind::CUInt:
+        case TokenKind::CLong:
+        case TokenKind::CULong:
+        case TokenKind::CLongLong:
+        case TokenKind::CULongLong:
+        case TokenKind::Gensym:
+        case TokenKind::MacroArg:
+        case TokenKind::Expression:
+            Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
+            LCC_UNREACHABLE();
     }
 }
 
@@ -1769,13 +2212,10 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             /// Make sure to actually analyse this intrinsic, as it will otherwise
             /// just be marked as done without actually being analysed.
             *expr_ptr = intrinsic;
-            Analyse(expr_ptr);
+            (void) Analyse(expr_ptr);
             return;
         }
     }
-
-    /// Analyse the callee and the arguments.
-    for (auto*& arg : expr->args()) Analyse(&arg);
 
     /// If analysing the callee fails, we can’t do anything else.
     if (not Analyse(&expr->callee())) {
@@ -1785,6 +2225,8 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 
     /// If the callee is an overload set, perform overload resolution.
     if (is<OverloadSet>(expr->callee()) or expr->callee()->type()->is_overload_set()) {
+        for (auto*& arg : expr->args()) (void) Analyse(&arg);
+
         /// If any of the arguments errored, we can’t resolve this.
         if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
             expr->set_sema_errored();
@@ -1896,8 +2338,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         //
         // Collect their overload sets.
 
-        // ***** 2eβ
-        //
+        // ***** 2eβ//
         // Remove from O all candidates C that do no accept any overload of this
         // argument as a parameter.
 
@@ -2040,11 +2481,40 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             and is<TypeDecl>(as<NameRefExpr>(expr->callee())->target())
         )
     ) {
-        const usz s = expr->args().size();
-        for (usz i = 0; i < s; ++i)
-            LValueToRValue(expr->args().data() + i);
+        // Calling a type expression with a single compound literal argument is a
+        // declaration that the compound literal is expected to be of that type.
+        if (
+            expr->args().size() == 1
+            and is<CompoundLiteral>(expr->args().at(0)) //
+        ) {
+            // Replace the type expression with the now-properly-typed compound
+            // literal.
+            *expr_ptr = new (mod) CompoundLiteral(
+                as<CompoundLiteral>(expr->args().at(0))->values(),
+                expr->location(),
+                expr->callee()->type()
+            );
+            // Perform conversions (like a compound literal with a single unnamed
+            // argument being converted to it's argument expression).
+            (void) Analyse(expr_ptr);
+            return;
+        }
+
+        for (auto*& arg : expr->args()) (void) Analyse(&arg);
+        /// If any of the arguments errored, we do too.
+        if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
+            expr->set_sema_errored();
+            return;
+        }
 
         if (expr->args().size() == 1) {
+            // Calling a type expression with a single compound literal argument is a
+            // declaration that the compound literal is expected to be of that type.
+            LCC_ASSERT(
+                not is<CompoundLiteral>(expr->args().at(0)),
+                "Call of type expression with single compound literal argument should have been handled above"
+            );
+
             *expr_ptr = new (mod) CastExpr(
                 expr->args().at(0),
                 expr->callee()->type(),
@@ -2123,7 +2593,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             expr->location()
         );
 
-        Analyse(expr_ptr);
+        (void) Analyse(expr_ptr);
 
         return;
     }
@@ -2360,7 +2830,7 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
                 Error(expr->location(), "__builtin_memcpy() takes exactly three arguments");
 
             /// Analyse the arguments.
-            for (auto*& arg : expr->args()) Analyse(&arg);
+            for (auto*& arg : expr->args()) (void) Analyse(&arg);
             ConvertOrError(&expr->args()[0], Type::VoidPtr);
             ConvertOrError(&expr->args()[1], Type::VoidPtr);
             ConvertOrError(&expr->args()[2], Type::Int);
@@ -2378,7 +2848,7 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
                 Error(expr->location(), "__builtin_memset() takes exactly three arguments");
 
             /// Analyse the arguments.
-            for (auto*& arg : expr->args()) Analyse(&arg);
+            for (auto*& arg : expr->args()) (void) Analyse(&arg);
             ConvertOrError(&expr->args()[0], Type::VoidPtr);
             ConvertOrError(&expr->args()[1], Type::Byte);
             ConvertOrError(&expr->args()[2], Type::Int);
@@ -2397,7 +2867,7 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
 
             /// Arguments must be integers or pointers.
             for (auto*& arg : expr->args()) {
-                Analyse(&arg);
+                (void) Analyse(&arg);
                 InsertPointerToIntegerCast(&arg);
                 ConvertOrError(&arg, Type::Int);
                 LValueToRValue(&arg);
@@ -2412,7 +2882,8 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
 auto optimal_string_alignment_distance(
     std::string_view s,
     std::string_view t
-) -> size_t {
+)
+    -> size_t {
     auto m = s.size();
     auto n = t.size();
     // Allocate 2d array
@@ -2543,13 +3014,22 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             ));
         }
 
-        bool short_name = least_distance_decl and least_distance_decl->name().size() < 5;
+        // The distance between a short name only has a few possibilities, so we
+        // lower the maximum distance.
         constexpr usz short_name_distance_max = 1;
+        bool short_name
+            = least_distance_decl and least_distance_decl->name().size() < 5;
+
+        // It is unlikely the programmer mistyped multiple extra characters in a
+        // name /on accident/, so we ensure the lengths are within some distance
+        // of each other.
+        bool length_close = least_distance_decl
+                        and std::abs(i64(least_distance_decl->name().size() - expr->name().size())) < 3;
 
         // If there is a short name, ensure it's distance is below or equal to the
         // maximum distance. Without this, things like `bar` get suggested to be
         // replaced with `fas`, and that just doesn't really make sense to me.
-        if (least_distance_decl and (not short_name or least_distance <= short_name_distance_max)) {
+        if (least_distance_decl and length_close and (not short_name or least_distance <= short_name_distance_max)) {
             err.attach(Note(
                 least_distance_decl->location(),
                 "Maybe you meant '{}', defined here?",
@@ -2568,7 +3048,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         // Make a copy of the pointer so we don't accidentally overwrite the
         // declaration's pointer in the following analysation.
         Expr* e = syms.at(0);
-        Analyse(&e);
+        (void) Analyse(&e);
         // FIXME: What in the fuck is this for? The assert would mean we wouldn't
         // need the following line and the line following means we wouldn't need
         // the assert. A fucking idiot wrote this, clearly.
@@ -2620,7 +3100,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
     // Create a new overload set and analyse it. This will make sure there are
     // no redeclarations etc.
     Expr* overload_set = new (mod) OverloadSet(overloads, expr->location());
-    Analyse(&overload_set);
+    (void) Analyse(&overload_set);
     if (overload_set->sema_errored()) expr->set_sema_errored();
 
     // The type of an overload set is special because its actual type will depend
@@ -2630,7 +3110,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
     expr->type(Type::OverloadSet);
 }
 
-void lcc::glint::Sema::AnalyseUnary(UnaryExpr* u) {
+void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
     /// Give up if there is an error in the operand.
     if (not Analyse(&u->operand())) {
         u->set_sema_errored();
@@ -2645,8 +3125,6 @@ void lcc::glint::Sema::AnalyseUnary(UnaryExpr* u) {
 
     /// Prefix operators.
     switch (u->op()) {
-        default: Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
-
         /// Get the address of an lvalue or function.
         case TokenKind::Ampersand: {
             if (not u->operand()->is_lvalue()) {
@@ -2694,19 +3172,63 @@ void lcc::glint::Sema::AnalyseUnary(UnaryExpr* u) {
             }
 
             LValueToRValue(&u->operand());
-            auto* ty = u->operand()->type();
 
-            if (not ty->is_integer()) {
+            if (not u->operand()->type()->is_integer()) {
                 Error(
                     u->location(),
-                    "Operand of unary prefix operator '-' must be an integer type, but was {}",
-                    ty
+                    "Operand of unary prefix operator '-' must be an integer or dynamic array type, but was {}",
+                    u->operand()->type()
                 );
                 u->set_sema_errored();
                 break;
             }
 
-            u->type(ty);
+            u->type(u->operand()->type());
+        } break;
+
+        case TokenKind::PlusPlus: {
+            if (not u->operand()->is_lvalue()) {
+                // TODO: If it's not an lvalue, should we just return "operand + 1"
+                // instead of "operand := operand + 1"?
+                Error(
+                    u->location(),
+                    "Operand of unary prefix operator increment (`{}') must be an lvalue (assignable)\n"
+                    "If you think this should work and should increment without doing an assignment, let me know.\n",
+                    ToString(u->op())
+                );
+                u->set_sema_errored();
+                break;
+            }
+
+            *expr_ptr = new (mod) BinaryExpr(
+                TokenKind::ColonEq,
+                u->operand(),
+                new (mod) BinaryExpr(
+                    TokenKind::Plus,
+                    u->operand(),
+                    new (mod) IntegerLiteral(1, u->operand()->type(), u->location()),
+                    u->location()
+                ),
+                u->location()
+            );
+            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+        } break;
+
+        case TokenKind::MinusMinus: {
+            LValueToRValue(&u->operand());
+
+            if (not u->operand()->type()->is_integer()) {
+                Error(
+                    u->location(),
+                    "Operand of unary prefix operator decrement (`{}') must have an integer type, but was {}",
+                    ToString(u->op()),
+                    u->operand()->type()
+                );
+                u->set_sema_errored();
+                break;
+            }
+
+            u->type(u->operand()->type());
         } break;
 
         /// Bitwise-not an integer.
@@ -2769,6 +3291,88 @@ void lcc::glint::Sema::AnalyseUnary(UnaryExpr* u) {
             // The result of 'has' is boolean.
             u->type(Type::Bool);
         } break;
+
+        case TokenKind::Invalid:
+        case TokenKind::Eof:
+        case TokenKind::LParen:
+        case TokenKind::RParen:
+        case TokenKind::LBrack:
+        case TokenKind::RBrack:
+        case TokenKind::LBrace:
+        case TokenKind::RBrace:
+        case TokenKind::BangLBrace:
+        case TokenKind::Comma:
+        case TokenKind::Colon:
+        case TokenKind::Semicolon:
+        case TokenKind::Dot:
+        case TokenKind::Plus:
+        case TokenKind::Star:
+        case TokenKind::Slash:
+        case TokenKind::Percent:
+        case TokenKind::Pipe:
+        case TokenKind::Caret:
+        case TokenKind::Hash:
+        case TokenKind::Shl:
+        case TokenKind::Shr:
+        case TokenKind::Eq:
+        case TokenKind::Ne:
+        case TokenKind::Lt:
+        case TokenKind::Gt:
+        case TokenKind::Le:
+        case TokenKind::Ge:
+        case TokenKind::StarStar:
+        case TokenKind::PlusEq:
+        case TokenKind::MinusEq:
+        case TokenKind::StarEq:
+        case TokenKind::SlashEq:
+        case TokenKind::PercentEq:
+        case TokenKind::AmpersandEq:
+        case TokenKind::PipeEq:
+        case TokenKind::CaretEq:
+        case TokenKind::TildeEq:
+        case TokenKind::ColonEq:
+        case TokenKind::ColonColon:
+        case TokenKind::RightArrow:
+        case TokenKind::Ident:
+        case TokenKind::Number:
+        case TokenKind::String:
+        case TokenKind::If:
+        case TokenKind::Else:
+        case TokenKind::While:
+        case TokenKind::Void:
+        case TokenKind::Byte:
+        case TokenKind::Bool:
+        case TokenKind::External:
+        case TokenKind::True:
+        case TokenKind::False:
+        case TokenKind::And:
+        case TokenKind::Or:
+        case TokenKind::Int:
+        case TokenKind::UInt:
+        case TokenKind::ArbitraryInt:
+        case TokenKind::Sizeof:
+        case TokenKind::Alignof:
+        case TokenKind::For:
+        case TokenKind::Return:
+        case TokenKind::Export:
+        case TokenKind::Struct:
+        case TokenKind::Enum:
+        case TokenKind::Union:
+        case TokenKind::Sum:
+        case TokenKind::Lambda:
+        case TokenKind::CShort:
+        case TokenKind::CUShort:
+        case TokenKind::CInt:
+        case TokenKind::CUInt:
+        case TokenKind::CLong:
+        case TokenKind::CULong:
+        case TokenKind::CLongLong:
+        case TokenKind::CULongLong:
+        case TokenKind::Gensym:
+        case TokenKind::MacroArg:
+        case TokenKind::Expression:
+            Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
+            LCC_UNREACHABLE();
     }
 }
 
@@ -2805,14 +3409,14 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                 if (syms.empty()) continue;
                 if (auto* s = cast<TypeDecl>(syms.at(0))) {
                     Expr* e = s;
-                    Analyse(&e);
+                    (void) Analyse(&e);
                     ty = s->type();
                     break;
                 }
 
                 if (auto* a = cast<TypeAliasDecl>(syms.at(0))) {
                     Expr* e = a;
-                    Analyse(&e);
+                    (void) Analyse(&e);
                     ty = a->type();
                     break;
                 }
@@ -2840,7 +3444,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
         case Type::Kind::Pointer: {
             auto* p = as<PointerType>(type);
             LCC_ASSERT(p->element_type(), "PointerType has NULL element type");
-            Analyse(&p->element_type());
+            (void) Analyse(&p->element_type());
 
             auto* elem = p->element_type();
             if (is<ReferenceType>(elem)) {
@@ -2857,7 +3461,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
         case Type::Kind::Reference: {
             auto* r = as<ReferenceType>(type);
             LCC_ASSERT(r->element_type(), "ReferenceType has NULL element type");
-            Analyse(&r->element_type());
+            (void) Analyse(&r->element_type());
 
             /// Collapse refs.
             while (is<ReferenceType>(r->element_type()))
@@ -2869,7 +3473,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
         case Type::Kind::Array: {
             auto* a = as<ArrayType>(type);
             LCC_ASSERT(a->element_type(), "Array has NULL element type");
-            Analyse(&a->element_type());
+            (void) Analyse(&a->element_type());
             a->element_type(DeclTypeDecay(a->element_type()));
 
             auto* elem = a->element_type();
@@ -2884,7 +3488,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
 
             usz size = 0;
             LCC_ASSERT(a->size(), "Array has NULL size expression");
-            Analyse(&a->size());
+            (void) Analyse(&a->size());
             if (a->size()->ok()) {
                 EvalResult res;
                 if (a->size()->evaluate(context, res, false)) {
@@ -2909,7 +3513,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
         case Type::Kind::ArrayView: {
             auto* a = as<ArrayViewType>(type);
             LCC_ASSERT(a->element_type(), "ArrayViewType has NULL element type");
-            Analyse(&a->element_type());
+            (void) Analyse(&a->element_type());
             a->element_type(DeclTypeDecay(a->element_type()));
 
             auto* elem = a->element_type();
@@ -2932,7 +3536,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
         case Type::Kind::DynamicArray: {
             auto* a = as<DynamicArrayType>(type);
             LCC_ASSERT(a->element_type(), "DynamicArray has NULL element type");
-            Analyse(&a->element_type());
+            (void) Analyse(&a->element_type());
             a->element_type(DeclTypeDecay(a->element_type()));
 
             auto* elem = a->element_type();
@@ -2948,7 +3552,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             // Cache struct type for IRGen.
             (void) a->struct_type(mod);
 
-            if (a->initial_size()) Analyse(&a->initial_size());
+            if (a->initial_size()) (void) Analyse(&a->initial_size());
         } break;
 
         // Apply decltype decay to the element type, prohibit arrays of
@@ -2956,7 +3560,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
         // Also set cached struct type for IRGen by calling struct_type().
         case Type::Kind::Sum: {
             auto* s = as<SumType>(type);
-            if (s->members().size() == 0) {
+            if (s->members().empty()) {
                 Error(
                     s->location(),
                     "Sum type empty!\n"
@@ -2976,7 +3580,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             // Finalise members
             for (auto& member : s->members()) {
                 // Analyse member type
-                Analyse(&member.type);
+                (void) Analyse(&member.type);
                 member.type = DeclTypeDecay(member.type);
                 if (member.type->sema_errored()) {
                     type->set_sema_errored();
@@ -3002,7 +3606,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             // Finalise members
             for (auto& member : u->members()) {
                 // Analyse member type
-                Analyse(&member.type);
+                (void) Analyse(&member.type);
                 member.type = DeclTypeDecay(member.type);
                 if (member.type->sema_errored()) {
                     type->set_sema_errored();
@@ -3026,12 +3630,12 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
         case Type::Kind::Function: {
             auto* ty = as<FuncType>(type);
             LCC_ASSERT(ty->return_type(), "Function type has NULL return type");
-            Analyse(&ty->return_type());
+            (void) Analyse(&ty->return_type());
 
             for (auto& param : ty->params()) {
                 LCC_ASSERT(param.type, "Function type has parameter with NULL type");
                 param.type = DeclTypeDecay(param.type);
-                Analyse(&param.type);
+                (void) Analyse(&param.type);
             }
 
             /// If the function returns void, it must not be marked discardable.
@@ -3078,7 +3682,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             /// Finalise all members.
             for (auto& member : s->members()) {
                 /// Analyse the member type.
-                Analyse(&member.type);
+                (void) Analyse(&member.type);
                 member.type = DeclTypeDecay(member.type);
                 if (member.type->sema_errored()) {
                     type->set_sema_errored();
@@ -3234,6 +3838,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
     }
 
     /// Do *not* use `type` here, as it may have been replaced by something else.
-    if (not(*type_ptr)->sema_done_or_errored()) (*type_ptr)->set_sema_done();
+    if (not(*type_ptr)->sema_done_or_errored())
+        (*type_ptr)->set_sema_done();
     return (*type_ptr)->ok();
 }

@@ -1,5 +1,6 @@
 #include <lcc/utils/macros.hh>
 
+#include <glint/ast.hh>
 #include <glint/lexer.hh>
 #include <glint/parser.hh>
 
@@ -274,6 +275,14 @@ void lcc::glint::Lexer::NextToken() {
         case '+': {
             tok.kind = TokenKind::Plus;
             NextChar();
+
+            if (lastc == '+') {
+                tok.kind = TokenKind::PlusPlus;
+                NextChar();
+            } else if (lastc == '=') {
+                tok.kind = TokenKind::PlusEq;
+                NextChar();
+            }
         } break;
 
         case '-': {
@@ -286,6 +295,9 @@ void lcc::glint::Lexer::NextToken() {
                 if (IsAlpha(lastc)) Error("Invalid integer literal");
             } else if (lastc == '>') {
                 tok.kind = TokenKind::RightArrow;
+            } else if (lastc == '=') {
+                tok.kind = TokenKind::MinusEq;
+                NextChar();
             } else {
                 tok.kind = TokenKind::Minus;
             }
@@ -294,36 +306,71 @@ void lcc::glint::Lexer::NextToken() {
         case '*': {
             tok.kind = TokenKind::Star;
             NextChar();
+
+            if (lastc == '=') {
+                tok.kind = TokenKind::StarEq;
+                NextChar();
+            }
         } break;
 
         case '/': {
             tok.kind = TokenKind::Slash;
             NextChar();
+
+            if (lastc == '=') {
+                tok.kind = TokenKind::SlashEq;
+                NextChar();
+            }
         } break;
 
         case '%': {
             tok.kind = TokenKind::Percent;
             NextChar();
+
+            if (lastc == '=') {
+                tok.kind = TokenKind::PercentEq;
+                NextChar();
+            }
         } break;
 
         case '&': {
             tok.kind = TokenKind::Ampersand;
             NextChar();
+
+            if (lastc == '=') {
+                tok.kind = TokenKind::AmpersandEq;
+                NextChar();
+            }
         } break;
 
         case '|': {
             tok.kind = TokenKind::Pipe;
             NextChar();
+
+            if (lastc == '=') {
+                tok.kind = TokenKind::PipeEq;
+                NextChar();
+            }
         } break;
 
         case '^': {
             tok.kind = TokenKind::Caret;
             NextChar();
+
+            if (lastc == '=') {
+                tok.kind = TokenKind::CaretEq;
+                NextChar();
+            }
         } break;
 
         case '~': {
             tok.kind = TokenKind::Tilde;
             NextChar();
+
+            if (lastc == '=') {
+                tok.kind = TokenKind::TildeEq;
+                NextChar();
+            }
         } break;
 
         case '!': {
@@ -790,7 +837,7 @@ auto lcc::glint::Lexer::MacroExpansion::operator++() -> Token {
     return ret;
 }
 
-bool lcc::glint::GlintToken::operator==(const GlintToken& rhs) const {
+auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
     if (kind != rhs.kind) return false;
     switch (kind) {
         case TokenKind::Ident:
@@ -876,13 +923,25 @@ bool lcc::glint::GlintToken::operator==(const GlintToken& rhs) const {
         case TokenKind::CULong:
         case TokenKind::CLongLong:
         case TokenKind::CULongLong:
+        case TokenKind::PlusPlus:
+        case TokenKind::MinusMinus:
+        case TokenKind::StarStar:
+        case TokenKind::PlusEq:
+        case TokenKind::MinusEq:
+        case TokenKind::StarEq:
+        case TokenKind::SlashEq:
+        case TokenKind::PercentEq:
+        case TokenKind::AmpersandEq:
+        case TokenKind::PipeEq:
+        case TokenKind::CaretEq:
+        case TokenKind::TildeEq:
             return true;
     }
 
     LCC_UNREACHABLE();
 }
 
-std::string_view lcc::glint::ToString(Tk kind) {
+auto lcc::glint::ToString(Tk kind) -> std::string_view {
     switch (kind) {
         case Tk::Invalid: return "invalid";
         case Tk::Eof: return "EOF";
@@ -959,6 +1018,18 @@ std::string_view lcc::glint::ToString(Tk kind) {
         case Tk::CULong: return "culong";
         case Tk::CLongLong: return "clonglong";
         case Tk::CULongLong: return "culonglong";
+        case Tk::PlusPlus: return "++";
+        case Tk::MinusMinus: return "--";
+        case Tk::StarStar: return "**";
+        case Tk::PlusEq: return "+=";
+        case Tk::MinusEq: return "-=";
+        case Tk::StarEq: return "*=";
+        case Tk::SlashEq: return "/=";
+        case Tk::PercentEq: return "%=";
+        case Tk::AmpersandEq: return "&=";
+        case Tk::PipeEq: return "|=";
+        case Tk::CaretEq: return "^=";
+        case Tk::TildeEq: return "~=";
     }
 
     return "<unknown>";

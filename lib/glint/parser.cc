@@ -60,11 +60,77 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
 
         case Tk::ColonEq:
         case Tk::ColonColon:
+        case Tk::PlusEq:
+        case Tk::MinusEq:
+        case Tk::StarEq:
+        case Tk::SlashEq:
+        case Tk::PercentEq:
+        case Tk::AmpersandEq:
+        case Tk::PipeEq:
+        case Tk::CaretEq:
+        case Tk::TildeEq:
             return 100;
 
-        /// Not an operator.
-        default: return -1;
+        // Not operators
+        case Tk::Invalid:
+        case Tk::Eof:
+        case Tk::LParen:
+        case Tk::RParen:
+        case Tk::RBrack:
+        case Tk::LBrace:
+        case Tk::RBrace:
+        case Tk::BangLBrace:
+        case Tk::Comma:
+        case Tk::Colon:
+        case Tk::Semicolon:
+        case Tk::Tilde:
+        case Tk::Exclam:
+        case Tk::At:
+        case Tk::Hash:
+        case Tk::PlusPlus:
+        case Tk::MinusMinus:
+        case Tk::StarStar:
+        case Tk::RightArrow:
+        case Tk::Ident:
+        case Tk::Number:
+        case Tk::String:
+        case Tk::If:
+        case Tk::Else:
+        case Tk::While:
+        case Tk::Void:
+        case Tk::Byte:
+        case Tk::Bool:
+        case Tk::External:
+        case Tk::True:
+        case Tk::False:
+        case Tk::Int:
+        case Tk::UInt:
+        case Tk::ArbitraryInt:
+        case Tk::Sizeof:
+        case Tk::Alignof:
+        case Tk::Has:
+        case Tk::For:
+        case Tk::Return:
+        case Tk::Export:
+        case Tk::Struct:
+        case Tk::Enum:
+        case Tk::Union:
+        case Tk::Sum:
+        case Tk::Lambda:
+        case Tk::CShort:
+        case Tk::CUShort:
+        case Tk::CInt:
+        case Tk::CUInt:
+        case Tk::CLong:
+        case Tk::CULong:
+        case Tk::CLongLong:
+        case Tk::CULongLong:
+        case Tk::Gensym:
+        case Tk::MacroArg:
+        case Tk::Expression:
+            return -1;
     }
+    LCC_UNREACHABLE();
 }
 
 /// Check if an operator is right-associative.
@@ -99,7 +165,7 @@ constexpr bool IsRightAssociative(lcc::glint::TokenKind t) {
     }
 }
 
-constexpr bool MayStartAnExpression(lcc::glint::TokenKind kind) {
+constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
     using Tk = lcc::glint::TokenKind;
     switch (kind) {
         case Tk::LParen:
@@ -108,6 +174,8 @@ constexpr bool MayStartAnExpression(lcc::glint::TokenKind kind) {
         case Tk::BangLBrace:
         case Tk::Plus:
         case Tk::Minus:
+        case Tk::PlusPlus:
+        case Tk::MinusMinus:
         case Tk::Ampersand:
         case Tk::Tilde:
         case Tk::Exclam:
@@ -129,8 +197,6 @@ constexpr bool MayStartAnExpression(lcc::glint::TokenKind kind) {
         case Tk::Sizeof:
         case Tk::Alignof:
         case Tk::Has:
-            return true;
-
         // Types
         case Tk::ArbitraryInt:
         case Tk::Byte:
@@ -182,6 +248,16 @@ constexpr bool MayStartAnExpression(lcc::glint::TokenKind kind) {
         case Tk::MacroArg:
         case Tk::And:
         case Tk::Or:
+        case Tk::StarStar:
+        case Tk::PlusEq:
+        case Tk::MinusEq:
+        case Tk::StarEq:
+        case Tk::SlashEq:
+        case Tk::PercentEq:
+        case Tk::AmpersandEq:
+        case Tk::PipeEq:
+        case Tk::CaretEq:
+        case Tk::TildeEq:
             return false;
     }
 
@@ -247,11 +323,13 @@ constexpr lcc::isz TypeQualifierPrecedence(lcc::glint::TokenKind t) {
 }
 } // namespace
 
-bool lcc::glint::Parser::AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
+auto lcc::glint::Parser::AtStartOfExpression() -> bool {
+    return MayStartAnExpression(tok.kind);
+}
 
 /// Creates a new scope and parses a block in that scope.
 auto lcc::glint::Parser::ParseBlock() -> Result<BlockExpr*> {
-    return ParseBlock({this});
+    return ParseBlock(ScopeRAII{this});
 }
 
 auto lcc::glint::Parser::ParseBlock(
@@ -268,9 +346,10 @@ auto lcc::glint::Parser::ParseBlock(
     /// Parse expressions.
     std::vector<Expr*> exprs;
     while (not At(Tk::RBrace, Tk::Eof)) {
-        if (Consume(Tk::Semicolon)) continue;
+        if (+ConsumeExpressionSeparator()) continue;
+
         auto expr = ParseExpr();
-        if (not Consume(Tk::Semicolon)) {
+        if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (At(Tk::Eof)) {
                 Warning("Expected ';' but got end of file");
             } else if (expr) {
@@ -303,10 +382,12 @@ auto lcc::glint::Parser::ParseBlock(
         exprs.push_back(expr.value());
     }
 
+    /// Yeet "}".
+    if (not Consume(Tk::RBrace))
+        return Error("Expected }}");
+
     loc = {loc, tok.location};
 
-    /// Yeet "}".
-    if (not Consume(Tk::RBrace)) return Error("Expected }}");
     return new (*mod) BlockExpr(std::move(exprs), loc);
 }
 
@@ -393,7 +474,7 @@ auto lcc::glint::Parser::ParseDeclRest(
             /// Otherwise, it is a variable declaration. Parse
             /// the initialiser if there is one.
             auto init = ExprResult::Null();
-            if (Consume(Tk::Eq) or not At(Tk::Semicolon, Tk::Comma)) {
+            if (Consume(Tk::Eq) or not +AtExpressionSeparator()) {
                 init = ParseExpr();
                 if (not init) return init.diag();
 
@@ -424,7 +505,7 @@ auto lcc::glint::Parser::ParseDeclRest(
             if (not expr) return expr.diag();
 
             // Create the variable declaration.
-            auto var = new (*mod) VarDecl(
+            auto* var = new (*mod) VarDecl(
                 ident,
                 Type::Unknown,
                 *expr,
@@ -483,11 +564,13 @@ auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
         enumerators.emplace_back(new (*mod) EnumeratorDecl(std::move(name), value, enumerator_loc));
 
         // Eat separators, if any.
-        while (Consume(Tk::Comma, Tk::Semicolon))
+        while (+ConsumeExpressionSeparator())
             ;
     }
 
-    if (not Consume(Tk::RBrace)) Error("Expected }}");
+    if (not Consume(Tk::RBrace))
+        Error("Expected }}");
+
     return new (*mod)
         EnumType(
             sc.scope,
@@ -661,14 +744,16 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         /// Unary operators.
         case Tk::Ampersand:
         case Tk::At:
+        case Tk::Exclam:
         case Tk::Minus:
         case Tk::Tilde:
-        case Tk::Exclam: {
+        case TokenKind::MinusMinus:
+        case TokenKind::PlusPlus: {
             auto loc = tok.location;
             auto op = tok.kind;
             NextToken();
             lhs = ParseExpr(PrefixOperatorPrecedence) >>= [&](Expr* operand) {
-                return new (*mod) UnaryExpr(op, operand, false, loc);
+                return new (*mod) UnaryExpr(op, operand, false, {loc, tok.location});
             };
         } break;
 
@@ -700,19 +785,34 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
 
         // Compound literal.
         case TokenKind::BangLBrace: {
-            std::vector<Expr*> elements;
             NextToken(); /// Yeet "!{".
 
             /// Parse the elements.
+            std::vector<CompoundLiteral::Member> elements{};
+            std::string name{};
             while (not At(Tk::RBrace, Tk::Eof)) {
+                name.clear();
+                if (Consume(Tk::Dot)) {
+                    if (not At(Tk::Ident)) {
+                        return Error(
+                            "Recognized named expression in compound literal, but the following token was not an identifier as expected. It was {}",
+                            ToString(tok.kind)
+                        );
+                    }
+                    name = tok.text;
+
+                    NextToken(); // yeet identifier
+                }
                 auto element = ParseExpr(0, true);
                 if (not element) return element.diag();
-                elements.push_back(element.value());
-                Consume(Tk::Comma);
+                elements.emplace_back(name, element.value());
+                ConsumeExpressionSeparator(ExpressionSeparator::Soft);
             }
 
             /// Yeet "}".
-            if (not Consume(Tk::RBrace)) return Error("Expected }}");
+            if (not Consume(Tk::RBrace))
+                return Error("Expected }}");
+
             lhs = new (*mod) CompoundLiteral(std::move(elements), tok.location);
         } break;
 
@@ -738,6 +838,16 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         case TokenKind::Ge:
         case TokenKind::ColonEq:
         case TokenKind::ColonColon:
+        case TokenKind::StarStar:
+        case TokenKind::PlusEq:
+        case TokenKind::MinusEq:
+        case TokenKind::StarEq:
+        case TokenKind::SlashEq:
+        case TokenKind::PercentEq:
+        case TokenKind::AmpersandEq:
+        case TokenKind::PipeEq:
+        case TokenKind::CaretEq:
+        case TokenKind::TildeEq:
         case TokenKind::RightArrow:
         case TokenKind::And:
         case TokenKind::Or:
@@ -747,6 +857,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
 
         case TokenKind::MacroArg:
         case TokenKind::Semicolon:
+            Note("Here");
             Diag::ICE("Unexpected token {} during parsing: likely lexer error", ToString(tok.kind));
     }
 
@@ -925,20 +1036,23 @@ auto lcc::glint::Parser::ParseForExpr() -> Result<ForExpr*> {
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::For), "ParseForExpr called while not at 'for'");
 
+    // Optionally consume expression separator between
+    ConsumeExpressionSeparator();
+
     /// Parse init, cond, increment, and body.
     ScopeRAII sc{this};
 
     auto init = ParseExpr();
     if (not init) return init.diag();
-    if (not Consume(Tk::Semicolon)) Error("Expected ; after 'for' initialisation expression");
+    if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) Error("Expected expression separator after 'for' initialisation expression");
 
     auto cond = ParseExpr();
     if (not cond) return cond.diag();
-    if (not Consume(Tk::Semicolon)) Error("Expected ; after 'for' condition expression");
+    if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) Error("Expected expression separator after 'for' condition expression");
 
     auto increment = ParseExpr();
     if (not increment) return increment.diag();
-    if (not Consume(Tk::Semicolon)) Error("Expected ; after 'for' increment expression");
+    if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) Error("Expected expression separator after 'for' increment expression");
 
     auto body = ParseExpr();
     if (not body) return body.diag();
@@ -991,8 +1105,7 @@ auto lcc::glint::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Exp
         /// Lbrace may just be a missing semicolon or weirdly
         /// placed block expression.
         if (At(Tk::LBrace)) {
-            return Diag::Warning(
-                context,
+            return Warning(
                 tok.location,
                 "External functions cannot have a body. If this '{{' is not supposed to "
                 "start a function body, consider adding a ';' after the function type"
@@ -1120,7 +1233,7 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     /// Parse condition, then, and else.
     auto cond = ParseExpr();
     // Following condition, accept an optional expression separator
-    Consume(Tk::Semicolon) or Consume(Tk::Comma);
+    ConsumeExpressionSeparator();
 
     auto then = ParseExprInNewScope();
     // Following then expression, accept an optional *soft* expression
@@ -1130,7 +1243,7 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     // Basically, what I'd like is if there is an else past a semi-colon then
     // to handle that, but that requires lookahead and I don't like that lol.
     if (LookAhead(1)->kind == Tk::Else) {
-        if (not At(Tk::Semicolon, Tk::Comma)) {
+        if (+ConsumeExpressionSeparator()) {
             return Error(
                 loc,
                 "Expected expression separator (like a semicolon or comma)"
@@ -1138,7 +1251,6 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
                 ToString(LookAhead(1)->kind)
             );
         }
-        Consume(Tk::Semicolon) or Consume(Tk::Comma);
     }
 
     auto else_ = ExprResult::Null();
@@ -1185,7 +1297,8 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<void> {
         module_kind
     );
 
-    while (At(Tk::Semicolon)) NextToken();
+    while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard))
+        ;
 
     // Parse imports.
     while (At(Tk::Ident) and tok.text == "import" and not tok.artificial) {
@@ -1197,7 +1310,8 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<void> {
         mod->add_import(tok.text, {loc, tok.location});
         NextToken(); // Yeet module name.
 
-        while (At(Tk::Semicolon)) NextToken();
+        while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard))
+            ;
     }
 
     return {};
@@ -1225,8 +1339,8 @@ auto lcc::glint::Parser::ParseStructType() -> Result<StructType*> {
         /// Add the member to the list.
         members.emplace_back(std::move(name), *type, Location{start, type->location()});
 
-        // Optionally eat soft or hard separator
-        Consume(Tk::Semicolon) or Consume(Tk::Comma);
+        // Optionally eat expression separator
+        ConsumeExpressionSeparator();
     }
 
     /// Yeet '}'.
@@ -1270,7 +1384,7 @@ auto lcc::glint::Parser::ParseUnionType() -> Result<UnionType*> {
         );
 
         // Optionally eat soft or hard separator.
-        Consume(Tk::Semicolon) or Consume(Tk::Comma);
+        ConsumeExpressionSeparator();
     }
 
     /// Yeet '}'.
@@ -1335,7 +1449,7 @@ auto lcc::glint::Parser::ParseSumType() -> Result<SumType*> {
         );
 
         // Optionally eat soft or hard separator
-        Consume(Tk::Semicolon) or Consume(Tk::Comma);
+        ConsumeExpressionSeparator();
     }
 
     /// Yeet '}'.
@@ -1593,7 +1707,8 @@ auto lcc::glint::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
 
 void lcc::glint::Parser::Synchronise() {
     while (not At(Tk::Semicolon, Tk::RBrace, Tk::Eof)) NextToken();
-    NextToken();
+    // Skip to where the start of the next expression would be.
+    while (At(Tk::Semicolon, Tk::RBrace)) NextToken();
 }
 
 /// Parse a function declaration.
@@ -1648,7 +1763,7 @@ void lcc::glint::Parser::ParseTopLevel() {
 
     /// Parse the file.
     for (;;) {
-        while (Consume(Tk::Semicolon))
+        while (+ConsumeExpressionSeparator())
             ;
 
         /// Stop if we’re at end of file.
@@ -1656,9 +1771,9 @@ void lcc::glint::Parser::ParseTopLevel() {
 
         /// Parse a top-level expression.
         auto expr = ParseExpr();
-        if (not Consume(Tk::Semicolon)) {
+        if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (At(Tk::Eof)) {
-                Warning("Expected ';' but got end of file");
+                Warning("Expected hard expression separator but got end of file");
             } else if (expr) {
                 Location location{};
                 if (expr.value()->location().is_valid())
@@ -1689,8 +1804,7 @@ void lcc::glint::Parser::ParseTopLevel() {
                     location.len = 1;
                 }
 
-                Error(location, "Expected ';'")
-
+                Error(location, "Expected hard expression separator")
                     .attach(Note("Before this"));
             }
         }

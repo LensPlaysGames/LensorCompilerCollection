@@ -88,24 +88,24 @@ enum struct TokenKind {
     Le, // <=
     Ge, // >=
 
-    // PlusPlus,    // ++
-    // MinusMinus,  // --
-    // StarStar,    // **
-    // PlusEq,      // +=
-    // MinusEq,     // -=
-    // StarEq,      // *=
-    // SlashEq,     // /=
-    // PercentEq,   // %=
-    // AmpersandEq, // &=
-    // PipeEq,      // |=
-    // CaretEq,  // ^=
-    // TildeEq,  // ~=
     // AtEq,     // @=
     // HashEq,   // #=
     // DotEq,    // .=
-    ColonEq,    // :=
-    ColonColon, // ::
-    RightArrow, // ->
+    PlusPlus,    // ++
+    MinusMinus,  // --
+    StarStar,    // **
+    PlusEq,      // +=
+    MinusEq,     // -=
+    StarEq,      // *=
+    SlashEq,     // /=
+    PercentEq,   // %=
+    AmpersandEq, // &=
+    PipeEq,      // |=
+    CaretEq,     // ^=
+    TildeEq,     // ~=
+    ColonEq,     // :=
+    ColonColon,  // ::
+    RightArrow,  // ->
 
     Ident,
     Number,
@@ -528,76 +528,98 @@ public:
 
     /// Get the element type of this type. This will assert if this
     /// type does not have an element type.
+    [[nodiscard]]
     auto elem() const -> Type*;
 
     /// Get the kind of this type.
+    [[nodiscard]]
     auto kind() const { return _kind; }
 
     /// Check if this is an array type.
-    bool is_array() const { return _kind == Kind::Array; }
+    [[nodiscard]]
+    auto is_array() const -> bool { return _kind == Kind::Array; }
 
     /// Check if this is a dynamic array type.
-    bool is_dynamic_array() const { return _kind == Kind::DynamicArray; }
+    [[nodiscard]]
+    auto is_dynamic_array() const -> bool { return _kind == Kind::DynamicArray; }
 
     /// Check if this is a view type.
-    bool is_view() const { return _kind == Kind::ArrayView; }
+    [[nodiscard]]
+    auto is_view() const -> bool { return _kind == Kind::ArrayView; }
 
     /// Check if this is the builtin \c bool type.
-    bool is_bool() const;
+    [[nodiscard]]
+    auto is_bool() const -> bool;
 
     /// Check if this is the builtin \c byte type.
-    bool is_byte() const;
+    [[nodiscard]]
+    auto is_byte() const -> bool;
 
     /// Check if this is a builtin type.
-    bool is_builtin() const { return _kind == Kind::Builtin; }
+    [[nodiscard]]
+    auto is_builtin() const -> bool { return _kind == Kind::Builtin; }
 
     /// Check if this is an enum type.
-    bool is_enum() const { return _kind == Kind::Enum; }
+    [[nodiscard]]
+    auto is_enum() const -> bool { return _kind == Kind::Enum; }
 
     /// Check if this is a function type.
-    bool is_function() const { return _kind == Kind::Function; }
+    [[nodiscard]]
+    auto is_function() const -> bool { return _kind == Kind::Function; }
 
     /// Returns true if this is a sized integer type, a C
     /// FFI integer type, \c int, or \c byte, or \c bool, if
     /// \c include_bool is true.
-    bool is_integer(bool include_bool = false) const;
+    [[nodiscard]]
+    auto is_integer(bool include_bool = false) const -> bool;
 
     /// Check if this is a pointer type.
-    bool is_pointer() const { return _kind == Kind::Pointer; }
+    [[nodiscard]]
+    auto is_pointer() const -> bool { return _kind == Kind::Pointer; }
 
     /// Check if this is a reference type.
-    bool is_reference() const { return _kind == Kind::Reference; }
+    [[nodiscard]]
+    auto is_reference() const -> bool { return _kind == Kind::Reference; }
 
     /// Check if this is a signed integer type.
-    bool is_signed_int(const Context* ctx) const;
+    [[nodiscard]]
+    auto is_signed_int(const Context* ctx) const -> bool;
 
     /// Check if this is a sized integer type.
-    bool is_sized_integer() const { return _kind == Kind::Integer; }
+    [[nodiscard]]
+    auto is_sized_integer() const -> bool { return _kind == Kind::Integer; }
 
     /// Check if this is a struct type.
-    bool is_struct() const { return _kind == Kind::Struct; }
+    [[nodiscard]]
+    auto is_struct() const -> bool { return _kind == Kind::Struct; }
 
     /// Check if this is a struct type.
-    bool is_sum_type() const { return _kind == Kind::Sum; }
+    [[nodiscard]]
+    auto is_sum_type() const -> bool { return _kind == Kind::Sum; }
 
     /// Check if this is the uninitialised type.
-    bool is_unknown() const;
+    [[nodiscard]]
+    auto is_unknown() const -> bool;
 
     /// Check if this is an unsigned integer type.
-    bool is_unsigned_int(const Context* ctx) const;
+    [[nodiscard]]
+    auto is_unsigned_int(const Context* ctx) const -> bool;
 
     /// Check if this is the builtin void type.
-    bool is_void() const;
+    [[nodiscard]]
+    auto is_void() const -> bool;
 
     /// Check if this is the builtin overload set type.
-    bool is_overload_set() const;
+    [[nodiscard]]
+    auto is_overload_set() const -> bool;
 
     /// Get the size of this type. It may be target-dependent,
     /// which is why this takes a context parameter.
     ///
     /// \param ctx The context to use.
     /// \return The size of this type, in bits.
-    usz size(const Context* ctx) const;
+    [[nodiscard]]
+    auto size(const Context* ctx) const -> usz;
 
     /// Get the minimum amount of bytes required to represent this type.
     /// Implemented in terms of `size()`.
@@ -605,25 +627,31 @@ public:
     /// \param ctx The context to use.
     /// \return The minimum amount of bytes required to represent an
     ///         instance of this type.
-    usz size_in_bytes(const Context* ctx) const {
+    [[nodiscard]]
+    auto size_in_bytes(const Context* ctx) const -> usz {
         return (size(ctx) / 8) + (size(ctx) % 8 ? 1 : 0);
     }
 
     /// Get a string representation of this type.
+    [[nodiscard]]
     auto string(bool use_colours = false) const -> std::string;
 
     /// Return this type stripped of any pointers and references.
+    [[nodiscard]]
     auto strip_pointers_and_references() -> Type*;
 
     /// Return this type stripped of any references.
+    [[nodiscard]]
     auto strip_references() -> Type*;
 
     /// It’s way too easy to accidentally write `a == b` when
     /// you really meant `*a == *b`, so we don’t allow this.
-    bool operator==(const Type& other) const = delete;
+    [[nodiscard]] auto operator==(const Type& other) const -> bool
+        = delete;
 
     /// Check if types are equal to each other.
-    static bool Equal(const Type* a, const Type* b);
+    [[nodiscard]]
+    static auto Equal(const Type* a, const Type* b) -> bool;
 
     /// Use these only if there is no location information
     /// available (e.g. for default initialisers etc.). In
@@ -687,7 +715,7 @@ private:
     /// Shorten long signatures w/ this.
     using K = BuiltinKind;
 
-    const BuiltinKind _kind;
+    BuiltinKind _kind;
 
     constexpr BuiltinType(K k, Location location)
         : Type(Kind::Builtin, location), _kind(k) {
@@ -696,23 +724,36 @@ private:
 
 public:
     /// Get the kind of this builtin.
+    [[nodiscard]]
     auto builtin_kind() const -> BuiltinKind { return _kind; }
 
-    bool operator==(BuiltinKind k) const { return _kind == k; }
+    [[nodiscard]]
+    auto
+    operator==(BuiltinKind k) const -> bool { return _kind == k; }
 
+    [[nodiscard]]
     static auto Make(Module& mod, K k, Location location) -> BuiltinType* {
         return new (mod) BuiltinType(k, location);
     }
 
     /// Get instances of primitive types.
+    [[nodiscard]]
     static auto Unknown(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Unknown, l); }
+    [[nodiscard]]
     static auto Bool(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Bool, l); }
+    [[nodiscard]]
     static auto Byte(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Byte, l); }
+    [[nodiscard]]
     static auto Int(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Int, l); }
+    [[nodiscard]]
     static auto UInt(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::UInt, l); }
+    [[nodiscard]]
     static auto Void(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Void, l); }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Builtin; }
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool {
+        return type->kind() == Kind::Builtin;
+    }
 };
 
 class IntegerType : public Type {
@@ -723,10 +764,15 @@ public:
     constexpr IntegerType(usz bitWidth, bool isSigned, Location location)
         : Type(Kind::Integer, location), _bit_width(bitWidth), _is_signed(isSigned) {}
 
-    bool is_signed() const { return _is_signed; }
-    usz bit_width() const { return _bit_width; }
+    [[nodiscard]]
+    auto is_signed() const { return _is_signed; }
+    [[nodiscard]]
+    auto bit_width() const { return _bit_width; }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Integer; }
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool {
+        return type->kind() == Kind::Integer;
+    }
 };
 
 /// C FFI integer type.
@@ -750,33 +796,51 @@ private:
     /// Shorten long signatures w/ this.
     using K = FFIKind;
 
-    const K kind;
+    K kind;
     constexpr FFIType(K k, Location location) : Type(Kind::FFIType, location), kind(k) {}
 
 public:
     /// Get the kind of this C FFI type.
+    [[nodiscard]]
     auto ffi_kind() const -> FFIKind { return kind; }
 
-    bool operator==(FFIKind k) const { return kind == k; }
+    [[nodiscard]] auto operator==(FFIKind k) const -> bool {
+        return kind == k;
+    }
 
-    static constexpr auto Make(Module& mod, K k, Location location) -> FFIType* {
+    [[nodiscard]]
+    static auto Make(Module& mod, K k, Location location) -> FFIType* {
         return new (mod) FFIType(k, location);
     }
 
     /// Get instances of C FFI types.
+    [[nodiscard]]
     static auto CChar(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CChar, l); }
+    [[nodiscard]]
     static auto CSChar(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CSChar, l); }
+    [[nodiscard]]
     static auto CUChar(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CUChar, l); }
+    [[nodiscard]]
     static auto CShort(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CShort, l); }
+    [[nodiscard]]
     static auto CUShort(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CUShort, l); }
+    [[nodiscard]]
     static auto CInt(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CInt, l); }
+    [[nodiscard]]
     static auto CUInt(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CUInt, l); }
+    [[nodiscard]]
     static auto CLong(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CLong, l); }
+    [[nodiscard]]
     static auto CULong(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CULong, l); }
+    [[nodiscard]]
     static auto CLongLong(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CLongLong, l); }
+    [[nodiscard]]
     static auto CULongLong(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CULongLong, l); }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::FFIType; }
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool {
+        return type->kind() == Kind::FFIType;
+    }
 };
 
 class NamedType : public Type {
@@ -787,11 +851,16 @@ public:
     NamedType(std::string name, Scope* name_scope, Location location)
         : Type(Kind::Named, location), _name(std::move(name)), _scope(name_scope) {}
 
-    auto name() const -> const std::string& { return _name; }
+    [[nodiscard]]
+    auto name() const { return _name; }
 
-    auto scope() const -> Scope* { return _scope; }
+    [[nodiscard]]
+    auto scope() const { return _scope; }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Named; }
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool {
+        return type->kind() == Kind::Named;
+    }
 };
 
 class TypeWithOneElement : public Type {
@@ -802,21 +871,29 @@ protected:
         : Type(kind, location), _element_type(element_type) {}
 
 public:
+    [[nodiscard]]
     auto element_type() -> Type*& { return _element_type; }
+    [[nodiscard]]
     auto element_type() const -> Type* { return _element_type; }
     void element_type(Type* ty) { _element_type = ty; }
 
-    static bool classof(const Type* type) {
-        return type->kind() >= Kind::Pointer and type->kind() <= Kind::Array;
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool {
+        return type->kind() == Kind::Pointer
+           and type->kind() == Kind::Reference
+           and type->kind() == Kind::DynamicArray
+           and type->kind() == Kind::Array;
     }
 };
 
 class PointerType : public TypeWithOneElement {
 public:
-    constexpr PointerType(Type* element_type, Location location = {})
+    explicit constexpr PointerType(Type* element_type, Location location = {})
         : TypeWithOneElement(Kind::Pointer, location, element_type) {}
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Pointer; }
+    static auto classof(const Type* type) -> bool {
+        return type->kind() == Kind::Pointer;
+    }
 };
 
 class ReferenceType : public TypeWithOneElement {
@@ -824,7 +901,10 @@ public:
     ReferenceType(Type* element_type, Location location)
         : TypeWithOneElement(Kind::Reference, location, element_type) {}
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Reference; }
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool {
+        return type->kind() == Kind::Reference;
+    }
 };
 
 class FuncType : public Type {
@@ -859,23 +939,33 @@ public:
         _attributes(std::move(attrs)) {}
 
     /// Query whether this function has an attribute.
-    bool has_attr(FuncAttr attr) const { return _attributes.contains(attr); }
+    [[nodiscard]]
+    auto has_attr(FuncAttr attr) const -> bool {
+        return _attributes.contains(attr);
+    }
 
     /// Get the parameters of this function.
+    [[nodiscard]]
     auto params() -> std::vector<Param>& { return _params; }
+    [[nodiscard]]
     auto params() const -> const std::vector<Param>& { return _params; }
 
     /// Remove an attribute from this function.
     void remove_attr(FuncAttr attr) { _attributes.erase(attr); }
 
     /// Get the return type of this function.
+    [[nodiscard]]
     auto return_type() -> Type*& { return _return_type; }
+    [[nodiscard]]
     auto return_type() const { return _return_type; }
 
     /// Set an attribute on this function.
     void set_attr(FuncAttr attr) { _attributes[attr] = true; }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Function; }
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool {
+        return type->kind() == Kind::Function;
+    }
 };
 
 class TypeDecl;
@@ -915,6 +1005,8 @@ public:
 class StructType : public DeclaredType {
 public:
     struct Member {
+        static constexpr isz BadIndex = -1;
+
         Type* type;
         std::string name;
         Location location;
@@ -933,16 +1025,51 @@ public:
     StructType(Scope* scope, std::vector<Member> members, Location location)
         : DeclaredType(Kind::Struct, scope, location), _members(std::move(members)) {}
 
-    usz alignment() const { return _alignment; }
+    [[nodiscard]]
+    auto alignment() const -> usz { return _alignment; }
     void alignment(usz alignment) { _alignment = alignment; }
 
-    usz byte_size() const { return _byte_size; }
+    [[nodiscard]]
+    auto byte_size() const -> usz { return _byte_size; }
     void byte_size(usz byteSize) { _byte_size = byteSize; }
 
+    [[nodiscard]]
     auto members() -> std::vector<Member>& { return _members; }
+    [[nodiscard]]
     auto members() const -> const std::vector<Member>& { return _members; }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Struct; }
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto member_by_name(std::string_view name) -> Member* {
+        auto found = rgs::find_if(_members, [name](const Member& m) {
+            return m.name == name;
+        });
+        if (found == _members.end()) return nullptr;
+        return &*found;
+    }
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto member_by_name(std::string_view name) const -> const Member* {
+        return member_by_name(name);
+    }
+
+    /// Caller should check return value is not negative.
+    [[nodiscard]]
+    auto member_index_by_name(std::string_view name) -> isz {
+        auto found = rgs::find_if(_members, [name](const Member& m) {
+            return m.name == name;
+        });
+        if (found == _members.end()) return -1;
+        return std::abs(std::distance(_members.begin(), found));
+    }
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto member_index_by_name(std::string_view name) const -> const Member* {
+        return member_index_by_name(name);
+    }
+
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool { return type->kind() == Kind::Struct; }
 };
 
 class ArrayType : public TypeWithOneElement {
@@ -1200,7 +1327,7 @@ public:
 
     void* operator new(size_t) = delete;
     void* operator new(size_t sz, Module& mod) {
-        auto ptr = ::operator new(sz);
+        auto* ptr = ::operator new(sz);
         mod.nodes.push_back(static_cast<Expr*>(ptr));
         return ptr;
     }
@@ -1290,9 +1417,11 @@ public:
         set_sema_done();
     }
 
-    aint value() const { return _value; }
+    [[nodiscard]]
+    auto value() const -> aint { return _value; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::IntegerLiteral; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::IntegerLiteral; }
 };
 
 class StringLiteral : public TypedExpr {
@@ -1308,16 +1437,44 @@ public:
 };
 
 class CompoundLiteral : public TypedExpr {
-    std::vector<Expr*> _values;
+public:
+    struct Member {
+        std::string name{};
+        Expr* value{};
+    };
+
+private:
+    std::vector<Member> _values;
 
 public:
-    CompoundLiteral(std::vector<Expr*> values, Location location, Type* type = Type::Unknown)
+    CompoundLiteral(std::vector<Member> values, Location location, Type* type = Type::Unknown)
         : TypedExpr(Kind::CompoundLiteral, location, type), _values(std::move(values)) {}
 
-    auto values() -> std::vector<Expr*>& { return _values; }
-    auto values() const -> const std::vector<Expr*>& { return _values; }
+    CompoundLiteral(const std::vector<Expr*>& values, Location location, Type* type = Type::Unknown)
+        : TypedExpr(Kind::CompoundLiteral, location, type) {
+        _values.reserve(values.size());
+        for (auto* v : values)
+            _values.emplace_back("", v);
+    }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::CompoundLiteral; }
+    [[nodiscard]]
+    auto values() -> std::vector<Member>& { return _values; }
+    [[nodiscard]]
+    auto values() const -> const std::vector<Member>& { return _values; }
+
+    [[nodiscard]]
+    auto children() const -> std::vector<Expr*> {
+        std::vector<Expr*> out{};
+        out.reserve(_values.size());
+        for (const auto& m : _values)
+            out.emplace_back(m.value);
+        return out;
+    }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::CompoundLiteral;
+    }
 };
 
 /// Enumerator declaration.
@@ -1596,9 +1753,12 @@ public:
     /// Add an expression to this block.
     void add(Expr* expr) { _children.push_back(expr); }
 
+    [[nodiscard]]
     auto children() -> std::vector<Expr*>& { return _children; }
+    [[nodiscard]]
     auto children() const -> const std::vector<Expr*>& { return _children; }
 
+    [[nodiscard]]
     auto last_expr() -> Expr** {
         if (_children.empty()) return nullptr;
         auto last = &_children.back();
@@ -1609,7 +1769,8 @@ public:
         return last;
     }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::Block; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Block; }
 };
 
 class ReturnExpr : public Expr {
@@ -1662,16 +1823,22 @@ public:
     CallExpr(Expr* callee, std::vector<Expr*> args, Location location)
         : TypedExpr(Kind::Call, location), _callee(callee), _args(std::move(args)) {}
 
+    [[nodiscard]]
     auto args() -> std::vector<Expr*>& { return _args; }
+    [[nodiscard]]
     auto args() const -> const std::vector<Expr*>& { return _args; }
 
+    [[nodiscard]]
     auto callee() -> Expr*& { return _callee; }
+    [[nodiscard]]
     auto callee() const { return _callee; }
 
     /// Get the function type of the callee.
+    [[nodiscard]]
     auto callee_type() const -> FuncType*;
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::Call; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Call; }
 };
 
 class IntrinsicCallExpr : public TypedExpr {

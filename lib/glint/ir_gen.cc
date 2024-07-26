@@ -96,15 +96,16 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 
         case Type::Kind::Sum: {
             const auto& t_sum = as<SumType>(in);
-            auto struct_type = t_sum->struct_type();
+            auto* struct_type = t_sum->struct_type();
             if (not struct_type) {
                 Diag::ICE(
                     "Glint Type-checker should have set SumType's cached type (by calling struct_type() or similar), but it appears to be nullptr at time of IRGen"
                 );
             }
             std::vector<lcc::Type*> member_types{};
+            member_types.reserve(struct_type->members().size());
             for (const auto& m : struct_type->members())
-                member_types.push_back(Convert(ctx, m.type));
+                member_types.emplace_back(Convert(ctx, m.type));
             return lcc::StructType::Get(ctx, std::move(member_types));
         }
 
@@ -290,10 +291,59 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     }
 
                     if (auto* init_expr = decl->init()) {
-                        generate_expression(init_expr);
-                        // Store generated init_expr into above inserted declaration
-                        auto* local_init = new (*module) StoreInst(generated_ir[init_expr], alloca, expr->location());
-                        insert(local_init);
+                        if (auto* c = cast<CompoundLiteral>(init_expr)) {
+                            if (auto* s = cast<StructType>(decl->type())) {
+                                LCC_ASSERT(
+                                    c->values().size() == s->members().size(),
+                                    "Glint:IRGen: Compound literal initialiser for struct type has invalid amount of members"
+                                );
+                                for (usz i = 0; i < c->values().size(); ++i) {
+                                    auto member = c->values().at(i);
+                                    // Confidence check on member name
+                                    if (not member.name.empty() and s->members().at(i).name != member.name) {
+                                        Diag::ICE(
+                                            ctx,
+                                            member.value->location(),
+                                            "IRGen:Glint: Compound literal member name {} mismatches struct member name {}\n"
+                                            "Semantic analysis should have reordered them properly\n",
+                                            member.name,
+                                            s->members().at(i).name
+                                        );
+                                    }
+                                    generate_expression(member.value);
+
+                                    auto* member_index = new (*module) IntegerConstant(Convert(ctx, Type::UInt), i);
+                                    auto* gmp = new (*module) GetMemberPtrInst(Convert(ctx, s), alloca, member_index);
+                                    auto* store = new (*module) StoreInst(generated_ir[member.value], gmp);
+                                    insert(gmp);
+                                    insert(store);
+                                }
+                            } else if (auto* a = cast<ArrayType>(decl->type())) {
+                                LCC_ASSERT(
+                                    c->values().size() == a->dimension(),
+                                    "Glint:IRGen: Compound literal initialiser for array type {} has invalid amount of members",
+                                    *decl->type()
+                                );
+                                for (usz i = 0; i < c->values().size(); ++i) {
+                                    auto member = c->values().at(i);
+                                    generate_expression(member.value);
+
+                                    auto* element_index = new (*module) IntegerConstant(Convert(ctx, Type::UInt), i);
+                                    auto* gep = new (*module) GEPInst(Convert(ctx, a->elem()), alloca, element_index);
+                                    auto* store = new (*module) StoreInst(generated_ir[member.value], gep);
+                                    insert(gep);
+                                    insert(store);
+                                }
+                            } else LCC_TODO(
+                                "IRGen:Glint: Compound literal initialising expression of type {} should be unwrapped into multiple GMP + STOREs",
+                                *decl->type()
+                            );
+                        } else {
+                            generate_expression(init_expr);
+                            // Store generated init_expr into above inserted declaration
+                            auto* local_init = new (*module) StoreInst(generated_ir[init_expr], alloca, expr->location());
+                            insert(local_init);
+                        }
                     }
                     generated_ir[expr] = alloca;
                 } break;
@@ -377,10 +427,9 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     generated_ir[expr] = cmpl;
                     insert(cmpl);
                 } break;
+
+                case TokenKind::Ampersand:
                 case TokenKind::At: {
-                    generated_ir[expr] = generated_ir[unary_expr->operand()];
-                } break;
-                case TokenKind::Ampersand: {
                     generated_ir[expr] = generated_ir[unary_expr->operand()];
                 } break;
 
@@ -415,6 +464,13 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                     generated_ir[expr] = eq;
                 } break;
+
+                case TokenKind::StarStar:
+                    LCC_TODO("IRGen for unary operator {}", ToString(unary_expr->op()));
+
+                case TokenKind::PlusPlus:
+                case TokenKind::MinusMinus:
+                    Diag::ICE("IRGen:Glint: Increment and decrement unary expressions should have been lowered to assignment and suchlike during semantic analysic");
 
                 // NOT a unary operator
                 case TokenKind::Invalid:
@@ -486,6 +542,15 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Gensym:
                 case TokenKind::MacroArg:
                 case TokenKind::Expression:
+                case TokenKind::PlusEq:
+                case TokenKind::MinusEq:
+                case TokenKind::StarEq:
+                case TokenKind::SlashEq:
+                case TokenKind::PercentEq:
+                case TokenKind::AmpersandEq:
+                case TokenKind::PipeEq:
+                case TokenKind::CaretEq:
+                case TokenKind::TildeEq:
                     LCC_ASSERT(false, "Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
             }
         } break;
@@ -710,7 +775,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Caret:
                 case TokenKind::Colon:
                 case TokenKind::ColonColon:
-                case TokenKind::ColonEq: // handled above
+                // handled above
+                case TokenKind::ColonEq:
                 case TokenKind::Comma:
                 case TokenKind::Dot:
                 case TokenKind::RightArrow:
@@ -760,8 +826,29 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::True:
                 case TokenKind::False:
                 case TokenKind::While:
-                    Diag(ctx, Diag::Kind::ICError, expr->location(), fmt::format("Unexpected operator {} in binary expression", ToString(binary_expr->op())));
-                    break;
+                case TokenKind::PlusPlus:
+                case TokenKind::MinusMinus:
+                case TokenKind::StarStar:
+                    Diag::ICE(
+                        ctx,
+                        expr->location(),
+                        "Unexpected operator {} in binary expression",
+                        ToString(binary_expr->op())
+                    );
+
+                case TokenKind::PlusEq:
+                case TokenKind::MinusEq:
+                case TokenKind::StarEq:
+                case TokenKind::SlashEq:
+                case TokenKind::PercentEq:
+                case TokenKind::AmpersandEq:
+                case TokenKind::PipeEq:
+                case TokenKind::CaretEq:
+                case TokenKind::TildeEq:
+                    LCC_TODO(
+                        "Binary operator {} in IRGen should have been lowered by semantic analysis",
+                        ToString(binary_expr->op())
+                    );
             }
 
             insert(as<Inst>(generated_ir[expr]));
@@ -1162,7 +1249,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             if (is<ObjectDecl>(name_ref->target()) and as<ObjectDecl>(name_ref->target())->linkage() == Linkage::Imported)
                 generate_expression(name_ref->target());
 
-            LCC_ASSERT(generated_ir[name_ref->target()], "NameRef {} references non-IRGenned expression...", fmt::ptr(name_ref));
+            LCC_ASSERT(
+                generated_ir[name_ref->target()],
+                "NameRef {} ({}) references non-IRGenned expression...",
+                name_ref->name(),
+                fmt::ptr(name_ref)
+            );
             generated_ir[expr] = generated_ir[name_ref->target()];
         } break;
 

@@ -566,7 +566,7 @@ std::string lcc::glint::Expr::name() const {
     LCC_UNREACHABLE();
 }
 
-std::vector<lcc::glint::Expr*> lcc::glint::Expr::children() const {
+auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
     switch (kind()) {
         case Kind::FuncDecl:
         case Kind::OverloadSet:
@@ -579,33 +579,33 @@ std::vector<lcc::glint::Expr*> lcc::glint::Expr::children() const {
         case Kind::IntrinsicCall:
         case Kind::Module:
         case Kind::Type:
-            if (auto t_dynarray = cast<DynamicArrayType>(type())) {
+            if (auto* t_dynarray = cast<DynamicArrayType>(type())) {
                 if (t_dynarray->initial_size())
                     return {t_dynarray->initial_size()};
             }
-            if (auto t_fixarray = cast<ArrayType>(type()))
+            if (auto* t_fixarray = cast<ArrayType>(type()))
                 return {t_fixarray->size()};
             return {};
 
         case Kind::While: {
-            auto w = as<lcc::glint::WhileExpr>(this);
+            const auto* w = as<lcc::glint::WhileExpr>(this);
             return {w->condition(), w->body()};
         }
 
         case Kind::For: {
-            auto f = as<lcc::glint::ForExpr>(this);
+            const auto* f = as<lcc::glint::ForExpr>(this);
             return {f->init(), f->condition(), f->increment(), f->body()};
         }
 
         case Kind::If: {
-            auto i = as<lcc::glint::IfExpr>(this);
+            const auto* i = as<lcc::glint::IfExpr>(this);
             if (i->otherwise())
                 return {i->condition(), i->then(), i->otherwise()};
             else return {i->condition(), i->then()};
         }
 
         case Kind::Return: {
-            auto ret = as<lcc::glint::ReturnExpr>(this);
+            const auto* ret = as<lcc::glint::ReturnExpr>(this);
             if (ret->value()) return {ret->value()};
             return {};
         }
@@ -613,14 +613,16 @@ std::vector<lcc::glint::Expr*> lcc::glint::Expr::children() const {
         case Kind::MemberAccess:
             return {as<lcc::glint::MemberAccessExpr>(this)->object()};
 
-        case Kind::CompoundLiteral:
-            return as<lcc::glint::CompoundLiteral>(this)->values();
+        case Kind::CompoundLiteral: {
+            const auto* c = as<lcc::glint::CompoundLiteral>(this);
+            return c->children();
+        }
 
         case Kind::Cast:
             return {as<lcc::glint::CastExpr>(this)->operand()};
 
         case Kind::Call: {
-            auto c = as<lcc::glint::CallExpr>(this);
+            const auto* c = as<lcc::glint::CallExpr>(this);
             std::vector<lcc::glint::Expr*> children{c->callee()};
             children.insert(children.end(), c->args().begin(), c->args().end());
             return children;
@@ -633,30 +635,30 @@ std::vector<lcc::glint::Expr*> lcc::glint::Expr::children() const {
             return {as<lcc::glint::AlignofExpr>(this)->expr()};
 
         case Kind::VarDecl: {
-            auto* v = as<lcc::glint::VarDecl>(this);
+            const auto* v = as<lcc::glint::VarDecl>(this);
             if (v->init()) return {v->init()};
             return {};
         } break;
 
         case Kind::NameRef: {
-            auto* n = as<lcc::glint::NameRefExpr>(this);
+            const auto* n = as<lcc::glint::NameRefExpr>(this);
             if (n->target())
                 return {n->target()};
             return {};
         }
 
         case Kind::Block: {
-            auto* b = as<lcc::glint::BlockExpr>(this);
+            const auto* b = as<lcc::glint::BlockExpr>(this);
             return b->children();
         }
 
         case Kind::Unary: {
-            auto* u = as<lcc::glint::UnaryExpr>(this);
+            const auto* u = as<lcc::glint::UnaryExpr>(this);
             return {u->operand()};
         }
 
         case Kind::Binary: {
-            auto b = as<lcc::glint::BinaryExpr>(this);
+            const auto* b = as<lcc::glint::BinaryExpr>(this);
             return {b->lhs(), b->rhs()};
         }
     }
@@ -924,7 +926,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
     /// Print a top-level node.
     void PrintTopLevelNode(const lcc::glint::Expr* e) {
         PrintHeader(e);
-        if (auto* f = cast<lcc::glint::FuncDecl>(e)) {
+        if (const auto* f = cast<lcc::glint::FuncDecl>(e)) {
             printed_functions.insert(f);
             if (auto* body = const_cast<lcc::glint::FuncDecl*>(f)->body()) {
                 if (auto* block = cast<lcc::glint::BlockExpr>(body)) {

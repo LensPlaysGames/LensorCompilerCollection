@@ -27,9 +27,11 @@ lcc::glint::Module::Module(
     if (is_logical_module) {
         ty = new (*this) FuncType({}, BuiltinType::Void(*this), {}, {});
     } else {
-        auto cchar_ty = FFIType::CChar(*this);
-        auto cint_ty = FFIType::CInt(*this);
-        auto char_ptr = new (*this) PointerType{new (*this) PointerType{cchar_ty}};
+        auto* cint_ty = FFIType::CInt(*this);
+
+        auto* cchar_ty = FFIType::CChar(*this);
+        auto* char_ptr = new (*this) PointerType{new (*this) PointerType{cchar_ty}};
+
         ty = new (*this) FuncType{
             {
                 {"__argc__", cint_ty, {}},

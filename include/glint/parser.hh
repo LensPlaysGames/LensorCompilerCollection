@@ -1,6 +1,7 @@
 #ifndef GLINT_PARSER_HH
 #define GLINT_PARSER_HH
 
+#include <functional>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/syntax/lexer.hh>
@@ -25,11 +26,11 @@ class Parser : public Lexer {
     std::unique_ptr<Module> mod{};
 
     /// The function we’re currently inside of.
-    FuncDecl* curr_func;
+    FuncDecl* curr_func{};
 
 public:
-    static std::unique_ptr<Module> Parse(Context* context, std::string_view source);
-    static std::unique_ptr<Module> Parse(Context* context, File& file);
+    static auto Parse(Context* context, std::string_view source) -> std::unique_ptr<Module>;
+    static auto Parse(Context* context, File& file) -> std::unique_ptr<Module>;
 
 private:
     static constexpr usz PrefixOperatorPrecedence = 10000;
@@ -39,20 +40,20 @@ private:
         Parser* parser;
         Scope* scope;
 
-        ScopeRAII(Parser* parser_, Scope* parent = nullptr)
+        explicit ScopeRAII(Parser* parser_, Scope* parent = nullptr)
             : parser(parser_), scope(new(*parser->mod) Scope(parent ? parent : parser->CurrScope())) {
             parser->scope_stack.push_back(scope);
         }
 
         ScopeRAII(const ScopeRAII&) = delete;
-        ScopeRAII operator=(const ScopeRAII&) = delete;
+        auto operator=(const ScopeRAII&) -> ScopeRAII = delete;
 
         ScopeRAII(ScopeRAII&& other) noexcept
             : parser(other.parser), scope(other.scope) {
             other.scope = nullptr;
         }
 
-        ScopeRAII& operator=(ScopeRAII&& other) noexcept {
+        auto operator=(ScopeRAII&& other) noexcept -> ScopeRAII& {
             if (this == &other) return *this;
             parser = other.parser;
             scope = other.scope;
@@ -69,20 +70,77 @@ private:
     Parser(Context* ctx, std::string_view source) : Lexer(ctx, source) {}
 
     /// Check if we’re at one of a set of tokens.
-    [[nodiscard]] static bool Is(GlintToken* tk, auto... tks) { return ((tk->kind == tks) or ...); }
-    [[nodiscard]] bool At(auto... tks) { return Is(&tok, tks...); }
+    [[nodiscard]]
+    static auto Is(GlintToken* tk, auto... tks) -> bool {
+        return ((tk->kind == tks) or ...);
+    }
+
+    [[nodiscard]]
+    auto At(auto... tks) -> bool {
+        return Is(&tok, tks...);
+    }
 
     /// Check if we’re at the start of an expression.
-    bool AtStartOfExpression();
+    auto AtStartOfExpression() -> bool;
 
     /// Like At(), but consume the token if it matches.
-    bool Consume(auto... tks) {
+    auto Consume(auto... tks) -> bool {
         if (At(tks...)) {
             NextToken();
             return true;
         }
         return false;
     }
+
+    enum class ExpressionSeparator {
+        Invalid = 0,
+        Soft,
+        Hard
+
+    };
+    auto AtExpressionSeparator(
+        ExpressionSeparator filter = ExpressionSeparator::Invalid
+    ) -> ExpressionSeparator {
+        using E = ExpressionSeparator;
+        if (
+            // not want_to_use_filter and consumed
+            (filter == E::Invalid and At(Tk::Comma))
+            // want_to_use_filter and filter_matches and consumed
+            or (filter != E::Invalid and filter == E::Soft and At(Tk::Comma))
+        ) return E::Soft;
+
+        if (
+            (filter == E::Invalid and At(Tk::Semicolon))
+            or (filter != E::Invalid and filter == E::Soft and At(Tk::Semicolon))
+        ) return E::Hard;
+
+        return E::Invalid;
+    };
+    auto ConsumeExpressionSeparator(
+        ExpressionSeparator filter = ExpressionSeparator::Invalid
+    ) -> ExpressionSeparator {
+        using E = ExpressionSeparator;
+        // if (
+        //     (not want_to_use_filter and consume)
+        //     or (want_to_use_filter and filter_matches and consume)
+        // )
+
+        if (
+            // not want_to_use_filter and consumed
+            (filter == E::Invalid and Consume(Tk::Comma))
+            // want_to_use_filter and filter_matches and consumed
+            or (filter != E::Invalid and filter == E::Soft and Consume(Tk::Comma))
+        ) return E::Soft;
+
+        if (
+            // not want_to_use_filter and consumed
+            (filter == E::Invalid and Consume(Tk::Semicolon))
+            // want_to_use_filter and filter_matches and consumed
+            or (filter != E::Invalid and filter == E::Hard and Consume(Tk::Semicolon))
+        ) return E::Hard;
+
+        return E::Invalid;
+    };
 
     /// Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }
