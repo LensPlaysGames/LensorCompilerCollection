@@ -270,10 +270,12 @@ void help() {
         "FLAGS:\n"
         "  -h, --help  ::  Show this help\n"
         "  -a, --all   ::  Print messages for every test\n"
+        "  -c, --count ::  Print counts at the end and for every test file processed\n"
     );
 }
 
 int main(int argc, const char** argv) {
+    bool option_count{false};
     for (int i = 1; i < argc; ++i) {
         std::string_view arg{argv[i]};
         if (arg.starts_with("-h") or arg.starts_with("--h") or arg.starts_with("-?")) {
@@ -282,6 +284,10 @@ int main(int argc, const char** argv) {
         }
         if (arg.starts_with("-a") or arg.starts_with("--all")) {
             option_print = true;
+            continue;
+        }
+        if (arg.starts_with("-c") or arg.starts_with("--count")) {
+            option_count = true;
             continue;
         }
         LCC_ASSERT(
@@ -295,9 +301,30 @@ int main(int argc, const char** argv) {
     langtest::TestContext out{};
     for (const auto& entry : std::filesystem::directory_iterator("ast")) {
         if (entry.is_regular_file()) {
-            if (option_print)
+            if (option_print or option_count)
                 fmt::print("{}:\n", entry.path().lexically_normal().filename().string());
-            out.merge(langtest::process_ast_test_file<GlintTest>(entry.path()));
+
+            auto count = langtest::process_ast_test_file<GlintTest>(entry.path());
+
+            if (option_count) {
+                fmt::print(
+                    "  {}PASSED:  {}/{}{}\n",
+                    C(lcc::utils::Colour::Green),
+                    count.count_passed(),
+                    count.count(),
+                    C(lcc::utils::Colour::Reset)
+                );
+                if (count.count_failed()) {
+                    fmt::print(
+                        "  {}FAILED:  {}{}\n",
+                        C(lcc::utils::Colour::Red),
+                        count.count_failed(),
+                        C(lcc::utils::Colour::Reset)
+                    );
+                }
+            }
+
+            out.merge(count);
         }
     }
 
