@@ -1,3 +1,5 @@
+#include <cli.hh>
+
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/format.hh>
@@ -18,69 +20,31 @@
 #include <intercept/parser.hh>
 #include <intercept/sema.hh>
 
-#include <cstdio>
+#include <cstdio>  // fopen and friends
+#include <cstdlib> // system
+#include <cstring> // strerror
+#include <filesystem>
 #include <fmt/format.h>
 #include <format>
 #include <string>
+#include <string_view>
 #include <vector>
 
-struct TwoColumnLayoutHelper {
-    struct Column {
-        const std::string_view a;
-        const std::string_view b;
-    };
-    std::vector<Column> columns;
-
-    /// Gap inserted between A and B columns.
-    std::string gap{"    "};
-
-    char padding_character{' '};
-
-    std::string get() const {
-        size_t longest_a_side = 0;
-        for (const auto& c : columns) {
-            if (c.a.size() > longest_a_side)
-                longest_a_side = c.a.size();
-        }
-
-        std::string out{};
-        for (const auto& c : columns) {
-            out += c.a;
-
-            if (c.b.size()) {
-                // Do padding if needed to line up b side
-                for (size_t i = c.a.size(); i < longest_a_side; ++i)
-                    out += padding_character;
-
-                out += gap;
-                out += c.b;
-            }
-        }
-
-        return out;
-    }
-
-    operator std::string() const {
-        return get();
-    }
-};
-
-namespace detail {
 void aluminium_handler() {
 #if defined(LCC_PLATFORM_WINDOWS)
     // Windows
-    system("start https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    std::system("start https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #elif defined(__APPLE__)
     // Apple
-    system("open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    std::system("open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #elif __linux__ || __unix__
     // Linux-ish
-    system("xdg-open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    std::system("xdg-open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #endif
 }
 
 /// Default target.
-const lcc::Target* default_target =
+const lcc::Target* const default_target =
 #if defined(LCC_PLATFORM_WINDOWS)
     lcc::Target::x86_64_windows;
 #elif defined(__APPLE__) or defined(__linux__)
@@ -90,173 +54,14 @@ const lcc::Target* default_target =
 #endif
 
 /// Default format
-const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
-} // namespace detail
+const lcc::Format* const default_format = lcc::Format::gnu_as_att_assembly;
 
-struct Options {
-    bool verbose{false};
-    bool ast{false};
-    bool ir{false};
-    bool mir{false};
-    bool stopat_syntax{false};
-    bool stopat_sema{false};
-    bool stopat_ir{false};
-    bool stopat_mir{false};
-    bool aluminium{false};
+auto main(int argc, const char** argv) -> int {
+    auto options = cli::parse(argc, argv);
 
-    std::vector<std::string> input_files{};
-    std::vector<std::string> include_directories{};
-    std::string output_filepath{};
-    int optimisation{0};
-    std::string optimisation_passes{};
-    std::string color{"auto"};
-    std::string language{"default"};
-    std::string format{"default"};
-};
-
-int main(int argc, const char** argv) {
-    Options options{};
-    // TODO: Handle reading options from file with @<path> syntax.
-    // TODO: Many languages will want their own "flags" or something like that
-    // of sorts that can be passed on the command line (I think in Glint this
-    // will be done as in-source attributes, but whatever, LCC isn't just
-    // about Glint). The driver should be made to accomodate this, somehow.
-    for (int i = 1; i < argc; ++i) {
-        auto next_arg = [&]() {
-            if (i + 1 >= argc) {
-                fmt::print("CLI ERROR: You probably gave an option and didn't supply a value at the very end of the command line\n");
-                exit(1);
-            }
-            return std::string_view{argv[++i]};
-        };
-        const auto arg = std::string_view{argv[i]};
-        if (arg.substr(0, 3) == "--h" or arg.substr(0, 2) == "-h") {
-            // clang-format off
-            fmt::print("USAGE: {} [FLAGS] [OPTIONS] [SOURCE FILES...]\n", argv[0]);
-            fmt::print("FLAGS:\n");
-            fmt::print("{}", TwoColumnLayoutHelper{{
-                {"  -v", "Enable verbose output\n"},
-                {"  --ast", "Emit AST in human-readable format\n"},
-                {"  --ir", "Emit LCC intermediate representation\n"},
-                {"  --mir", "Emit LCC machine instruction representation at various stages\n"},
-                {"  --stopat-syntax", "Request language does not process input further than syntactic analysis\n"},
-                {"  --stopat-sema", "Request language does not process input further than semantic analysis\n"},
-                {"  --stopat-ir", "Do not process input further than LCC's intermediate representation (IR)\n"},
-                {"  --stopat-mir", "Do not process input further than LCC's machine instruction representation (MIR)\n"},
-                {"  --aluminium", "That special something to spice up your compilation\n"}},
-            }.get());
-            fmt::print("OPTIONS:\n");
-            fmt::print("{}", TwoColumnLayoutHelper{{
-                {"  -I", "Add a directory to the include search paths\n"},
-                {"  -o", "Path to the output filepath where target code will be stored\n"},
-                {"  -O", "Set optimisation level (default 0)\n"},
-                {"", "    0, 1, 2, 3\n"},
-                {"  --passes", "Comma-separated list of optimisation passes to run\n"},
-                {"  --color", "Whether to include colors colours in the output (default: auto)\n"},
-                {"", "    always, auto, never\n"},
-                {"  -x", "What language to parse input code as (default: extension based)\n"},
-                {"", "    glint, ir\n"},
-                {"  -f", "What format to emit code in (default: asm)\n"},
-                // Basically, the name on the left of the colon will pick a default from
-                // one on the right of the colon based on the system the compiler was
-                // compiled for.
-                {"", "    asm: gnu-as-att,\n"},
-                {"", "    obj: elf, coff,\n"},
-                {"", "    IR: ir, llvm\n"},
-                }}.get());
-            // clang-format on
-            exit(0);
-        }
-
-        if (arg == "-v")
-            options.verbose = true;
-        else if (arg == "--ast")
-            options.ast = true;
-        else if (arg == "--ir")
-            options.ir = true;
-        else if (arg == "--mir")
-            options.mir = true;
-        else if (arg == "--stopat-syntax")
-            options.stopat_syntax = true;
-        else if (arg == "--stopat-sema")
-            options.stopat_sema = true;
-        else if (arg == "--stopat-ir")
-            options.stopat_ir = true;
-        else if (arg == "--stopat-mir")
-            options.stopat_mir = true;
-        else if (arg == "--aluminium")
-            options.aluminium = true;
-
-        else if (arg == "-I") {
-            // Add a directory to the include search paths
-            auto include_dir = next_arg();
-            options.include_directories.push_back(std::string(include_dir));
-        } else if (arg == "-o") {
-            // Path to the output filepath where target code will be stored
-            auto output_path = next_arg();
-            options.output_filepath = std::string(output_path);
-        } else if (arg == "-O") {
-            // Set optimisation level (default: 0)
-            auto o_level_str = next_arg();
-
-            auto o_level = 0;
-            if (o_level_str == "0")
-                ;
-            else if (o_level_str == "1")
-                o_level = 1;
-            else if (o_level_str == "2")
-                o_level = 2;
-            else if (o_level_str == "3")
-                o_level = 3;
-            else {
-                fmt::print("CLI ERROR: Invalid optimisation level {}\n", o_level_str);
-                exit(1);
-            }
-
-            options.optimisation = o_level;
-        } else if (arg == "--passes") {
-            // Comma-separated list of optimisation passes to run
-            auto passes = next_arg();
-            options.optimisation_passes = passes;
-        } else if (arg == "--color") {
-            // Whether to include colours in the output
-            auto color = next_arg();
-            if (color != "always" and color != "auto" and color != "never") {
-                fmt::print("CLI ERROR: Invalid color level {}\n", color);
-                exit(1);
-            }
-            options.color = color;
-        } else if (arg == "-x") {
-            // What language to parse input code as
-            auto lang = next_arg();
-            if (lang != "glint" and lang != "ir") {
-                fmt::print("CLI ERROR: Invalid lang {}\n", lang);
-                exit(1);
-            }
-            options.language = lang;
-        } else if (arg == "-f") {
-            // What format to emit code in
-            auto format = next_arg();
-            if (
-                format != "asm" and format != "gnu-as-att"
-                and format != "obj" and format != "elf" and format != "coff"
-                and format != "IR" and format != "ir" and format != "llvm"
-            ) {
-                fmt::print("CLI ERROR: Invalid format {}\n", format);
-                exit(1);
-            }
-            options.format = format;
-        } else if (arg.starts_with("-")) {
-            fmt::print(
-                "CLI ERROR: Unrecognized command line option or flag {}\n"
-                "    Prepend ./ or equivalent for file that starts with '-'\n",
-                arg
-            );
-            exit(1);
-        } else {
-            // Otherwise, it's a filepath
-            options.input_files.push_back(std::string(arg));
-        }
+    if (options.aluminium) {
+        aluminium_handler();
+        return 0;
     }
 
     /// Determine whether to use colours in the output.
@@ -279,8 +84,10 @@ int main(int argc, const char** argv) {
         lcc::Diag::Fatal("no input files");
 
     /// Compile the file.
+
+    // Get format from command line option, falling back to default.
     // TODO: Get target from "-t" or "--target" command line option.
-    auto* format = detail::default_format;
+    auto* format = default_format;
     if (options.format == "default") {
         ;
     } else if (options.format == "ir" or options.format == "IR") {
@@ -302,11 +109,12 @@ int main(int argc, const char** argv) {
     } else LCC_ASSERT(false, "Unhandled format");
 
     lcc::Context context{
-        detail::default_target,
+        default_target,
         format,
         use_colour,
         options.mir,
-        options.stopat_mir};
+        options.stopat_mir //
+    };
 
     context.add_include_directory(".");
     for (const auto& dir : options.include_directories) {
@@ -314,19 +122,21 @@ int main(int argc, const char** argv) {
         context.add_include_directory(dir);
     }
 
-    auto ConvertFileExtensionToOutputFormat = [&](std::string path_string) {
+    auto ConvertFileExtensionToOutputFormat = [&](const std::string& path_string) {
         const char* replacement = ".s";
         if (context.format()->format() == lcc::Format::LLVM_TEXTUAL_IR)
             replacement = ".ll";
         if (context.format()->format() == lcc::Format::ELF_OBJECT or context.format()->format() == lcc::Format::COFF_OBJECT)
             replacement = ".o";
 
-        return std::filesystem::path{path_string}.replace_extension(replacement).string();
+        return std::filesystem::path{path_string}
+            .replace_extension(replacement)
+            .string();
     };
 
     /// Common path after IR gen.
     auto EmitModule = [&](lcc::Module* m, std::string_view input_file_path, std::string_view output_file_path) {
-        if (options.optimisation_passes.size()) {
+        if (not options.optimisation_passes.empty()) {
             lcc::opt::RunPasses(m, options.optimisation_passes);
             if (options.ir) m->print_ir(use_colour);
         }
@@ -334,7 +144,8 @@ int main(int argc, const char** argv) {
         if (options.ir)
             m->print_ir(use_colour);
 
-        if (options.optimisation)
+        // NOTE: Only apply full optimisation if specific passes were not requested.
+        if (options.optimisation and options.optimisation_passes.empty())
             lcc::opt::Optimise(m, int(options.optimisation));
 
         if (options.ir) {
@@ -360,31 +171,57 @@ int main(int argc, const char** argv) {
     // NOTE: Moves the input file, so, uhh, don't use that after passing it to
     // this.
     auto specified_language = options.language;
-    auto GenerateOutputFile = [&](auto& input_file, std::string_view output_file_path) {
-        auto path_str = input_file;
-        auto f = fopen(input_file.data(), "rb");
-        if (not f) {
-            fmt::print("ERROR opening file {}\n", path_str);
+    auto GenerateOutputFile = [&](std::string& input_file, std::string_view output_file_path) {
+        std::filesystem::path path{input_file};
+        // Don't use input_file since it may be moved from.
+        auto path_str = path.lexically_normal().string();
+
+        if (not std::filesystem::exists(path)) {
+            lcc::Diag::Error(
+                "Input file does not exist: {}",
+                path.lexically_normal().string()
+            );
             return;
         }
+        if (not std::filesystem::is_regular_file(path)) {
+            lcc::Diag::Error(
+                "Input file exists, but is not a regular file: {}",
+                path.lexically_normal().string()
+            );
+            return;
+        }
+
+        auto* f = fopen(path.string().data(), "rb");
+        if (not f) {
+            lcc::Diag::Fatal(
+                "Could not open file at {}: {}",
+                path.lexically_normal().string(),
+                std::strerror(errno)
+            );
+            return;
+        }
+
+        // Get size of file, restoring cursor to beginning.
         fseek(f, 0, SEEK_END);
         size_t fsize = size_t(ftell(f));
         fseek(f, 0, SEEK_SET);
+
         std::vector<char> contents{};
         contents.resize(fsize);
         auto nread = fread(contents.data(), 1, fsize, f);
         if (nread != fsize) {
-            fmt::print(
+            fclose(f);
+            lcc::Diag::Fatal(
                 "ERROR reading file {}\n"
                 "    Got {} bytes, expected {}\n",
-                path_str,
+                path.lexically_normal().string(),
                 nread,
                 fsize
             );
-            fclose(f);
-            exit(1);
+            LCC_UNREACHABLE();
         }
         fclose(f);
+
         auto& file = context.create_file(
             std::move(input_file),
             std::move(contents)
@@ -398,31 +235,37 @@ int main(int argc, const char** argv) {
         }
 
         /// Glint.
-        else if (specified_language == "glint" or (specified_language == "default" and path_str.ends_with(".g"))) {
-            /// Parse the file.
+        if (specified_language == "glint" or (specified_language == "default" and path_str.ends_with(".g"))) {
+            // Parse the file.
             auto mod = lcc::glint::Parser::Parse(&context, file);
             if (options.ast and mod) mod->print(use_colour);
-            if (context.has_error()) return; // the error condition is handled by the caller already
+            // The error condition is handled by the caller already.
+            if (context.has_error()) return;
             if (options.stopat_syntax) return;
 
-            /// Perform semantic analysis.
-            lcc::glint::Sema::Analyse(&context, *mod, true);
+            // Perform semantic analysis.
+            lcc::glint::Sema::Analyse(
+                &context,
+                *mod,
+                context.use_colour_diagnostics()
+            );
             if (options.ast) {
                 fmt::print("\nAfter Sema:\n");
                 mod->print(use_colour);
             }
-            if (context.has_error()) return; // the error condition is handled by the caller already
-
-            /// Stop after sema if requested.
+            // The error condition is handled by the caller already.
+            if (context.has_error()) return;
+            // Stop after sema if requested.
             if (options.stopat_sema) return;
 
-            auto ir = lcc::glint::IRGen::Generate(&context, *mod);
+            auto* ir = lcc::glint::IRGen::Generate(&context, *mod);
+            if (context.has_error()) return;
 
             return EmitModule(ir, path_str, output_file_path);
         }
 
         /// Intercept.
-        else if (specified_language == "int" or (specified_language == "default" and path_str.ends_with(".int"))) {
+        if (specified_language == "int" or (specified_language == "default" and path_str.ends_with(".int"))) {
             /// Parse the file.
             auto mod = lcc::intercept::Parser::Parse(&context, file);
             if (context.has_error()) return; // the error condition is handled by the caller already
@@ -438,10 +281,7 @@ int main(int argc, const char** argv) {
             return EmitModule(lcc::intercept::IRGen::Generate(&context, *mod), path_str, output_file_path);
         }
 
-        /// Unknown.
-        else {
-            lcc::Diag::Fatal("Unrecognised input file type");
-        }
+        lcc::Diag::Fatal("Unrecognised input file type");
     };
 
     auto configured_output_file_path = options.output_filepath;
@@ -456,8 +296,8 @@ int main(int argc, const char** argv) {
     } else {
         if (not configured_output_file_path.empty()) {
             lcc::Diag::Fatal(
-                "Cannot specify -o when generating multiple output files (would overwrite the same file with every output)."
-                "If you have a suggestion of how you think this should behave, let a developer know."
+                "Cannot specify -o when generating multiple output files (would overwrite the same file with every output).\n"
+                "If you have a suggestion of how you think this should behave, let a developer know.\n"
             );
         }
 

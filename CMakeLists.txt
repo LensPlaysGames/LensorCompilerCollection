@@ -271,8 +271,8 @@ target_link_libraries(object PRIVATE options)
 add_library(
   liblcc STATIC
   include/lcc/calling_conventions/sysv_x86_64.hh
-  include/lcc/codegen/isel.hh
   include/lcc/codegen/gnu_as_att_assembly.hh
+  include/lcc/codegen/isel.hh
   include/lcc/codegen/mir.hh
   include/lcc/codegen/mir_utils.hh
   include/lcc/codegen/register_allocation.hh
@@ -307,6 +307,7 @@ add_library(
   include/lcc/utils/platform.hh
   include/lcc/utils/result.hh
   include/lcc/utils/rtti.hh
+  include/lcc/utils/twocolumnlayouthelper.hh
   lib/lcc/codegen/isel.cc
   lib/lcc/codegen/mir.cc
   lib/lcc/codegen/register_allocation.cc
@@ -336,7 +337,12 @@ set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
 target_link_libraries(liblcc PUBLIC object)
 
 # Add the driver.
-add_executable(lcc src/lcc.cc)
+add_executable(
+  lcc
+  src/cli.cc
+  src/lcc.cc
+)
+target_include_directories(lcc PUBLIC src)
 
 # Link lcc driver with language libraries.
 target_link_libraries(lcc PUBLIC glint)
