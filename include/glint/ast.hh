@@ -1761,7 +1761,10 @@ public:
     [[nodiscard]]
     auto last_expr() -> Expr** {
         if (_children.empty()) return nullptr;
-        auto last = &_children.back();
+
+        // Going in reverse, starting at the end, skip any function declarations.
+        // TODO: If every expression is a function declaration, return nullptr.
+        auto* last = &_children.back();
         auto last_index = last - _children.data();
         while (is<FuncDecl>(*last) and last_index--)
             last = _children.data() + last_index;

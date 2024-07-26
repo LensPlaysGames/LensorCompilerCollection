@@ -882,55 +882,72 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     if (not ty->return_type()->is_void()) {
         Expr** last{};
 
+        // Get last expression in function.
         if (auto* block = cast<BlockExpr>(decl->body())) {
-            // For anything except the top-level function, if there is an expected
-            // return value, there has to be one, otherwise it's an error.
-            // For the top level function of Glint programs, a return value is
-            // created if a valid one is not present.
-            if (block->children().empty()) {
-                if (decl->name() != "main") {
-                    Error(decl->location(), "Function `{}` has non-void return type, and must return a value", decl->name());
-                    return;
-                }
-
-                auto* inserted_return_value = new (mod) IntegerLiteral(0, {});
-                block->add(new (mod) ReturnExpr(inserted_return_value, {}));
-            }
-
-            last = block->last_expr();
-
-            // For the top level function of Glint programs, a return value is created
-            // if a valid one is not present. This includes if the last value is not
-            // convertible to the return type of main.
-            if (
-                decl->name() == "main"
-                and not is<ReturnExpr>(*last)
-                and TryConvert(last, ty->return_type()) <= 0
-            ) {
-                auto* inserted_return_value = new (mod) IntegerLiteral(0, {});
-                block->add(new (mod) ReturnExpr(inserted_return_value, {}));
+            if (not block->children().empty())
                 last = block->last_expr();
-            }
         } else last = &decl->body();
 
-        if (is<ReturnExpr>(*last)) return;
+        // If there was no last expression, then it is an ill-formed function---
+        // unless this is the top-level function, in which case we will insert a
+        // valid return value.
+        if (not last) {
+            if (decl != mod.top_level_function() and decl->name() != "main") {
+                Error(
+                    decl->location(),
+                    "No expression in body of function {}",
+                    decl->name()
+                );
+                return;
+            }
+            auto* inserted_return_value = new (mod) IntegerLiteral(0, {});
+            decl->body() = new (mod) ReturnExpr(inserted_return_value, {});
+            last = &decl->body();
+        }
 
-        if (not Convert(last, ty->return_type())) {
+        // We have a return expression, hurray!
+        if (auto ret = cast<ReturnExpr>(*last)) {
+            LCC_ASSERT(
+                TryConvert(&ret->value(), ty->return_type()) == 0,
+                "Last expression may be a return expression, sure, but the expression it's returning is not convertible to the return type!"
+            );
+            return;
+        }
+
+        // If the last expression is not a return expression and the type of the
+        // last expression is convertible to the return type, insert a return
+        // expression that returns the converted last expression.
+        if (Convert(last, ty->return_type())) {
+            if (is<BlockExpr>(decl->body()))
+                *last = new (mod) ReturnExpr(*last, {});
+            else decl->body() = new (mod) ReturnExpr(*last, {});
+            return;
+        }
+        // Otherwise, if the last expression is not a return expression and the
+        // type of that last expression is not convertible to the return type of
+        // the function, the program is ill-formed (type of return expression does
+        // not match return type of enclosing function)---unless this is the top-
+        // level function, in which case we will insert a valid return value.
+        if (decl != mod.top_level_function() and decl->name() != "main") {
             Error(
                 (*last)->location(),
-                "Type of last expression {} is not convertible to return type {}",
+                "Type of last expression {}, which is being implicitly returned, is not convertible to return type {}",
                 (*last)->type(),
                 ty->return_type()
             );
             return;
         }
 
-        LValueToRValue(last);
-
-        // Insert a `ReturnExpr` which returns `last`.
-        if (is<BlockExpr>(decl->body()))
-            *last = new (mod) ReturnExpr(*last, {});
-        else decl->body() = new (mod) ReturnExpr(*last, {});
+        // insert "return 0;"
+        auto* inserted_return_value = new (mod) IntegerLiteral(0, {});
+        auto* inserted_return = new (mod) ReturnExpr(inserted_return_value, {});
+        if (auto* b = cast<BlockExpr>(decl->body())) {
+            b->add(inserted_return);
+            last = b->last_expr();
+        } else {
+            decl->body() = inserted_return;
+            last = &decl->body();
+        }
     } else {
         if (auto* block = cast<BlockExpr>(decl->body())) {
             if (block->children().empty() or not is<ReturnExpr>(*block->last_expr()))
@@ -1140,7 +1157,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         /// The type of a block is the type of its last expression. Type
         /// inference is only used for the last expression in the block.
         case Expr::Kind::Block: {
-            auto block = as<BlockExpr>(expr);
+            auto* block = as<BlockExpr>(expr);
             if (block->children().empty()) {
                 block->type(Type::Void);
                 break;
@@ -1339,6 +1356,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             // Ensure named members exist in represented type.
             if (auto* union_t = cast<UnionType>(c->type())) {
+                (void) union_t;
                 LCC_TODO("Compound literal to union");
             } else if (auto* array_t = cast<ArrayType>(c->type())) {
                 if (c->values().size() != array_t->dimension()) {

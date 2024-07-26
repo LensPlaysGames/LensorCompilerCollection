@@ -694,7 +694,8 @@ auto lcc::glint::Module::deserialise(
                     "Cannot deserialise overload sets; sorry"
                 );
                 auto builtin_kind = BuiltinType::BuiltinKind(builtin_kind_value);
-                BuiltinType::Make(*this, builtin_kind, {});
+                // Purely for the side-effect of recording the type in the module.
+                (void) BuiltinType::Make(*this, builtin_kind, {});
             } break;
 
             // FFIType: ffi_kind :u16
@@ -705,7 +706,8 @@ auto lcc::glint::Module::deserialise(
                     length_array[i] = module_metadata_blob.at(type_offset++);
                 u16 ffi_kind_value = from_bytes<u16>(length_array);
                 auto ffi_kind = FFIType::FFIKind(ffi_kind_value);
-                FFIType::Make(*this, ffi_kind, {});
+                // Purely for the side-effect of recording the type in the module.
+                (void) FFIType::Make(*this, ffi_kind, {});
             } break;
 
             // PointerType, ReferenceType: type_index :TypeIndex

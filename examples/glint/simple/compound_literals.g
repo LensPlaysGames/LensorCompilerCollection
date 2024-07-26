@@ -53,4 +53,5 @@ sum_t : sum { number:cint length:uint };
 ;;   ;; native data like a C string, or something.
 ;;   foobar :: [byte view] !{ bar.data, bar.size };
 ;;   -bar;
+  @foo[0];
 };

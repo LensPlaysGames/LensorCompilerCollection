@@ -169,7 +169,11 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
     using K = glint::Expr::Kind;
     switch (expr->kind()) {
         case K::Block: {
-            for (auto e : as<BlockExpr>(expr)->children()) generate_expression(e);
+            auto* b = as<BlockExpr>(expr);
+            if (b->children().empty()) return;
+            for (auto* e : b->children())
+                generate_expression(e);
+            generated_ir[expr] = generated_ir[*b->last_expr()];
         } break;
 
         // Will be inlined anywhere it is used; a no-op for actual generation.
@@ -1182,7 +1186,16 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     return;
                 }
 
-                auto* load = new (*module) LoadInst(t_to, generated_ir[cast->operand()], expr->location());
+                if (not generated_ir[cast->operand()]) {
+                    expr->print(true);
+                    Diag::ICE("Cast cannot insert load when operand has not been IRGenned");
+                }
+
+                auto* load = new (*module) LoadInst(
+                    t_to,
+                    generated_ir[cast->operand()],
+                    expr->location()
+                );
                 generated_ir[expr] = load;
                 insert(load);
                 return;

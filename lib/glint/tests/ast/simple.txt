@@ -3,7 +3,7 @@ Empty
 ================
 ---
 
-(block (return (integer_literal)))
+(return (integer_literal))
 
 ================
 Empty, Whitespace
@@ -13,16 +13,34 @@ Empty, Whitespace
 
 ---
 
-(block (return (integer_literal)))
+(return (integer_literal))
 
 ================
-Empty, Expression Separators
+Empty, Hard Expression Separators
 ================
 ; ; ; ; ; ; ;
 ; ; ; ;
 ---
 
-(block (return (integer_literal)))
+(return (integer_literal))
+
+================
+Empty, Soft Expression Separators
+================
+,,,,,,   ,,  ,, , ,    , ,, ,
+,,    , ,  ,, ,,
+---
+
+(return (integer_literal))
+
+================
+Empty, Hard+Soft Expression Separators
+================
+;,,;,,;,,   ;,,;  ,,; ,; ;,; ;   , ;,, ,
+; ,,    ;, ,  ,, ,,  ;
+---
+
+(return (integer_literal))
 
 ================
 Return Literal Number
