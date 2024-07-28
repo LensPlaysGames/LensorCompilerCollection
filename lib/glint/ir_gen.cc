@@ -359,12 +359,20 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                             auto* local_init = new (*module) StoreInst(generated_ir[init_expr], alloca, expr->location());
                             insert(local_init);
                         }
+                    } else {
+                        // TODO: init with zero
                     }
                     generated_ir[expr] = alloca;
                 } break;
 
                 case Linkage::Imported: {
-                    auto* global = new (*module) GlobalVariable(module, Convert(ctx, decl->type()), decl->name(), decl->linkage(), nullptr);
+                    auto* global = new (*module) GlobalVariable(
+                        module,
+                        Convert(ctx, decl->type()),
+                        decl->name(),
+                        decl->linkage(),
+                        nullptr
+                    );
                     generated_ir[expr] = global;
                 } break;
 
@@ -375,12 +383,18 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case Linkage::Internal:
                 case Linkage::Used:
                 case Linkage::Exported: {
-                    Value* init = nullptr;
+                    Value* init{nullptr};
                     if (auto* init_expr = decl->init()) {
                         generate_expression(init_expr);
                         init = generated_ir[init_expr];
                     }
-                    auto* global = new (*module) GlobalVariable(module, Convert(ctx, decl->type()), decl->name(), decl->linkage(), init);
+                    auto* global = new (*module) GlobalVariable(
+                        module,
+                        Convert(ctx, decl->type()),
+                        decl->name(),
+                        decl->linkage(),
+                        init
+                    );
                     generated_ir[expr] = global;
                 } break;
 
@@ -485,7 +499,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                 case TokenKind::PlusPlus:
                 case TokenKind::MinusMinus:
-                    Diag::ICE("IRGen:Glint: Increment and decrement unary expressions should have been lowered to assignment and suchlike during semantic analysic");
+                    Diag::ICE("IRGen:Glint: Increment and decrement unary expressions should have been lowered to assignment and suchlike during semantic analysis");
 
                 // NOT a unary operator
                 case TokenKind::Invalid:
@@ -602,26 +616,26 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     // should turn into
                     //   bar.tag := foo.tag.x;
                     //   (:cint.ptr &bar.data) := 69;
-                    auto tag_ptr = new (*module) GetMemberPtrInst(
+                    auto* tag_ptr = new (*module) GetMemberPtrInst(
                         Convert(ctx, sum_type->struct_type()),
                         generated_ir[m->object()],
                         new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0),
                         m->location()
                     );
                     // NOTE: See how tag is member index + 1;
-                    auto tag_val = new (*module) IntegerConstant(Convert(ctx, Type::UInt), m->member() + 1);
-                    auto store_tag = new (*module) StoreInst(tag_val, tag_ptr, expr->location());
+                    auto* tag_val = new (*module) IntegerConstant(Convert(ctx, Type::UInt), m->member() + 1);
+                    auto* store_tag = new (*module) StoreInst(tag_val, tag_ptr, expr->location());
 
                     insert(tag_ptr);
                     insert(store_tag);
 
-                    auto data_ptr = new (*module) GetMemberPtrInst(
+                    auto* data_ptr = new (*module) GetMemberPtrInst(
                         Convert(ctx, sum_type->struct_type()),
                         generated_ir[m->object()],
                         new (*module) IntegerConstant(Convert(ctx, Type::UInt), 1),
                         m->location()
                     );
-                    auto store_data = new (*module) StoreInst(rhs, data_ptr, expr->location());
+                    auto* store_data = new (*module) StoreInst(rhs, data_ptr, expr->location());
 
                     insert(data_ptr);
                     insert(store_data);
@@ -655,7 +669,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 if (!lhs) LCC_ASSERT(false, "lvalue codegen for lhs of subscript didn't go as expected; sorry");
 
                 generate_expression(rhs_expr);
-                auto rhs = generated_ir[rhs_expr];
+                auto* rhs = generated_ir[rhs_expr];
 
                 Type* lhs_type_stripped = lhs_expr->type()->strip_references();
                 if (lhs_type_stripped->is_pointer()) {
@@ -693,8 +707,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             generate_expression(binary_expr->lhs());
             generate_expression(binary_expr->rhs());
 
-            auto lhs = generated_ir[binary_expr->lhs()];
-            auto rhs = generated_ir[binary_expr->rhs()];
+            auto* lhs = generated_ir[binary_expr->lhs()];
+            auto* rhs = generated_ir[binary_expr->rhs()];
 
             switch (binary_expr->op()) {
                 case TokenKind::Plus: {
@@ -1421,12 +1435,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             update_block(then);
             generate_expression(if_expr->then());
-            auto last_then_block = block;
+            auto* last_then_block = block;
             insert(new (*module) BranchInst(exit, expr->location()));
 
             update_block(otherwise);
             generate_expression(if_expr->otherwise());
-            auto last_else_block = block;
+            auto* last_else_block = block;
             insert(new (*module) BranchInst(exit, expr->location()));
 
             update_block(exit);
@@ -1454,12 +1468,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             generate_expression(call->callee());
 
-            auto function_type = as<FunctionType>(Convert(ctx, call->callee_type()));
+            auto* function_type = as<FunctionType>(Convert(ctx, call->callee_type()));
 
             std::vector<Value*> args{};
             for (const auto& [i, arg] : vws::enumerate(call->args())) {
                 generate_expression(arg);
-                if (auto alloca = cast<AllocaInst>(generated_ir[arg])) {
+                if (auto* alloca = cast<AllocaInst>(generated_ir[arg])) {
                     if (alloca->allocated_type() == function_type->params().at(usz(i))) {
                         auto* load = new (*module) LoadInst(function_type->params().at(usz(i)), alloca);
                         generated_ir[arg] = load;
@@ -1480,7 +1494,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 args.push_back(generated_ir[arg]);
             }
 
-            auto ir_call = new (*module) CallInst(generated_ir[call->callee()], function_type, std::move(args), expr->location());
+            auto* ir_call = new (*module) CallInst(generated_ir[call->callee()], function_type, std::move(args), expr->location());
 
             generated_ir[expr] = ir_call;
             insert(ir_call);
@@ -1576,10 +1590,11 @@ void IRGen::generate_function(glint::FuncDecl* f) {
             update_block(block);
 
             // Bind param instructions.
+            // TODO: Only if used. Or remove if unused after body generated.
             for (auto [i, param] : vws::enumerate(f->param_decls())) {
-                auto inst = function->param(usz(i));
-                auto alloca = new (*module) AllocaInst(inst->type(), param->location());
-                auto store = new (*module) StoreInst(inst, alloca);
+                auto* inst = function->param(usz(i));
+                auto* alloca = new (*module) AllocaInst(inst->type(), param->location());
+                auto* store = new (*module) StoreInst(inst, alloca);
                 insert(alloca);
                 insert(store);
                 generated_ir[param] = alloca;

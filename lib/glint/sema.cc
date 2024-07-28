@@ -1242,13 +1242,17 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 // An untyped compound literal initialiser is allowed for typed
                 // declarations.
                 auto* c = cast<CompoundLiteral>(v->init());
+                // Set the type of the compound literal from the type of the declaration,
+                // if the compound literal's type isn't already explicitly declared.
                 if (c and c->type()->is_unknown())
                     *c->type_ref() = v->type();
 
-                auto* s = cast<SumType>(v->type());
                 // compound literal initialiser for sum type
-                // foo :sum_t !{ .member expression }
-                // foo :sum_t; foo.member := expression;
+                //     foo :sum_t !{ .member expression }
+                // should turn into
+                //     foo :sum_t;
+                //     foo.member := expression;
+                auto* s = cast<SumType>(v->type());
                 if (c and s) {
                     auto member = c->values().at(0);
                     usz member_index = usz(-1);
@@ -2244,8 +2248,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     /// If the callee is an overload set, perform overload resolution.
     if (is<OverloadSet>(expr->callee()) or expr->callee()->type()->is_overload_set()) {
         for (auto*& arg : expr->args()) (void) Analyse(&arg);
-
-        /// If any of the arguments errored, we can’t resolve this.
+        // If any of the arguments errored, we can’t resolve this.
         if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
             expr->set_sema_errored();
             return;
@@ -2356,7 +2359,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         //
         // Collect their overload sets.
 
-        // ***** 2eβ//
+        // ***** 2eβ
         // Remove from O all candidates C that do no accept any overload of this
         // argument as a parameter.
 
@@ -2549,6 +2552,13 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         return;
     }
 
+    for (auto*& arg : expr->args()) (void) Analyse(&arg);
+    // If any of the arguments errored, we can’t resolve this.
+    if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
+        expr->set_sema_errored();
+        return;
+    }
+
     /// If the callee is a function pointer, dereference it.
     if (auto* ty = expr->callee()->type(); ty->is_pointer() and ty->elem()->is_function())
         InsertImplicitCast(&expr->callee(), ty->elem());
@@ -2698,22 +2708,22 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     /// type. This is all handled transparently by Convert().
     for (usz i = 0, end = std::min(expr->args().size(), func_type->params().size()); i < end; i++) {
         // LValueToRValue(expr->args().data() + i);
-        if (not Convert(expr->args().data() + i, func_type->params()[i].type)) {
+        if (not Convert(expr->args().data() + i, func_type->params().at(i).type)) {
             // got
-            auto* from = expr->args()[i]->type();
+            auto* from = expr->args().at(i)->type();
             // expected
-            auto* to = func_type->params()[i].type;
+            auto* to = func_type->params().at(i).type;
 
             if (from->is_dynamic_array() and to->is_array()) {
                 Error(
-                    expr->args()[i]->location(),
+                    expr->args().at(i)->location(),
                     "Creation of a fixed array has to be done manually, with elements copied in from a dynamic array.\n"
                     "This way, /you/ can ensure that /all/ of the array's elements are initialised.\n",
                     from,
                     to
                 );
             } else Error(
-                expr->args()[i]->location(),
+                expr->args().at(i)->location(),
                 "Type of argument {} is not convertible to parameter type {}",
                 from,
                 to
