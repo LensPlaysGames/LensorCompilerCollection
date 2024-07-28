@@ -162,8 +162,9 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
     // Possible FIXME: I think this is only ever used for early return. Maybe
     // we could just handle early returns specifically and not have this?
     if (block->closed()) {
-        // TODO: Unique block name, or something.
-        update_block(new (*module) lcc::Block(fmt::format("body.{}", total_block)));
+        update_block(
+            new (*module) lcc::Block(fmt::format("body.{}", total_block))
+        );
     }
 
     using K = glint::Expr::Kind;
@@ -176,7 +177,6 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             generated_ir[expr] = generated_ir[*b->last_expr()];
         } break;
 
-        // Will be inlined anywhere it is used; a no-op for actual generation.
         case K::IntegerLiteral: {
             auto* literal = new (*module) lcc::IntegerConstant(
                 Convert(ctx, expr->type()),
@@ -212,7 +212,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     if (auto* dynamic_array_t = cast<DynamicArrayType>(decl->type())) {
                         constexpr usz default_dynamic_array_capacity = 8;
 
-                        Value* capacity_val;
+                        Value* capacity_val{};
                         lcc::Type* capacity_val_type = Convert(ctx, dynamic_array_t->struct_type()->members()[2].type);
                         if (dynamic_array_t->initial_size()) {
                             LCC_ASSERT(
@@ -235,6 +235,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                                 default_dynamic_array_capacity
                             );
                         }
+                        LCC_ASSERT(
+                            capacity_val,
+                            "One of the if branches above should have set the value, but it is null"
+                        );
 
                         // TODO: Don't use hard-coded struct member index.
                         auto* capacity_ptr = new (*module) GetMemberPtrInst(
@@ -242,7 +246,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                             alloca,
                             new (*module) IntegerConstant(Convert(ctx, Type::UInt), 2)
                         );
-                        auto capacity_store = new (*module) StoreInst(capacity_val, capacity_ptr);
+                        auto* capacity_store = new (*module) StoreInst(capacity_val, capacity_ptr);
                         insert(capacity_ptr);
                         insert(capacity_store);
 
@@ -255,11 +259,11 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                             alloca,
                             new (*module) IntegerConstant(Convert(ctx, Type::UInt), 1)
                         );
-                        auto size_store = new (*module) StoreInst(size_val, size_ptr);
+                        auto* size_store = new (*module) StoreInst(size_val, size_ptr);
                         insert(size_ptr);
                         insert(size_store);
 
-                        Value* alloc_size_bytes;
+                        Value* alloc_size_bytes{};
                         if (dynamic_array_t->initial_size()) {
                             auto* initial_size = new (*module) LoadInst(
                                 Convert(ctx, dynamic_array_t->initial_size()->type()),
@@ -274,6 +278,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                                 default_dynamic_array_capacity * dynamic_array_t->element_type()->size_in_bytes(ctx)
                             );
                         }
+                        LCC_ASSERT(
+                            alloc_size_bytes,
+                            "One of the if branches above should have set the value, but it is null"
+                        );
 
                         auto malloc_func = module->function_by_name("malloc");
                         LCC_ASSERT(malloc_func, "Glint IRGen couldn't find `malloc'");
@@ -296,6 +304,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                     if (auto* init_expr = decl->init()) {
                         if (auto* c = cast<CompoundLiteral>(init_expr)) {
+                            // Compound Literal Initialising Expression of a Struct Type
                             if (auto* s = cast<StructType>(decl->type())) {
                                 LCC_ASSERT(
                                     c->values().size() == s->members().size(),
@@ -322,7 +331,9 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                                     insert(gmp);
                                     insert(store);
                                 }
-                            } else if (auto* a = cast<ArrayType>(decl->type())) {
+                            }
+                            // Compound Literal Initialising Expression of a Fixed Array Type
+                            else if (auto* a = cast<ArrayType>(decl->type())) {
                                 LCC_ASSERT(
                                     c->values().size() == a->dimension(),
                                     "Glint:IRGen: Compound literal initialiser for array type {} has invalid amount of members",
@@ -1476,7 +1487,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         } break;
 
         case K::IntrinsicCall: {
-            auto intrinsic = as<IntrinsicCallExpr>(expr);
+            auto* intrinsic = as<IntrinsicCallExpr>(expr);
             switch (intrinsic->intrinsic_kind()) {
                 /// Handled by sema.
                 case IntrinsicKind::BuiltinFilename:
@@ -1506,7 +1517,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         } break;
 
         case K::MemberAccess: {
-            auto member_access = as<MemberAccessExpr>(expr);
+            auto* member_access = as<MemberAccessExpr>(expr);
 
             generate_expression(member_access->object());
 
@@ -1524,16 +1535,16 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 member_access->struct_type(),
                 "MemberAccessExpr should have struct type finalised by the type-checker, but it is NULL at time of IRGen"
             );
-            auto struct_t = Convert(ctx, member_access->struct_type());
-            auto instance_pointer = generated_ir[member_access->object()];
-            auto index = new (*module) IntegerConstant(lcc::IntegerType::Get(ctx, 64), member_access->member());
-            auto gmp = new (*module) GetMemberPtrInst(struct_t, instance_pointer, index);
+            auto* struct_t = Convert(ctx, member_access->struct_type());
+            auto* instance_pointer = generated_ir[member_access->object()];
+            auto* index = new (*module) IntegerConstant(lcc::IntegerType::Get(ctx, 64), member_access->member());
+            auto* gmp = new (*module) GetMemberPtrInst(struct_t, instance_pointer, index);
             generated_ir[expr] = gmp;
             insert(gmp);
         } break;
 
         case K::EnumeratorDecl: {
-            auto enumerator = as<EnumeratorDecl>(expr);
+            auto* enumerator = as<EnumeratorDecl>(expr);
             generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, enumerator->type()), enumerator->value());
         } break;
 
