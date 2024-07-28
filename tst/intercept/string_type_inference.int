@@ -1,9 +1,0 @@
-;; 0
-;; Infer this!
-
-puts : ext void(s : @byte)
-
-str :: "Infer this!"[0]
-
-puts(str)
-0

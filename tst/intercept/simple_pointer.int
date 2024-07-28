@@ -1,9 +1,0 @@
-;; 69
-
-;; Using a pointer to mutate an int variable that may be created at
-;; any time!
-bar : void (ptr : @int) @ptr := 69
-
-number : int
-bar(&number)
-number

@@ -1,8 +1,0 @@
-;; 0
-
-;; This represents a returned comparison from the root.
-;; It should NOT trigger an error for a top-level comparison.
-
-a: int = 69;
-b: int = 42;
-a = b;

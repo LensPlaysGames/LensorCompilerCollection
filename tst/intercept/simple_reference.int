@@ -1,9 +1,0 @@
-;; 69
-
-;; Using a reference to mutate an int variable that may be created
-;; at any time!
-bar : void (ref : &int) ref := 69
-
-number : int = 42
-bar(number)
-number

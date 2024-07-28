@@ -1,7 +1,0 @@
-;; LABELS overloading
-;; ERROR
-
-foo : void (x : int) {}
-foo : int (x: int) 42
-
-foo(420)

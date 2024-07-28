@@ -1,5 +1,0 @@
-;; ERROR
-
-bar 42;
-
-bar : void () {}

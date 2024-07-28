@@ -1,8 +1,0 @@
-;; 69
-
-foo: int(n : int) = n
-bar: int() {
-  x: int = 69
-  foo(x)
-}
-bar()

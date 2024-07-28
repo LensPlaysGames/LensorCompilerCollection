@@ -1,7 +1,0 @@
-;; 69
-
-;; NOTE: currently broken because of the ISel bug.
-
-a : int = 34
-b :: a + 1
-a + b

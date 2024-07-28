@@ -1,6 +1,0 @@
-;; 69
-
-a     : int  = 69;
-a_ptr : @int = &a;
-
-@a_ptr;

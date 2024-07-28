@@ -1,4 +1,0 @@
-;; 42
-
-foo : int (a b c d : int) = a + b + c + d;
-foo 11 11 11 11;

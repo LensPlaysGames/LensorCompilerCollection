@@ -1,9 +1,0 @@
-;; 69
-
-foo: int(x : int) {
-  if x = 1 then return 42;
-  if x = 2 then return 69;
-  31;
-};
-
-foo 2;

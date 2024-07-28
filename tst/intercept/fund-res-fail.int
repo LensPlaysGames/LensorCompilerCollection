@@ -1,6 +1,0 @@
-;; ERROR
-
-foo : void () {
-    bar()
-    { bar : void() { } }
-}

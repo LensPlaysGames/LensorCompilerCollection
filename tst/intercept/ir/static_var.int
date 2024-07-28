@@ -1,8 +1,0 @@
-;; R %lcc %s --ir
-
-;; d t %[0-9]+
-
-;; *     (?<val>$t) = load i64 from @x
-;; +     return i64 $val
-static x :: 32;
-x;

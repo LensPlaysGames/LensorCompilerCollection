@@ -1,4 +1,0 @@
-;; 38
-;; This message was printed by a syscall
-
-__builtin_syscall(1, 1, "This message was printed by a syscall\n"[0], 38)

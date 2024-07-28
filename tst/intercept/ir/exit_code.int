@@ -1,9 +1,0 @@
-;; R %lcc %s --ir
-
-;; Declare `i_` as regex to match any bitwidth signed integer
-;; d i_ i[0-9]+
-
-;; * main : (?<ret_type>$i_)
-;; *     return $ret_type 69
-
-69;

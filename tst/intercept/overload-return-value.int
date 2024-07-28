@@ -1,7 +1,0 @@
-;; LABELS overloading
-;; 42
-
-foo : int (x : byte) 42
-foo : int (x : int) 69
-
-foo (1 as byte)

@@ -1,6 +1,0 @@
-;; 69
-
-macro thirty_four emits 34 endmacro
-macro sixty_nine emits thirty_four + 35 endmacro
-
-sixty_nine

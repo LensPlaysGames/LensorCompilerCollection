@@ -236,26 +236,6 @@ target_include_directories(glint PUBLIC include)
 target_link_libraries(glint PRIVATE options)
 target_link_libraries(glint PRIVATE object)
 
-# Intercept language library (will remove soon)
-add_library(
-  intercept STATIC
-  include/intercept/ast.hh
-  include/intercept/eval.hh
-  include/intercept/ir_gen.hh
-  include/intercept/lexer.hh
-  include/intercept/parser.hh
-  include/intercept/sema.hh
-  lib/intercept/ast.cc
-  lib/intercept/eval.cc
-  lib/intercept/ir_gen.cc
-  lib/intercept/lexer.cc
-  lib/intercept/parser.cc
-  lib/intercept/sema.cc
-)
-target_include_directories(intercept PUBLIC include)
-target_link_libraries(intercept PRIVATE options)
-target_link_libraries(intercept PRIVATE object)
-
 # Generic object library (convertible to ELF and COFF, currently)
 add_library(
   object STATIC
@@ -347,7 +327,6 @@ target_include_directories(lcc PUBLIC src)
 
 # Link lcc driver with language libraries.
 target_link_libraries(lcc PUBLIC glint)
-target_link_libraries(lcc PUBLIC intercept)
 
 # Apply options.
 target_link_libraries(liblcc PRIVATE options)

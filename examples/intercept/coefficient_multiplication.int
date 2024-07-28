@@ -1,4 +1,0 @@
-;; In Intercept, you may multiply integers simply by writing them next to
-;; each other, like in math.
-x :: 17;
-4 x + 1;

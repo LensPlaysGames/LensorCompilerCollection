@@ -15,10 +15,6 @@
 #include <glint/ir_gen.hh>
 #include <glint/parser.hh>
 #include <glint/sema.hh>
-#include <intercept/ast.hh>
-#include <intercept/ir_gen.hh>
-#include <intercept/parser.hh>
-#include <intercept/sema.hh>
 
 #include <cstdio>  // fopen and friends
 #include <cstdlib> // system
@@ -262,23 +258,7 @@ auto main(int argc, const char** argv) -> int {
             if (context.has_error()) return;
 
             return EmitModule(ir, path_str, output_file_path);
-        }
 
-        /// Intercept.
-        if (specified_language == "int" or (specified_language == "default" and path_str.ends_with(".int"))) {
-            /// Parse the file.
-            auto mod = lcc::intercept::Parser::Parse(&context, file);
-            if (context.has_error()) return; // the error condition is handled by the caller already
-            if (options.ast) mod->print(use_colour);
-            if (options.stopat_syntax) return;
-
-            /// Perform semantic analysis.
-            lcc::intercept::Sema::Analyse(&context, *mod, true);
-            if (context.has_error()) return; // the error condition is handled by the caller already
-            if (options.ast) mod->print(use_colour);
-            if (options.stopat_sema) return;
-
-            return EmitModule(lcc::intercept::IRGen::Generate(&context, *mod), path_str, output_file_path);
         }
 
         lcc::Diag::Fatal("Unrecognised input file type");

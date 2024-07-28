@@ -1,7 +1,0 @@
-;; 0
-
-foo: void() {
-  34 + 35;
-};
-foo; ;; this is fine because discarding void is allowed
-foo;

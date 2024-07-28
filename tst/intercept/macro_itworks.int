@@ -1,7 +1,0 @@
-;; 69
-
-macro add34 $arg1 emits
-  $arg1 + 34
-endmacro
-
-add34 35
