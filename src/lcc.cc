@@ -10,11 +10,7 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/platform.hh>
 
-// FIXME: We should probably have a more unified API for each language
-#include <glint/ast.hh>
-#include <glint/ir_gen.hh>
-#include <glint/parser.hh>
-#include <glint/sema.hh>
+#include <glint/driver.hh>
 
 #include <cstdio>  // fopen and friends
 #include <cstdlib> // system
@@ -51,6 +47,61 @@ const lcc::Target* const default_target =
 
 /// Default format
 const lcc::Format* const default_format = lcc::Format::gnu_as_att_assembly;
+
+[[nodiscard]] auto read_file_contents(
+    lcc::Context* context,
+    std::string_view input_filepath
+) -> lcc::Result<std::vector<char>> {
+    std::filesystem::path path{input_filepath};
+    // Don't use input_file since it may be moved from.
+    auto path_str = path.lexically_normal().string();
+
+    if (not std::filesystem::exists(path)) {
+        return lcc::Diag::Error(
+            "Input file does not exist: {}",
+            path.lexically_normal().string()
+        );
+    }
+    if (not std::filesystem::is_regular_file(path)) {
+        return lcc::Diag::Error(
+            "Input file exists, but is not a regular file: {}",
+            path.lexically_normal().string()
+        );
+    }
+
+    auto* f = fopen(path.string().data(), "rb");
+    if (not f) {
+        lcc::Diag::Fatal(
+            "Could not open file at {}: {}",
+            path.lexically_normal().string(),
+            std::strerror(errno)
+        );
+        LCC_UNREACHABLE();
+    }
+
+    // Get size of file, restoring cursor to beginning.
+    fseek(f, 0, SEEK_END);
+    size_t fsize = size_t(ftell(f));
+    fseek(f, 0, SEEK_SET);
+
+    std::vector<char> contents{};
+    contents.resize(fsize);
+    auto nread = fread(contents.data(), 1, fsize, f);
+    if (nread != fsize) {
+        fclose(f);
+        lcc::Diag::Fatal(
+            "ERROR reading file {}\n"
+            "    Got {} bytes, expected {}\n",
+            path.lexically_normal().string(),
+            nread,
+            fsize
+        );
+        LCC_UNREACHABLE();
+    }
+    fclose(f);
+
+    return contents;
+}
 
 auto main(int argc, const char** argv) -> int {
     auto options = cli::parse(argc, argv);
@@ -107,9 +158,14 @@ auto main(int argc, const char** argv) -> int {
     lcc::Context context{
         default_target,
         format,
-        use_colour,
-        options.mir,
-        options.stopat_mir //
+        lcc::Context::Options{
+            (lcc::Context::OptionColour) use_colour,
+            options.ast,
+            options.stopat_syntax,
+            options.stopat_sema,
+            options.mir,
+            options.stopat_mir //
+        }                      //
     };
 
     context.add_include_directory(".");
@@ -132,6 +188,8 @@ auto main(int argc, const char** argv) -> int {
 
     /// Common path after IR gen.
     auto EmitModule = [&](lcc::Module* m, std::string_view input_file_path, std::string_view output_file_path) {
+        if (not m) return;
+
         if (not options.optimisation_passes.empty()) {
             lcc::opt::RunPasses(m, options.optimisation_passes);
             if (options.ir) m->print_ir(use_colour);
@@ -161,7 +219,7 @@ auto main(int argc, const char** argv) -> int {
         m->emit(output_file_path);
 
         if (options.verbose)
-            fmt::print("Generated output from {} at {}\n", input_file_path, output_file_path);
+            fmt::print("Generated output artifact from input component {} at {}\n", input_file_path, output_file_path);
     };
 
     // NOTE: Moves the input file, so, uhh, don't use that after passing it to
@@ -187,81 +245,36 @@ auto main(int argc, const char** argv) -> int {
             return;
         }
 
-        auto* f = fopen(path.string().data(), "rb");
-        if (not f) {
-            lcc::Diag::Fatal(
-                "Could not open file at {}: {}",
-                path.lexically_normal().string(),
-                std::strerror(errno)
-            );
-            return;
-        }
-
-        // Get size of file, restoring cursor to beginning.
-        fseek(f, 0, SEEK_END);
-        size_t fsize = size_t(ftell(f));
-        fseek(f, 0, SEEK_SET);
-
-        std::vector<char> contents{};
-        contents.resize(fsize);
-        auto nread = fread(contents.data(), 1, fsize, f);
-        if (nread != fsize) {
-            fclose(f);
-            lcc::Diag::Fatal(
-                "ERROR reading file {}\n"
-                "    Got {} bytes, expected {}\n",
-                path.lexically_normal().string(),
-                nread,
-                fsize
-            );
-            LCC_UNREACHABLE();
-        }
-        fclose(f);
+        auto contents = read_file_contents(&context, input_file);
+        if (not contents) return;
 
         auto& file = context.create_file(
             std::move(input_file),
-            std::move(contents)
+            std::move(*contents)
         );
 
         /// LCC IR.
-        if (specified_language == "ir" or (specified_language == "default" and path_str.ends_with(".lcc"))) {
+        if (
+            specified_language == "ir"
+            or (specified_language == "default" and path_str.ends_with(".lcc"))
+        ) {
             auto mod = lcc::Module::Parse(&context, file);
             if (context.has_error()) return; // the error condition is handled by the caller already
-            return EmitModule(mod.get(), path_str, output_file_path);
+            EmitModule(mod.get(), path_str, output_file_path);
+            return;
         }
 
         /// Glint.
-        if (specified_language == "glint" or (specified_language == "default" and path_str.ends_with(".g"))) {
-            // Parse the file.
-            auto mod = lcc::glint::Parser::Parse(&context, file);
-            if (options.ast and mod) mod->print(use_colour);
-            // The error condition is handled by the caller already.
-            if (context.has_error()) return;
-            if (options.stopat_syntax) return;
-
-            // Perform semantic analysis.
-            lcc::glint::Sema::Analyse(
-                &context,
-                *mod,
-                context.use_colour_diagnostics()
-            );
-            if (options.ast) {
-                fmt::print("\nAfter Sema:\n");
-                mod->print(use_colour);
-            }
-            // The error condition is handled by the caller already.
-            if (context.has_error()) return;
-            // Stop after sema if requested.
-            if (options.stopat_sema) return;
-
-            auto* ir = lcc::glint::IRGen::Generate(&context, *mod);
-            if (context.has_error()) return;
-
-            return EmitModule(ir, path_str, output_file_path);
-
+        if (
+            specified_language == "glint"
+            or (specified_language == "default" and path_str.ends_with(".g"))
+        ) {
+            auto* ir = lcc::glint::produce_module(&context, file);
+            EmitModule(ir, path_str, output_file_path);
+            return;
         }
 
-        lcc::Diag::Fatal("Unrecognised input file type");
+        lcc::Diag::Fatal("Unrecognised input file type: consider passing `-x <lang>' to force a specific language.");
     };
 
     auto configured_output_file_path = options.output_filepath;
@@ -272,7 +285,17 @@ auto main(int argc, const char** argv) -> int {
 
         GenerateOutputFile(input_files[0], output_file_path);
         if (context.has_error()) return 1;
-        if (options.verbose) fmt::print("Generated output at {}\n", output_file_path);
+
+        if (
+            options.verbose
+            and not(
+                options.stopat_syntax
+                or options.stopat_sema
+                or options.stopat_ir
+                or options.stopat_mir
+            )
+        ) fmt::print("Generated final output at {}\n", output_file_path);
+
     } else {
         if (not configured_output_file_path.empty()) {
             lcc::Diag::Fatal(

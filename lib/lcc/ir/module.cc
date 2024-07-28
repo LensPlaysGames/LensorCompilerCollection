@@ -280,7 +280,7 @@ void Module::lower() {
                                 LCC_ASSERT(
                                     store->val()->type() == Type::PtrTy,
                                     "Cannot lower store to memcpy when value is not of pointer type (it's {})",
-                                    store->val()->type()->string(context()->use_colour_diagnostics())
+                                    store->val()->type()->string(context()->option_use_colour())
                                 );
                             }
 
@@ -334,13 +334,13 @@ void Module::emit(std::filesystem::path output_file_path) {
         case Format::GNU_AS_ATT_ASSEMBLY: {
             auto machine_ir = mir();
 
-            if (_ctx->should_print_mir())
+            if (_ctx->option_print_mir())
                 fmt::print("{}", PrintMIR(vars(), machine_ir));
 
             for (auto& mfunc : machine_ir)
                 select_instructions(this, mfunc);
 
-            if (_ctx->should_print_mir()) {
+            if (_ctx->option_print_mir()) {
                 fmt::print("\nAfter ISel\n");
                 if (_ctx->target()->is_arch_x86_64()) {
                     for (auto& f : machine_ir)
@@ -389,7 +389,7 @@ void Module::emit(std::filesystem::path output_file_path) {
             for (auto& mfunc : machine_ir)
                 allocate_registers(desc, mfunc);
 
-            if (_ctx->should_print_mir()) {
+            if (_ctx->option_print_mir()) {
                 fmt::print("\nAfter RA\n");
                 if (_ctx->target()->is_arch_x86_64()) {
                     for (auto& f : machine_ir)
@@ -402,7 +402,7 @@ void Module::emit(std::filesystem::path output_file_path) {
                 }
             }
 
-            if (_ctx->stopat_mir()) std::exit(0);
+            if (_ctx->option_stopat_mir()) std::exit(0);
 
             if (_ctx->format()->format() == Format::GNU_AS_ATT_ASSEMBLY) {
                 if (_ctx->target()->is_arch_x86_64())

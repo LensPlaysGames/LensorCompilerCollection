@@ -18,7 +18,7 @@ using Kind = lcc::Diag::Kind;
 
 namespace {
 /// Get the colour of a diagnostic.
-static constexpr auto Colour(lcc::Diag::Kind kind) -> lcc::utils::Colour {
+constexpr auto Colour(lcc::Diag::Kind kind) -> lcc::utils::Colour {
     switch (kind) {
         using enum lcc::utils::Colour;
         case Kind::ICError: return Magenta;
@@ -35,7 +35,7 @@ static constexpr auto Colour(lcc::Diag::Kind kind) -> lcc::utils::Colour {
 }
 
 /// Get the name of a diagnostic.
-static constexpr std::string_view Name(lcc::Diag::Kind kind) {
+constexpr auto Name(lcc::Diag::Kind kind) -> std::string_view {
     switch (kind) {
         case Kind::ICError: return "Internal Compiler Error";
         case Kind::FError: return "Fatal Error";
@@ -61,7 +61,8 @@ void lcc::Diag::HandleFatalErrors() {
     }
 
     // Also exit on any fatal error.
-    if (kind == Kind::FError) std::exit(FATAL_EXIT_CODE);
+    if (kind == Kind::FError)
+        std::exit(FATAL_EXIT_CODE);
 }
 
 /// Print a diagnostic with no (valid) location info.
@@ -70,13 +71,20 @@ void lcc::Diag::PrintDiagWithoutLocation() {
     utils::Colours C(ShouldUseColour());
 
     /// Print the message.
-    fmt::print(stderr, "{}{}{}: {}", C(Bold), C(Colour(kind)), Name(kind), C(Reset));
+    fmt::print(
+        stderr,
+        "{}{}{}: {}",
+        C(Bold),
+        C(Colour(kind)),
+        Name(kind),
+        C(Reset)
+    );
     fmt::print(stderr, "{}\n", message);
     HandleFatalErrors();
 }
 
-bool lcc::Diag::ShouldUseColour() const {
-    if (context) return context->use_colour_diagnostics();
+auto lcc::Diag::ShouldUseColour() const -> bool {
+    if (context) return context->option_use_colour();
     return lcc::platform::StderrIsTerminal();
 }
 
@@ -166,6 +174,8 @@ void lcc::Diag::print() {
     utils::ReplaceAll(range, "\t", "    ");
     utils::ReplaceAll(after, "\t", "    ");
 
+    // TODO: If diagnostic points to the end of a line, insert a space to highlight.
+
     // Print the file name, line number, and column number.
     const auto& file = *fs[where.file_id].get();
     fmt::print(stderr, "{}{}:{}:{}: ", C(Bold), fs::relative(file.path()).string(), line, col);
@@ -185,7 +195,8 @@ void lcc::Diag::print() {
         for (auto newline_offset : message_newline_offsets) {
             // Do indentation for continuing lines, but only if the lines don't begin
             // with their own indentation already.
-            if (printed_offset != 0 and message.at(printed_offset) != ' ') fmt::print(stderr, "    ");
+            if (printed_offset != 0 and message.at(printed_offset) != ' ')
+                fmt::print(stderr, "    ");
             fmt::print(
                 stderr,
                 "{}",
@@ -225,12 +236,12 @@ void lcc::Diag::print() {
     if (not location_is_multiline) {
         // We first pad the line based on the number of digits in the line number
         // and append more spaces to line us up with the range.
-        for (usz i = 0; i < digits + before.size() + sizeof("  | ") - 1; i++)
+        for (usz i = 0; i < digits + before.size() + sizeof("  | ") - 1; ++i)
             fmt::print(stderr, " ");
 
         // Finally, print the underline itself.
         fmt::print(stderr, "{}{}", C(Bold), C(Colour(kind)));
-        for (usz i = 0; i < range.size(); i++) fmt::print(stderr, "~");
+        for (usz i = 0; i < range.size(); ++i) fmt::print(stderr, "~");
         fmt::print(stderr, "{}\n", C(Reset));
     }
 

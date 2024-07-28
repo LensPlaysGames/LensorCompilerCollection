@@ -15,8 +15,48 @@ class Target;
 class Format;
 
 class Context {
+public:
+    enum OptionColour : bool {
+        DoNotUseColour,
+        UseColour = true,
+    };
+    enum OptionPrintAST : bool {
+        DoNotPrintAST,
+        PrintAST = true,
+    };
+    enum OptionStopatSyntax : bool {
+        DoNotStopatSyntax,
+        StopatSyntax = true,
+    };
+    enum OptionStopatSema : bool {
+        DoNotStopatSema,
+        StopatSema = true,
+    };
+
+    enum OptionPrintMIR : bool {
+        DoNotPrintMIR,
+        PrintMIR = true,
+    };
+    enum OptionStopatMIR : bool {
+        DoNotStopatMIR,
+        StopatMIR = true,
+    };
+
+    struct Options {
+        OptionColour _colour_diagnostics;
+
+        OptionPrintAST _should_print_ast;
+        OptionStopatSyntax _stopat_syntax;
+        OptionStopatSema _stopat_sema;
+
+        OptionPrintMIR _should_print_mir;
+        OptionStopatMIR _stopat_mir;
+    };
+
+private:
     /// The files owned by the context.
-    std::vector<std::unique_ptr<File>> owned_files;
+    std::vector<std::unique_ptr<File>>
+        owned_files;
 
     /// Error flag. This is set-only.
     mutable bool error_flag = false;
@@ -24,10 +64,7 @@ class Context {
     /// Called once the first time a context is created.
     static void InitialiseLCCData();
 
-    /// Miscellaneous flags.
-    bool _colour_diagnostics = false;
-    bool _should_print_mir = false;
-    bool _stopat_mir = false;
+    Options _options;
 
     const Target* _target{};
     const Format* _format{};
@@ -46,9 +83,7 @@ public:
     explicit Context(
         const Target* target,
         const Format* format,
-        bool colour_diagnostics,
-        bool should_print_mir,
-        bool stopat_mir
+        const Options& options
     );
 
     /// Do not allow copying or moving the context.
@@ -109,17 +144,31 @@ public:
 
     /// Whether to use colours in diagnostics.
     [[nodiscard]]
-    auto use_colour_diagnostics() const -> bool {
-        return _colour_diagnostics;
+    auto option_use_colour() const {
+        return _options._colour_diagnostics;
     }
 
     [[nodiscard]]
-    auto should_print_mir() const -> bool {
-        return _should_print_mir;
+    auto option_print_ast() const {
+        return _options._should_print_ast;
+    }
+    [[nodiscard]]
+    auto option_stopat_syntax() const {
+        return _options._stopat_syntax;
+    }
+    [[nodiscard]]
+    auto option_stopat_sema() const {
+        return _options._stopat_sema;
     }
 
     [[nodiscard]]
-    auto stopat_mir() const -> bool { return _stopat_mir; }
+    auto option_print_mir() const {
+        return _options._should_print_mir;
+    }
+    [[nodiscard]]
+    auto option_stopat_mir() const {
+        return _options._stopat_mir;
+    }
 
     auto include_directories() const -> const decltype(_include_directories)& {
         return _include_directories;

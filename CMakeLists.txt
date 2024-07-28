@@ -218,6 +218,7 @@ endif()
 add_library(
   glint STATIC
   include/glint/ast.hh
+  include/glint/driver.hh
   include/glint/eval.hh
   include/glint/ir_gen.hh
   include/glint/lexer.hh
@@ -225,6 +226,7 @@ add_library(
   include/glint/sema.hh
   lib/glint/ast.cc
   lib/glint/ast_module.cc
+  lib/glint/driver.cc
   lib/glint/eval.cc
   lib/glint/init.cc
   lib/glint/ir_gen.cc

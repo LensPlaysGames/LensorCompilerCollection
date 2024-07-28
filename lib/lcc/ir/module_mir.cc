@@ -80,8 +80,8 @@ constexpr auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
 } // namespace
 
 auto Module::mir() -> std::vector<MFunction> {
-    if (_ctx->should_print_mir())
-        print_ir(_ctx->use_colour_diagnostics());
+    if (_ctx->option_print_mir())
+        print_ir(_ctx->option_use_colour());
 
     // Begin MIR generation by assigning virtual registers to each and every
     // value in the IR. While the IR can reference the direct result of a

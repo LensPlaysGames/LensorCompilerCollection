@@ -8,12 +8,8 @@
 lcc::Context::Context(
     const Target* target,
     const Format* format,
-    bool colour_diagnostics,
-    bool should_print_mir,
-    bool stopat_mir
-) : _colour_diagnostics(colour_diagnostics),
-    _should_print_mir(should_print_mir),
-    _stopat_mir(stopat_mir),
+    const lcc::Context::Options& options
+) : _options(options),
     _target(target),
     _format(format) {
     static std::once_flag once;

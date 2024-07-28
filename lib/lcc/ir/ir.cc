@@ -438,10 +438,10 @@ auto Inst::instructions_before_this() -> std::span<Inst*> {
 
 void Inst::replace_with(Value* v) {
     while (not users().empty()) {
-        auto u = users().front();
+        auto* u = users().front();
 
         /// Using `Children()` is fine here since we are not a block.
-        for (auto use : u->Children()) {
+        for (auto* use : u->Children()) {
             if (*use == this) {
                 RemoveUse(this, u);
                 AddUse(v, u);
@@ -451,8 +451,11 @@ void Inst::replace_with(Value* v) {
     }
 
     /// If v is an instruction and not inserted in a block, insert it now.
-    if (auto inst = cast<Inst>(v); inst and parent and not inst->parent) {
-        auto block = cast<Block>(parent);
+    if (
+        auto* inst = cast<Inst>(v);
+        inst and parent and not inst->parent
+    ) {
+        auto* block = cast<Block>(parent);
         block->insert_before(inst, this);
     }
 
@@ -1029,7 +1032,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::ArrayConstant: {
                 auto a = as<ArrayConstant>(v);
 
-                /// String.
+                // String
                 if (a->is_string_literal()) {
                     static const auto FormatChar = [](u8 c) {
                         return std::isprint(c) and c != '\"'
@@ -1047,22 +1050,36 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                     );
                 }
 
-                /// Array
-                else {
-                    return Format(
-                        "{}[{}{}{}]",
-                        C(Red),
-                        C(Magenta),
-                        fmt::join(
-                            std::span<const u8>(reinterpret_cast<const u8*>(a->data()), a->size()),
-                            " "
-                        ),
-                        C(Red)
-                    );
-                }
+                // Array
+                return Format(
+                    "{}[{}{}{}]",
+                    C(Red),
+                    C(Magenta),
+                    fmt::join(
+                        std::span<const u8>(reinterpret_cast<const u8*>(a->data()), a->size()),
+                        " "
+                    ),
+                    C(Red)
+                );
             }
 
-            case Value::Kind::Intrinsic: LCC_TODO();
+            case Value::Kind::Intrinsic: {
+                auto* intrinsic = as<IntrinsicInst>(v);
+                switch (intrinsic->intrinsic_kind()) {
+                    case IntrinsicKind::DebugTrap:
+                        return Format("intrinsic.debug_trap");
+
+                    case IntrinsicKind::MemCopy:
+                        return Format("intrinsic.memcpy");
+
+                    case IntrinsicKind::MemSet:
+                        return Format("intrinsic.memset");
+
+                    case IntrinsicKind::SystemCall:
+                        return Format("intrinsic.syscall");
+                }
+                LCC_UNREACHABLE();
+            }
 
             /// These always yield a value.
             case Value::Kind::Copy:

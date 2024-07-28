@@ -5,18 +5,20 @@
 #include <string_view>
 #include <vector>
 
+#include <lcc/context.hh>
+
 namespace cli {
 
 struct Options {
     bool verbose{false};
-    bool ast{false};
-    bool ir{false};
-    bool mir{false};
-    bool stopat_syntax{false};
-    bool stopat_sema{false};
-    bool stopat_ir{false};
-    bool stopat_mir{false};
     bool aluminium{false};
+    bool ir{false};
+    bool stopat_ir{false};
+    lcc::Context::OptionPrintAST ast{false};
+    lcc::Context::OptionPrintMIR mir{false};
+    lcc::Context::OptionStopatSyntax stopat_syntax{false};
+    lcc::Context::OptionStopatSema stopat_sema{false};
+    lcc::Context::OptionStopatMIR stopat_mir{false};
 
     std::vector<std::string> input_files{};
     std::vector<std::string> include_directories{};

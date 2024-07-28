@@ -1108,7 +1108,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     LCC_ASSERT(
                         it != sum_type->members().end(),
                         "Sum type {} has no member named '{}'",
-                        sum_type->string(ctx->use_colour_diagnostics()),
+                        sum_type->string(ctx->option_use_colour()),
                         m->name()
                     );
                     auto member_index = usz(std::distance(sum_type->members().begin(), it));

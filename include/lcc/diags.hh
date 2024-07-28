@@ -17,6 +17,10 @@ namespace lcc {
 
 /// A diagnostic. The diagnostic is issued when the destructor is called.
 struct Diag {
+    // TODO: "Fix" diagnostic type for suggested overwrites/fixes to the
+    // source, and eventually the ability to actually commit the fix to the
+    // file.
+
     /// Diagnostic severity.
     enum struct Kind {
         None,    ///< Not an error. Do not emit this diagnostic.

@@ -69,22 +69,22 @@ auto parse(int argc, const char** argv) -> Options {
 
         if (arg == "-v")
             o.verbose = true;
-        else if (arg == "--ast")
-            o.ast = true;
-        else if (arg == "--ir")
-            o.ir = true;
-        else if (arg == "--mir")
-            o.mir = true;
-        else if (arg == "--stopat-syntax")
-            o.stopat_syntax = true;
-        else if (arg == "--stopat-sema")
-            o.stopat_sema = true;
-        else if (arg == "--stopat-ir")
-            o.stopat_ir = true;
-        else if (arg == "--stopat-mir")
-            o.stopat_mir = true;
         else if (arg == "--aluminium")
             o.aluminium = true;
+        else if (arg == "--ast")
+            o.ast = lcc::Context::PrintAST;
+        else if (arg == "--stopat-syntax")
+            o.stopat_syntax = lcc::Context::StopatSyntax;
+        else if (arg == "--stopat-sema")
+            o.stopat_sema = lcc::Context::StopatSema;
+        else if (arg == "--ir")
+            o.ir = true;
+        else if (arg == "--stopat-ir")
+            o.stopat_ir = true;
+        else if (arg == "--mir")
+            o.mir = lcc::Context::PrintMIR;
+        else if (arg == "--stopat-mir")
+            o.stopat_mir = lcc::Context::StopatMIR;
 
         else if (arg == "-I") {
             // Add a directory to the include search paths
