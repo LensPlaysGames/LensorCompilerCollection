@@ -226,6 +226,7 @@ add_library(
   lib/glint/ast.cc
   lib/glint/ast_module.cc
   lib/glint/eval.cc
+  lib/glint/init.cc
   lib/glint/ir_gen.cc
   lib/glint/lexer.cc
   lib/glint/parser.cc

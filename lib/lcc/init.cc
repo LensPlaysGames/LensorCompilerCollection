@@ -1,8 +1,9 @@
-#include <glint/ast.hh>
-#include <intercept/ast.hh>
 #include <lcc/context.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
+
+#include <glint/ast.hh>
+#include <intercept/ast.hh>
 
 namespace lcc {
 
@@ -45,36 +46,6 @@ public:
         t.set_sema_done();
         return t;
     }
-
-    static consteval auto glint_unknown() noexcept {
-        return glint::BuiltinType{glint::BuiltinType::K::Unknown, {}};
-    }
-    static consteval auto glint_bool() noexcept {
-        return glint::BuiltinType{glint::BuiltinType::K::Bool, {}};
-    }
-    static consteval auto glint_byte() noexcept {
-        return glint::BuiltinType{glint::BuiltinType::K::Byte, {}};
-    }
-    static consteval auto glint_int() noexcept {
-        return glint::BuiltinType{glint::BuiltinType::K::Int, {}};
-    }
-    static consteval auto glint_uint() noexcept {
-        return glint::BuiltinType{glint::BuiltinType::K::UInt, {}};
-    }
-    static consteval auto glint_overload_set() noexcept {
-        return glint::BuiltinType{glint::BuiltinType::K::OverloadSet, {}};
-    }
-    static consteval auto glint_void() noexcept {
-        return glint::BuiltinType{glint::BuiltinType::K::Void, {}};
-    }
-    // NOTE: If you pass in anything that isn't glint_void_ty, you are going
-    // to have a very bad time. We do this so that we don't require a
-    // forward declaration.
-    static consteval auto glint_void_ptr(glint::Type* void_ty) noexcept {
-        auto t = glint::PointerType{void_ty};
-        t.set_sema_done();
-        return t;
-    }
 };
 } // namespace lcc
 
@@ -95,16 +66,6 @@ constinit auto intercept_void_ty = lcc::Init::intercept_void();
 constinit auto intercept_overload_set_ty = lcc::Init::intercept_overload_set();
 constinit auto intercept_void_ptr_ty = lcc::Init::intercept_void_ptr(&intercept_void_ty);
 
-// GLINT TYPES
-constinit auto glint_unknown_ty = lcc::Init::glint_unknown();
-constinit auto glint_bool_ty = lcc::Init::glint_bool();
-constinit auto glint_byte_ty = lcc::Init::glint_byte();
-constinit auto glint_int_ty = lcc::Init::glint_int();
-constinit auto glint_uint_ty = lcc::Init::glint_uint();
-constinit auto glint_overload_set_ty = lcc::Init::glint_overload_set();
-constinit auto glint_void_ty = lcc::Init::glint_void();
-constinit auto glint_void_ptr_ty = lcc::Init::glint_void_ptr(&glint_void_ty);
-
 } // namespace
 
 // THIS IS WHERE THE ACTUAL STATIC MEMBERS ARE DEFINED
@@ -123,16 +84,6 @@ constinit lcc::intercept::Type* lcc::intercept::Type::Unknown = &intercept_unkno
 constinit lcc::intercept::Type* lcc::intercept::Type::Void = &intercept_void_ty;
 constinit lcc::intercept::Type* lcc::intercept::Type::VoidPtr = &intercept_void_ptr_ty;
 constinit lcc::intercept::Type* lcc::intercept::Type::OverloadSet = &intercept_overload_set_ty;
-
-// Initialise builtin and/or common Glint types
-constinit lcc::glint::Type* lcc::glint::Type::Unknown = &glint_unknown_ty;
-constinit lcc::glint::Type* lcc::glint::Type::Bool = &glint_bool_ty;
-constinit lcc::glint::Type* lcc::glint::Type::Byte = &glint_byte_ty;
-constinit lcc::glint::Type* lcc::glint::Type::Int = &glint_int_ty;
-constinit lcc::glint::Type* lcc::glint::Type::UInt = &glint_uint_ty;
-constinit lcc::glint::Type* lcc::glint::Type::OverloadSet = &glint_overload_set_ty;
-constinit lcc::glint::Type* lcc::glint::Type::Void = &glint_void_ty;
-constinit lcc::glint::Type* lcc::glint::Type::VoidPtr = &glint_void_ptr_ty;
 
 void lcc::Context::InitialiseLCCData() {
     // no-op (and we'd like to keep it this way, if possible)

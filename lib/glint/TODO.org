@@ -14,10 +14,12 @@ Modify Operations:
 - Prepend, Insert Front, via =~==;
   - Handle Single Element on rhs
   - Handle Another Dynamic Array on rhs
+  - Handle Multiple Dynamic Arrays within Compound Literal on rhs
 - Append, Insert Back, via =+==;
   - Handle Single Element on rhs
   - Handle Another Dynamic Array on rhs
-- TODO: How to insert at index?
+  - Handle Multiple Dynamic Arrays within Compound Literal on rhs
+- TODO: How to insert at index? Maybe ~dynarray[index] += elem~?
 
 Deletion Operations:
 - Unary Prefix Minus =-=
@@ -28,7 +30,7 @@ Sum Type
 #+begin_src glint-ts
 result_t : sum {
   error :[byte view];
-  data :[byte vie
+  data :[byte view];
 };
 
 foo :result_t() {

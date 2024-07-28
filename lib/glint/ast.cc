@@ -789,7 +789,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                 return;
             }
             case K::Binary: {
-                auto* b = as<lcc::glint::BinaryExpr>(e);
+                const auto* b = as<lcc::glint::BinaryExpr>(e);
                 PrintBasicHeader("BinaryExpr", e);
                 out += fmt::format(
                     " {}{} {}",

@@ -30,26 +30,26 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         NoOp = 0,
     };
 
-    // Caching from always caused a whole bunch of problems so this is the
+    // Caching "from" always caused a whole bunch of problems so this is the
     // never-cache solution while still providing a nice name
 #define from ((*expr_ptr)->type())
 
-    /// Cannot convert if the types contain errors.
+    // Cannot convert if the types contain errors.
     if (from->is_unknown() or from->sema_errored() or to->is_unknown() or to->sema_errored())
         return TypesContainErrors;
 
-    /// This is so we don’t forget that we’ve applied lvalue-to-rvalue
-    /// conversion and raised the score by one.
+    // This is so we don’t forget that we’ve applied lvalue-to-rvalue
+    // conversion and raised the score by one.
     int score = 0;
     auto Score = [&](int i) {
         LCC_ASSERT(i, "Score must be 1 or greater. Use the enum constants above for values <= 0");
         return i + int(score);
     };
 
-    /// Any type can be converted to void.
+    // Any type can be converted to void.
     if (to->is_void()) return NoOp;
 
-    /// Any type can be converted to itself.
+    // Any type can be converted to itself.
     if (Type::Equal(from, to)) {
         // lvalue expression must be converted to rvalue if we want a value of the given type.
         if ((*expr_ptr)->is_lvalue()) {
@@ -94,7 +94,7 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         return Score(1);
     }
 
-    /// All conversions beside reference binding require lvalue-to-rvalue conversion.
+    // All conversions beside reference binding require lvalue-to-rvalue conversion.
     if (to->is_reference() and Type::Equal(from, to->elem())) {
         if ((*expr_ptr)->is_lvalue()) {
             if constexpr (PerformConversion)
@@ -105,18 +105,18 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         return ConversionImpossible;
     }
 
-    /// Lvalue to rvalue conversion is required.
+    // Lvalue to rvalue conversion is required.
     score += (*expr_ptr)->is_lvalue();
     if constexpr (PerformConversion)
         LValueToRValue(expr_ptr, false);
 
-    /// Get reference-to-reference conversions out of the way early.
+    // Get reference-to-reference conversions out of the way early.
     if (from->is_reference() and to->is_reference()) {
-        /// A reference can be converted to the same reference.
+        // A reference can be converted to the same reference.
         if (Type::Equal(from, to)) return NoOp;
 
-        /// References to arrays can be converted to references to
-        /// the first element.
+        // References to arrays can be converted to references to
+        // the first element.
         auto* arr = cast<ArrayType>(from->elem());
         if (arr and Type::Equal(arr->element_type(), to->elem())) {
             if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
@@ -126,7 +126,7 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         return ConversionImpossible;
     }
 
-    /// Strip reference from `from` if need be.
+    // Strip reference from `from` if need be.
     if (auto* ref = cast<ReferenceType>(from)) {
         score += 1;
         if constexpr (PerformConversion)
@@ -144,11 +144,11 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
     // Try deproceduring (convert a function into a call to that function).
     if (Deproceduring(expr_ptr)) return Score(1);
 
-    /// Now check if the types are equal. In many cases, lvalue-to-rvalue
-    /// conversion is all we need.
+    // Now check if the types are equal. In many cases, lvalue-to-rvalue
+    // conversion is all we need.
     if (Type::Equal(from, to)) return NoOp;
 
-    /// Pointer to pointer conversions.
+    // Pointer to pointer conversions.
     if (from->is_pointer() and to->is_pointer()) {
         /// Pointers to arrays are convertible to pointers to the first element.
         auto* arr = cast<ArrayType>(from->elem());
@@ -201,7 +201,7 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         return Score(1);
     }
 
-    /// Function types can be converted to their corresponding function types.
+    // Function types can be converted to their corresponding function types.
     if (
         from->is_function() and to->is_pointer()
         and Type::Equal(to->elem(), from)
@@ -211,7 +211,7 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         return NoOp;
     }
 
-    /// Integer to boolean and vis versa implicit conversions.
+    // Integer to boolean and vis versa implicit conversions.
     if (
         (from->is_integer() and to->is_bool())
         or (from->is_bool() and to->is_integer())
@@ -234,15 +234,15 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         // to.
         EvalResult res;
         if ((*expr_ptr)->evaluate(context, res, false)) {
-            /// Note: We currently don’t support integer constants larger than 64
-            /// bits internally, so if the type has a bit width larger than 64, it
-            /// will always fit.
+            // Note: We currently don’t support integer constants larger than 64
+            // bits internally, so if the type has a bit width larger than 64, it
+            // will always fit.
             auto val = res.as_int();
 
-            /// Signed to Unsigned Conversion
+            // Signed to Unsigned Conversion
             if (val.slt(0) and to->is_unsigned_int(context)) return ConversionImpossible;
 
-            /// Unsigned to Unsigned Conversion
+            // Unsigned to Unsigned Conversion
             auto bits = to->size(context);
             if (
                 from->is_unsigned_int(context)
@@ -268,7 +268,7 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         return ConversionImpossible;
     }
 
-    /// Try deproceduring one last time.
+    // Try deproceduring one last time.
     if (Deproceduring(expr_ptr)) return Score(1);
 
 #undef from

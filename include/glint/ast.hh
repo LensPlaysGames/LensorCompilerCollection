@@ -21,6 +21,9 @@ namespace lcc::glint {
 static constexpr std::string_view metadata_section_name{".glint"};
 static constexpr std::string_view metadata_file_extension{".gmeta"};
 
+// Forward declaration
+class Init;
+
 enum struct IntrinsicKind {
     BuiltinDebugtrap,
     BuiltinFilename,
@@ -482,7 +485,7 @@ public:
 };
 
 class Type : public SemaNode {
-    friend lcc::Init;
+    friend lcc::glint::Init;
 
 public:
     enum struct Kind {
@@ -659,19 +662,20 @@ public:
     /// BuiltinType instead.
     ///
     /// Do NOT compare against these w/ `==`!
+    /// Use Type::Equal() static method instead.
     ///
     /// When adding a type here, don’t forget to initialise
     /// it in Context::InitialiseLCCData().
-    static Type* Bool;
-    static Type* Byte;
-    static Type* Int;
-    static Type* UInt;
-    static Type* Unknown;
-    static Type* Void;
-    static Type* VoidPtr;
+    static Type* const Bool;
+    static Type* const Byte;
+    static Type* const Int;
+    static Type* const UInt;
+    static Type* const Unknown;
+    static Type* const Void;
+    static Type* const VoidPtr;
 
     /// The type of an unresolved overload set.
-    static Type* OverloadSet;
+    static Type* const OverloadSet;
 };
 
 static constexpr auto ToString(Type::Kind k) {
@@ -698,7 +702,7 @@ static constexpr auto ToString(Type::Kind k) {
 /// and there is no point in storing their names in each of them, so an
 /// instance of one only ever stores its primitive type kind.
 class BuiltinType : public Type {
-    friend lcc::Init;
+    friend lcc::glint::Init;
 
 public:
     enum struct BuiltinKind {
@@ -989,12 +993,15 @@ public:
     /// Get the declaration of this type.
     ///
     /// If this is an anonymous type, this returns null.
+    [[nodiscard]]
     auto decl() const -> TypeDecl* { return _decl; }
 
     /// Get the scope for the contents of this type.
+    [[nodiscard]]
     auto scope() -> Scope* { return _scope; }
 
-    static bool classof(const Type* type) {
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool {
         return type->kind() == Kind::Enum
             or type->kind() == Kind::Union
             or type->kind() == Kind::Sum
@@ -1080,25 +1087,30 @@ public:
         : TypeWithOneElement(Kind::Array, location, element_type), _size(size) {}
 
     /// Get the dimension of this array.
+    [[nodiscard]]
     auto dimension() const -> usz;
 
+    [[nodiscard]]
     auto size() -> Expr*& { return _size; }
-    Expr* size() const { return _size; }
+    [[nodiscard]]
+    auto size() const -> Expr* { return _size; }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Array; }
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool { return type->kind() == Kind::Array; }
 };
 
 class ArrayViewType : public TypeWithOneElement {
     static constexpr auto K = Kind::ArrayView;
 
-    StructType* _cached_struct{nullptr};
+    StructType* _cached_struct{};
 
 public:
     static constexpr usz IntegerWidth = 64;
 
-    ArrayViewType(Type* element_type, Location location = {})
+    explicit ArrayViewType(Type* element_type, Location location = {})
         : TypeWithOneElement(K, location, element_type) {}
 
+    [[nodiscard]]
     auto struct_type(Module& mod) -> StructType* {
         if (not _cached_struct) {
             _cached_struct = new (mod) StructType(
@@ -1121,6 +1133,7 @@ public:
     [[nodiscard]]
     auto struct_type() { return _cached_struct; }
 
+    [[nodiscard]]
     static auto classof(const Type* type) -> bool { return type->kind() == K; }
 };
 
@@ -1136,10 +1149,12 @@ public:
     DynamicArrayType(Type* element_type, Expr* size, Location location = {})
         : TypeWithOneElement(K, location, element_type), _initial_size(size) {}
 
+    [[nodiscard]]
     auto initial_size() -> Expr*& { return _initial_size; }
     [[nodiscard]]
     auto initial_size() const -> Expr* { return _initial_size; }
 
+    [[nodiscard]]
     auto struct_type(Module& mod) -> StructType* {
         if (not _cached_struct) {
             _cached_struct = new (mod) StructType(
@@ -1161,6 +1176,7 @@ public:
     [[nodiscard]]
     auto struct_type() { return _cached_struct; }
 
+    [[nodiscard]]
     static auto classof(const Type* type) -> bool { return type->kind() == K; }
 };
 
@@ -1183,29 +1199,36 @@ private:
     std::vector<Member> _members;
     usz _byte_size{};
     usz _alignment{};
-    StructType* _cached_struct;
+    StructType* _cached_struct{};
 
 public:
     SumType(Scope* scope, std::vector<Member> members, Location location)
         : DeclaredType(Kind::Sum, scope, location), _members(std::move(members)) {}
 
-    usz alignment() const { return _alignment; }
+    [[nodiscard]]
+    auto alignment() const { return _alignment; }
     void alignment(usz alignment) { _alignment = alignment; }
 
-    usz byte_size() const { return _byte_size; }
+    [[nodiscard]]
+    auto byte_size() const { return _byte_size; }
     void byte_size(usz byteSize) { _byte_size = byteSize; }
 
+    [[nodiscard]]
     auto struct_type(Module& mod) -> StructType*;
 
     /// Caller needs to make sure to check the return value is not nullptr.
+    [[nodiscard]]
     auto struct_type() -> StructType* {
         return _cached_struct;
     }
 
+    [[nodiscard]]
     auto members() -> std::vector<Member>& { return _members; }
+    [[nodiscard]]
     auto members() const -> const std::vector<Member>& { return _members; }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Sum; }
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool { return type->kind() == Kind::Sum; }
 };
 
 class UnionType : public DeclaredType {
@@ -1229,23 +1252,30 @@ public:
     UnionType(Scope* scope, std::vector<Member> members, Location location)
         : DeclaredType(Kind::Union, scope, location), _members(std::move(members)) {}
 
-    usz alignment() const { return _alignment; }
+    [[nodiscard]]
+    auto alignment() const { return _alignment; }
     void alignment(usz alignment) { _alignment = alignment; }
 
-    usz byte_size() const { return _byte_size; }
+    [[nodiscard]]
+    auto byte_size() const { return _byte_size; }
     void byte_size(usz byteSize) { _byte_size = byteSize; }
 
+    [[nodiscard]]
     auto array_type(Module& mod) -> ArrayType*;
 
     /// Caller needs to make sure to check the return value is not nullptr.
+    [[nodiscard]]
     auto array_type() const -> ArrayType* {
         return _cached_type;
     }
 
+    [[nodiscard]]
     auto members() -> std::vector<Member>& { return _members; }
+    [[nodiscard]]
     auto members() const -> const std::vector<Member>& { return _members; }
 
-    static bool classof(const Type* type) { return type->kind() == Kind::Union; }
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool { return type->kind() == Kind::Union; }
 };
 
 class EnumeratorDecl;
@@ -1315,7 +1345,7 @@ public:
     };
 
 private:
-    const Kind _kind;
+    Kind _kind;
     bool _lvalue = false;
 
 protected:
@@ -1325,8 +1355,8 @@ protected:
 public:
     virtual ~Expr() = default;
 
-    void* operator new(size_t) = delete;
-    void* operator new(size_t sz, Module& mod) {
+    [[nodiscard]] auto operator new(size_t) -> void* = delete;
+    [[nodiscard]] auto operator new(size_t sz, Module& mod) -> void* {
         auto* ptr = ::operator new(sz);
         mod.nodes.push_back(static_cast<Expr*>(ptr));
         return ptr;
@@ -1338,32 +1368,42 @@ public:
     /// \param out Outparameter for the result of the evaluation.
     /// \param required Whether to error if evaluation fails.
     /// \return Whether evaluation succeeded.
-    bool evaluate(const Context* ctx, EvalResult& out, bool required);
+    [[nodiscard]]
+    auto evaluate(const Context* ctx, EvalResult& out, bool required) -> bool;
 
-    std::string name() const;
-    std::vector<lcc::glint::Expr*> children() const;
+    [[nodiscard]]
+    auto name() const -> std::string;
+    [[nodiscard]]
+    auto children() const -> std::vector<lcc::glint::Expr*>;
 
-    std::string langtest_name() const;
-    std::vector<lcc::glint::Expr*> langtest_children() const;
+    [[nodiscard]]
+    auto langtest_name() const -> std::string;
+    [[nodiscard]]
+    auto langtest_children() const -> std::vector<lcc::glint::Expr*>;
 
-    Kind kind() const { return _kind; }
+    [[nodiscard]]
+    auto kind() const -> Kind { return _kind; }
 
     /// Check if this is an lvalue. Only lvalues can have their
     /// address taken or be converted to references.
-    bool is_lvalue() const { return _lvalue; }
+    [[nodiscard]]
+    auto is_lvalue() const -> bool { return _lvalue; }
 
     /// Mark this as an lvalue.
     void set_lvalue(bool lvalue = true) { _lvalue = lvalue; }
 
+    [[nodiscard]]
     auto type() const -> Type*;
 
     void print(bool use_colour) const;
 
     /// Deep-copy an expression.
-    static Expr* Clone(Module& mod, Expr* expr);
+    [[nodiscard]]
+    static auto Clone(Module& mod, Expr* expr) -> Expr*;
 };
 
-std::string ToString(Expr::Kind k);
+[[nodiscard]]
+auto ToString(Expr::Kind k) -> std::string;
 
 class TypedExpr : public Expr {
     Type* _type;
@@ -1373,13 +1413,16 @@ protected:
         : Expr(kind, location), _type(type) {}
 
 public:
+    [[nodiscard]]
     auto type() const -> Type* { return _type; }
     void type(Type* type) { _type = type; }
 
     /// Get a reference to the type of this expression.
+    [[nodiscard]]
     auto type_ref() -> Type** { return &_type; }
 
-    static bool classof(const Expr* expr) {
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
         return expr->kind() >= Kind::TypeDecl and expr->kind() <= Kind::MemberAccess;
     }
 };
@@ -1393,10 +1436,13 @@ protected:
         : TypedExpr(kind, location, type), _name(std::move(name)) {}
 
 public:
+    [[nodiscard]]
     auto name() const -> const std::string& { return _name; }
+    [[nodiscard]]
     auto name(std::string name) { _name = std::move(name); }
 
-    static bool classof(const Expr* expr) {
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
         return expr->kind() >= Kind::TypeDecl and expr->kind() <= Kind::FuncDecl;
     }
 };
@@ -1421,7 +1467,9 @@ public:
     auto value() const -> aint { return _value; }
 
     [[nodiscard]]
-    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::IntegerLiteral; }
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::IntegerLiteral;
+    }
 };
 
 class StringLiteral : public TypedExpr {
@@ -1431,9 +1479,13 @@ public:
     /// Intern the given string and create a string literal for it.
     StringLiteral(Module& mod, std::string_view value, Location location);
 
-    usz string_index() const { return _index; }
+    [[nodiscard]]
+    auto string_index() const -> usz { return _index; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::StringLiteral; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::StringLiteral;
+    }
 };
 
 class CompoundLiteral : public TypedExpr {
@@ -1488,12 +1540,16 @@ public:
         : Decl(Kind::EnumeratorDecl, std::move(name), Type::Int, location),
           _init(init) {}
 
+    [[nodiscard]]
     auto init() -> Expr*& { return _init; }
+    [[nodiscard]]
     auto init() const { return _init; }
 
-    aint value() const;
+    [[nodiscard]]
+    auto value() const -> aint;
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::EnumeratorDecl; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::EnumeratorDecl; }
 };
 
 /// A declaration that has linkage.
@@ -1529,8 +1585,8 @@ public:
     /// Set the linkage of this declaration.
     void linkage(Linkage linkage) { _linkage = linkage; }
 
-    /// RTTI.
-    static bool classof(const Expr* expr) {
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
         return expr->kind() >= Kind::VarDecl and expr->kind() <= Kind::FuncDecl;
     }
 };
@@ -1549,10 +1605,14 @@ public:
     ) : ObjectDecl(Kind::VarDecl, type, std::move(name), mod, linkage, location),
         _init(init) {}
 
+    [[nodiscard]]
     auto init() -> Expr*& { return _init; }
+    [[nodiscard]]
     auto init() const { return _init; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::VarDecl; }
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::VarDecl;
+    }
 };
 
 class FuncDecl : public ObjectDecl {
@@ -1652,17 +1712,29 @@ public:
     }
 
     /// Get the module this struct is declared in.
+    [[nodiscard]]
     auto module() const -> Module* { return _module; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeDecl; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::TypeDecl;
+    }
 };
 
 class TypeAliasDecl : public Decl {
 public:
     TypeAliasDecl(std::string name, Type* aliased_type, Location location)
-        : Decl(Kind::TypeAliasDecl, std::move(name), aliased_type, location) {}
+        : Decl(
+            Kind::TypeAliasDecl,
+            std::move(name),
+            aliased_type,
+            location
+        ) {}
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeAliasDecl; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::TypeAliasDecl;
+    }
 };
 
 /// A set of function overloads.
@@ -1673,9 +1745,13 @@ public:
     OverloadSet(std::vector<FuncDecl*> overloads, Location location)
         : TypedExpr(Kind::OverloadSet, location), _overloads(std::move(overloads)) {}
 
+    [[nodiscard]]
     auto overloads() const -> const std::vector<FuncDecl*>& { return _overloads; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::OverloadSet; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::OverloadSet;
+    }
 };
 
 class IfExpr : public TypedExpr {
@@ -1685,18 +1761,29 @@ class IfExpr : public TypedExpr {
 
 public:
     IfExpr(Expr* condition, Expr* then, Expr* otherwise, Location location)
-        : TypedExpr(Kind::If, location), _condition(condition), _then(then), _otherwise(otherwise) {}
+        : TypedExpr(Kind::If, location),
+          _condition(condition),
+          _then(then), _otherwise(otherwise) {}
 
+    [[nodiscard]]
     auto condition() -> Expr*& { return _condition; }
+    [[nodiscard]]
     auto condition() const { return _condition; }
 
+    [[nodiscard]]
     auto then() -> Expr*& { return _then; }
+    [[nodiscard]]
     auto then() const { return _then; }
 
+    [[nodiscard]]
     auto otherwise() -> Expr*& { return _otherwise; }
+    [[nodiscard]]
     auto otherwise() const { return _otherwise; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::If; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::If;
+    }
 };
 
 class Loop : public Expr {
@@ -1707,13 +1794,18 @@ public:
     Loop(Kind kind, Expr* condition, Expr* body, Location location)
         : Expr(kind, location), _body(body), _condition(condition) {}
 
+    [[nodiscard]]
     auto body() const { return _body; }
+    [[nodiscard]]
     auto body() -> Expr*& { return _body; }
 
+    [[nodiscard]]
     auto condition() const { return _condition; }
+    [[nodiscard]]
     auto condition() -> Expr*& { return _condition; }
 
-    static bool classof(const Expr* expr) {
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
         return expr->kind() >= Kind::While and expr->kind() <= Kind::For;
     }
 };
@@ -1723,7 +1815,8 @@ public:
     WhileExpr(Expr* condition, Expr* body, Location location)
         : Loop(Kind::While, condition, body, location) {}
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::While; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::While; }
 };
 
 class ForExpr : public Loop {
@@ -1734,13 +1827,18 @@ public:
     ForExpr(Expr* init, Expr* condition, Expr* increment, Expr* body, Location location)
         : Loop(Kind::For, condition, body, location), _init(init), _increment(increment) {}
 
+    [[nodiscard]]
     auto init() -> Expr*& { return _init; }
+    [[nodiscard]]
     auto init() const { return _init; }
 
+    [[nodiscard]]
     auto increment() -> Expr*& { return _increment; }
+    [[nodiscard]]
     auto increment() const { return _increment; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::For; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::For; }
 };
 
 class BlockExpr : public TypedExpr {
@@ -1783,10 +1881,13 @@ public:
     ReturnExpr(Expr* value, Location location)
         : Expr(Kind::Return, location), _value(value) {}
 
+    [[nodiscard]]
     auto value() -> Expr*& { return _value; }
+    [[nodiscard]]
     auto value() const { return _value; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::Return; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Return; }
 };
 
 /// Expression that has been evaluated by sema, together w/ a cached value.
@@ -1811,11 +1912,14 @@ public:
 
     /// May return null. This is the case if a constant value of non-`int`
     /// type needs to be synthesised by the compiler.
+    [[nodiscard]]
     auto expr() const { return _expression; }
 
+    [[nodiscard]]
     auto value() -> EvalResult& { return _value; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::EvaluatedConstant; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::EvaluatedConstant; }
 };
 
 class CallExpr : public TypedExpr {
@@ -1852,12 +1956,16 @@ public:
     IntrinsicCallExpr(IntrinsicKind kind, std::vector<Expr*> args)
         : TypedExpr(Kind::IntrinsicCall, {}), _kind(kind), _args(std::move(args)) {}
 
+    [[nodiscard]]
     auto args() -> std::vector<Expr*>& { return _args; }
+    [[nodiscard]]
     auto args() const -> const std::vector<Expr*>& { return _args; }
 
+    [[nodiscard]]
     auto intrinsic_kind() const { return _kind; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::IntrinsicCall; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::IntrinsicCall; }
 };
 
 class CastExpr : public TypedExpr {
@@ -1868,21 +1976,31 @@ public:
     CastExpr(Expr* value, Type* ty, CastKind k, Location location)
         : TypedExpr(Kind::Cast, location, ty), _value(value), _cast_kind(k) {}
 
+    [[nodiscard]]
     auto cast_kind() const { return _cast_kind; }
 
     /// Check cast kinds.
-    bool is_hard_cast() const { return _cast_kind == CastKind::HardCast; }
-    bool is_implicit_cast() const { return _cast_kind == CastKind::ImplicitCast; }
-    bool is_lvalue_to_rvalue() const { return _cast_kind == CastKind::LValueToRValueConv; }
-    bool is_lvalue_to_ref() const { return _cast_kind == CastKind::LValueToReference; }
-    bool is_ref_to_lvalue() const { return _cast_kind == CastKind::ReferenceToLValue; }
-    bool is_soft_cast() const { return _cast_kind == CastKind::SoftCast; }
+    [[nodiscard]]
+    auto is_hard_cast() const -> bool { return _cast_kind == CastKind::HardCast; }
+    [[nodiscard]]
+    auto is_implicit_cast() const -> bool { return _cast_kind == CastKind::ImplicitCast; }
+    [[nodiscard]]
+    auto is_lvalue_to_rvalue() const -> bool { return _cast_kind == CastKind::LValueToRValueConv; }
+    [[nodiscard]]
+    auto is_lvalue_to_ref() const -> bool { return _cast_kind == CastKind::LValueToReference; }
+    [[nodiscard]]
+    auto is_ref_to_lvalue() const -> bool { return _cast_kind == CastKind::ReferenceToLValue; }
+    [[nodiscard]]
+    auto is_soft_cast() const -> bool { return _cast_kind == CastKind::SoftCast; }
 
     /// Get the operand of this expression.
+    [[nodiscard]]
     auto operand() -> Expr*& { return _value; }
+    [[nodiscard]]
     auto operand() const { return _value; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::Cast; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Cast; }
 };
 
 class UnaryExpr : public TypedExpr {
@@ -1895,16 +2013,21 @@ public:
         : TypedExpr(Kind::Unary, location), _operand(operand), _op(op), _postfix(is_postfix) {}
 
     /// Check if this is a postfix unary expression.
-    bool is_postfix() const { return _postfix; }
+    [[nodiscard]]
+    auto is_postfix() const -> bool { return _postfix; }
 
     /// Get the operand of this expression.
+    [[nodiscard]]
     auto operand() -> Expr*& { return _operand; }
+    [[nodiscard]]
     auto operand() const { return _operand; }
 
     /// Get the unary operator.
+    [[nodiscard]]
     auto op() const { return _op; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::Unary; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Unary; }
 };
 
 class BinaryExpr : public TypedExpr {
@@ -1917,17 +2040,23 @@ public:
         : TypedExpr(Kind::Binary, location), _lhs(lhs), _rhs(rhs), _op(op) {}
 
     /// Get the left-hand side of this expression.
+    [[nodiscard]]
     auto lhs() -> Expr*& { return _lhs; }
+    [[nodiscard]]
     auto lhs() const { return _lhs; }
 
     /// Get the right-hand side of this expression.
+    [[nodiscard]]
     auto rhs() -> Expr*& { return _rhs; }
+    [[nodiscard]]
     auto rhs() const { return _rhs; }
 
     /// Get the binary operator.
+    [[nodiscard]]
     auto op() const { return _op; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::Binary; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Binary; }
 };
 
 class NameRefExpr : public TypedExpr {
@@ -1939,12 +2068,17 @@ public:
     NameRefExpr(std::string name, Scope* name_scope, Location location)
         : TypedExpr(Kind::NameRef, location), _name(std::move(name)), _scope(name_scope) {}
 
+    [[nodiscard]]
     auto name() const -> const std::string& { return _name; }
+
+    [[nodiscard]]
     auto scope() const -> Scope* { return _scope; }
+
+    [[nodiscard]]
     auto target() const -> Expr* { return _target; }
     void target(Expr* target) { _target = target; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::NameRef; }
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::NameRef; }
 };
 
 class TypeExpr : public TypedExpr {
@@ -1953,7 +2087,10 @@ public:
     TypeExpr(Type* _ty, Location location)
         : TypedExpr(Kind::Type, location, _ty) {}
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::Type; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::Type;
+    }
 };
 
 class MemberAccessExpr : public TypedExpr {
@@ -1971,17 +2108,24 @@ public:
         _struct = type;
     }
 
-    usz member() const { return _member_index; }
+    [[nodiscard]]
+    auto member() const -> usz { return _member_index; }
 
+    [[nodiscard]]
     auto name() const -> const std::string& { return _name; }
 
+    [[nodiscard]]
     auto object() -> Expr*& { return _object; }
+    [[nodiscard]]
     auto object() const { return _object; }
     auto object(Expr* object) { _object = object; }
 
+    [[nodiscard]]
     auto struct_type() const { return _struct; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::MemberAccess; }
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::MemberAccess;
+    }
 };
 
 class ModuleExpr : public Expr {
@@ -1991,11 +2135,13 @@ public:
     ModuleExpr(Module* _module, Location location)
         : Expr(Kind::Module, location), _mod(_module) {}
 
+    [[nodiscard]]
     auto mod() const -> Module* {
         return _mod;
     }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::Module; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Module; }
 };
 
 class SizeofExpr : public Expr {
@@ -2005,15 +2151,18 @@ public:
     SizeofExpr(Expr* _expression, Location location)
         : Expr(Kind::Sizeof, location), _expr(_expression) {}
 
+    [[nodiscard]]
     auto expr() const -> Expr* {
         return _expr;
     }
 
+    [[nodiscard]]
     auto expr_ref() -> Expr** {
         return &_expr;
     }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::Sizeof; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Sizeof; }
 };
 
 class AlignofExpr : public Expr {
@@ -2023,15 +2172,18 @@ public:
     AlignofExpr(Expr* _expression, Location location)
         : Expr(Kind::Alignof, location), _expr(_expression) {}
 
+    [[nodiscard]]
     auto expr() const -> Expr* {
         return _expr;
     }
 
+    [[nodiscard]]
     auto expr_ref() -> Expr** {
         return &_expr;
     }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::Alignof; }
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Alignof; }
 };
 
 } // namespace lcc::glint
