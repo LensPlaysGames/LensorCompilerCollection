@@ -884,9 +884,9 @@ public:
     [[nodiscard]]
     static auto classof(const Type* type) -> bool {
         return type->kind() == Kind::Pointer
-           and type->kind() == Kind::Reference
-           and type->kind() == Kind::DynamicArray
-           and type->kind() == Kind::Array;
+            or type->kind() == Kind::Reference
+            or type->kind() == Kind::DynamicArray
+            or type->kind() == Kind::Array;
     }
 };
 
