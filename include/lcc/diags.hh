@@ -76,7 +76,7 @@ public:
     }
 
     /// Create an empty diagnostic.
-    explicit Diag(){};
+    explicit Diag() : kind(Kind::None){};
 
     /// Disallow copying.
     Diag(const Diag&) = delete;

@@ -475,6 +475,7 @@ public:
     void insert_after(Inst* to_insert, Inst* after);
 
     /// Get the instructions in this block.
+    [[nodiscard]]
     auto instructions() -> std::vector<Inst*>& { return inst_list; }
 
     /// Get the associated machine block.

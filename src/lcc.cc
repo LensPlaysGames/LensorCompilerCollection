@@ -253,7 +253,6 @@ auto main(int argc, const char** argv) -> int {
             std::move(*contents)
         );
 
-        /// LCC IR.
         if (
             specified_language == "ir"
             or (specified_language == "default" and path_str.ends_with(".lcc"))
@@ -264,7 +263,6 @@ auto main(int argc, const char** argv) -> int {
             return;
         }
 
-        /// Glint.
         if (
             specified_language == "glint"
             or (specified_language == "default" and path_str.ends_with(".g"))
@@ -274,7 +272,10 @@ auto main(int argc, const char** argv) -> int {
             return;
         }
 
-        lcc::Diag::Fatal("Unrecognised input file type: consider passing `-x <lang>' to force a specific language.");
+        lcc::Diag::Fatal(
+            "Unrecognised input file type: consider passing `-x <lang>' to force a specific language.\n"
+            "See help by passing `-h' for more info.\n"
+        );
     };
 
     auto configured_output_file_path = options.output_filepath;

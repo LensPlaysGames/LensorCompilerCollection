@@ -677,7 +677,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     /// Print a cast instruction.
     void PrintCast(Inst* i, std::string_view mnemonic) {
-        auto c = as<UnaryInstBase>(i);
+        auto* c = as<UnaryInstBase>(i);
         PrintTemp(i);
         Print(
             "{} {} {}to {}",
@@ -690,7 +690,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     /// Print a binary instruction.
     void PrintBinary(Inst* i, std::string_view mnemonic) {
-        auto b = as<BinaryInst>(i);
+        auto* b = as<BinaryInst>(i);
         PrintTemp(i);
         Print(
             "{} {}{}, {}",
@@ -716,22 +716,22 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
             /// Instructions.
             case Value::Kind::Alloca: {
-                auto local = as<AllocaInst>(i);
+                auto* local = as<AllocaInst>(i);
                 PrintTemp(i);
                 Print("alloca {}", Ty(local->allocated_type()));
                 return;
             }
 
             case Value::Kind::Copy: {
-                auto copy = as<CopyInst>(i);
+                auto* copy = as<CopyInst>(i);
                 PrintTemp(i);
                 Print("copy {}", Val(copy->operand()));
                 return;
             }
 
             case Value::Kind::Call: {
-                auto c = as<CallInst>(i);
-                auto callee_ty = as<FunctionType>(c->callee()->type());
+                auto* c = as<CallInst>(i);
+                auto* callee_ty = as<FunctionType>(c->callee()->type());
                 if (not callee_ty->ret()->is_void()) PrintTemp(i);
                 else Print("    {}", C(Yellow));
                 Print(
@@ -744,7 +744,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 );
 
                 bool first = true;
-                for (auto arg : c->args()) {
+                for (auto* arg : c->args()) {
                     if (first) first = false;
                     else Print("{}, ", C(Red));
                     Print("{}", Val(arg));
@@ -758,7 +758,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             }
 
             case Value::Kind::GetElementPtr: {
-                auto gep = as<GEPInst>(i);
+                auto* gep = as<GEPInst>(i);
                 PrintTemp(i);
                 Print(
                     "gep {} {}from {} {}at {}",
@@ -772,7 +772,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             }
 
             case Value::Kind::GetMemberPtr: {
-                auto gmp = as<GetMemberPtrInst>(i);
+                auto* gmp = as<GetMemberPtrInst>(i);
                 PrintTemp(i);
                 Print(
                     "gmp {} {}from {} {}at {}",
@@ -786,7 +786,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             }
 
             case Value::Kind::Intrinsic: {
-                auto intrinsic = as<IntrinsicInst>(i);
+                auto* intrinsic = as<IntrinsicInst>(i);
                 auto operands = intrinsic->operands();
                 switch (intrinsic->intrinsic_kind()) {
                     default: LCC_ASSERT(false, "Unimplemented intrinsic in LCC IR printer");
@@ -810,7 +810,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             }
 
             case Value::Kind::Load: {
-                auto load = as<LoadInst>(i);
+                auto* load = as<LoadInst>(i);
                 PrintTemp(i);
                 Print(
                     "load {} {}from {}",
@@ -822,7 +822,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             }
 
             case Value::Kind::Phi: {
-                auto phi = as<PhiInst>(i);
+                auto* phi = as<PhiInst>(i);
                 const auto separator = fmt::format("{}, ", C(Red));
                 const auto FormatPHIVal = [this](auto& val) {
                     return fmt::format(
@@ -846,7 +846,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             }
 
             case Value::Kind::Store: {
-                auto store = as<StoreInst>(i);
+                auto* store = as<StoreInst>(i);
                 Print(
                     "    {}store {} {}into {}",
                     C(Yellow),
@@ -859,7 +859,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
             /// Terminators.
             case Value::Kind::Branch: {
-                auto branch = as<BranchInst>(i);
+                auto* branch = as<BranchInst>(i);
                 Print(
                     "    {}branch {}to {}",
                     C(Yellow),
@@ -870,7 +870,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             }
 
             case Value::Kind::CondBranch: {
-                auto branch = as<CondBranchInst>(i);
+                auto* branch = as<CondBranchInst>(i);
                 Print(
                     "    {}branch {}on {} {}to {} {}else {}",
                     C(Yellow),
@@ -885,7 +885,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             }
 
             case Value::Kind::Return: {
-                auto ret = as<ReturnInst>(i);
+                auto* ret = as<ReturnInst>(i);
                 if (ret->val()) Print("    {}return {}", C(Yellow), Val(ret->val()));
                 else Print("    {}return", C(Yellow));
                 return;
@@ -903,14 +903,14 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Trunc: PrintCast(i, "trunc"); return;
 
             case Value::Kind::Neg: {
-                auto neg = as<UnaryInstBase>(i);
+                auto* neg = as<UnaryInstBase>(i);
                 PrintTemp(i);
                 Print("negate {}", Index(i), Val(neg->operand()));
                 return;
             }
 
             case Value::Kind::Compl: {
-                auto c = as<UnaryInstBase>(i);
+                auto* c = as<UnaryInstBase>(i);
                 PrintTemp(i);
                 Print("compl {}", Index(i), Val(c->operand()));
                 return;
@@ -948,7 +948,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     /// Print a global variable.
     void PrintGlobal(GlobalVariable* v) {
         bool imported{false};
-        for (auto n : v->names()) {
+        for (const auto& n : v->names()) {
             if (n.name != v->names().front().name)
                 Print("{}, ", C(White));
             Print(
@@ -1030,7 +1030,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
             /// TODO: Format this differently based on the array type?
             case Value::Kind::ArrayConstant: {
-                auto a = as<ArrayConstant>(v);
+                auto* a = as<ArrayConstant>(v);
 
                 // String
                 if (a->is_string_literal()) {
@@ -1186,7 +1186,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             /// Instructions that may yield a value.
             case Value::Kind::Call: return as<CallInst>(i)->type() != Type::VoidTy;
             case Value::Kind::Intrinsic: {
-                auto intrinsic = as<IntrinsicInst>(i);
+                auto* intrinsic = as<IntrinsicInst>(i);
                 switch (intrinsic->intrinsic_kind()) {
                     default: LCC_UNREACHABLE();
 
@@ -1219,15 +1219,15 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         /// Ok because we’re not going to mutate this, but we should
         /// probably refactor the IR printer to use const Value*’s
         /// instead...
-        auto v = const_cast<Value*>(const_value);
+        auto* v = const_cast<Value*>(const_value);
         LCCIRPrinter p{use_colour};
-        if (auto b = cast<Block>(v)) {
+        if (auto* b = cast<Block>(v)) {
             if (b->function()) p.SetFunctionIndices(b->function());
             p.PrintBlock(b);
-        } else if (auto f = cast<Function>(v)) {
+        } else if (auto* f = cast<Function>(v)) {
             p.SetFunctionIndices(f);
             p.PrintFunction(f);
-        } else if (auto i = cast<Inst>(v)) {
+        } else if (auto* i = cast<Inst>(v)) {
             if (i->block() and i->block()->function()) p.SetFunctionIndices(i->block()->function());
             p.PrintInst(i);
         } else if (is<GlobalVariable>(v)) {
