@@ -1,0 +1,158 @@
+================
+Deproceduring, function;
+================
+
+foo :void() {};
+foo;
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (call (name))
+ (return (integer_literal)))
+
+
+================
+Trailing Smooth Clamshell, function();
+================
+
+foo :void() {};
+foo();
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (call (name))
+ (return (integer_literal)))
+
+
+================
+Wrapped in Parens, (function);
+================
+
+foo :void() {};
+(foo);
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (call (name))
+ (return (integer_literal)))
+
+
+================
+Disallowed Call
+================
+
+foo :void(x:int) {};
+;; confusingly in this scenario, this should return 42 and discard foo as
+;; an unused expression.
+foo, 42;
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (name)
+ (return (integer_literal)))
+
+
+================
+Multiple Arguments, No Separator
+================
+
+foo :void(x:int y:int) {};
+foo 42 69;
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (call (name) (integer_literal) (integer_literal))
+ (return (integer_literal)))
+
+
+================
+Multiple Arguments, Comma Separator
+================
+
+foo :void(x:int y:int) {};
+foo 42, 69;
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (call (name) (integer_literal) (integer_literal))
+ (return (integer_literal)))
+
+
+================
+Multiple Arguments, Disallowed Call
+================
+
+foo :void(x:int y:int) {};
+foo, 42 69;
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (name)
+ (return
+  (binary_multiply (integer_literal) (integer_literal))))
+
+
+================
+Multiple Arguments, Comma Separated, Disallowed Call
+================
+
+foo :void(x:int y:int) {};
+foo, 42, 69;
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (name)
+ (integer_literal)
+ (return (integer_literal)))
+
+
+================
+Single Argument, Binary Operator, function 34 + 35;
+================
+
+foo :void(x:int) {};
+;; should NOT be parsed as `(foo 34) + 35`, instead `foo (34 + 35)`.
+foo 34 + 35;
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (call (name)
+  (binary_add
+   (integer_literal)
+   (integer_literal)))
+ (return (integer_literal)))
+
+
+================
+Single Argument, Unary Prefix Operator, function -69;
+================
+
+foo :void(x:int) {};
+;; should NOT be parsed as `(foo) - (69)`, instead `foo (- 69)`.
+foo -69;
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (call (name) (integer_literal))
+ (return (integer_literal)))
+

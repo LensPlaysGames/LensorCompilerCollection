@@ -991,3 +991,38 @@ If you understood the vtable stuff up above and how sum types in Glint work (tag
   }
 #+end_src
 
+*** Calls
+[2024-07-28 Sun 19:46]
+
+#+begin_src glint-ts
+  foo;     ;; parsed as access of foo, may be turned into a call through deproceduring.
+  foo();   ;; parsed as call of foo
+  (foo);   ;; parsed as access of foo, may be turned into a call through deproceduring.
+
+  foo bar;     ;; parsed as call of foo, single argument of bar which may be turned into a call through deproceduring.
+  bar baz;     ;; parsed as call of bar, single argument of baz which may be turned into a call through deproceduring.
+  foo bar baz; ;; parsed as call of foo, two arguments, bar and baz, which may be turned into calls through deproceduring.
+
+  ;; Notice how (bar baz) is NOT parsed as a call in the arguments, even
+  ;; though it is at the top level; we are not "expecting" a function to
+  ;; call so we don't assume there is one. This is akin to the "operator
+  ;; position" in LISP, sort of. We can "expect another function"/put
+  ;; another expression in the operator position by opening up a
+  ;; parenthetical expression list.
+
+  foo (bar baz);  ;; parsed as call of foo, single argument of call of bar, single argument of baz which may be turned into a call through deproceduring.
+
+  ;; After we have parsed an expression in the operator position, we begin
+  ;; collecting arguments into a call of that operator expression.
+  ;; A comma directly following the operator position may be used to stop
+  ;; this behavior (arguments will not be collected, deproceduring will
+  ;; still be applied).
+  ;; TODO: not implemented yet
+  foo, bar baz; ;; parsed as access of foo, may be turned into a call through deproceduring, sequentially a call to bar, single argument of baz (yada yada).
+
+  ;; however, a comma may be used to separate arguments as well (to no effect).
+  foo bar, baz; ;; parsed as call of foo, two arguments, bar and baz, which may be turned into calls through deproceduring.
+
+  ;; foo (bar, baz);
+#+end_src
+

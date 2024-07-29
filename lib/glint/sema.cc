@@ -909,7 +909,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         }
 
         // We have a return expression, hurray!
-        if (auto ret = cast<ReturnExpr>(*last)) {
+        if (auto* ret = cast<ReturnExpr>(*last)) {
             LCC_ASSERT(
                 TryConvert(&ret->value(), ty->return_type()) == 0,
                 "Last expression may be a return expression, sure, but the expression it's returning is not convertible to the return type!"
@@ -920,7 +920,9 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         // If the last expression is not a return expression and the type of the
         // last expression is convertible to the return type, insert a return
         // expression that returns the converted last expression.
-        if (Convert(last, ty->return_type())) {
+        // FIXME: Probably a bug elsewhere, but last type can be void after
+        // conversion if deproceduring happens to a function that returns void.
+        if (Convert(last, ty->return_type()) and not(*last)->type()->is_void()) {
             if (is<BlockExpr>(decl->body()))
                 *last = new (mod) ReturnExpr(*last, {});
             else decl->body() = new (mod) ReturnExpr(*last, {});

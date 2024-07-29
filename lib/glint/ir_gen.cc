@@ -412,9 +412,19 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             switch (unary_expr->op()) {
                 case TokenKind::Exclam: {
-                    auto* zero_imm = new (*module) lcc::IntegerConstant(lcc::IntegerType::Get(ctx, ctx->target()->size_of_pointer), 0);
-                    auto* zero_imm_bitcast = new (*module) lcc::BitcastInst(zero_imm, lcc::Type::PtrTy);
-                    auto* eq = new (*module) EqInst(generated_ir[unary_expr->operand()], zero_imm_bitcast, expr->location());
+                    auto* zero_imm = new (*module) lcc::IntegerConstant(
+                        lcc::IntegerType::Get(ctx, unary_expr->operand()->type()->size(ctx)),
+                        0
+                    );
+                    auto* zero_imm_bitcast = new (*module) lcc::BitcastInst(
+                        zero_imm,
+                        Convert(ctx, unary_expr->operand()->type())
+                    );
+                    auto* eq = new (*module) EqInst(
+                        generated_ir[unary_expr->operand()],
+                        zero_imm_bitcast,
+                        expr->location()
+                    );
                     generated_ir[expr] = eq;
                     insert(zero_imm_bitcast);
                     insert(eq);

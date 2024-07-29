@@ -15,7 +15,7 @@
 
 namespace {
 /// Get the binary precedence of a token.
-constexpr inline lcc::isz CallPrecedence = 100'000;
+constexpr inline lcc::isz CallPrecedence = 90;
 constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
     using Tk = lcc::glint::TokenKind;
     switch (t) {
@@ -25,7 +25,8 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         /// Call and subscript have higher precedence than unary operators.
         /// Note: Unary operator precedence is 10'000.
         case Tk::LBrack:
-            return CallPrecedence + 1;
+            return 100'001;
+            // return CallPrecedence + 1;
 
         case Tk::Star:
         case Tk::Slash:
@@ -71,7 +72,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::TildeEq:
             return 100;
 
-        // Not operators
+        // Not binary or postfix unary operators
         case Tk::Invalid:
         case Tk::Eof:
         case Tk::LParen:
@@ -1805,7 +1806,7 @@ void lcc::glint::Parser::ParseTopLevel() {
                     rightmost_location.len = 1;
                 }
 
-                Error(rightmost_location, "Expected hard expression separator")
+                Warning(rightmost_location, "Expected hard expression separator")
                     .attach(Note("Before this"));
             }
         }

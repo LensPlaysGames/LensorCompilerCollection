@@ -37,6 +37,7 @@ lcc::StringMap<Tk> keywords{
     {"lambda", Tk::Lambda},
     {"true", Tk::True},
     {"false", Tk::False},
+    {"not", Tk::Exclam},
     {"and", Tk::And},
     {"or", Tk::Or},
     {"sizeof", Tk::Sizeof},
