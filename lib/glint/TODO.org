@@ -1,3 +1,46 @@
+* TODO [REQUIRED] =supplant=
+
+#+begin_src glint-ts
+  a : struct { x:int y:int };
+  b : struct { supplant a; }
+  foo :: b !{ .x 42 .y 69 };
+  foo.y;
+#+end_src
+
+Take the members of a struct (or any type that has named members, like a sum type), and place them in another struct, without the verbosity of the "reach through" name. No =foo.a.x=, just =foo.x=.
+
+#+begin_src glint-ts
+  location_t : struct { begin:int, end:int };
+  token_data_t : sum {
+    x:int
+    y:[byte]
+  };
+  token : struct {
+    ;; every token can share common data members, since it's a struct
+    loc :location_t
+    supplant token_data_t;
+  };
+  ;; but, instances of a token don't require explicitly reaching through
+  ;; `token_data_t` (which also means you can change the implementation)
+  t :: lex ...;
+
+  ;; not t.data.x or whatever, just t.x! Very handy.
+  if (has t.x) ...;
+
+#+end_src
+
+* TODO [FIX] =!= is completely broken.
+
+* TODO [REQUIRED] =break=
+
+I think it'd be nice to have break take an optional integer literal operand for how many loops to break out of.
+
+* TODO [REQUIRED] Sum type Assign From Sum Type
+
+* TODO Support =elif=
+
+Hwai nahwt.
+
 * TODO [REQUIRED] Make Concrete the Dynamic Array Type
 
 Creation Operations:

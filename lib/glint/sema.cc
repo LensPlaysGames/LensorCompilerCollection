@@ -221,6 +221,9 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         return Score(1);
     }
 
+    // FIXME: I'm pretty sure enum to enum should never happen, since sema
+    // should lower every enum access to it's underlying type.
+
     // Integer to integer
     //
     // For portability, we would ideally not make any assumptions about
@@ -286,15 +289,15 @@ void lcc::glint::Sema::ConvertOrError(Expr** expr, Type* to) {
 
 auto lcc::glint::Sema::ConvertToCommonType(Expr** a, Expr** b) -> bool {
     // An integer literal should always be converted into the type of the
-    // other side.
+    // other side STRIPPED OF REFERENCES.
     bool a_is_literal = is<IntegerLiteral>(*a);
     bool b_is_literal = is<IntegerLiteral>(*b);
     bool both_literals = a_is_literal and b_is_literal;
     if (not both_literals) {
         if (a_is_literal)
-            return Convert(a, (*b)->type());
+            return Convert(a, (*b)->type()->strip_references());
         if (b_is_literal)
-            return Convert(b, (*a)->type());
+            return Convert(b, (*a)->type()->strip_references());
     }
     return Convert(a, (*b)->type()) or Convert(b, (*a)->type());
 }
@@ -1783,6 +1786,9 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         return;
     }
 
+#define lhs_t b->lhs()->type()
+#define rhs_t b->rhs()->type()
+
     switch (b->op()) {
         case TokenKind::RightArrow:
             Error(
@@ -1927,12 +1933,10 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Or: {
             LValueToRValue(&b->lhs());
             LValueToRValue(&b->rhs());
-            auto* lhs = b->lhs()->type();
-            auto* rhs = b->rhs()->type();
 
             /// Both types must be integers or booleans.
-            if (not lhs->is_integer(true) or not rhs->is_integer(true)) {
-                Error(b->location(), "Cannot perform arithmetic on {} and {}", lhs, rhs);
+            if (not lhs_t->is_integer(true) or not rhs_t->is_integer(true)) {
+                Error(b->location(), "Cannot perform arithmetic on {} and {}", lhs_t, rhs_t);
                 b->set_sema_errored();
                 return;
             }
@@ -1943,9 +1947,9 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     b->location(),
                     "Binary logical operator {} on {} and {}: cannot convert lhs, of type {}, to {}",
                     ToString(b->op()),
-                    lhs,
-                    rhs,
-                    lhs,
+                    lhs_t,
+                    rhs_t,
+                    lhs_t,
                     Type::Bool
                 );
                 b->set_sema_errored();
@@ -1956,9 +1960,9 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     b->location(),
                     "Binary logical operator {} on {} and {}: cannot convert rhs, of type {}, to {}",
                     ToString(b->op()),
-                    lhs,
-                    rhs,
-                    lhs,
+                    lhs_t,
+                    rhs_t,
+                    lhs_t,
                     Type::Bool
                 );
                 b->set_sema_errored();
@@ -2025,27 +2029,48 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Ampersand:
         case TokenKind::Pipe:
         case TokenKind::Caret: {
+            // fmt::print("BEGIN {}\n", ToString(b->op()));
+            // b->lhs()->print(true);
+            // b->rhs()->print(true);
+
             LValueToRValue(&b->lhs());
             LValueToRValue(&b->rhs());
-            auto* lhs = b->lhs()->type();
-            auto* rhs = b->rhs()->type();
+
+            // b->lhs()->print(true);
+            // b->rhs()->print(true);
 
             /// Both types must be integers.
-            if (not lhs->is_integer() or not rhs->is_integer()) {
-                Error(b->location(), "Cannot perform arithmetic on {} and {}", lhs, rhs);
+            if (not lhs_t->is_integer() or not rhs_t->is_integer()) {
+                Error(
+                    b->location(),
+                    "Cannot perform arithmetic on {} and {}",
+                    lhs_t,
+                    rhs_t
+                );
                 b->set_sema_errored();
                 return;
             }
+
+            // b->lhs()->print(true);
+            // b->rhs()->print(true);
 
             /// Convert both operands to their common type.
             if (not ConvertToCommonType(&b->lhs(), &b->rhs())) {
-                Error(b->location(), "Cannot perform arithmetic on {} and {}", lhs, rhs);
+                Error(
+                    b->location(),
+                    "Cannot perform arithmetic on {} and {}",
+                    lhs_t,
+                    rhs_t
+                );
                 b->set_sema_errored();
                 return;
             }
 
+            // b->lhs()->print(true);
+            // b->rhs()->print(true);
+
             /// The result type is the common type.
-            b->type(b->lhs()->type());
+            b->type(lhs_t);
         } break;
 
         /// Comparisons are all handled the same.
@@ -2057,34 +2082,35 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Ge: {
             LValueToRValue(&b->lhs());
             LValueToRValue(&b->rhs());
-            auto* lhs = b->lhs()->type();
-            auto* rhs = b->rhs()->type();
 
             /// If both operands are integers, convert them to their common type.
-            if (lhs->is_integer() and rhs->is_integer()) {
+            if (
+                (lhs_t->is_integer() and rhs_t->is_integer())
+                or (lhs_t->is_enum() and rhs_t->is_enum())
+            ) {
                 if (not ConvertToCommonType(&b->lhs(), &b->rhs())) {
-                    Error(b->location(), "Cannot compare {} and {}", lhs, rhs);
+                    Error(b->location(), "Cannot compare {} and {}", lhs_t, rhs_t);
                     b->set_sema_errored();
                     return;
                 }
             }
 
             /// Bool can only be compared with bool.
-            else if (lhs->is_bool() and rhs->is_bool()) { /** No-op **/
+            else if (lhs_t->is_bool() and rhs_t->is_bool()) { /** No-op **/
             }
 
             /// If both operands are pointers, they must be the same type.
-            else if (lhs->is_pointer() and rhs->is_pointer()) {
-                if (not Type::Equal(lhs, rhs)) Error(
+            else if (lhs_t->is_pointer() and rhs_t->is_pointer()) {
+                if (not Type::Equal(lhs_t, rhs_t)) Error(
                     b->location(),
                     "Cannot compare unrelated pointer types {} and {}",
-                    lhs,
-                    rhs
+                    lhs_t,
+                    rhs_t
                 );
             }
 
             /// Other comparisons are not allowed.
-            else { Error(b->location(), "Cannot compare {} and {}", lhs, rhs); }
+            else { Error(b->location(), "Cannot compare {} and {}", lhs_t, rhs_t); }
 
             /// Comparisons return bool.
             b->type(Type::Bool);
@@ -2104,14 +2130,14 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             /// the lhs is indeed an lvalue, we don’t ever mark this as errored
             /// because we know what its type is going to be, irrespective of
             /// whether the assignment is valid or not.
-            b->type(b->lhs()->type());
+            b->type(lhs_t);
 
             // Assignment always yields an lvalue.
             b->set_lvalue();
 
             // Disallow assigning to a sum type directly.
-            auto* lhs_type = b->lhs()->type();
-            if (auto* sum_type = cast<SumType>(b->lhs()->type())) {
+            auto* lhs_type = lhs_t;
+            if (auto* sum_type = cast<SumType>(lhs_t)) {
                 if (auto* m = cast<MemberAccessExpr>(b->lhs())) {
                     // Use member access to fetch type from sum type
                     lhs_type = sum_type->members().at(m->member()).type;
@@ -2134,7 +2160,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 Error(
                     b->rhs()->location(),
                     "Type of expression {} is not convertible to variable type {}",
-                    b->rhs()->type(),
+                    rhs_t,
                     lhs_type
                 );
                 return;
@@ -2204,6 +2230,9 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
             LCC_UNREACHABLE();
     }
+
+#undef lhs_t
+#undef rhs_t
 }
 
 void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
@@ -2535,6 +2564,9 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 not is<CompoundLiteral>(expr->args().at(0)),
                 "Call of type expression with single compound literal argument should have been handled above"
             );
+
+            // Do conversions like lvalue to rvalue and stuffs.
+            (void) Convert(&expr->args().at(0), expr->callee()->type());
 
             *expr_ptr = new (mod) CastExpr(
                 expr->args().at(0),
@@ -3234,7 +3266,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
                 new (mod) BinaryExpr(
                     TokenKind::Plus,
                     u->operand(),
-                    new (mod) IntegerLiteral(1, u->operand()->type(), u->location()),
+                    new (mod) IntegerLiteral(1, u->location()),
                     u->location()
                 ),
                 u->location()

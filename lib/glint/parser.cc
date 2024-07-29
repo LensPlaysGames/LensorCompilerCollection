@@ -1243,7 +1243,8 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     // Basically, what I'd like is if there is an else past a semi-colon then
     // to handle that, but that requires lookahead and I don't like that lol.
     if (LookAhead(1)->kind == Tk::Else) {
-        if (+ConsumeExpressionSeparator()) {
+        if (not +ConsumeExpressionSeparator()) {
+            Note(LookAhead(1)->location, "Here");
             return Error(
                 loc,
                 "Expected expression separator (like a semicolon or comma)"
@@ -1775,9 +1776,9 @@ void lcc::glint::Parser::ParseTopLevel() {
             if (At(Tk::Eof)) {
                 Warning("Expected hard expression separator but got end of file");
             } else if (expr) {
-                Location location{};
+                Location rightmost_location{};
                 if (expr.value()->location().is_valid())
-                    location = expr.value()->location();
+                    rightmost_location = expr.value()->location();
 
                 // Attempt to get the location that is as close to where the semi-colon
                 // should be.
@@ -1786,25 +1787,25 @@ void lcc::glint::Parser::ParseTopLevel() {
                 // available, or the type.
                 if (auto* var_decl = cast<VarDecl>(*expr)) {
                     if (var_decl->init())
-                        location = var_decl->init()->location();
-                    else location = var_decl->type()->location();
+                        rightmost_location = var_decl->init()->location();
+                    else rightmost_location = var_decl->type()->location();
                 }
 
                 // For a function declaration, choose the body location, if it's
                 // available, or the type.
                 if (auto* fdecl = cast<FuncDecl>(*expr)) {
                     if (fdecl->body())
-                        location = fdecl->body()->location();
-                    else location = fdecl->type()->location();
+                        rightmost_location = fdecl->body()->location();
+                    else rightmost_location = fdecl->type()->location();
                 }
 
                 // Limit location to length of one, discarding the beginning (fold right).
-                if (location.len > 1) {
-                    location.pos += location.len - 1;
-                    location.len = 1;
+                if (rightmost_location.len > 1) {
+                    rightmost_location.pos += rightmost_location.len - 1;
+                    rightmost_location.len = 1;
                 }
 
-                Error(location, "Expected hard expression separator")
+                Error(rightmost_location, "Expected hard expression separator")
                     .attach(Note("Before this"));
             }
         }
@@ -1813,7 +1814,6 @@ void lcc::glint::Parser::ParseTopLevel() {
         else {
             // If we failed to parse an expression at the top level, there was an error.
             context->set_error();
-
             // Jump past the next semicolon or closing brace in case of an error.
             Synchronise();
         }
