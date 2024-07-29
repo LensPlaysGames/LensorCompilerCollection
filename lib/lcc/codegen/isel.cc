@@ -121,10 +121,19 @@ void select_instructions(Module* mod, MFunction& function) {
                             block.instructions()[index] = mov_imm;
                             break;
                         }
-
+                        if (std::holds_alternative<MOperandLocal>(inst.get_operand(0))) {
+                            // The move itself does the truncation; we just load less.
+                            auto mov_local = MInst(usz(x86_64::Opcode::Move), {0, 0});
+                            mov_local.add_operand(inst.get_operand(0));
+                            mov_local.add_operand(MOperandRegister{inst.reg(), uint(inst.regsize())});
+                            block.instructions()[index] = mov_local;
+                            break;
+                        }
                         LCC_ASSERT(
                             std::holds_alternative<MOperandRegister>(inst.get_operand(0)),
-                            "Sorry, but you can only truncate registers and immediates for right now"
+                            "Sorry, but you can only truncate registers, immediates, and locals for right now\n"
+                            "    {}\n",
+                            PrintMOperand(inst.get_operand(0))
                         );
 
                         auto mov_inst = MInst(usz(x86_64::Opcode::Move), {0, 0});
