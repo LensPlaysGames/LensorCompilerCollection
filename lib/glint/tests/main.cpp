@@ -48,9 +48,15 @@ struct GlintTest : langtest::Test {
         lcc::Context context{
             default_target,
             default_format,
-            false,
-            false,
-            false};
+            lcc::Context::Options{
+                lcc::Context::DoNotUseColour,
+                lcc::Context::DoNotPrintAST,
+                lcc::Context::DoNotStopatSyntax,
+                lcc::Context::DoNotStopatSema,
+                lcc::Context::DoNotPrintMIR,
+                lcc::Context::DoNotStopatMIR //
+            }                                //
+        };
 
         bool failed_parse{false};
         bool failed_check{false};
@@ -299,7 +305,7 @@ int main(int argc, const char** argv) {
     }
 
     langtest::TestContext out{};
-    for (const auto& entry : std::filesystem::directory_iterator("ast")) {
+    for (const auto& entry : std::filesystem::directory_iterator("corpus")) {
         if (entry.is_regular_file()) {
             if (option_print or option_count)
                 fmt::print("{}:\n", entry.path().lexically_normal().filename().string());
