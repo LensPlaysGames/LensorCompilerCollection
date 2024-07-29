@@ -1,3 +1,16 @@
+* TODO [REQUIRED] Operator Overloading
+
+Turn it into a call.
+Turn it into a call.
+Turn it into a call.
+Turn it into a call.
+
+Analyse that expression.
+Analyse that expression.
+Analyse that expression.
+Analyse that expression.
+
+
 * TODO [REQUIRED] =supplant=
 
 #+begin_src glint-ts
@@ -28,6 +41,8 @@ Take the members of a struct (or any type that has named members, like a sum typ
   if (has t.x) ...;
 
 #+end_src
+
+Implementation note: =supplant= is basically a declaration that states any access of the members of the following type should have an extra member access to an invisible member inserted automatically.
 
 * TODO [FIX] =!= is completely broken.
 

@@ -32,6 +32,30 @@
 
 (declare-function treesit-parser-create "treesit.c")
 
+(defcustom
+  glint-ts-mode-indent-offset 2
+  "Amount of spaces to be used as a unit of indentation.")
+
+(defvar glint-ts-mode--indent-rules
+  '((glint
+
+     ( ;; rule-begin
+      ;; BLOCK CLOSER REMOVES INDENT
+      (or (node-is "}"))
+      standalone-parent ;; anchor
+      0 ;; offset
+      ) ;; rule-end
+
+     ( ;; rule-begin
+      ;; BLOCK EXPRESSION CAUSES INDENT
+      (or (parent-is "block")) ;; matcher
+      standalone-parent ;; anchor
+      glint-ts-mode-indent-offset ;; offset
+      ) ;; rule-end
+
+     ))
+  "See `treesit-simple-indent-rules' (with `M-x' `describe-variable'), as well as `treesit-simple-indent-presets' (very helpful!).")
+
 (defun glint-ts-mode--install ()
   "Use 'treesit-install-language-grammar' to install the Glint language grammar"
   (interactive)
@@ -56,25 +80,39 @@
                   type: (type_pointer (type_function))))
 
    :feature 'type
-   `((type_fixed_array)   @font-lock-type-face
-     (type_dynamic_array) @font-lock-type-face
-     (type_ffi)           @font-lock-type-face
-     (type_identifier)    @font-lock-type-face
-     (type_pointer)       @font-lock-type-face
-     (type_primitive)     @font-lock-type-face
-     (type_reference)     @font-lock-type-face)
+   `((declaration type: (identifier) @font-lock-type-face)
+     (type_array)  @font-lock-type-face
+     (type_ffi)        @font-lock-type-face
+     (type_pointer)    @font-lock-type-face
+     (type_primitive)  @font-lock-type-face
+     (type_reference)  @font-lock-type-face)
 
    :feature 'number
-   `((number_literal) @font-lock-number-face)
+   `((integer_literal) @font-lock-number-face
+     (bool_literal)    @font-lock-number-face)
 
    :feature 'string
-   `((string) @font-lock-string-face)
+   `((string_literal) @font-lock-string-face)
 
    :feature 'keyword
-   `(["discardable" "external" "export" "module" "return"] @font-lock-keyword-face)
+   `([
+      "import" "module"
+      "if" "else" "while"
+      "not"
+      "and" "or"
+      "enum" "struct" "sum" "union"
+      "external" "export"
+      "return"
+      ]
+     @font-lock-keyword-face)
 
-   ;; :feature 'operator
-   ;; `([] @font-lock-operator-face)
+   :feature 'operator
+   `(["@" "!" ; "~"
+      "+" "-" "*" "/" "&" "|" "^" "=" "!=" "<" "<=" ">" ">="
+      "::" ":" ":="
+      "++" "--"
+      ]
+     @font-lock-operator-face)
 
    :feature 'delimiter
    `(["(" ")" "{" "}"] @font-lock-delimiter-face)
@@ -96,6 +134,9 @@
         (setq-local comment-end "")
 
         ;; Font Lock
+        (setq-local
+         treesit-simple-indent-rules
+         glint-ts-mode--indent-rules)
         (setq-local
          treesit-font-lock-settings
          (glint-ts-mode--font-lock-settings))
