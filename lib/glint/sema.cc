@@ -1781,6 +1781,27 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
     return (*expr_ptr)->ok();
 }
 
+void lcc::glint::Sema::RewriteToBinaryOpThenAssign(
+    Expr** expr_ptr,
+    TokenKind op,
+    Expr* lhs,
+    Expr* rhs,
+    Location location
+) {
+    *expr_ptr = new (mod) BinaryExpr(
+        TokenKind::ColonEq,
+        lhs,
+        new (mod) BinaryExpr(
+            op,
+            lhs,
+            rhs,
+            location
+        ),
+        location
+    );
+    AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+}
+
 void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
     // Give up if there is an error in either operand.
     if (not Analyse(&b->lhs()) or not Analyse(&b->rhs())) {
@@ -1795,129 +1816,41 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::RightArrow:
             Error(
                 b->location(),
-                "Sorry, but the {} doesn't do anything yet.",
+                "Sorry, but {} doesn't do anything yet.",
                 ToString(b->op())
             );
             break;
 
         case TokenKind::PlusEq:
-            *expr_ptr = new (mod) BinaryExpr(
-                TokenKind::ColonEq,
-                b->lhs(),
-                new (mod) BinaryExpr(
-                    TokenKind::Plus,
-                    b->lhs(),
-                    b->rhs(),
-                    b->location()
-                ),
-                b->location()
-            );
-            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Plus, b);
             break;
 
         case TokenKind::MinusEq:
-            *expr_ptr = new (mod) BinaryExpr(
-                TokenKind::ColonEq,
-                b->lhs(),
-                new (mod) BinaryExpr(
-                    TokenKind::Minus,
-                    b->lhs(),
-                    b->rhs(),
-                    b->location()
-                ),
-                b->location()
-            );
-            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Minus, b);
             break;
 
         case TokenKind::StarEq:
-            *expr_ptr = new (mod) BinaryExpr(
-                TokenKind::ColonEq,
-                b->lhs(),
-                new (mod) BinaryExpr(
-                    TokenKind::Star,
-                    b->lhs(),
-                    b->rhs(),
-                    b->location()
-                ),
-                b->location()
-            );
-            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Star, b);
             break;
 
         case TokenKind::SlashEq:
-            *expr_ptr = new (mod) BinaryExpr(
-                TokenKind::ColonEq,
-                b->lhs(),
-                new (mod) BinaryExpr(
-                    TokenKind::Slash,
-                    b->lhs(),
-                    b->rhs(),
-                    b->location()
-                ),
-                b->location()
-            );
-            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Slash, b);
             break;
 
         case TokenKind::PercentEq:
-            *expr_ptr = new (mod) BinaryExpr(
-                TokenKind::ColonEq,
-                b->lhs(),
-                new (mod) BinaryExpr(
-                    TokenKind::Percent,
-                    b->lhs(),
-                    b->rhs(),
-                    b->location()
-                ),
-                b->location()
-            );
-            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Percent, b);
             break;
 
         case TokenKind::AmpersandEq:
-            *expr_ptr = new (mod) BinaryExpr(
-                TokenKind::ColonEq,
-                b->lhs(),
-                new (mod) BinaryExpr(
-                    TokenKind::Ampersand,
-                    b->lhs(),
-                    b->rhs(),
-                    b->location()
-                ),
-                b->location()
-            );
-            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Ampersand, b);
             break;
 
         case TokenKind::PipeEq:
-            *expr_ptr = new (mod) BinaryExpr(
-                TokenKind::ColonEq,
-                b->lhs(),
-                new (mod) BinaryExpr(
-                    TokenKind::Pipe,
-                    b->lhs(),
-                    b->rhs(),
-                    b->location()
-                ),
-                b->location()
-            );
-            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Pipe, b);
             break;
 
         case TokenKind::CaretEq:
-            *expr_ptr = new (mod) BinaryExpr(
-                TokenKind::ColonEq,
-                b->lhs(),
-                new (mod) BinaryExpr(
-                    TokenKind::Caret,
-                    b->lhs(),
-                    b->rhs(),
-                    b->location()
-                ),
-                b->location()
-            );
-            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Caret, b);
             break;
 
         case TokenKind::TildeEq:

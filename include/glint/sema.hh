@@ -71,6 +71,32 @@ private:
     // expr_ptr points to unary expression `u`
     void AnalyseUnary(Expr** expr_ptr, UnaryExpr* u);
 
+    /// Rewrite given expression pointer to:
+    /// BINARY :=
+    /// |-- lhs
+    /// `-- BINARY op
+    ///     |-- lhs
+    ///     `-- rhs
+    void RewriteToBinaryOpThenAssign(
+        Expr** expr_ptr,
+        TokenKind op,
+        Expr* lhs,
+        Expr* rhs,
+        Location location = {}
+    );
+    void RewriteToBinaryOpThenAssign(
+        Expr** expr_ptr,
+        TokenKind op,
+        BinaryExpr* b
+    ) {
+        RewriteToBinaryOpThenAssign(
+            expr_ptr,
+            op,
+            b->lhs(),
+            b->rhs(),
+            b->location()
+        );
+    }
     /// Analyse an expression and discard it.
     /// \see Discard.
     [[nodiscard]]
