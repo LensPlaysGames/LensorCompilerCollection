@@ -81,7 +81,8 @@
 
    :feature 'type
    `((declaration type: (identifier) @font-lock-type-face)
-     (type_array)  @font-lock-type-face
+     ["enum" "struct" "sum" "union"] @font-lock-type-face
+     (type_array)      @font-lock-type-face
      (type_ffi)        @font-lock-type-face
      (type_pointer)    @font-lock-type-face
      (type_primitive)  @font-lock-type-face
@@ -100,7 +101,6 @@
       "if" "else" "while"
       "not"
       "and" "or"
-      "enum" "struct" "sum" "union"
       "external" "export"
       "return"
       ]
