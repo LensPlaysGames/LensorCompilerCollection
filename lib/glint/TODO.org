@@ -1,3 +1,81 @@
+* TODO [FEATURE] "Member Functions" for sum, enum, struct, and union types.
+
+We aren't going to call them "member", or use that word around them ever.
+
+Rather, this is syntactic sugar
+  A.) to write a function easily using the member's of a type and,
+  B.) to group functions related to a type within the scope ("namespace")
+      of that type.
+
+For this to work, we'll implement a fallback to universal function call syntax (UFCS) if there isn't an overload without it (maybe this could be a use for =->=, to specify "member" functions). In layman's (my) terms, this just means that a call of =thing.function args...= is equivalent to =function thing args...=; that is, the lhs of the =.= operator is passed as the first argument to the function specified on the rhs.
+
+Following should both work.
+
+#+begin_src glint-ts
+  MyT : struct {
+    ;; ...
+    ->valid :bool() some_bool_member;
+  };
+
+  myT :MyT;
+  myT->valid;
+#+end_src
+
+#+begin_src glint-ts
+  MyT : struct {
+    ;; ...
+  };
+
+  valid :bool(i:MyT.ref) i.some_bool_member;
+
+  to_int :int(i:bool) if i 1 else 0;
+
+  myT :MyT;
+  myT->valid;
+  myT->valid->to_int;
+#+end_src
+
+"Accessor Function"?
+"Trailing Function Syntax"?
+
+
+Binary operator =->= rewrites into =rhs(lhs)=.
+Call of binary operator =->= rewrites into =rhs(lhs, args...)=.
+
+* TODO [REQUIRED] Sum Type ~switch~ / ~match~
+
+#+begin_src glint-ts
+  Token : sum {
+    x:int
+    y:[byte]
+  };
+
+  t :Token;
+  ;; ...
+
+  ;; ¡ERROR! When matching on a sum type, all members must be handled.
+  ;; Unhandled members: y
+  ;;   match t {
+  ;;     .x :: print "<integer>";
+  ;;   };
+  ;; Eventually make this a fix diagnostic with suggested fix that may be
+  ;; optionally applied.
+
+  match t {
+    .x :: print "<integer>";
+    .y :: print "<symbol>";
+  };
+
+  ;; optional FEATURE: value match
+  x :: 69;
+  match x {
+    42 :: print "the answer\n";
+    69 :: print "noice\n";
+  };
+#+end_src
+
+Optional FEATURE: =fallthrough=.
+
 * TODO [REQUIRED] Operator Overloading
 
 Turn it into a call.
@@ -44,7 +122,7 @@ Take the members of a struct (or any type that has named members, like a sum typ
 
 Implementation note: =supplant= is basically a declaration that states any access of the members of the following type should have an extra member access to an invisible member inserted automatically.
 
-* TODO [FIX] =!= is completely broken.
+* DONE [FIX] =!= is completely broken.
 
 * TODO [REQUIRED] =break=
 
@@ -75,12 +153,14 @@ Modify Operations:
   - Handle Multiple Dynamic Arrays within Compound Literal on rhs
 - Append, Insert Back, via =+==;
   - Handle Single Element on rhs
+  - TODO Handle Compound Literal with Insert Index and Single Element on rhs
   - Handle Another Dynamic Array on rhs
+  - TODO Handle Compound Literal with Insert Index and Another Dynamic Array on rhs
   - Handle Multiple Dynamic Arrays within Compound Literal on rhs
-- TODO: How to insert at index? Maybe ~dynarray[index] += elem~?
+- TODO: Syntax to insert at index? Maybe ~dynarray[index] += elem~? ~d[i] := elem~?
 
 Deletion Operations:
-- Unary Prefix Minus =-=
+- DONE Unary Prefix Minus =-=
 
 * DONE [REQUIRED] Sum Type, Dynamic Array, Array View, and Fixed Array Initialisation from Compound Literal
 
@@ -163,15 +243,16 @@ With a dynamic array, we have the most data at runtime, but the least at compile
 So, I don't think a dynamic array should be convertible to a fixed array, and definitely not implicitly. In contrast, I /do/ think a dynamic array should be convertible to a view; it's the same thing but without the ability to modify it.
 
 Implicit Conversions:
-- Fixed Array :: Array View, Dynamic Array
+- Fixed Array :: Array View
 - Dynamic Array :: Array View
 
-Inverse:
-- Fixed Array
+Inverse (Disallowed Implicit Conversions):
+- Fixed Array :: Dynamic Array
 - Dynamic Array :: Fixed Array
 - Array View :: Fixed Array
 
 Explicit Conversions:
+- Fixed Array :: Dynamic Array
 - Array View :: Dynamic Array
 
 * TODO [REQUIRED] Zero Initialisation

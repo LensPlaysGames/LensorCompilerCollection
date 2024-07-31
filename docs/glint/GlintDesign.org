@@ -1026,3 +1026,16 @@ If you understood the vtable stuff up above and how sum types in Glint work (tag
   ;; foo (bar, baz);
 #+end_src
 
+*** User-defined Implicit Conversions
+[2024-07-30 Tue 23:19]
+
+#+begin_src glint-ts
+  MyT : struct {
+    valid :bool;
+    ;; ...
+  };
+
+  convert :bool(myT :MyT) myT.valid;
+
+#+end_src
+
