@@ -24,8 +24,8 @@ class CharacterRange {
     /// I’d say.
 
     const char* curr;
-    const char* const end;
-    const char* const begin;
+    const char* end;
+    const char* begin;
 
 public:
     CharacterRange(File* f)
@@ -39,12 +39,14 @@ public:
           begin(s.data()) {}
 
     /// Get the current offset in the file.
+    [[nodiscard]]
     auto current_offset() const -> u32 {
         return u32(curr - begin) - 1;
     }
 
     /// Get the next character.
-    char next() {
+    [[nodiscard]]
+    auto next() -> u32 {
         if (curr >= end) return 0;
         const auto c = *curr++;
 
@@ -71,7 +73,7 @@ public:
         }
 
         /// Regular character.
-        return c;
+        return u32(c);
     }
 };
 } // namespace detail
@@ -81,12 +83,13 @@ struct Lexer {
     detail::CharacterRange chars;
     TToken tok{};
     Context* context{};
-    char lastc = ' ';
+    u32 lastc = ' ';
 
-    Lexer(detail::CharacterRange chs) : chars(chs) {}
+    explicit Lexer(detail::CharacterRange chs) : chars(chs) {}
     Lexer(Context* ctx, detail::CharacterRange chs)
         : chars(chs), context(ctx) {}
 
+    [[nodiscard]]
     auto CurrentOffset() const -> u32 { return chars.current_offset(); }
 
     void NextChar() {
@@ -94,25 +97,39 @@ struct Lexer {
     }
 
     template <typename... Args>
-    Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
+    auto Error(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
         return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    Diag Warning(fmt::format_string<Args...> fmt, Args&&... args) {
+    auto Warning(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
         return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    Diag Note(fmt::format_string<Args...> fmt, Args&&... args) {
+    auto Note(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
         return Diag::Note(context, tok.location, fmt, std::forward<Args>(args)...);
     }
 
-    static bool IsSpace(char c) { return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\f' or c == '\v'; }
-    static bool IsAlpha(char c) { return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z'); }
-    static bool IsDigit(char c) { return c >= '0' and c <= '9'; }
-    static bool IsHexDigit(char c) { return (c >= '0' and c <= '9') or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F'); }
-    static bool IsAlphaNumeric(char c) { return IsAlpha(c) or IsDigit(c); }
+    static auto IsSpace(u32 c) -> bool {
+        return c == ' ' or c == '\t' or c == '\n'
+            or c == '\r' or c == '\f' or c == '\v';
+    }
+    static auto IsAlpha(u32 c) -> bool {
+        return (c >= 'a' and c <= 'z')
+            or (c >= 'A' and c <= 'Z');
+    }
+    static auto IsDigit(u32 c) -> bool {
+        return c >= '0' and c <= '9';
+    }
+    static auto IsHexDigit(u32 c) -> bool {
+        return (c >= '0' and c <= '9')
+            or (c >= 'a' and c <= 'f')
+            or (c >= 'A' and c <= 'F');
+    }
+    static auto IsAlphaNumeric(u32 c) -> bool {
+        return IsAlpha(c) or IsDigit(c);
+    }
 };
 
 template <typename TToken>
@@ -129,6 +146,7 @@ protected:
     // FIXME: These necessary?
     using Lexer<TToken>::Error;
     using Lexer<TToken>::Warning;
+    using Lexer<TToken>::Note;
 };
 
 template <typename TToken>
@@ -144,6 +162,7 @@ protected:
 
     using Lexer<TToken>::Error;
     using Lexer<TToken>::Warning;
+    using Lexer<TToken>::Note;
 
     auto FileId() const { return _file->file_id(); }
 

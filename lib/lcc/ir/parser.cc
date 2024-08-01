@@ -171,8 +171,10 @@ private:
     void SetBlock(Inst* parent, Block*& val, IRValue v);
     void SetValue(Inst* parent, Value*& val, IRValue v);
 
-    static bool IsIdentStart(char c) { return IsAlpha(c) or c == '_' or c == '.'; }
-    static bool IsIdentContinue(char c) {
+    static auto IsIdentStart(u32 c) -> bool {
+        return IsAlpha(c) or c == '_' or c == '.';
+    }
+    static auto IsIdentContinue(u32 c) -> bool {
         return IsIdentStart(c) or IsDigit(c);
     }
 };
@@ -181,14 +183,15 @@ private:
 void lcc::parser::Parser::NextIdentifier() {
     tok.kind = TokenKind::Keyword;
     while (IsIdentContinue(lastc)) {
-        tok.text += lastc;
+        if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in identifier");
+        tok.text += char(lastc);
         NextChar();
     }
 }
 
 void lcc::parser::Parser::NextNumber() {
-    static const auto IsBinary = [](char c) { return c == '0' || c == '1'; };
-    static const auto IsOctal = [](char c) { return IsDigit(c) and c < '8'; };
+    static const auto IsBinary = [](u32 c) { return c == '0' || c == '1'; };
+    static const auto IsOctal = [](u32 c) { return IsDigit(c) and c < '8'; };
 
     /// Helper that actually parses the number.
     const auto ParseNumber = [&](std::string_view name, auto&& IsValidDigit, int base) {
@@ -197,7 +200,8 @@ void lcc::parser::Parser::NextNumber() {
 
         /// Lex digits.
         while (IsValidDigit(lastc)) {
-            tok.text += lastc;
+            if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in number literal");
+            tok.text += char(lastc);
             NextChar();
         }
 
@@ -358,7 +362,7 @@ void lcc::parser::Parser::NextToken() {
                 if (
                     tok.text.size() > 1
                     and tok.text[0] == 'i'
-                    and IsDigit(tok.text[1])
+                    and IsDigit(u32(tok.text[1]))
                 ) {
                     const char* cstr = tok.text.c_str();
 
@@ -429,7 +433,7 @@ auto lcc::parser::Parser::ParseBinary(std::string tmp) -> Result<Inst*> {
 auto lcc::parser::Parser::ParseBlock() -> Result<Block*> {
     /// Block name and colon.
     if (not At(Tk::Keyword)) return Error("Expected block name");
-    auto b = new (*mod) Block(tok.text);
+    auto* b = new (*mod) Block(tok.text);
     AddTemporary("%" + b->name(), b);
     NextToken();
     if (not Consume(Tk::Colon)) return Error("Expected ':'");
@@ -480,7 +484,7 @@ auto lcc::parser::Parser::ParseCall(bool tail) -> Result<CallInst*> {
         ret = *ty;
     }
 
-    auto call = new (*mod) CallInst(
+    auto* call = new (*mod) CallInst(
         FunctionType::Get(mod->context(), ret, std::move(arg_types), is_variadic),
         loc
     );
@@ -521,7 +525,7 @@ auto lcc::parser::Parser::ParseIntrinsic() -> Result<IntrinsicInst*> {
 
     if (not Consume(Tk::RParen)) return Error("Expected ')'");
 
-    auto intrinsic = new (*mod) IntrinsicInst(intrinsic_it->second, {}, loc);
+    auto* intrinsic = new (*mod) IntrinsicInst(intrinsic_it->second, {}, loc);
     intrinsic->operand_list.resize(args.size());
     for (const auto& [i, arg] : vws::enumerate(args))
         SetValue(intrinsic, intrinsic->operand_list[usz(i)], arg);
@@ -607,7 +611,7 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     }
 
     /// Create the function.
-    auto f = new (*mod) Function(
+    auto* f = new (*mod) Function(
         mod.get(),
         std::move(name),
         FunctionType::Get(mod->context(), *ret, std::move(args), is_variadic),
@@ -658,7 +662,7 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     for (auto [tmp, fixups] : block_fixups) {
         auto it = temporaries.find(tmp);
         if (it == temporaries.end()) return Error("Unknown block '{}'", tmp);
-        auto b = cast<Block>(it->second);
+        auto* b = cast<Block>(it->second);
         if (not b) return Error("'{}' is not a block", tmp);
         for (auto elem : fixups) {
             *elem.second = b;

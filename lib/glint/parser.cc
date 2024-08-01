@@ -311,7 +311,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
 ///     i32.ref()
 ///     [i32.ref.ptr 10]
 ///     [i32.ptr 10].ref
-constexpr lcc::isz TypeQualifierPrecedence(lcc::glint::TokenKind t) {
+constexpr auto TypeQualifierPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
     using Tk = lcc::glint::TokenKind;
     switch (t) {
         case Tk::At: return 400;
@@ -887,7 +887,8 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
     // If encountering a comma at this position, it is a "soft" expression
     // separator. So, we are done parsing whatever expression we were parsing,
     // as if it's a semi-colon. But, it won't cause a function call to stop
-    // being parsed. Hope that makes sense.
+    // being parsed (i.e. a comma can be used to separate function arguments,
+    // but not a function and it's arguments). Hope that makes sense.
     if (Consume(Tk::Comma)) return lhs;
 
     /// The rules for operator precedence parsing are as follows:

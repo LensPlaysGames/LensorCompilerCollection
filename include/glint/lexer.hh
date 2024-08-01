@@ -76,12 +76,15 @@ protected:
     /// parsed.
     ///
     /// LookAhead(0) returns the current token.
+    [[nodiscard]]
     auto LookAhead(usz n) -> Token*;
 
     void NextToken();
 
-    static bool IsIdentStart(char c) { return IsAlpha(c) or c == '_'; }
-    static bool IsIdentContinue(char c) {
+    [[nodiscard]]
+    static auto IsIdentStart(u32 c) -> bool { return IsAlpha(c) or c == '_'; }
+    [[nodiscard]]
+    static auto IsIdentContinue(u32 c) -> bool {
         /// Note: '!' is *not* a start character so `!foo` still gets
         /// parsed as `!` + `foo`, but `foo!` gets parsed as one token.
         return IsAlphaNumeric(c) or c == '_' or c == '!' or c == '$' or c == '@';

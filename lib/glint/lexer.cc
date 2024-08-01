@@ -453,7 +453,8 @@ void lcc::glint::Lexer::NextIdentifier() {
     // instead of appending character by character, DON’T. There is a REASON
     // why NextChar() exists. Character != byte in the source file.
     do {
-        tok.text += lastc;
+        if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in identifier");
+        tok.text += char(lastc);
         NextChar();
     } while (IsIdentContinue(lastc));
     tok.kind = TokenKind::Ident;
@@ -484,7 +485,7 @@ void lcc::glint::Lexer::HandleIdentifier() {
     /// beginning of an identifier.
     if (tok.text.size() > 1
         and (tok.text[0] == 's' or tok.text[0] == 'i' or tok.text[0] == 'u')
-        and IsDigit(tok.text[1])) {
+        and IsDigit(u32(tok.text[1]))) {
         const char* cstr = tok.text.c_str();
 
         /// Convert the number.
@@ -500,7 +501,7 @@ void lcc::glint::Lexer::HandleIdentifier() {
 }
 
 void lcc::glint::Lexer::NextString() {
-    char delim = lastc;
+    auto delim = lastc;
     NextChar();
 
     tok.text.clear();
@@ -508,7 +509,8 @@ void lcc::glint::Lexer::NextString() {
     if (delim == '\'') {
         while (lastc != delim) {
             if (lastc == 0) Error("Unterminated string literal");
-            tok.text += lastc;
+            if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in string literal");
+            tok.text += char(lastc);
             NextChar();
         }
     } else {
@@ -533,7 +535,8 @@ void lcc::glint::Lexer::NextString() {
                     default: Error("Invalid escape sequence");
                 }
             } else {
-                tok.text += lastc;
+                if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in string literal");
+                tok.text += char(lastc);
             }
             NextChar();
         }
@@ -545,8 +548,8 @@ void lcc::glint::Lexer::NextString() {
 }
 
 void lcc::glint::Lexer::NextNumber() {
-    static const auto IsBinary = [](char c) { return c == '0' || c == '1'; };
-    static const auto IsOctal = [](char c) { return IsDigit(c) and c < '8'; };
+    static const auto IsBinary = [](u32 c) { return c == '0' || c == '1'; };
+    static const auto IsOctal = [](u32 c) { return IsDigit(c) and c < '8'; };
 
     LCC_ASSERT(
         lastc != DigitSeparator,
@@ -561,8 +564,10 @@ void lcc::glint::Lexer::NextNumber() {
 
         // Lex digits (and maybe digit separators).
         while (IsValidDigit(lastc) or lastc == DigitSeparator) {
-            if (lastc != DigitSeparator)
-                tok.text += lastc;
+            if (lastc != DigitSeparator) {
+                if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in number literal");
+                tok.text += char(lastc);
+            }
             NextChar();
         }
 
@@ -632,7 +637,7 @@ void lcc::glint::Lexer::ExpandMacro(Macro& m) {
                 case MacroArgumentSelector::ExprOnce:
                 case MacroArgumentSelector::Expr: {
                     static_assert(std::derived_from<Parser, Lexer>);
-                    auto parser = static_cast<Parser*>(this);
+                    auto* parser = static_cast<Parser*>(this);
                     auto start = tok.location;
                     auto expr = parser->ParseExpr();
 
