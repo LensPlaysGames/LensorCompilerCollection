@@ -21,3 +21,9 @@ type : sum {
 };
 #+end_src
 And I didn't even need to `...` anything, that's all of it. No enum required. Only as many type declarations as you actually need.
+
+* Non-breaking Breaking Changes
+
+In c++, nearly every change is a breaking change. If you move a group of members into another struct, all the code that uses those members has to be rewritten.
+
+In Glint, nearly every change is not a breaking change. If you move a group of members into another struct, you can supplant it and it's fine. You could also turn the member into a function, and, due to deproceduring, no code would have to change.
