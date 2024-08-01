@@ -1,12 +1,22 @@
 * Lexer
 
-1.) map of string to tokenkind for keywords.
-2.) next_token() -> skip ws, switch on lastc setting tokenkind.
-  2a.) complicated lexing can be abstracted into helpers (i.e. next_number()).
-3.) ToString(tokenkind), so we can change the syntax and not have to
-    rewrite error messages.
+A lexer transforms a sequence of input characters into a sequence of output lexemes, or tokens. A lexeme is just a fancy word for "meaningful group of characters". For example, for an English language parser, a single word would probably be a single lexeme. For computer languages, this usually means numbers, operators, keywords, and more (i.e. strings).
+
+**** Implementation Notes
+
+1. map of string to tokenkind for keywords.
+2. next_token() -> skip ws, switch on lastc setting tokenkind.
+  2a. complicated lexing can be abstracted into helpers (i.e. next_number()).
+3. ToString(tokenkind), so we can change the syntax and not have to
+   rewrite error messages.
 
 * Parser(s)
+
+A parser transforms a sequence of input lexemes into a tree structure that better represents the meaning of the program.
+
+While it is possible to generate all lexemes, or tokens, for a given input and only then operate on them, it is much more efficient to only ever keep a single lexeme around, and build the output tree as you go. This is why the lexer and parser are often interweaved in a very close-knit fashion, working together to form their output.
+
+If you watch YouTube tutorials, then you will (probably only) know about "recursive" parsers. While they do get the job done, and if it works, it works, there are many different types of parsing and I seriously urge you to consider which is the best approach for your given use-case. A language that has a complex macro system may end up parsing code that is 1000 nested levels deep (due to a macro expanding into macros that expand and so on). If those 1000 levels of parsing are encoded in the stackframes of function calls, as they are with recursive parsers, you are going to get a stack overflow (and I don't mean the helpful website). For a LISP, these sort of complex macros are very common, and high level functions may end up diving fifty thousand "levels" down---you aren't going to encode that on the stack and have a good time anytime soon. But a C-like language? How often do you get more than 10 nested levels deep in block expressions? Mostly never. C is mostly top level functions with expressions in their bodies, just a couple levels deep. There really isn't a /need/ for a continuation based parser for C, unless for performance reasons.
 
 ** Recursive
 
@@ -110,7 +120,7 @@ root
 
 At this point, the parser has encountered the end of the input (no more lexemes), and will stop parsing---the output tree will not be changed, it is in it's final form.
 
-So, let's think about how one would traverse this tree, in order to execute the operations declared and get the answer. Well, we all know /PEMDAS/, or some version of it: parentheses, exponents, multiplication and division, then addition and subtraction. This is the order of operations. So, to do =7 * 3 + 4=, we would first do any parenthetical expressions, but there are none. Then we do exponents; also none of those. Then we do multiplication and division: hey, we have one of those! So =7 * 3= is evaluated to ~=19=~ =21=, and then we are left with =21 + 4=, which is =25=. Alright, so the correct answer is =25=... can we walk the tree we produced and get that answer? Let's try.
+So, let's think about how one would traverse this tree, in order to execute the operations declared and get the answer. Well, we all know /PEMDAS/, or some version of it: parentheses, exponents, multiplication and division, then addition and subtraction. This is the order of operations. So, to do =7 * 3 + 4=, we would first do any parenthetical expressions, but there are none. Then we do exponents; also none of those. Then we do multiplication and division: hey, we have one of those! So =7 * 3= is evaluated to +=19=+ =21=, and then we are left with =21 + 4=, which is =25=. Alright, so the correct answer is =25=... can we walk the tree we produced and get that answer? Let's try.
 
 #+begin_example
 root
@@ -192,7 +202,7 @@ With this tree, we can walk it depth-first and get the proper answer to our calc
 
 ** Continuation
 
-More efficient. Not more complicated, just a different mental model of how to operate on a tree; it is more like having a cursor and walking around it, rewriting as you go. When you have to do something later, rather than calling a (possibly recursive) function and encoding all of that information through the call stack (and therefore on the /actual/ hardware stack, which is definitely not infinite), we instead allocate memory ourselves and store that information there. This allows parsing arbitrarily-nested code without running into a stack overflow (and I don't mean the helpful website).
+More efficient. Not more complicated, just a different mental model of how to operate on a tree; it is more like having a cursor and walking around it, rewriting as you go. When you have to do something later, rather than calling a (possibly recursive) function and encoding all of that information through the call stack (and therefore on the /actual/ hardware stack, which is definitely not infinite), we instead allocate memory ourselves and store that information there. This allows parsing arbitrarily-nested code without running into a stack overflow (and I don't mean the helpful website this time, either).
 
 Dynamic list of =Stackframe= objects.
 
@@ -222,7 +232,7 @@ Recursive:
       }
 
       Node rhs;
-      parse_expr(&rhs);
+      parse_expr(&rhs, precedence);
       ,*result = binary_node(token, lhs, rhs);
     }
   }
@@ -233,6 +243,7 @@ Continuation:
   void parse_expr(Node* result) {
       // working_node is ⋅, where we are writing to.
       Node* working_node = result;
+      unsigned int parent_precedence = 0;
       // This loop will never loop itself, but only ever explicitly be
       // continued.
       while (true) {
@@ -246,7 +257,6 @@ Continuation:
           switch (token) {
               // if binary operator
               unsigned int precedence = binary_op_precedence(token);
-              unsigned int parent_precedence = binary_op_precedence(working_node->parent.token);
 
               // 7 * 3 + ⋅ 4
               // working_node is `3`, parent is `*`
@@ -264,6 +274,9 @@ Continuation:
 
               ,*working_node = binary_node(token, working_node, nullptr);
               working_node = &working_node->rhs;
+              // parent of working_node is now this binary operation, so parent
+              // precedence of the working node is now this precedence.
+              parent_precedence = precedence;
               continue;
           }
 
