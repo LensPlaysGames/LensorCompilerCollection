@@ -1,0 +1,275 @@
+* Lexer
+
+1.) map of string to tokenkind for keywords.
+2.) next_token() -> skip ws, switch on lastc setting tokenkind.
+  2a.) complicated lexing can be abstracted into helpers (i.e. next_number()).
+3.) ToString(tokenkind), so we can change the syntax and not have to
+    rewrite error messages.
+
+* Parser(s)
+
+** Recursive
+
+The masses like this, for some reason.
+
+1.) parse_expr()
+  -> switch on tokenkind, setting "lhs" node
+  -> parse binary operators (and their expressions) until stopping point according to precedence; a better way to think about this mentally is "write new binary operations to the right side of the parent binary operation until we return to writing everything we just parsed as the lhs of a new binary operation". Kind of complex but do whatever you need to do, because once you get that, parsing in any manner becomes a lot simpler to reason about. SEE THE TREE. I don't care if you have to draw it on paper, go look at a bush, cut out some construction paper and do some arts and crafts, or get out a marker and whiteboard---do whatever /you/ need to do to see the tree, and how it may be transformed through an operation (like rewriting, or rerooting, etc).
+
+*** 25 or 49
+
+#+begin_example
+7 * 3 + 4
+root
+`+
+ |`*
+ | |`7
+ | `3
+ `4
+root
+`-- binary "+" add
+    |-- binary "*" multiply
+    |   |-- 7
+    |   `-- 3
+    `-- 4
+#+end_example
+
+*** 1.)
+Note that the =⋅= is used in the input to show where the parser state is currently "at"; that is, where it has consumed lexemes up to (and built the output tree for everything behind it, although it may still be incomplete). In the output, it refers to where the next parsed tree node will be placed. It may often be referred to as the "working node", as it is what the parser is working on, with the given state.
+#+begin_example
+⋅ 7 * 3 + 4
+root
+`⋅
+#+end_example
+
+Side-note: If you are confused about the =⋅= thing, think of it as a question: the parser will answer that question in the next operation on the state. "What goes here?"---/advance/---"7 goes here." (spoiler, sorry :&).
+
+*** 2.)
+As you can see, we have now encountered a =7= lexeme; a number. A number is a self-evaluating expression, which is a fancy way to say that it is a leaf node in the output tree. This means that our working node was rewritten (or found to be, or whatever language is in tune with your mental model) to be a number node =7=, and that was placed in the output tree at the working position.
+#+begin_example
+7 ⋅ * 3 + 4
+root
+`7
+#+end_example
+
+Side-note: If we encountered another number, there would be no working position to place it in---this is intentional, because two separate numbers following each other is not a calculation, and therefore not supported in a language that just supports a single math expression. This may leave you wondering how we ever get a more complex tree, and for that keep reading.
+
+*** 3.)
+This is where the "tree" part starts.
+
+When we encounter an infix binary operator, it is an instruction to the parser to do a rewrite of the previous working node (or recontextualizing what it means); that node is now the left hand side (or /lhs/) of a binary operation (specified by the operator). In this case, we encountered =*=, which signifies multiplication. In many cases, languages often expect binary operators, so it is baked into the parsing code to parse every expression as if it's the =lhs= of a binary expression, only writing it to the output tree once it knows that it is /not/ a binary expression. In any case, the following tree is produced given the state so far. Notice how we now have a working position again, in the right hand side (or /rhs/) of the multiplication binary operation node (signified =*=).
+#+begin_example
+7 * ⋅ 3 + 4
+root
+`*
+ |`7
+ `⋅
+#+end_example
+
+*** 4.)
+
+#+begin_example
+7 * 3 ⋅ + 4
+root
+`*
+ |`7
+ `3
+#+end_example
+
+Surprise! We wrote =3= to the working position. Betcha didn't see that one comin'!
+
+Looking good so far.
+
+*** 5.)
+
+#+begin_example
+7 * 3 + ⋅ 4
+#+end_example
+
+**** 5a.)
+
+Alright, this is where an interesting little thing calls the order of operations comes into play, but I won't bog you down with that too much right now. Let's keep parsing with our simple rules: a binary operator replaces the last working node.
+#+begin_example
+root
+`*
+ |`7
+ `+
+  |`3
+  `⋅
+#+end_example
+
+#+begin_example
+7 * 3 + 4 ⋅
+root
+`*
+ |`7
+ `+
+  |`3
+  `4
+#+end_example
+
+At this point, the parser has encountered the end of the input (no more lexemes), and will stop parsing---the output tree will not be changed, it is in it's final form.
+
+So, let's think about how one would traverse this tree, in order to execute the operations declared and get the answer. Well, we all know /PEMDAS/, or some version of it: parentheses, exponents, multiplication and division, then addition and subtraction. This is the order of operations. So, to do =7 * 3 + 4=, we would first do any parenthetical expressions, but there are none. Then we do exponents; also none of those. Then we do multiplication and division: hey, we have one of those! So =7 * 3= is evaluated to ~=19=~ =21=, and then we are left with =21 + 4=, which is =25=. Alright, so the correct answer is =25=... can we walk the tree we produced and get that answer? Let's try.
+
+#+begin_example
+root
+`*
+ |`7
+ `+
+  |`3
+  `4
+#+end_example
+
+We could start with the multiplication, but one of it's operands, the =rhs=, requires evaluation itself. So, either way, we will have to end up walking the tree "bottom-up", or, starting with the leaf nodes (also why leaf nodes are called self-evaluating). So, =3= and =4= evaluate to themselves, and then we do the addition and get the result =7=, and then we perform our multiplication and ... oh, we get =49=... Wasn't the right answer =25=? What went wrong? We parsed everything, every operation and value is accounted for. Well, the issue lies in the order of operations. See, we didn't know it, but we were following the wrong rule when it comes to what happens when we encounter a binary operator: "a binary operator replaces the last working node". There is more to the story---when we encounter a binary operator, it replaces the last working node *with a higher binary operator precedence than itself*, following the last working node until this isn't true. A higher precedence weights a node lower in the tree than a lower precedence---the precedence values themselves don't matter, only their relationship to each other. Another way to say that is a binary operation replaces the working node child of the parent of the last working node that has a lower binary operator precedence than itself.
+
+You could think of it like this, if it helps. A precedence value "bubbles up" a parsed binary operator up the tree, following parents, until a lower precedence operator is encountered. At that time, the lower precedence of the encountered operation means the operation we just parsed is actually a higher precedence and should be weighed down lower in the tree than the operation of lower precedence, and therefore we do not replace it. Very wordy way to say, "go until it's lower".
+
+So, let's think about what needs to weight the most, given the =PEMDAS= order of operations. Well, they've kind of done the work for us: the weights go in order of the abbreviation.
+
+Precedence Values:
+#+begin_example
+P -- 6
+E -- 5
+M -- 4
+D -- 3
+A -- 2
+S -- 1
+#+end_example
+
+Any operation/node that isn't a binary operation doesn't have a binary operator precedence, and can be thought of as any invalid value you want (=0=, =nil=, =-1=, whatever), as long as that value stops any walking of binary operation precedence (if that makes sense). Another way to think about this is that precedence only applies to subtrees of binary operations and leaf nodes only.
+
+So, given this new rule when we encounter a binary operator and these precedence values, let's go back and try again.
+
+**** 5b.)
+
+Previous Tree
+#+begin_example
+root
+`*
+ |7
+ `4
+#+end_example
+
+Now that we've encountered the =+=, we need to look up it's precedence before we know where to place it in the tree. =+= is an addition operation, and addition
+#+begin_example
+P -- 6
+E -- 5
+M -- 4
+D -- 3
+A -- 2
+S -- 1
+#+end_example
+
+Addition has a precedence of =2=.
+
+Now, we need to check the parent of the last working node, and get it's precedence. The last working node is =4=, so the parent of that is a =*= binary operation, which signifies multiplication. Multiplication has a precedence of =4=.
+
+Finally, we can do a comparison. The precedence of the new binary operation that we just parsed, addition, =2=, is *less than* the precedence of the parent binary operation, multiplication, =4=. This means our "go until it's lower" rule is not true, so we continue up the tree, deciding to rewrite the multiplication (=*=) with addition (=+=) due to the heavier precedence weighing the multiplication operation down. Or, the addition operation's low precedence floats it up past the more-dense multiplication operation, which sinks. The next parent is =root=, which doesn't have a binary operation precedence, since it isn't a binary operation. Because of this, we are done following this binary operation subtree and may place our addition (=+=) in the tree.
+
+#+begin_example
+root
+`+ (2)
+ |`* (4)
+ | |`7
+ | `3
+ `⋅
+#+end_example
+
+As you can see, the above tree is different from the one produced previously, from the simpler rule---instead of writing the =+= into the =rhs= of the multiplication (=*=) operation, we replaced the multiplication operation with the addition operation, then wrote the multiplication operation into the =lhs= of the addition operation. The working node is then set to the =rhs= of the addition operation in both cases.
+
+#+begin_example
+7 * 3 + 4 ⋅
+root
+`+ (2)
+ |`* (4)
+ | |`7
+ | `3
+ `4
+#+end_example
+
+With this tree, we can walk it depth-first and get the proper answer to our calculation when evaluating: =(7 * 3) + 4= -> =21 + 4= -> =25=. Hurray! We properly parsed binary operations using precedence.
+
+** Continuation
+
+More efficient. Not more complicated, just a different mental model of how to operate on a tree; it is more like having a cursor and walking around it, rewriting as you go. When you have to do something later, rather than calling a (possibly recursive) function and encoding all of that information through the call stack (and therefore on the /actual/ hardware stack, which is definitely not infinite), we instead allocate memory ourselves and store that information there. This allows parsing arbitrarily-nested code without running into a stack overflow (and I don't mean the helpful website).
+
+Dynamic list of =Stackframe= objects.
+
+Parse the =lhs= expression. Then, if a binary operator is parsed, create a corresponding stack frame and push it to the dynamic list. Basically, instead of calling =parse_expr()= again with a new argument, we use local variables instead, assigning the working node to a new value instead of passing a new value to a function. To go back to the beginning and parse a new expression into the working node, we go back to the top of a loop after writing a stack frame: this is called a continuation (it even uses the =continue= keyword!).
+
+Recursive:
+#+begin_src c
+  void parse_expr(Node* result, unsigned int parent_precedence = 0) {
+    Node* lhs;
+    switch (token) {
+      // ...set lhs...
+    }
+
+    next_token();
+    switch (token) {
+      // if binary operator
+      unsigned int precedence = binary_op_precedence(token);
+
+      // If the precedence is lower, bubble/float it up the tree. In the case
+      // of a recursive parser, this means going up the call stack, and we do
+      // that by returning.
+      // TODO: If precedences are equal, we should only return iff the binary
+      // operator is not right associative.
+      if (precedence < parent_precedence) {
+        ,*result = *lhs;
+        return;
+      }
+
+      Node rhs;
+      parse_expr(&rhs);
+      ,*result = binary_node(token, lhs, rhs);
+    }
+  }
+#+end_src
+
+Continuation:
+#+begin_src cpp
+  void parse_expr(Node* result) {
+      // working_node is ⋅, where we are writing to.
+      Node* working_node = result;
+      // This loop will never loop itself, but only ever explicitly be
+      // continued.
+      while (true) {
+          // parse lhs
+          next_token();
+          switch (token) {
+              // ...set working_node...
+              // consumes tokens
+          }
+
+          switch (token) {
+              // if binary operator
+              unsigned int precedence = binary_op_precedence(token);
+              unsigned int parent_precedence = binary_op_precedence(working_node->parent.token);
+
+              // 7 * 3 + ⋅ 4
+              // working_node is `3`, parent is `*`
+              // precedence is `2`, parent_precedence is `4`.
+              // TODO: If precedences are equal, we should take into account right
+              // associativity.
+              // NOTE: This loop is equivalent to eating stackframes by returning in
+              // the recursive parser, with the local parameters changing.
+              while (precedence < parent_precedence) {
+                  // working_node, `3`, is replaced with `7 * 3`.
+                  working_node = working_node.parent;
+                  precedence = binary_op_precedence(working_node->parent.token);
+                  // NOTE: If parent is not a binary operator, then we should break.
+              }
+
+              ,*working_node = binary_node(token, working_node, nullptr);
+              working_node = &working_node->rhs;
+              continue;
+          }
+
+          break;
+      }
+  }
+#+end_src
+
+What I hope you can see is that the body of the recursive-style function is /within/ this =while (true)= loop. The code is the same, but the manner of execution is now manually with a while-loop vs through function calls and return statements encoding this onto the stack.
