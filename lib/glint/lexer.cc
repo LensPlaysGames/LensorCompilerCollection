@@ -436,6 +436,8 @@ void lcc::glint::Lexer::NextToken() {
             }
 
             Error("Invalid token");
+            // Yeet invalid character, skipping it.
+            NextChar();
         } break;
     }
 

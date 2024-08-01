@@ -27,6 +27,13 @@ class CharacterRange {
     const char* end;
     const char* begin;
 
+    enum class Encoding {
+        UTF8,
+        ASCII,
+
+        COUNT
+    } encoding{Encoding::UTF8};
+
 public:
     CharacterRange(File* f)
         : curr(f->data()),
@@ -42,6 +49,94 @@ public:
     [[nodiscard]]
     auto current_offset() const -> u32 {
         return u32(curr - begin) - 1;
+    }
+
+    [[nodiscard]]
+    static auto utf8_pack_bytes(u32 b0, u32 b1 = 0, u32 b2 = 0, u32 b3 = 0) -> u32 {
+        if ((b0 & 0b1110'0000U) == 0b1100'0000U) {
+            // 2 byte encoding; first byte holds top five bits, second byte holds
+            // bottom six.
+            u32 byte0 = (b0 & 0b0001'1111U) << 6U;
+            u32 byte1 = b1 & 0b0011'1111U;
+            return byte0 | byte1;
+        }
+
+        if ((b0 & 0b1111'0000U) == 0b1110'0000U) {
+            u32 byte0 = (b0 & 0b0000'1111U) << 12U;
+            u32 byte1 = (b1 & 0b0011'1111U) << 6U;
+            u32 byte2 = b2 & 0b0011'1111U;
+            return byte0 | byte1 | byte2;
+        }
+
+        if ((b0 & 0b1111'1000U) == 0b1111'0000U) {
+            u32 byte0 = (b0 & 0b0000'0111U) << 18U;
+            u32 byte1 = (b1 & 0b0011'1111U) << 12U;
+            u32 byte2 = (b2 & 0b0011'1111U) << 6U;
+            u32 byte3 = b3 & 0b0011'1111U;
+            return byte0 | byte1 | byte2 | byte3;
+        }
+
+        return b0;
+    }
+
+    // Given the first byte of a utf8 encoded unicode character, return the
+    // encoded codepoint. May advance.
+    [[nodiscard]]
+    auto rest_utf8(u8 b0) -> u32 {
+        constexpr auto is_continuation = [](u8 b) -> bool {
+            return (b & 0b1100'0000U) == 0b1000'0000U;
+        };
+
+        // Skip continuation bytes. This will skip leftover from overlong
+        // encodings as well as handle the case of a random continuation byte in
+        // the file.
+        while (is_continuation(b0)) b0 = u8(*curr++);
+
+        auto remaining_bytes = end - curr;
+        if ((b0 & 0b1110'0000U) == 0b1100'0000U) {
+            if (remaining_bytes < 1) {
+                fmt::print("ERROR: Lexer expected 2-byte UTF8 encoding but there is not enough input");
+                return 0;
+            }
+            auto b1 = (u8(*curr++));
+            if (not is_continuation(b1)) {
+                fmt::print("ERROR: Lexer expected 2-byte UTF8 encoding but one of the continuation bytes is not a continuation byte (invalid utf8 encoding).");
+                return 0;
+            }
+            return utf8_pack_bytes(b0, b1);
+        }
+
+        if ((b0 & 0b1111'0000U) == 0b1110'0000U) {
+            if (remaining_bytes < 2) {
+                fmt::print("ERROR: Lexer expected 3-byte UTF8 encoding but there is not enough input");
+                return 0;
+            }
+            auto b1 = (u8(*curr++));
+            auto b2 = (u8(*curr++));
+            if (not rgs::all_of(std::array<u8, 2>{b1, b2}, is_continuation)) {
+                fmt::print("ERROR: Lexer expected 3-byte UTF8 encoding but one of the continuation bytes is not a continuation byte (invalid utf8 encoding).");
+                return 0;
+            }
+            return utf8_pack_bytes(b0, b1, b2);
+        }
+
+        if ((b0 & 0b1111'1000U) == 0b1111'0000U) {
+            if (remaining_bytes < 3) {
+                fmt::print("ERROR: Lexer expected 4-byte UTF8 encoding but there is not enough input");
+                return 0;
+            }
+            auto b1 = (u8(*curr++));
+            auto b2 = (u8(*curr++));
+            auto b3 = (u8(*curr++));
+            if (not rgs::all_of(std::array<u8, 3>{b1, b2, b3}, is_continuation)) {
+                fmt::print("ERROR: Lexer expected 3-byte UTF8 encoding but one of the continuation bytes is not a continuation byte (invalid utf8 encoding).");
+                return 0;
+            }
+            return utf8_pack_bytes(b0, b1, b2, b3);
+        }
+
+        // Single-byte encoded character
+        return b0;
     }
 
     /// Get the next character.
@@ -72,8 +167,14 @@ public:
             return '\n';
         }
 
-        /// Regular character.
-        return u32(c);
+        switch (encoding) {
+            case Encoding::ASCII: return u32(c);
+            case Encoding::UTF8: return rest_utf8(u8(c));
+
+            case Encoding::COUNT:
+                LCC_UNREACHABLE();
+        }
+        LCC_UNREACHABLE();
     }
 };
 } // namespace detail
