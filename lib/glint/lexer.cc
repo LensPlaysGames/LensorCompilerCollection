@@ -1,3 +1,4 @@
+#include <lcc/utf8.hh>
 #include <lcc/utils/macros.hh>
 
 #include <glint/ast.hh>
@@ -435,7 +436,7 @@ void lcc::glint::Lexer::NextToken() {
                 break;
             }
 
-            Error("Invalid token");
+            Error("Invalid token (codepoint 0x{:x}, `{}')", lastc, utf8::ToString(lastc));
             // Yeet invalid character, skipping it.
             NextChar();
         } break;

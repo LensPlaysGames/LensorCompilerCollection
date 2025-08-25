@@ -40,6 +40,11 @@ public:
           end(f->data() + f->size()),
           begin(f->data()) {}
 
+    CharacterRange(File* f, usz pos, usz len)
+        : curr(f->data() + std::min(pos, f->size() - 1)),
+          end(f->data() + std::min(pos + len, f->size())),
+          begin(f->data()) {}
+
     CharacterRange(std::string_view s)
         : curr(s.data()),
           end(s.data() + s.size()),
@@ -145,13 +150,14 @@ public:
         if (curr >= end) return 0;
         const auto c = *curr++;
 
-        /// Stray null.
+        // Handle NUL byte.
         if (c == 0) {
             fmt::print("ERROR: Lexer encountered NUL byte within source file.");
             return 0;
         }
 
-        /// Handle line endings nonsene.
+        // Handle line endings nonsense.
+        // Convert CRLF -> LF, LFCR -> LF, CR -> LF, and LF -> LF.
         if (c == '\r' || c == '\n') {
             if (curr != end && (*curr == '\r' || *curr == '\n')) {
                 bool same = c == *curr;
@@ -167,6 +173,7 @@ public:
             return '\n';
         }
 
+        // Parse the encoded character code-unit into a codepoint.
         switch (encoding) {
             case Encoding::ASCII: return u32(c);
             case Encoding::UTF8: return rest_utf8(u8(c));
@@ -251,6 +258,21 @@ protected:
 };
 
 template <typename TToken>
+class SpanWithinFileLexer : public Lexer<TToken> {
+
+protected:
+    SpanWithinFileLexer(Context* context, File* file, usz offset, usz length)
+        : Lexer<TToken>(context, file, offset, length) {
+        this->NextChar();
+    }
+
+    // FIXME: These necessary?
+    using Lexer<TToken>::Error;
+    using Lexer<TToken>::Warning;
+    using Lexer<TToken>::Note;
+};
+
+template <typename TToken>
 class FileLexer : public Lexer<TToken> {
     File* _file;
 
@@ -264,16 +286,6 @@ protected:
     using Lexer<TToken>::Error;
     using Lexer<TToken>::Warning;
     using Lexer<TToken>::Note;
-
-    auto FileId() const { return _file->file_id(); }
-
-    auto CurrentLocation() const {
-        return Location{
-            Lexer<TToken>::CurrentOffset(),
-            (decltype(Location::len)) 1,
-            (decltype(Location::file_id)) _file->file_id() //
-        };
-    }
 };
 } // namespace lcc::syntax
 
