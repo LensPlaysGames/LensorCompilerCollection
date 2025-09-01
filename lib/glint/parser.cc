@@ -118,6 +118,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Union:
         case Tk::Sum:
         case Tk::Lambda:
+        case Tk::Supplant:
         case Tk::CShort:
         case Tk::CUShort:
         case Tk::CInt:
@@ -217,6 +218,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::Enum:
         case Tk::Union:
         case Tk::Sum:
+        case Tk::Supplant:
             return true;
 
         case Tk::Invalid:
@@ -854,6 +856,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         case TokenKind::Or:
         case TokenKind::Invalid:
         case TokenKind::Eof:
+        case TokenKind::Supplant:
             return Error("Expected expression, got {}", ToString(tok.kind));
 
         case TokenKind::MacroArg:
@@ -1329,18 +1332,32 @@ auto lcc::glint::Parser::ParseStructType() -> Result<StructType*> {
     ScopeRAII sc{this};
     std::vector<StructType::Member> members;
     while (not At(Tk::RBrace)) {
-        /// Name.
-        auto name = tok.text;
         auto start = tok.location;
-        if (not Consume(Tk::Ident)) return Error("Expected member name in struct declaration");
 
-        /// Type.
-        if (not Consume(Tk::Colon)) return Error("Expected ':' in struct declaration");
-        auto type = ParseType();
-        if (not type) return type.diag();
+        // Supplanted Declaration
+        if (Consume(Tk::Supplant)) {
+            auto type = ParseType();
+            if (not type) return type.diag();
 
-        /// Add the member to the list.
-        members.emplace_back(std::move(name), *type, Location{start, type->location()});
+            // Make up unique name with supplant marker prefix
+            auto name = std::string("__sup") + std::to_string(members.size());
+            members.emplace_back(std::move(name), *type, Location{start, type->location()});
+            members.back().supplanted = true;
+        } else {
+            // Regular Declaration
+
+            /// Name.
+            auto name = tok.text;
+            if (not Consume(Tk::Ident)) return Error("Expected member name in struct declaration");
+
+            /// Type.
+            if (not Consume(Tk::Colon)) return Error("Expected ':' in struct declaration");
+            auto type = ParseType();
+            if (not type) return type.diag();
+
+            /// Add the member to the list.
+            members.emplace_back(std::move(name), *type, Location{start, type->location()});
+        }
 
         // Optionally eat expression separator
         ConsumeExpressionSeparator();

@@ -139,6 +139,7 @@ enum struct TokenKind {
     Union,
     Sum,
     Lambda,
+    Supplant,
 
     CShort,     // cshort
     CUShort,    // cushort
@@ -1018,6 +1019,7 @@ public:
         std::string name;
         Location location;
         usz byte_offset{};
+        bool supplanted{false};
 
         Member(std::string name_, Type* type_, Location location_)
             : type(type_), name(std::move(name_)), location(location_) {}

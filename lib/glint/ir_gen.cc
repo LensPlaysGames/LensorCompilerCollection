@@ -570,6 +570,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Union:
                 case TokenKind::Sum:
                 case TokenKind::Lambda:
+                case TokenKind::Supplant:
                 case TokenKind::CShort:
                 case TokenKind::CUShort:
                 case TokenKind::CInt:
@@ -859,6 +860,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Enum:
                 case TokenKind::Union:
                 case TokenKind::Sum:
+                case TokenKind::Supplant:
                 case TokenKind::Semicolon:
                 case TokenKind::Tilde:
                 case TokenKind::Void:

@@ -36,6 +36,7 @@ lcc::StringMap<Tk> keywords{
     {"sum", Tk::Sum},
     {"union", Tk::Union},
     {"lambda", Tk::Lambda},
+    {"supplant", Tk::Supplant},
     {"true", Tk::True},
     {"false", Tk::False},
     {"not", Tk::Exclam},
@@ -918,6 +919,7 @@ auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
         case TokenKind::Sum:
         case TokenKind::Has:
         case TokenKind::Lambda:
+        case TokenKind::Supplant:
         case TokenKind::True:
         case TokenKind::False:
         case TokenKind::And:
@@ -1019,6 +1021,7 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
         case Tk::Union: return "union";
         case Tk::Sum: return "sum";
         case Tk::Lambda: return "lambda";
+        case Tk::Supplant: return "supplant";
         case Tk::CShort: return "cshort";
         case Tk::CUShort: return "cushort";
         case Tk::CInt: return "cint";

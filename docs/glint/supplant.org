@@ -1,0 +1,40 @@
+#+title: Glint | Supplant Notes
+#+author: Lens_r
+
+* Data & Functionality Composition in Glint Using Supplant
+
+=supplant <type>;=
+
+Supplant is important.
+
+I want data composition. I *don't* want the mess of inheritance (yuck!). Inheritance isn't necessarily bad, it's just confusing.
+
+Here's the idea(s):
+=supplant= takes a type and places it within the given struct, much like a regular declaration. There are two major differences, however:
+  1.) A supplanted struct member has it's namespace pulled into the parent struct's namespace. That is, the members of the supplanted struct member are accessible by their names directly, and do not require first accessing the supplanted struct (from a lexical standpoint).
+  2.) The parent struct becomes IMPLICITLY convertible to the supplanted struct type. No type-casting needed.
+
+Glint
+---
+Entity : struct {
+    health : int;
+    x : int;
+    y : int;
+    ;; ...
+};
+doDamage : void(e : &Entity) {
+    e.health -= 1;
+};
+
+Skeleton : struct {
+    arrow_amount : int;
+    supplant Entity;
+};
+
+s : Skeleton;
+doDamage s; ;; works!!
+---
+
+Syntactically and functionally, this allows the "parent" type (the one that contains the supplanted type) to be treated exactly the same. This would really be revolutionary in the context of writing something like a syntax tree.
+
+And, before you start to say this doesn't solve the problem of "casting down" i.e. going from an entity to a skeleton, I disagree. Well, I agree it doesn't, but I disagree that this is a part of that problem. I believe /that/ problem would be fixed by having an "Entities" sum type which contains Skeleton. That way, all the functions that operate on entities still work, and casting down just involves determining what value the sum type holds. Downside? Having to write the name of every new entity one time in an entities type. Similar to having to write the name of every new file into a build system for a programming project. Not that bad, I'd say. If we eventually do code introspection stuff, the build system could generate the sum type based on a set of criteria (if supplants Entity -> do thing)

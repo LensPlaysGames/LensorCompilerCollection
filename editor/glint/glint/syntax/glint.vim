@@ -39,6 +39,7 @@ syn keyword glintKeywords
   \ return
   \ sizeof
   \ struct
+  \ supplant
 
 syn keyword glintRepeat
   \ for

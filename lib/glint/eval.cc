@@ -209,6 +209,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::StarStar:
                 case TokenKind::String:
                 case TokenKind::Struct:
+                case TokenKind::Supplant:
                 case TokenKind::Sum:
                 case TokenKind::TildeEq:
                 case TokenKind::True:
@@ -386,6 +387,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::Union:
                 case TokenKind::Sum:
                 case TokenKind::Lambda:
+                case TokenKind::Supplant:
                 case TokenKind::CShort:
                 case TokenKind::CUShort:
                 case TokenKind::CInt:

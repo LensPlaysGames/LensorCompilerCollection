@@ -1,3 +1,5 @@
+#include <fmt/format.h>
+
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
@@ -1662,10 +1664,62 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             /// The struct type must contain the member.
             auto& members = struct_type->members();
-            auto it = rgs::find_if(members, [&](auto& member) { return member.name == m->name(); });
+            auto member_predicate = [&](auto& member) {
+                return member.name == m->name();
+            };
+            auto it = rgs::find_if(members, member_predicate);
             if (it == members.end()) {
-                Error(m->location(), "Struct {} has no member named '{}'", struct_type, m->name());
-                m->set_sema_errored();
+                // If the struct (or struct-like) type does not contain a member with the
+                // exact name given, go on to check if any members are supplanted: if
+                // there are supplanted members, look in their namespaces for the named
+                // member (and eventually insert the necessary extra member access).
+                std::function<bool(StructType::Member&)> supplanted_member_predicate = [&](auto& member) {
+                    if (member.name == m->name()) return true;
+                    if (member.supplanted) {
+                        // Confidence Check
+                        if (not is<StructType>(member.type)) {
+                            Error(m->location(), "supplant does not support non-struct types (yet?): {}", member.type);
+                            m->set_sema_errored();
+                            return false;
+                        }
+                        auto supplanted_members = as<StructType>(member.type)->members();
+                        auto supplanted_it = rgs::find_if(supplanted_members, supplanted_member_predicate);
+                        return supplanted_it != supplanted_members.end();
+                    }
+                    return false;
+                };
+
+                it = rgs::find_if(members, supplanted_member_predicate);
+                if (m->sema_errored()) break;
+                if (it == members.end()) {
+                    // Member access name doesn't match any member's name, nor the name of any
+                    // member of any supplanted member.
+                    auto e = Error(m->location(), "{} has no member named '{}'", struct_type, m->name());
+                    e.attach(
+                        Note(
+                            m->location(),
+                            "Valid members include: {}",
+                            fmt::join(
+                                vws::transform(struct_type->members(), [&](StructType::Member& member) {
+                                    if (member.supplanted) return "members of supplanted " + member.type->string();
+                                    return member.name;
+                                }),
+                                ","
+                            )
+                        )
+                    );
+                    m->set_sema_errored();
+                    break;
+                }
+                // Member access to supplanted member
+                // (m->object) . (m->name)  ->  (m->object) . (supplanted_member) . (m->name)
+                auto* supplanted_member_access = new (mod) MemberAccessExpr(m->object(), it->name, m->location());
+                auto* new_member_access = new (mod) MemberAccessExpr(supplanted_member_access, m->name(), m->location());
+                *expr_ptr = new_member_access;
+                if (not Analyse(expr_ptr)) {
+                    m->set_sema_errored();
+                    break;
+                }
                 break;
             }
 
@@ -2151,6 +2205,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Union:
         case TokenKind::Sum:
         case TokenKind::Lambda:
+        case TokenKind::Supplant:
         case TokenKind::CShort:
         case TokenKind::CUShort:
         case TokenKind::CInt:
@@ -3355,6 +3410,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::Union:
         case TokenKind::Sum:
         case TokenKind::Lambda:
+        case TokenKind::Supplant:
         case TokenKind::CShort:
         case TokenKind::CUShort:
         case TokenKind::CInt:

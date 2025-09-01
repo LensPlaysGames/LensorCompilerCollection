@@ -103,6 +103,7 @@
       "and" "or"
       "external" "export"
       "return"
+      "supplant"
       ]
      @font-lock-keyword-face)
 
