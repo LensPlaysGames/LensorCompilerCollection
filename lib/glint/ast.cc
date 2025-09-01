@@ -139,9 +139,9 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
             return as<ArrayViewType>(this)->size(ctx);
 
         case Kind::Array: return elem()->align(ctx);
-        case Kind::Struct: return as<StructType>(this)->alignment();
-        case Kind::Union: return as<UnionType>(this)->alignment();
-        case Kind::Sum: return as<SumType>(this)->alignment();
+        case Kind::Struct: return as<StructType>(this)->alignment() * 8;
+        case Kind::Union: return as<UnionType>(this)->alignment() * 8;
+        case Kind::Sum: return as<SumType>(this)->alignment() * 8;
         case Kind::Integer: return std::bit_ceil(as<IntegerType>(this)->bit_width());
     }
 

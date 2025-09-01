@@ -516,8 +516,8 @@ protected:
 public:
     virtual ~Type() = default;
 
-    void* operator new(size_t) = delete;
-    void* operator new(size_t sz, Module& mod) {
+    auto operator new(size_t) -> void* = delete;
+    auto operator new(size_t sz, Module& mod) -> void* {
         auto* ptr = ::operator new(sz);
         mod.types.push_back(static_cast<Type*>(ptr));
         return ptr;
@@ -1034,10 +1034,12 @@ public:
     StructType(Scope* scope, std::vector<Member> members, Location location)
         : DeclaredType(Kind::Struct, scope, location), _members(std::move(members)) {}
 
+    // Alignment of this struct type in bytes
     [[nodiscard]]
     auto alignment() const -> usz { return _alignment; }
     void alignment(usz alignment) { _alignment = alignment; }
 
+    // Size of this struct type in bytes
     [[nodiscard]]
     auto byte_size() const -> usz { return _byte_size; }
     void byte_size(usz byteSize) { _byte_size = byteSize; }
