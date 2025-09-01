@@ -1173,10 +1173,17 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             for (auto*& child : block->children()) {
                 const bool last = &child == block->last_expr();
-                if (not Analyse(&child, last ? expected_type : nullptr))
+                if (not Analyse(&child, last ? expected_type : nullptr)) {
                     block->set_sema_errored();
-                if (not last and child->ok())
-                    Discard(&child);
+                    // NOTE: If, for some ungodly reason, we want to continue semantic
+                    // analysis within a block after an expression within that block has
+                    // already failed, we could /not/ return false here and keep going.
+                    return false;
+                }
+                // The value of the block expression is the value of the last expression;
+                // the results of the preceding expressions (if any), are unused, and can
+                // therefore be discarded.
+                if (not last and child->ok()) Discard(&child);
             }
 
             if (not block->sema_errored()) {
