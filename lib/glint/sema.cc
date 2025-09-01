@@ -3730,6 +3730,8 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             usz byte_size = 0;
             usz alignment = 1;
 
+            std::vector<Type*> supplanted_types{};
+
             /// Finalise all members.
             for (auto& member : s->members()) {
                 /// Analyse the member type.
@@ -3738,6 +3740,25 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                 if (member.type->sema_errored()) {
                     type->set_sema_errored();
                     continue;
+                }
+
+                if (member.supplanted) {
+                    // Check if this type has already been supplanted; if so, error.
+                    if (rgs::any_of(supplanted_types, [&](Type* already_supplanted_type) {
+                            return Type::Equal(already_supplanted_type, member.type);
+                        })) {
+                        auto e = Error(
+                            member.location,
+                            "Supplant must only be used once per type within definition of a single type. Multiple supplant of {} within {}.",
+                            *member.type,
+                            *type
+                        );
+                        e.attach(Note(type->location(), "Defined here"));
+                        type->set_sema_errored();
+                        return false;
+                    }
+                    // Record supplanted type for future duplicate check.
+                    supplanted_types.emplace_back(member.type);
                 }
 
                 /// Align the member to its alignment.
