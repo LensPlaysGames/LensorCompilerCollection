@@ -1,0 +1,438 @@
+* TODO [FEATURE] "Member Functions" for sum, enum, struct, and union types.
+
+We aren't going to call them "member", or use that word around them ever.
+
+Rather, this is syntactic sugar
+  A.) to write a function easily using the member's of a type and,
+  B.) to group functions related to a type within the scope ("namespace")
+      of that type.
+
+For this to work, we'll implement a fallback to universal function call syntax (UFCS) if there isn't an overload without it (maybe this could be a use for =->=, to specify "member" functions). In layman's (my) terms, this just means that a call of =thing.function args...= is equivalent to =function thing args...=; that is, the lhs of the =.= operator is passed as the first argument to the function specified on the rhs.
+
+Following should both work.
+
+#+begin_src glint-ts
+  MyT : struct {
+    ;; ...
+    ->valid :bool() some_bool_member;
+  };
+
+  myT :MyT;
+  myT->valid;
+#+end_src
+
+#+begin_src glint-ts
+  MyT : struct {
+    ;; ...
+  };
+
+  valid :bool(i:MyT.ref) i.some_bool_member;
+
+  to_int :int(i:bool) if i 1 else 0;
+
+  myT :MyT;
+  myT->valid;
+  myT->valid->to_int;
+#+end_src
+
+"Accessor Function"?
+"Trailing Function Syntax"?
+
+Binary operator =->= rewrites into =rhs(lhs)=.
+Call of binary operator =->= rewrites into =rhs(lhs, args...)=.
+
+* TODO [REQUIRED] Sum Type ~switch~ / ~match~
+
+#+begin_src glint-ts
+  Token : sum {
+    x:int
+    y:[byte]
+  };
+
+  t :Token;
+  ;; ...
+
+  ;; ¡ERROR! When matching on a sum type, all members must be handled.
+  ;; Unhandled members: y
+  ;;   match t {
+  ;;     .x :: print "<integer>";
+  ;;   };
+  ;; Eventually make this a fix diagnostic with suggested fix that may be
+  ;; optionally applied.
+
+  match t {
+    .x :: print "<integer>";
+    .y :: print "<symbol>";
+  };
+
+  ;; optional FEATURE: value match
+  x :: 69;
+  match x {
+    42 :: print "the answer\n";
+    69 :: print "noice\n";
+  };
+#+end_src
+
+Optional FEATURE: =fallthrough=.
+
+* TODO [REQUIRED] Operator Overloading
+
+Turn it into a call.
+Turn it into a call.
+Turn it into a call.
+Turn it into a call.
+
+Analyse that expression.
+Analyse that expression.
+Analyse that expression.
+Analyse that expression.
+
+
+* TODO [REQUIRED] =supplant=
+
+#+begin_src glint-ts
+  a : struct { x:int y:int };
+  b : struct { supplant a; }
+  foo :: b !{ .x 42 .y 69 };
+  foo.y;
+#+end_src
+
+Take the members of a struct (or any type that has named members, like a sum type), and place them in another struct, without the verbosity of the "reach through" name. No =foo.a.x=, just =foo.x=.
+
+#+begin_src glint-ts
+  location_t : struct { begin:int, end:int };
+  token_data_t : sum {
+    x:int
+    y:[byte]
+  };
+  token : struct {
+    ;; every token can share common data members, since it's a struct
+    loc :location_t
+    supplant token_data_t;
+  };
+  ;; but, instances of a token don't require explicitly reaching through
+  ;; `token_data_t` (which also means you can change the implementation)
+  t :: lex ...;
+
+  ;; not t.data.x or whatever, just t.x! Very handy.
+  if (has t.x) ...;
+
+#+end_src
+
+Implementation note: =supplant= is basically a declaration that states any access of the members of the following type should have an extra member access to an invisible member inserted automatically.
+
+Basic implementation (struct-only) completed [2025-09-01 Mon 15:03]. I still need to do the implicit conversion implementation, and add support for sum types.
+
+* DONE [FIX] =!= is completely broken.
+
+* TODO [REQUIRED] =break=
+
+I think it'd be nice to have break take an optional integer literal operand for how many loops to break out of.
+
+* TODO [REQUIRED] Sum type Assign From Sum Type
+
+* TODO Support =elif=
+
+Hwai nahwt.
+
+* TODO [REQUIRED] Make Concrete the Dynamic Array Type
+
+Creation Operations:
+- Explicit Declaration
+
+- NOTE: If we allow implicit conversions to create a temporary dynamic array, we will have to deal with freeing it automatically (assuming we want it to be nice to use vs just functional).
+#+begin_src glint-ts
+  print_bytes : void(:[byte]) { ... };
+  print_bytes "huzzah!";
+#+end_src
+Basically, as you can see, if we were to create a dynamic array temporary from the fixed array here, it would be created, and then the programmer would never even have the ability to free it (it's an unnamed temporary created by the compiler). So, I think we should just disallow this, and if they want a dynamic array, they have to explicitly make one.
+
+Modify Operations:
+- Prepend, Insert Front, via =~==;
+  - Handle Single Element on rhs
+  - Handle Another Dynamic Array on rhs
+  - Handle Multiple Dynamic Arrays within Compound Literal on rhs
+- Append, Insert Back, via =+==;
+  - Handle Single Element on rhs
+  - TODO Handle Compound Literal with Insert Index and Single Element on rhs
+  - Handle Another Dynamic Array on rhs
+  - TODO Handle Compound Literal with Insert Index and Another Dynamic Array on rhs
+  - Handle Multiple Dynamic Arrays within Compound Literal on rhs
+- TODO: Syntax to insert at index? Maybe ~dynarray[index] += elem~? ~d[i] := elem~?
+
+Deletion Operations:
+- DONE Unary Prefix Minus =-=
+
+* DONE [REQUIRED] Sum Type, Dynamic Array, Array View, and Fixed Array Initialisation from Compound Literal
+
+Sum Type
+#+begin_src glint-ts
+result_t : sum {
+  error :[byte view];
+  data :[byte view];
+};
+
+foo :result_t() {
+  return !{ .error "" }
+}
+#+end_src
+
+In general, this sort of "=.member expression= form" should also work with struct and union types.
+
+
+Dynamic Array
+Array View
+#+begin_src glint-ts
+  data :: [byte] !{ 84, 73, 84, 83, 0 };
+  ;; ...
+  span :[byte view] !{ data.data, data.size };
+  data_again :[byte] !{ span.data, span.size };
+#+end_src
+
+For dynamic arrays, we will initialise the array with the given elements and size and whathaveyou and suchlike and whatnot and so on, UNLESS the first element has a type equal to a pointer to the element type of the dynamic array, in which case it will copy from there in memory N elements (given as the next argument).
+
+
+Fixed Array
+#+begin_src glint-ts
+  sum_args :[int 4] !{ 34, 17, 17, 1 };
+#+end_src
+
+
+* TODO [REQUIRED] Figure out How Dynamic Arrays, Fixed Arrays, and Array Views Interact, Then Implement It
+
+So, from a useability standpoint, all of these should be convertible between each other... (ish). No matter what, both fixed and dynamic arrays should convert to views (obviously).
+
+So, we should be able to take a fixed array and create a dynamic array temporary (remember, just a data+size+capacity struct) implicitly. This allows us to pass a string literal to a function that expects a ~[byte]~, that way the function doesn't care if you allocated it on the heap or what. If the function appends and ends up doing a grow operation, this is okay. It will copy the data from the old place into a newly allocated place. This does mean we can't use realloc, but, I'm not too worried about that. We will probably eventually have a custom little built-in allocator for dynamic arrays, or maybe even include allocators based on the dynamic arrays you use in your program. Anyway, I'm getting ahead of myself.
+
+- Fixed Array :: Element Type + Size at compile-time, just a block of memory at runtime.
+- Dynamic Array :: Element Type at compile-time, struct with a data pointer, size integer, and capacity integer.
+- Array View :: Element Type at compile-time, struct with a data pointer and size integer.
+
+Or, in Glint (array of =int='s).
+#+begin_src glint-ts
+  fixarray : [int 2];
+  fixarray :: struct {
+    \0: int;
+    \1: int;
+  };
+
+  dynarray : [int];
+  dynarray :: struct {
+    data: int.ptr; ;; dynamically allocated elsewhere
+    size: uint;
+    capacity: uint;
+  };
+
+  ;; Er, no syntax or anything for this yet. Pretend!
+  array_view : [int view];
+  ;; or maybe ![int];
+  ;; or maybe [int].view;
+  ;; or maybe [int]v;
+  ;; or maybe view[int];
+  array_view :: struct {
+    data: int.ptr;
+    size: uint;
+  };
+#+end_src
+
+With a fixed array, we know the size (and therefore capacity) at compile-time. So, we could initialise a dynamic array from a fixed array very easily; same for an array view.
+
+So, a fixed array is definitely and always convertible to both dynamic arrays and array views.
+
+With a dynamic array, we have the most data at runtime, but the least at compile-time. We /could/ implicitly convert from a dynamic array to a fixed array at runtime; all we'd have to do is pass the data pointer, basically, as that's the array of data in memory. The problem is that there is no way to guarantee the validity of the members. So, if we created a fixed array =[int 69]= from a dynamic array =[int]= with size 42, the last 27 members would be ... zeroed out? undefined? The compiler wouldn't be able to tell you not to access indices past this, so you'd have to implement your own check for whether or not it's "over", and at that point why not just use a dynamic array.
+
+So, I don't think a dynamic array should be convertible to a fixed array, and definitely not implicitly. In contrast, I /do/ think a dynamic array should be convertible to a view; it's the same thing but without the ability to modify it.
+
+Implicit Conversions:
+- Fixed Array :: Array View
+- Dynamic Array :: Array View
+
+Inverse (Disallowed Implicit Conversions):
+- Fixed Array :: Dynamic Array
+- Dynamic Array :: Fixed Array
+- Array View :: Fixed Array
+
+Explicit Conversions:
+- Fixed Array :: Dynamic Array
+- Array View :: Dynamic Array
+
+* TODO [REQUIRED] Zero Initialisation
+
+MAKE EVERYTHING ZERO BY DEFAULT.
+
+In the future we can do initialisation from struct member init expressions and stuff like that but just making everything zero (except for dynamic arrays, those are special) will make things a lot more obvious, I think.
+#+begin_src glint-ts
+  foo :int; ;; returns 0 every time!
+#+end_src
+
+Then, I'd also like to make sure compound literals work okay for initialisation.
+#+begin_src glint-ts
+  my_t : struct {
+    x :int;
+    y :int;
+  };
+
+  foo :my_t !{ 69, 420 };
+#+end_src
+
+Also this is unrelated and a small thing but I think a comma after an expression should disallow the next expressions from being treated as arguments in a call expression, but it should be allowed to separate arguments themselves with commas...
+#+begin_src glint-ts
+  foo :int(x:int y:int) x+y;
+
+  foo 34 35; ;; CALL foo ARGS (MULTIPLY 34 35);
+  foo 34, 35; ;; CALL foo ARGS (34) (35);
+  foo, 34 35; ;; CALL foo NOARGS; MULTIPLY 34 35;
+
+  some_t :struct {
+    x :int
+    y :int
+  };
+  ;; equivalent
+  bar :: some_t 69, 420;
+  boz :some_t !{69, 420};
+
+  some_t_operation :!(s :some_t) 2(s.x) + s.y;
+  ;; should work
+  some_t_operation !{69, 420};
+  some_t_operation bar;
+  some_t_operation !{bar};
+  some_t_operation (some_t 69 420);
+#+end_src
+
+Basically, a comma after an expression will disallow that expression from collecting arguments and becoming a callee of a call expression. Note that through deproceduring it still may (and probably will) implicitly become a call, just without arguments (usually the intended behaviour, especially in compound literals).
+
+We should have a special error for someone trying to call the infer type to instantiate something and point the developer to use a compound literal instead. We might be able to suggest a fix, even.
+
+* TODO [Syntactic Candy] Variable initialized w/ Anonymous Struct
+
+This doesn't make a ton of sense as far as the AST (a type expression producing a value of that type is kind of funky) but for this very specific case it would mean it "just works" how you would expect it to.
+
+#+begin_src glint-ts
+  my_var :: struct {
+     x: int;
+     y: int;
+  };
+
+  my_var.x; ;; Notice how this is an instance of the struct vs the type itself.
+#+end_src
+
+* TODO [Minor] Error on Append to Parameter of Non-reference Dynamic Array Type
+
+Most of the time someone appends to a parameter, they want that reflected at the call site, but a non-reference dynamic array parameter is a local copy.
+
+** Bug in Current Implementation
+
+Plus, if they did append to it and end up reallocating, the caller would have no way of knowing the data was freed out from under them. So, if we want to pass dynamic arrays by value, we would have to copy the underlying data AND the dynamic array itself to form a parameter that wouldn't touch the original at the call site. That's fine, but, we currently aren't doing that, so there will be big bugs.
+
+* TODO [Feature] Exported Alias for Custom Object File Symbols
+
+Current issue: gstd_read is too verbose for the language itself, but juuuust verbose enough for C usage. So we want one name visible from C, =gstd_read=, and another visible form Glint, =read= (which will probably be Glint name mangled).
+
+#+begin_src glint-ts
+  ;; NOTE: Should actually export /mangled/ name
+  export read: [Byte](path: [Byte]) {
+      ;; ...
+  }
+  ;; NOTE: This is where we may define any amount of aliases to the above
+  ;; function, mostly for interopability with other programs and languages.
+  ;; These are exported alongside the regular export, and may even be
+  ;; exported if the base declaration is not (i.e. so C code may call)
+  alias read "gstd_read";
+#+end_src
+
+Sadly, this will probably require support all the way from Glint lexer through to IR to MIR to codegen backends, as I don't think we ever thought of a function having multiple names. But, now it might. So, we'll support that. Pretty easy in assembly, just allow outputting multiple =.globl= directives before a label instead of just one. In object files, it's as easy as defining an extra symbol with the same section and offset as the aliased symbol. However, getting that data from the language frontend to the backend through all the data transformations will be interesting (or we will cheat and pass it in the context lol).
+
+Well I spent three hours trying to implement this and ended up throwing everything out because I'm apparently too stupid to fucking implement this properly at the moment. What's so stupid is it requires linkages to no longer apply to objects but to apply to the symbols that apply to the objects, and that is an indirection that literally none of the compiler has planned for.
+
+So, to actually do this, here's what I'll need to break it down into:
+1. IR and MIR function names get converted to a name + linkage.
+1a. Make sure everything still works as it does now.
+2. IR and MIR no longer forced to have one name.
+3. Glint IRGen handles aliases as names added to the base declaration with "Exported" linkage.
+
+JFC I did the backend part half in a trance.
+
+* DONE [REQUIRED] Deallocation of Dynamic Array with Unary Prefix Minus
+
+#+begin_src glint-ts
+a : [Byte]; ;; allocated
+-a; ;; deallocated
+a; ;; ERROR!
+#+end_src
+
+Also error (warn?) on deallocating in any loop control flow; the only time this would make sense is a dynamic array of dynamic arrays, I'd think. Note that deallocating cannot be undone.
+
+A fixed array obviously can't be deallocated, and an array parameter isn't moved to the function and therefore not deallocated. A dynamic array return value is moved to the caller, and may be freed like any other dynamic array.
+
+#+begin_src glint-ts
+  import "std.SimpleFile";
+  import "std.print";
+
+  contents :: read "TODO.org";
+
+  print contents.data;
+
+  -contents;
+
+  0;
+#+end_src
+
+The above program shouldn't leak any memory; contents is allocated within =read=, and deallocated after use.
+
+* TODO [Feature] =!= As "Infer Type" Type.
+
+#+begin_src glint-ts
+  ;; equivalent
+  foo :! 69;
+  bar :: 69;
+#+end_src
+
+Obviously that's not that useful, let's look at when it is.
+
+#+begin_src glint-ts
+  foo :!(x:int y:int) x+y;
+#+end_src
+
+Deduced return type of a function! Cool!
+
+* POSSIBLE [Feature] Warn on Dynamic Array Creation Within Loop Control Flow
+
+It should be created outside the loop. This will mean the code that is written directly corresponds to the "more efficient" method of first allocating and then adding all the new data vs repeatedly allocating.
+
+* TODO This hits an assert in IRGen regarding name ref expr; it /should/ fail during type-checking
+
+#+begin_src glint-ts
+t_big : struct {
+    x : uint;
+    y : uint;
+    z : uint;
+};
+
+foo : void(a:t_big) {
+    a.x;
+};
+
+bar : t_big;
+foo(t_big);
+0;
+#+end_src
+
+Basically, =t_big= is a struct and so sema is thinking that it is okay to pass a type expression to somewhere where a value of that type is actually required, since the "variable" of =t_big= is of =t_big= struct type.
+
+To clarify again, the above should error during type-checking due to =t_big= being a type expression that resolves to =t_big= rather than a value of type =t_big=.
+
+The type of =t_big= is currently the type it represents, but I think the type needs to be something like =type= and the value needs to be the actual type it represents.
+
+** Another version of the same thing
+
+#+begin_src glint-ts
+sum_t : sum {
+    x : cint;
+    y : uint;
+};
+
+example :: 0;
+foo :: sum_t;
+#+end_src
+
+I often miswrite this sort of program because of initialising a type-inferred variable and then instantiating a sum type. What I'd like this to become is a typed declaration with no initialiser, which will require sema to identify initialising expressions that refer explicitly to types, and do the replacement.
