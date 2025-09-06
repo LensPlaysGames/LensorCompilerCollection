@@ -55,28 +55,6 @@ Only really useful for value match.
 
 * Finish =supplant=
 
-** [DONE] Add Implicit Conversion of Struct to Its Supplanted Members
-
-The below code should work, since =baz= (any instance of =bar=, technically) is implicitly (meaning automatically) convertible to =foo= (or any supplanted type, for that matter).
-
-#+begin_src glint-ts
-  foo : struct {
-    x : int;
-    y : int;
-  };
-  calculate_foo : int(f : foo.ref) f.x + f.y;
-
-  bar : struct {
-    a : int;
-    supplant foo;
-  };
-
-  baz : bar;
-  baz.x := 42;
-  baz.y := 27;
-  calculate_foo baz;
-#+end_src
-
 ** Allow Supplanting Sum Types into Structs
 
 #+begin_src glint-ts
