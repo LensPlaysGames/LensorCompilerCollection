@@ -64,6 +64,22 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
         return NoOp;
     }
 
+    // Casting to a supplanted member can be done from an lvalue.
+    // TODO: When sum types are supplant-able, add that here too.
+    if (from->strip_references()->is_struct() and to->strip_references()->is_struct()) {
+        auto members = as<StructType>(from->strip_pointers_and_references())->members();
+        for (auto m : members) {
+            if (m.supplanted and Type::Equal(m.type, to->strip_references())) {
+                if constexpr (PerformConversion) {
+                    *expr_ptr = new (mod) MemberAccessExpr(*expr_ptr, m.name, from->location());
+                    // FIXME: Is this correct?
+                    (void) Analyse(expr_ptr);
+                }
+                return Score(1);
+            }
+        }
+    }
+
     // Casting to an array view can be done from an lvalue.
 
     // Fixed Array to Array View

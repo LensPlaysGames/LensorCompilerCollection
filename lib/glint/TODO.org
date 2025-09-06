@@ -95,3 +95,27 @@ The below code should work, since =baz= (any instance of =bar=, technically) is 
   ;; not t.data.x or whatever, just t.x! Very handy.
   if (has t.x) ...;
 #+end_src
+
+* When assigning to the same lvalue twice in a row
+
+Probably a mistake to assign something and then overwrite it immediately.
+
+Can you spot the mistake in the below program? It is meant to return 69 (and demonstrate implicit cast of =supplant='ed members).
+
+#+begin_src glint-ts
+  foo : struct {
+    x : int;
+    y : int;
+  };
+  calculate_foo : int(f : foo.ref) f.x + f.y;
+
+  bar : struct {
+    a : int;
+    supplant foo;
+  };
+
+  baz : bar;
+  baz.x := 42;
+  baz.x := 27;
+  calculate_foo baz;
+#+end_src
