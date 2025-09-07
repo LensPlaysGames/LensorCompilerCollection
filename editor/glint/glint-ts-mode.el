@@ -104,6 +104,7 @@
       "external" "export"
       "return"
       "supplant"
+      "match"
       ]
      @font-lock-keyword-face)
 

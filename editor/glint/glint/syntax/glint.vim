@@ -40,6 +40,7 @@ syn keyword glintKeywords
   \ sizeof
   \ struct
   \ supplant
+  \ match
 
 syn keyword glintRepeat
   \ for
