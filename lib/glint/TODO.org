@@ -1,31 +1,4 @@
-* Implement =match=
-
-#+begin_src glint-ts
-  Token : sum {
-    x:int
-    y:[byte]
-  };
-
-  t :Token;
-  ;; ...
-
-  ;; ¡ERROR! When matching on a sum type, all members must be handled.
-  ;; Unhandled members: y
-  ;;   match t {
-  ;;     .x :: print "<integer>";
-  ;;   };
-  ;; Eventually make this a fix diagnostic with suggested fix that may be
-  ;; optionally applied.
-
-  match t {
-    .x :: print "<integer>";
-    .y :: print "<symbol>";
-  };
-#+end_src
-
-Basically syntactic sugar for =if (has t.x) <thing> else if (has t.y) <thing>=.
-
-** Value =match=
+* Value =match=
 
 When the expression directly following =match= is NOT of a sum type, make it syntactic sugar for =if x = 42 <thing> else if x = 69 <thing>= etc. Or we could just use =switch= instead of =match= for this.
 
@@ -38,7 +11,7 @@ When the expression directly following =match= is NOT of a sum type, make it syn
   };
 #+end_src
 
-*** Extra Feature =fallthrough=
+** Extra Feature =fallthrough=
 
 Only really useful for value match.
 
@@ -51,7 +24,6 @@ Only really useful for value match.
     420 :: print "noice\n";
   };
 #+end_src
-
 
 * Finish =supplant=
 
