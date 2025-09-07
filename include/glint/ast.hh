@@ -1232,6 +1232,21 @@ public:
     [[nodiscard]]
     auto members() const -> const std::vector<Member>& { return _members; }
 
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto member_by_name(std::string_view name) -> Member* {
+        auto found = rgs::find_if(_members, [name](const Member& m) {
+            return m.name == name;
+        });
+        if (found == _members.end()) return nullptr;
+        return &*found;
+    }
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto member_by_name(std::string_view name) const -> const Member* {
+        return member_by_name(name);
+    }
+
     [[nodiscard]]
     static auto classof(const Type* type) -> bool { return type->kind() == Kind::Sum; }
 };

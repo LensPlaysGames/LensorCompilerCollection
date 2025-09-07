@@ -432,6 +432,7 @@ auto lcc::glint::Sema::EvaluateAsInt(Expr* expr, Type* int_type, aint& out) -> b
 auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
     switch (expr->kind()) {
         /// These always have side effects.
+        case Expr::Kind::Match:
         case Expr::Kind::While:
         case Expr::Kind::For:
         case Expr::Kind::Return:
@@ -1056,6 +1057,80 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             }
             [[fallthrough]];
         }
+
+        case Expr::Kind::Match: {
+            auto* match = as<MatchExpr>(expr);
+
+            if (match->names().size() != match->bodies().size())
+                Diag::ICE("MatchExpr has mismatched amount of names and bodies");
+
+            if (not Analyse(&match->object())) {
+                expr->set_sema_errored();
+                return false;
+            }
+
+            if (not is<SumType>(match->object()->type())) {
+                Error(
+                    match->object()->location(),
+                    "Invalid type for match object: {}\n  (requires sum type)",
+                    match->object()->type()
+                );
+                expr->set_sema_errored();
+                return false;
+            }
+
+            // Ensure all names are parts of the composite type of the object.
+            auto* s = as<SumType>(match->object()->type());
+            auto it = rgs::find_if(match->names(), [&](const auto& name) {
+                // If we find the member, continue. If we have a mismatch, return true.
+                return s->member_by_name(name) == nullptr;
+            });
+            if (it != match->names().end()) {
+                Error(
+                    match->bodies().at(usz(it - match->names().begin()))->location(),
+                    "Name given in match expression, `{}`, not present as part of the composite type we are matching on.",
+                    *it
+                );
+                expr->set_sema_errored();
+                return false;
+            }
+
+            // Analyse match bodies
+            for (auto*& body : match->bodies()) {
+                if (not Analyse(&body)) {
+                    expr->set_sema_errored();
+                    return false;
+                }
+            }
+
+            Expr* if_expr = nullptr;
+            auto body = match->bodies().rbegin();
+            for (auto name = match->names().rbegin(); name != match->names().rend(); ++name, ++body) {
+                LCC_ASSERT(body != match->bodies().rend(), "MatchExpr has mismatched amount of names and bodies");
+
+                auto* member_access = new (mod) MemberAccessExpr(
+                    match->object(),
+                    *name,
+                    (*body)->location()
+                );
+                auto* cond_expr = new (mod) UnaryExpr(
+                    TokenKind::Has,
+                    member_access,
+                    false,
+                    (*body)->location()
+                );
+                auto* then_expr = *body;
+
+                // This is how we build the chain of ifs
+                auto* otherwise_expr = if_expr;
+                if_expr = new (mod) IfExpr(cond_expr, then_expr, otherwise_expr, match->location());
+                if (not Analyse(&if_expr)) {
+                    expr->set_sema_errored();
+                    return false;
+                }
+            }
+            *expr_ptr = if_expr;
+        } break;
 
         case Expr::Kind::While: {
             auto* l = as<Loop>(expr);
@@ -2230,6 +2305,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Sum:
         case TokenKind::Lambda:
         case TokenKind::Supplant:
+        case TokenKind::Match:
         case TokenKind::CShort:
         case TokenKind::CUShort:
         case TokenKind::CInt:
@@ -3435,6 +3511,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::Sum:
         case TokenKind::Lambda:
         case TokenKind::Supplant:
+        case TokenKind::Match:
         case TokenKind::CShort:
         case TokenKind::CUShort:
         case TokenKind::CInt:

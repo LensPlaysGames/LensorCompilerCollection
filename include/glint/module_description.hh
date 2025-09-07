@@ -83,6 +83,7 @@ struct ModuleDescription {
                 case K::FuncDecl: return Kind::FUNCTION;
 
                 // Non-decl kinds
+                case K::Match:
                 case K::While:
                 case K::For:
                 case K::Return:

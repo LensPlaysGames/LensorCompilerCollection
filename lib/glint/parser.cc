@@ -119,6 +119,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Sum:
         case Tk::Lambda:
         case Tk::Supplant:
+        case Tk::Match:
         case Tk::CShort:
         case Tk::CUShort:
         case Tk::CInt:
@@ -199,6 +200,8 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::Sizeof:
         case Tk::Alignof:
         case Tk::Has:
+        case Tk::Supplant:
+        case Tk::Match:
         // Types
         case Tk::ArbitraryInt:
         case Tk::Byte:
@@ -218,7 +221,6 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::Enum:
         case Tk::Union:
         case Tk::Sum:
-        case Tk::Supplant:
             return true;
 
         case Tk::Invalid:
@@ -626,26 +628,30 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             // Yeet `match`
             NextToken();
 
-            auto object = ParseExpr();
+            auto object = ParseExpr(current_precedence, true);
             if (not object) return object.diag();
 
-            lhs = new (*mod) MatchExpr(*object, {loc, lhs->location()});
+            lhs = new (*mod) MatchExpr(*object, {loc, object->location()});
 
             if (not Consume(Tk::LBrace))
                 return Error(loc, "Expected block expression for match body following match object expression.");
 
             while (not At(Tk::RBrace)) {
                 if (not Consume(Tk::Dot))
-                    return Error(tok.location, "Expected `.` followed by sum type member identifier");
+                    return Error(tok.location, "Expected `.` followed by sum type member identifier (or `}}`)");
 
                 if (not At(Tk::Ident)) return Error("Expected identifier after .");
                 auto name = tok.text;
+                // Yeet name
+                Consume(Tk::Ident);
 
                 // Optional `:`
                 Consume(Tk::Colon);
 
                 auto body = ParseExpr();
                 if (not body) return body.diag();
+                // Optionally consume expression separator.
+                ConsumeExpressionSeparator();
 
                 as<MatchExpr>(*lhs)->add_match(name, *body);
             }

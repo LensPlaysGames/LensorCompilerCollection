@@ -472,6 +472,7 @@ std::string lcc::glint::Expr::name() const {
         case Kind::IntrinsicCall:
         case Kind::Cast:
         case Kind::NameRef:
+        case Kind::Match:
             return ToString(kind());
 
         case Kind::Unary: {
@@ -610,6 +611,13 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
             return {};
         }
 
+        case Kind::Match: {
+            const auto* match = as<lcc::glint::MatchExpr>(this);
+            std::vector<lcc::glint::Expr*> children{match->object()};
+            for (auto* b : match->bodies()) children.push_back(b);
+            return children;
+        }
+
         case Kind::MemberAccess:
             return {as<lcc::glint::MemberAccessExpr>(this)->object()};
 
@@ -712,6 +720,7 @@ auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
         case lcc::glint::Expr::Kind::Module: return "module";
         case lcc::glint::Expr::Kind::Sizeof: return "sizeof";
         case lcc::glint::Expr::Kind::Alignof: return "alignof";
+        case lcc::glint::Expr::Kind::Match: return "match";
     }
     LCC_UNREACHABLE();
 }
@@ -863,6 +872,19 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                 PrintBasicHeader("IfExpr", e);
                 if (not e->type()->is_void()) out += fmt::format(" {}", e->type()->string(use_colour));
                 PrintLValue(e);
+                out += '\n';
+                return;
+            }
+
+            case K::Match: {
+                PrintBasicHeader("MatchExpr", e);
+                const auto* m = as<lcc::glint::MatchExpr>(e);
+                out += fmt::format(
+                    " on {}{} {}",
+                    C(name_colour),
+                    m->object()->name(),
+                    m->object()->type()->string(use_colour)
+                );
                 out += '\n';
                 return;
             }

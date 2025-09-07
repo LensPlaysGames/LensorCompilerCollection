@@ -33,6 +33,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
         case Kind::TypeAliasDecl:
         case Kind::TypeDecl:
         case Kind::VarDecl:
+        case Kind::Match:
             return not_a_constant_expr();
 
         case Kind::Alignof:
@@ -210,6 +211,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::String:
                 case TokenKind::Struct:
                 case TokenKind::Supplant:
+                case TokenKind::Match:
                 case TokenKind::Sum:
                 case TokenKind::TildeEq:
                 case TokenKind::True:
@@ -388,6 +390,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::Sum:
                 case TokenKind::Lambda:
                 case TokenKind::Supplant:
+                case TokenKind::Match:
                 case TokenKind::CShort:
                 case TokenKind::CUShort:
                 case TokenKind::CInt:

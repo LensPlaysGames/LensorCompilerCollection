@@ -6,6 +6,7 @@
 #include <lcc/utils.hh>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace lcc {
@@ -31,7 +32,7 @@ public:
     bool is_fill{false};
 
     Section() = default;
-    Section(std::string name_) : name(name_) {}
+    explicit Section(std::string name_) : name(std::move(name_)) {}
 
     // Enum integer value is bit index into attributes field.
     enum struct Attribute {
@@ -49,7 +50,7 @@ public:
         MAX = sizeof(decltype(attributes)) // NONE ALLOWED PAST THIS
     };
 
-    bool attribute(Attribute n) {
+    bool attribute(Attribute n) const {
         return attributes & (u64(1) << int(n));
     }
 
