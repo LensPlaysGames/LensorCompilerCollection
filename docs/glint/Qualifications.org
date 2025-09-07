@@ -1,0 +1,136 @@
+* Preface
+
+Milestones for Glint compilers to hit, basically.
+
+** Support Levels
+
+- SUPPORT LEVEL 0 (ZERO) :: Unsupported
+- SUPPORT LEVEL 1 (ONE) :: Acknowledgment, Lexical Analysis (Tokens!)
+- SUPPORT LEVEL 2 (TWO) :: Understanding, Syntactic Analysis (AST Generated)
+- SUPPORT LEVEL 3 (THREE) :: Checking, Semantic Analysis (Rules and Types!)
+- SUPPORT LEVEL 4 (FOUR) :: Code Generation
+
+* Qualifications
+
+- Qualifications
+  1. [ ] 0 Self-Evaluating Expressions
+     1. [ ] 0 Integers
+        1. [ ] 0 Decimal, no prefix
+        2. [ ] 0 Hexadecimal, 0x prefix
+        3. [ ] 0 Binary, 0b prefix
+        4. [ ] 0 Octal, 0o prefix
+     2. [ ] 0 Booleans
+        1. [ ] 0 =true=
+        2. [ ] 0 =false=
+     3. [ ] 0 Character Literal
+     4. [ ] 0 String Literal
+        1. [ ] 0 Inescapable Strings, ='= delimiter
+        2. [ ] 0 Escapable Strings, ="= delimiter
+           1. [ ] 0 Escape =\\= as =\=
+           2. [ ] 0 Escape =\"= as ="=
+           3. [ ] 0 Escape =\'= as ='=
+           4. [ ] 0 Escape =\n= as newline
+           5. [ ] 0 Escape =\r= as carriage return
+           6. [ ] 0 Escape =\t= as horizontal tab
+           7. [ ] 0 Escape =\v= as vertical tab
+           8. [ ] 0 Escape =\f= as new page
+           9. [ ] 0 Escape =\b= as backspace
+           10. [ ] 0 Escape =\a= as audible bell
+           11. [ ] 0 Escape =\0= as NUL byte
+           12. [ ] 0 Escape =\x{00}= as hexadecimal value
+           13. [ ] 0 Escape =\u{0000}= as Unicode codepoint =U+{0000}=
+     5. [ ] 0 Compound Literal with =!{=
+  2. [ ] 0 Basic Expressions
+     1. [ ] 0 Block
+     2. [ ] 0 Parentheses
+     3. [ ] 0 Return
+     4. [ ] 0 Explicit Lambda
+     5. [ ] 0 =sizeof=
+     6. [ ] 0 =alignof=
+  3. [ ] 0 Declarations
+     1. [ ] 0 Type Declared
+        1. [ ] 0 Uninitialized, =x : <type>=
+        2. [ ] 0 Initialized, =x : <type> = <value>=
+        3. [ ] 0 =export=
+        4. [ ] 0 =external=
+     2. [ ] 0 Type Inferred, =x :: <value>=
+     3. [ ] 0 Type Declaration
+        1. [ ] 0 Struct
+        2. [ ] 0 Union
+        3. [ ] 0 Sum
+        4. [ ] 0 Cereal
+        5. [ ] 0 Arbitrary Integer
+  4. [ ] 0 Assignment
+     1. [ ] 0 Basic, To Variable of Type from Value of Same Type
+     2. [ ] 0 To Sum Type from one of Sum's Part Types
+     3. [ ] 0 To Sum Type from Sum Type
+     4. [ ] 0 To Supplanted Member
+     5. [ ] 0 To Multiple Layer Supplanted Member
+     6. [ ] 0 To Array from Array
+     7. [ ] 0 To Array from Dynamic Array
+     8. [ ] 0 To Dynamic Array from Array
+     9. [ ] 0 To Dynamic Array from Dynamic Array
+  5. [ ] 0 Operators
+     1. [ ] 0 Unary
+        1. [ ] 0 Minus, =-=
+        2. [ ] 0 Plus, =+=
+        3. [ ] 0 Dereference, =@=
+        4. [ ] 0 Addressof, =&=
+        5. [ ] 0 Bitwise Negation, =~=
+        6. [ ] 0 =has=
+        7. [ ] 0 MinusMinus, =--=
+        8. [ ] 0 PlusPlus, =++=
+        9. [ ] 0 Logical Negation, =not= and =!=
+     2. [ ] 0 Binary
+        1. [ ] 0 Plus, =+=
+        2. [ ] 0 Minus, =-=
+        3. [ ] 0 Multiply, =*=
+        4. [ ] 0 Divide, =/=
+        5. [ ] 0 Modulo/Remainder, =%=
+        6. [ ] 0 Logical Conjunction, =and=
+        7. [ ] 0 Logical Disjunction, =or=
+        8. [ ] 0 Comparison
+           1. [ ] 0 Less Than, =<=
+           2. [ ] 0 Greater Than, =>=
+           3. [ ] 0 Less Than or Equal to, =<==
+           4. [ ] 0 Greater Than or Equal to, =>==
+           5. [ ] 0 Not Equal, =!==
+           6. [ ] 0 Equal, ===
+        9. [ ] 0 Subscript, =[=
+        10. [ ] 0 Member Access, =.=
+            1. [ ] 0 Basic
+            2. [ ] 0 To Sum Type
+            3. [ ] 0 To Supplanted Member
+        11. [ ] 0 Bitwise
+            1. [ ] 0 Shift Left, =<<=
+            2. [ ] 0 Shift Right, =>>=
+            3. [ ] 0 Conjunction, =&=
+            4. [ ] 0 Disjunction, =|=
+            5. [ ] 0 Exclusive Disjunction, =^=
+        12. [ ] 0 Assignment
+            1. [ ] 0 Basic, =:==
+            2. [ ] 0 Addition, =+==
+            3. [ ] 0 Subtraction, =-==
+            4. [ ] 0 Multiplication, =*==
+            5. [ ] 0 Division, =/==
+            6. [ ] 0 Modulo/Remainder, =%==
+            7. [ ] 0 Bitwise Conjunction, =&==
+            8. [ ] 0 Bitwise Disjunction, =|==
+            9. [ ] 0 Bitwise Exclusive Disjunction, =^==
+            10. [ ] 0 Bitwise Negation, =~==
+        13. [ ] 0 Type-Inferrred Declaration and Assignment, =::=
+        14. [ ] 0 Append Element to Dynamic Array
+        15. [ ] 0 Prepend Element to Dynamic Array
+        16. [ ] 0 Insert Element to Dynamic Array
+  6. [ ] 0 Control Flow
+     1. [ ] 0 =if/else=
+     2. [ ] 0 =while=
+     3. [ ] 0 =cfor=
+     4. [ ] 0 =match= on Sum Type
+  7. [ ] 0 Lexer Macros
+     1. [ ] 0 Basic Macros
+     2. [ ] 0 Macros w/ Arguments
+        1. [ ] 0 Expression Arguments
+        2. [ ] 0 Eval-once Expression Arguments
+     3. [ ] 0 =gensym=
+     4. [ ] 0 Error on Unhygienic Expansion
