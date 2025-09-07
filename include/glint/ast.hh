@@ -140,6 +140,7 @@ enum struct TokenKind {
     Sum,
     Lambda,
     Supplant,
+    Match,
 
     CShort,     // cshort
     CUShort,    // cushort
@@ -1344,6 +1345,7 @@ public:
         Module,
 
         // replaced during sema
+        Match,
         Sizeof,
         Alignof,
     };
@@ -1787,6 +1789,62 @@ public:
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {
         return expr->kind() == Kind::If;
+    }
+};
+
+// "match" <value-of-sum-type> "{"
+//     { "."<name-of-sum-type-member> [ ":" ] <body-expression> ";" }
+// "}"
+//
+// foo : sum {
+//   x : int;
+//   y : [Bool];
+// };
+// bar : foo;
+// bar.x := 69;
+//
+// out : int;
+//
+// ;; THE FOLLOWING
+// match bar {
+//   .x: out := bar.x;
+//   .y: out := 42;
+// };
+// ;; BECOMES
+// if (has bar.x) out := bar.x;
+// else if (has bar.y) out := 42;
+// else exit(7);
+class MatchExpr : public Expr {
+    Expr* _object;
+    std::vector<std::string> _names;
+    std::vector<Expr*> _bodies;
+
+public:
+    MatchExpr(Expr* object, Location location) : Expr(Kind::Match, location), _object(object) {}
+
+    [[nodiscard]]
+    auto object() const { return _object; }
+    [[nodiscard]]
+    auto object() -> Expr*& { return _object; }
+
+    [[nodiscard]]
+    auto names() const { return _names; }
+    [[nodiscard]]
+    auto names() -> std::vector<std::string>& { return _names; }
+
+    [[nodiscard]]
+    auto bodies() const { return _bodies; }
+    [[nodiscard]]
+    auto bodies() -> std::vector<Expr*>& { return _bodies; }
+
+    auto add_match(std::string name, Expr* body) {
+        _names.push_back(std::move(name));
+        _bodies.push_back(body);
+    }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::Match;
     }
 };
 

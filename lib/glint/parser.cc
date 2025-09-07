@@ -621,6 +621,39 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             NextToken();
             break;
 
+        case Tk::Match: {
+            auto loc = tok.location;
+            // Yeet `match`
+            NextToken();
+
+            auto object = ParseExpr();
+            if (not object) return object.diag();
+
+            lhs = new (*mod) MatchExpr(*object, {loc, lhs->location()});
+
+            if (not Consume(Tk::LBrace))
+                return Error(loc, "Expected block expression for match body following match object expression.");
+
+            while (not At(Tk::RBrace)) {
+                if (not Consume(Tk::Dot))
+                    return Error(tok.location, "Expected `.` followed by sum type member identifier");
+
+                if (not At(Tk::Ident)) return Error("Expected identifier after .");
+                auto name = tok.text;
+
+                // Optional `:`
+                Consume(Tk::Colon);
+
+                auto body = ParseExpr();
+                if (not body) return body.diag();
+
+                as<MatchExpr>(*lhs)->add_match(name, *body);
+            }
+
+            if (not Consume(Tk::RBrace))
+                return Error(loc, "Expected end brace for match body block expression.");
+        } break;
+
         case Tk::Sizeof: {
             auto loc = tok.location;
             // Yeet `sizeof`
