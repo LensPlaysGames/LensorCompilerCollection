@@ -1095,6 +1095,23 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 return false;
             }
 
+            if (not rgs::all_of(s->members(), [&](const auto& member) {
+                    return rgs::any_of(match->names(), [&](const auto& name) {
+                        return name == member.name;
+                    });
+                })) {
+                auto e = Error(match->location(), "Not all members of composite type handled in match");
+                for (const auto& m : s->members()) {
+                    if (not rgs::any_of(match->names(), [&](const auto& name) {
+                            return name == m.name;
+                        })) {
+                        e.attach(Note(m.location, "Unhandled member: {}", m.name));
+                    }
+                }
+                expr->set_sema_errored();
+                return false;
+            }
+
             // Analyse match bodies
             for (auto*& body : match->bodies()) {
                 if (not Analyse(&body)) {
