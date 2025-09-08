@@ -44,6 +44,8 @@ struct Test {
     std::string_view source;
     std::string_view ir;
     MatchTree matcher;
+    bool should_fail_parse{false};
+    bool should_fail_check{false};
 };
 
 class TestContext {
@@ -228,6 +230,33 @@ auto parse_test(
 
         // Eat '\n'
         while (i < fsize and contents[i] == '\n') ++i;
+
+        // Handle lines beginning with `:` following name before ending `=` line
+        // (test specifiers).
+        while (contents[i] == ':') {
+            ++i;
+            size_t specifier_begin{i};
+            while (i < fsize and contents[i] != '\n')
+                ++i;
+
+            auto specifier = std::string_view{
+                contents.begin() + lcc::isz(specifier_begin),
+                contents.begin() + lcc::isz(i)};
+
+            // Eat newline
+            ++i;
+
+            if (specifier.starts_with("desc")) {
+                // do nothing (test description)
+            } else if (specifier == "fail_parse" or specifier == "parse_error") {
+                test.should_fail_parse = true;
+            } else if (specifier == "fail_sema" or specifier == "fail_check" or specifier == "sema_error") {
+                test.should_fail_check = true;
+            } else {
+                fmt::print("ERROR parsing test specifiers for test {}\n", test.name);
+                return false;
+            }
+        }
 
         // Skip '=' line
         while (i < fsize and contents[i] != '\n')
