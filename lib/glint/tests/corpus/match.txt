@@ -1,0 +1,55 @@
+================
+Match
+================
+
+foo : sum {
+  x : int;
+  y : int;
+};
+
+bar : foo;
+bar.x := 69;
+;; bar.y := 69;
+
+out : int;
+match bar {
+  .x : out := bar.x;
+  .y : out := 42;
+};
+out;
+
+---
+
+(block
+ (type_declaration)
+ (variable_declaration)
+ (binary_assignment (member_access (name)) (integer_literal))
+ (variable_declaration)
+ (if (unary_has (member_access (name)))
+  (binary_assignment (name) (cast (member_access (name))))
+  (if (unary_has (member_access (name)))
+   (binary_assignment (name) (integer_literal))))
+ (return (cast (name))))
+
+================
+Error on Match Must Handle All Members of Composite Type
+:fail_sema
+================
+
+foo : sum {
+  x : int;
+  y : int;
+};
+
+bar : foo;
+bar.x := 69;
+
+out : int;
+match bar {
+  .x : out := bar.x;
+};
+out;
+
+---
+
+()

@@ -37,7 +37,6 @@ const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
 bool option_print;
 
 struct GlintTest : langtest::Test {
-    bool should_print{option_print};
     auto run() -> bool {
         LCC_ASSERT(not name.empty(), "Refusing to run test with empty name");
 
@@ -228,9 +227,12 @@ struct GlintTest : langtest::Test {
             } else failed_check = true;
         } else failed_parse = true;
 
-        // TODO: Handle expected to fail to parse, to fail to check sort of tests.
         bool passed = ast_matches and ir_matches
                   and not failed_parse and not failed_check;
+
+        // Handle expected to fail to parse, to fail to check sort of tests.
+        if (should_fail_check and failed_check and not failed_parse) passed = true;
+        if (should_fail_parse and failed_parse) passed = true;
 
         // NOTE: Even if we shouldn't print, the parsing/semantic analysis that
         // failed almost certainly printed something of some kind, so we are kind
@@ -268,13 +270,52 @@ struct GlintTest : langtest::Test {
             }
         }
 
-        if (should_print and passed) {
+        if (option_print and passed) {
             fmt::print("  {}: {}PASS{}\n", name, C(Colour::Green), C(Colour::Reset));
         }
 
         return passed;
     }
 };
+
+void output_ast(std::filesystem::path p) {
+    auto contents = lcc::File::Read(p);
+    auto source = std::string_view{
+        contents.begin(),
+        contents.begin() + lcc::isz(contents.size()),
+    };
+
+    // TODO: Get target from "-t" or "--target" command line option.
+    // TODO: Get format from "-f" or "--format" command line option.
+    lcc::Context context{
+        default_target,
+        default_format,
+        lcc::Context::Options{
+            lcc::Context::DoNotUseColour,
+            lcc::Context::DoNotPrintAST,
+            lcc::Context::DoNotStopatSyntax,
+            lcc::Context::DoNotStopatSema,
+            lcc::Context::DoNotPrintMIR,
+            lcc::Context::DoNotStopatMIR //
+        }                                //
+    };
+
+    auto mod = lcc::glint::Parser::Parse(&context, source);
+    if (not context.has_error()) {
+        // Perform type-checking
+        lcc::glint::Sema::Analyse(&context, *mod, true);
+        if (not context.has_error()) {
+            auto* root = mod->top_level_function()->body();
+            fmt::print("{}\n", langtest::print_node<lcc::glint::Expr>(root));
+        } else {
+            fmt::print("ERROR: Cannot output AST matcher, error encountered during sema\n");
+            return;
+        }
+    } else {
+        fmt::print("ERROR: Cannot output AST matcher, error encountered during parsing\n");
+        return;
+    }
+}
 
 void help() {
     fmt::print(
@@ -284,11 +325,16 @@ void help() {
         "  -h, --help  ::  Show this help\n"
         "  -a, --all   ::  Print messages for every test\n"
         "  -c, --count ::  Print counts at the end and for every test file processed\n"
+        "OPTIONS:\n"
+        "  -r, --read <filepath> ::  Output the AST parsed from the given\n"
+        "          source file, such that it could be used as the matcher\n"
+        "          input for a test\n"
     );
 }
 
 int main(int argc, const char** argv) {
     bool option_count{false};
+    std::filesystem::path p{""};
     for (int i = 1; i < argc; ++i) {
         std::string_view arg{argv[i]};
         if (arg.starts_with("-h") or arg.starts_with("--h") or arg.starts_with("-?")) {
@@ -303,12 +349,30 @@ int main(int argc, const char** argv) {
             option_count = true;
             continue;
         }
+        if (arg.starts_with("-r") or arg.starts_with("--read")) {
+            if (i + 1 >= argc) {
+                fmt::print("ERROR: read option expects a source file input, but no argument was given\n");
+                return 1;
+            }
+            ++i;
+            p = argv[i];
+            continue;
+        }
         LCC_ASSERT(
             false,
             "Unhandled command line option `{}'.\n"
             "Use -h for more info.",
             arg
         );
+    }
+
+    if (not p.empty()) {
+        if (not std::filesystem::exists(p)) {
+            fmt::print("ERROR: read option given a source file input that does not correspond to an existing file!\n");
+            return 1;
+        }
+        output_ast(p);
+        return 0;
     }
 
     langtest::TestContext out{};
