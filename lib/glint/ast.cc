@@ -482,6 +482,7 @@ std::string lcc::glint::Expr::name() const {
                 case TokenKind::Minus: return "unary_negation";
                 case TokenKind::Tilde: return "unary_negation";
                 case TokenKind::Exclam: return "unary_not";
+                case TokenKind::Has: return "unary_has";
                 default: LCC_ASSERT(
                     false,
                     "Unhandled unary expression operator {}",
