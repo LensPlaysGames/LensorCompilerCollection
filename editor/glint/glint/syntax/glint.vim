@@ -100,7 +100,7 @@ hi def link glintMacro              Macro
 hi def link glintMacroArgs          Function
 hi def link glintModule             Special
 hi def link glintImport             Special
-hi def link glintExportSymbol       Special
+hi def link glintExportSymbol       StorageClass
 hi def link glintModuleName         Function
 hi def link glintBuiltinFunc        Identifier
 hi def link glintDataTypes          Structure
