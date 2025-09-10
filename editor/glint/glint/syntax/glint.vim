@@ -42,7 +42,6 @@ syn keyword glintKeywords
   \ external
   \ return
   \ sizeof
-  \ supplant
   \ match
 
 syn keyword glintRepeat
@@ -79,6 +78,7 @@ syn keyword glintBuiltinFunc __builtin_syscall __builtin_line __builtin_filename
 syn keyword glintImport import nextgroup=glintModuleName skipwhite
 syn keyword glintModule module nextgroup=glintModuleName skipwhite
 syn keyword glintExportSymbol export
+syn keyword glintSupplant supplant
 
 " NOTE: Include semicolon at the end of line?
 syn match glintModuleName "\<[a-zA-Z0-9_]*" contained skipwhite
@@ -104,5 +104,6 @@ hi def link glintExportSymbol       StorageClass
 hi def link glintModuleName         Function
 hi def link glintBuiltinFunc        Identifier
 hi def link glintDataTypes          Structure
+hi def link glintSupplant           StorageClass
 
 let b:current_syntax = 'glint'
