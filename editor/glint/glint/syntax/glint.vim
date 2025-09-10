@@ -32,13 +32,16 @@ syn keyword glintPrimitiveTypes
   \ uint
   \ void
 
+syn keyword glintDataTypes
+  \ struct
+  \ enum
+  \ sum
+
 syn keyword glintKeywords
   \ alignof
-  \ enum
   \ external
   \ return
   \ sizeof
-  \ struct
   \ supplant
   \ match
 
@@ -100,5 +103,6 @@ hi def link glintImport             Special
 hi def link glintExportSymbol       Special
 hi def link glintModuleName         Function
 hi def link glintBuiltinFunc        Identifier
+hi def link glintDataTypes          Structure
 
 let b:current_syntax = 'glint'
