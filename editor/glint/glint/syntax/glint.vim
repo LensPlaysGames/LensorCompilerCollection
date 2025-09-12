@@ -4,7 +4,7 @@ endif
 
 syn keyword glintTodo contained TODO FIXME XXX NOTE
 
-syn region glintCommentLine start=";" end="$" display contains=glintTodo
+syn region glintCommentLine start=";;" end="$" display contains=glintTodo
 
 syn region glintRawString start="'" end="'" display
 
