@@ -1,0 +1,168 @@
+================
+Empty file
+:syntax
+================
+---
+
+(block)
+
+================
+whitespace, spaces
+:syntax
+================
+                    
+---
+
+(block)
+
+================
+whitespace, newlines
+:syntax
+================
+
+
+
+
+
+
+
+
+
+---
+
+(block)
+
+================
+whitespace, newlines and spaces
+:syntax
+================
+     
+
+  
+
+       
+
+ 
+
+---
+
+(block)
+
+================
+whitespace, horizontal tab
+:syntax
+================
+	
+---
+
+(block)
+
+================
+empty parenthetical expression
+:syntax
+================
+()
+---
+
+(block)
+
+================
+hard separator
+:syntax
+================
+;
+---
+
+(block)
+
+================
+multiple hard separators
+:syntax
+================
+;;;;;;;;;;
+---
+
+(block)
+
+================
+soft separator
+:syntax
+================
+,
+---
+
+(block)
+
+================
+multiple soft separators
+:syntax
+================
+,,,,,,,,,,,
+---
+
+(block)
+
+================
+soft and hard separators
+:syntax
+================
+,,,;;;;,,,;,;,;,;,,,,,;;;;,,,;
+---
+
+(block)
+
+================
+mix of empty parenthetical expressions and soft separators
+:syntax
+================
+,(,(,,(),,),,,,,,),,,
+---
+
+(block)
+
+================
+mix of empty parenthetical expressions and hard separators
+:syntax
+================
+;(;(;;();;(;;););;;;);;
+---
+
+(block)
+
+================
+mix of empty parenthetical expressions and hard and soft separators
+:syntax
+================
+;,;;,(;,;,,(,,;,;,;;()();,;,;,,),;,,;,,,,,,;);,;,;;;
+---
+
+(block)
+
+================
+Comments, Just a Comment
+:syntax
+================
+;; just a comment
+---
+
+(block)
+
+================
+Comments, empty comment
+:syntax
+================
+;;
+---
+
+(block)
+
+================
+Comments, comment within contextual parsing context
+:syntax
+================
+if ;; cool stuff
+0, 0;
+---
+
+(block
+ (if (integer_literal) (integer_literal)))

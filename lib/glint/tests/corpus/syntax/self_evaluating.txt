@@ -1,0 +1,269 @@
+================
+Single Digit Integer
+:syntax
+================
+
+0;
+
+---
+
+(block (integer_literal))
+
+================
+Single Digit Integer, hexadecimal
+:syntax
+================
+
+0x0;
+
+---
+
+(block (integer_literal))
+
+
+================
+Single Digit Integer, binary
+:syntax
+================
+
+0b0;
+
+---
+
+(block (integer_literal))
+
+================
+Single Digit Integer, octal
+:syntax
+================
+
+0o0;
+
+---
+
+(block (integer_literal))
+
+================
+Multiple Digit Integer
+:syntax
+================
+
+69;
+
+---
+
+(block (integer_literal))
+
+================
+Multiple Digit Integer, hexadecimal
+:syntax
+================
+
+0xad0f;
+
+---
+
+(block (integer_literal))
+
+================
+Multiple Digit Integer, binary
+:syntax
+================
+
+0b1001;
+
+---
+
+(block (integer_literal))
+
+================
+Multiple Digit Integer, octal
+:syntax
+================
+
+0o777;
+
+---
+
+(block (integer_literal))
+
+================
+Integer, Leading 0s
+:fail_parse
+================
+
+0069;
+
+---
+
+()
+
+================
+Integer, Leading 0s, hexadecimal
+:syntax
+================
+
+0x000f00;
+
+---
+
+(block (integer_literal))
+
+================
+Integer, Digit Separator
+:syntax
+================
+
+6'9;
+
+---
+
+(block (integer_literal))
+
+
+================
+Integer, Invalid Duplicate Digit Separator
+:fail_parse
+================
+
+6''''9;
+
+---
+
+(block (integer_literal))
+
+================
+Integer, Multiple Digit Separator
+:syntax
+================
+
+6'9'4'20;
+
+---
+
+(block (integer_literal))
+
+================
+Boolean, true
+:syntax
+================
+true;
+---
+
+(block (integer_literal))
+
+================
+Boolean, false
+:syntax
+================
+false;
+---
+
+(block (integer_literal))
+
+================
+String Literal, Single Quote, Empty
+:syntax
+================
+'';
+---
+
+(block (string_literal))
+
+================
+String Literal, Single Quote, Whitespace
+:syntax
+================
+'       ';
+---
+
+(block (string_literal))
+
+================
+String Literal, Single Quote, Newlines
+:syntax
+================
+'
+
+
+
+';
+---
+
+(block (string_literal))
+
+================
+String Literal, Single Quote, Whitespace and Newlines
+:syntax
+================
+'   
+        
+  
+';
+---
+
+(block (string_literal))
+
+================
+String Literal, Single Quote
+:syntax
+================
+'asdf';
+---
+
+(block (string_literal))
+
+================
+String Literal, Double Quote, Empty
+:syntax
+================
+"";
+---
+
+(block (string_literal))
+
+================
+String Literal, Double Quote
+:syntax
+================
+"asdf";
+---
+
+(block (string_literal))
+
+================
+String Literal, Double Quote, \n escape
+:syntax
+================
+"\n";
+---
+
+(block (string_literal))
+
+================
+String Literal, Double Quote, \r escape
+:syntax
+================
+"\r";
+---
+
+(block (string_literal))
+
+================
+String Literal, Double Quote, \t escape
+:syntax
+================
+"\t";
+---
+
+(block (string_literal))
+
+================
+String Literal, Double Quote, \\ escape
+:syntax
+================
+"\\";
+---
+
+(block (string_literal))
+

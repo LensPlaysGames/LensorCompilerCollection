@@ -586,7 +586,16 @@ auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
 }
 
 auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expression) -> ExprResult {
+    // NOTE: Using Null result is dangerous because if we return lhs without
+    // first assigning /something/ to it, then it completely breaks.
     auto lhs = ExprResult::Null();
+
+    if (+ConsumeExpressionSeparator())
+        return Error(tok.location, "Empty expression probably has unintended consequences.");
+
+    /// TODO: Stop if there are no more expressions before the end of the file.
+    // TODO: Return empty expression or something
+    // if (At(Tk::Eof)) return empty;
 
     /// See below.
     const auto start_token = tok.kind;
@@ -754,7 +763,17 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
 
         /// Parenthesised expression.
         case Tk::LParen: {
+            // Eat '('
             NextToken();
+            // Empty expression isn't an expression, becomes no ast node. If we are
+            // parsing an expression, we need to keep going (or return an empty
+            // expression).
+            // "(" ")" => ()
+            // TODO: Should we return the empty expression if we get an empty
+            // parenthetical expression? We currently have no way to do that.
+            if (Consume(Tk::RParen))
+                return Error("Empty parenthetical expression probably has unintended consequences: try `,` or `;`.");
+
             lhs = ParseExpr();
             if (not lhs) return lhs.diag();
             // If there is more syntax before the paren expression closes, this may be
@@ -1065,8 +1084,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
     }
 
     // Eat any amount of commas following an expression
-    while (Consume(Tk::Comma))
-        ;
+    while (Consume(Tk::Comma));
 
     return lhs;
 }

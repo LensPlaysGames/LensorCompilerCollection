@@ -44,6 +44,7 @@ struct Test {
     std::string_view source;
     std::string_view ir;
     MatchTree matcher;
+    bool should_only_parse{false};
     bool should_fail_parse{false};
     bool should_fail_check{false};
 };
@@ -171,7 +172,8 @@ void parse_matchtree(
 
     match.name = {
         contents.begin() + lcc::isz(begin_match),
-        contents.begin() + lcc::isz(i)};
+        contents.begin() + lcc::isz(i)
+    };
 
     // Eat whitespace
     while (i < fsize and isspace(contents[i])) ++i;
@@ -226,7 +228,8 @@ auto parse_test(
 
         test.name = {
             contents.begin() + lcc::isz(begin),
-            contents.begin() + lcc::isz(i)};
+            contents.begin() + lcc::isz(i)
+        };
 
         // Eat '\n'
         while (i < fsize and contents[i] == '\n') ++i;
@@ -241,13 +244,16 @@ auto parse_test(
 
             auto specifier = std::string_view{
                 contents.begin() + lcc::isz(specifier_begin),
-                contents.begin() + lcc::isz(i)};
+                contents.begin() + lcc::isz(i)
+            };
 
             // Eat newline
             ++i;
 
             if (specifier.starts_with("desc")) {
                 // do nothing (test description)
+            } else if (specifier == "only_parse" or specifier == "syntax") {
+                test.should_only_parse = true;
             } else if (specifier == "fail_parse" or specifier == "parse_error") {
                 test.should_fail_parse = true;
             } else if (specifier == "fail_sema" or specifier == "fail_check" or specifier == "sema_error") {
@@ -288,7 +294,8 @@ auto parse_test(
         }
         test.source = {
             contents.begin() + lcc::isz(begin_source),
-            contents.begin() + lcc::isz(i)};
+            contents.begin() + lcc::isz(i)
+        };
     }
 
     { // Parse test expected AST
@@ -345,7 +352,8 @@ auto parse_test(
                     }
                     test.ir = {
                         contents.begin() + lcc::isz(lcc_ir_begin),
-                        contents.begin() + lcc::isz(lcc_ir_end) + 1};
+                        contents.begin() + lcc::isz(lcc_ir_end) + 1
+                    };
                 }
             }
         }
