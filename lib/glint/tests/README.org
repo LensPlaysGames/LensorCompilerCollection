@@ -1,0 +1,39 @@
+* Glint LangTest Driver
+
+LCC provides LangTest as a very basic framework for parsing language tests (both AST and IR data structures). This is Glint's use of that framework.
+
+Basically, this is a standalone program that links with =liblcc= and uses the language library directly to do data transformations on test sources (i.e. SOURCE => AST => IR), and then confirm those transformations happened in an expected way.
+
+Tests are stored in =corpus= subdirectory tree. *Run the test program with this directory as your working directory*, or it probably won't do what you want it to do.
+
+** Building
+
+Use CMake.
+
+Generate build tree (once).
+#+begin_src bash-ts
+  cmake -B bld -DCMAKE_BUILD_TYPE=Debug
+#+end_src
+
+Invoke build (as needed).
+#+begin_src bash-ts
+  cmake --build bld
+#+end_src
+
+Run like =./bld/glinttests=.
+Run with =--help= parameter to see all flags/options.
+
+** Tests
+
+#+begin_src
+  corpus
+  |-- <misc. tests>
+  |-- syntax
+  |-- semantic
+  `-- codegen
+#+end_src
+
+- =corpus= :: Contains all tests.
+- =syntax= :: Contains tests decorated with =:syntax= or =:fail_parse= specifiers, to test the parser specifically.
+- =semantic= :: Contains all tests with =:fail_sema= specifiers, as well as tests that ensure semantic conversions are properly applied, to test the semantic analyser specifically.
+- =codegen= :: Contains all tests with LCC IR tested in the output, to test the code generator specifically.

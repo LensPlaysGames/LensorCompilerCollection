@@ -1,0 +1,60 @@
+================
+Block, Empty
+:syntax
+================
+{};
+
+---
+
+(block (block))
+
+================
+Block, Single Expression
+:syntax
+================
+{0};
+
+---
+
+(block (block (integer_literal)))
+
+================
+Block, Multiple Expression, Soft Separator
+:syntax
+================
+{0,0};
+
+---
+
+(block (block (integer_literal) (integer_literal)))
+
+================
+Block, Multiple Expression, Soft Separators
+:syntax
+================
+{0,0,};
+
+---
+
+(block (block (integer_literal) (integer_literal)))
+
+================
+Block, Multiple Expression, Hard Separator
+:syntax
+================
+{0;0};
+
+---
+
+(block (block (integer_literal) (integer_literal)))
+
+================
+Block, Multiple Expression, Hard Separators
+:syntax
+================
+{0;0;};
+
+---
+
+(block (block (integer_literal) (integer_literal)))
+
