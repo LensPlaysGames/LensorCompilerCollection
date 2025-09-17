@@ -207,3 +207,15 @@ x :: 42;
 
 (block (binary_lessthan_orequal (integer_literal) (integer_literal)))
 
+
+================
+.
+:syntax
+================
+
+x.y;
+
+---
+
+(block (member_access (name)))
+

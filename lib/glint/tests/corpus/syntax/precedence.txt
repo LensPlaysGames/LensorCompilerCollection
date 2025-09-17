@@ -1,0 +1,247 @@
+;; precedence groups from lowest to highest:
+;; assignment
+;; logical or
+;; logical and
+;; comparison
+;; bitwise
+;; bitwise, shifting
+;; additive
+;; multiplicative
+;; member access (dot) and subscript (brackets)
+
+================
+x.y[z]
+:syntax
+================
+
+x.y[z];
+
+---
+
+(block
+ (binary_subscript
+  (member_access (name))
+  (name)))
+
+================
+x[y].z
+:syntax
+================
+
+x[y].z;
+
+---
+
+(block
+ (member_access
+  (binary_subscript (name) (name))))
+
+================
+subscript over multiplicative, x[y] * z
+:syntax
+================
+
+x[y] * z
+
+---
+
+(block
+ (binary_multiply
+  (binary_subscript
+   (name)
+   (name))
+  (name)))
+
+================
+multiplicative over additive, 10 + 20 * 30
+:syntax
+================
+
+10 + 20 * 30;
+
+---
+
+(block
+ (binary_add
+  (integer_literal)
+  (binary_multiply
+   (integer_literal)
+   (integer_literal))))
+
+================
+multiplicative over additive, 20 * 30 + 10
+:syntax
+================
+
+20 * 30 + 10;
+
+---
+
+(block
+ (binary_add
+  (binary_multiply
+   (integer_literal)
+   (integer_literal))
+  (integer_literal)))
+
+================
+additive over bitwise shifting, 100 + 38 >> 1
+:syntax
+================
+
+100 + 38 >> 1;
+
+---
+
+(block
+ (binary_shr
+  (binary_add
+   (integer_literal)
+   (integer_literal))
+  (integer_literal)))
+
+================
+bitwise shifting over bitwise, x | y >> z
+:syntax
+================
+
+x | y >> z;
+
+---
+
+(block
+ (binary_bitor
+  (name)
+  (binary_shr
+   (name)
+   (name))))
+
+================
+bitwise shifting over bitwise, y >> z | x
+:syntax
+================
+
+y >> z | x;
+
+---
+
+(block
+ (binary_bitor
+  (binary_shr
+   (name)
+   (name))
+  (name)))
+
+================
+bitwise over comparison, x | y = z
+:syntax
+================
+
+x | y = z;
+
+---
+
+(block
+ (binary_equal
+  (binary_bitor
+   (name)
+   (name))
+  (name)))
+
+================
+bitwise over comparison, z = x | y
+:syntax
+================
+
+z = x | y;
+
+---
+
+(block
+ (binary_equal
+  (name)
+  (binary_bitor
+   (name)
+   (name))))
+
+================
+comparison over logical and, a = b and x = y
+:syntax
+================
+
+a = b and x = y;
+
+---
+
+(block
+ (binary_and
+  (binary_equal
+   (name)
+   (name))
+  (binary_equal
+   (name)
+   (name))))
+
+================
+comparison over logical and, x = y and z
+:syntax
+================
+
+x = y and z;
+
+---
+
+(block
+ (binary_and
+  (binary_equal
+   (name)
+   (name))
+  (name)))
+
+================
+logical and over logical or, x and y or z
+:syntax
+================
+
+x and y or z;
+
+---
+
+(block
+ (binary_or
+  (binary_and
+   (name)
+   (name))
+  (name)))
+
+================
+logical and over logical or, x or y and z
+:syntax
+================
+
+x or y and z;
+
+---
+
+(block
+ (binary_or
+  (name)
+  (binary_and
+   (name)
+   (name))))
+
+================
+logical or over assignment, x := y or z;
+:syntax
+================
+
+x := y or z;
+
+---
+
+(block
+ (binary_assignment
+  (name)
+  (binary_or
+   (name)
+   (name))))

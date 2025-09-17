@@ -1,0 +1,15 @@
+================
+Left to Right * and /
+:syntax
+================
+
+100 / 10 * 10;
+
+---
+
+(block
+ (binary_multiply
+  (binary_divide
+   (integer_literal)
+   (integer_literal))
+  (integer_literal)))

@@ -161,6 +161,15 @@ constexpr bool IsRightAssociative(lcc::glint::TokenKind t) {
 
         case Tk::ColonEq:
         case Tk::ColonColon:
+        case Tk::PlusEq:
+        case Tk::MinusEq:
+        case Tk::StarEq:
+        case Tk::SlashEq:
+        case Tk::PercentEq:
+        case Tk::AmpersandEq:
+        case Tk::PipeEq:
+        case Tk::CaretEq:
+        case Tk::TildeEq:
             return true;
 
         /// Not an operator.
