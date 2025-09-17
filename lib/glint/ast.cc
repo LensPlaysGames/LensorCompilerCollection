@@ -480,9 +480,11 @@ std::string lcc::glint::Expr::name() const {
                 case TokenKind::Ampersand: return "unary_addressof";
                 case TokenKind::At: return "unary_dereference";
                 case TokenKind::Minus: return "unary_negation";
-                case TokenKind::Tilde: return "unary_negation";
+                case TokenKind::Tilde: return "unary_bitnegation";
                 case TokenKind::Exclam: return "unary_not";
                 case TokenKind::Has: return "unary_has";
+                case TokenKind::PlusPlus: return "unary_plusplus";
+                case TokenKind::MinusMinus: return "unary_minusminus";
                 default: LCC_ASSERT(
                     false,
                     "Unhandled unary expression operator {}",
