@@ -140,3 +140,70 @@ x :: 42;
 ---
 
 (block (variable_declaration (integer_literal)))
+
+================
+=
+:syntax
+================
+
+0 = 0;
+
+---
+
+(block (binary_equal (integer_literal) (integer_literal)))
+
+================
+!=
+:syntax
+================
+
+0 != 1;
+
+---
+
+(block (binary_notequal (integer_literal) (integer_literal)))
+
+================
+>
+:syntax
+================
+
+0 > 0;
+
+---
+
+(block (binary_greaterthan (integer_literal) (integer_literal)))
+
+================
+>=
+:syntax
+================
+
+0 >= 0;
+
+---
+
+(block (binary_greaterthan_orequal (integer_literal) (integer_literal)))
+
+================
+<
+:syntax
+================
+
+0 < 0;
+
+---
+
+(block (binary_lessthan (integer_literal) (integer_literal)))
+
+================
+<=
+:syntax
+================
+
+0 <= 0;
+
+---
+
+(block (binary_lessthan_orequal (integer_literal) (integer_literal)))
+
