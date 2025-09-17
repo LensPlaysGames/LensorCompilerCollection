@@ -302,6 +302,9 @@ void lcc::glint::Lexer::NextToken() {
             } else if (lastc == '=') {
                 tok.kind = TokenKind::MinusEq;
                 NextChar();
+            } else if (lastc == '-') {
+                tok.kind = TokenKind::MinusMinus;
+                NextChar();
             } else {
                 tok.kind = TokenKind::Minus;
             }
