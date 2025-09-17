@@ -1,0 +1,54 @@
+================
++
+:syntax
+================
+
+42 + 27;
+
+---
+
+(block (binary_add (integer_literal) (integer_literal)))
+
+================
+-
+:syntax
+================
+
+42 - 27;
+
+---
+
+(block (binary_subtract (integer_literal) (integer_literal)))
+
+================
+*
+:syntax
+================
+
+42 * 27;
+
+---
+
+(block (binary_multiply (integer_literal) (integer_literal)))
+
+================
+/
+:syntax
+================
+
+42 / 27;
+
+---
+
+(block (binary_divide (integer_literal) (integer_literal)))
+
+================
+%
+:syntax
+================
+
+42 % 27;
+
+---
+
+(block (binary_modulo (integer_literal) (integer_literal)))

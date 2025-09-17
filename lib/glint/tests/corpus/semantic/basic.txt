@@ -1,0 +1,12 @@
+================
+Invoking Integers Multiplies
+================
+
+42 27;
+
+---
+
+(block (return
+ (binary_multiply
+  (integer_literal)
+  (integer_literal))))
