@@ -1,0 +1,92 @@
+================
+Unary @
+:syntax
+================
+
+@x;
+
+---
+
+(block (unary_dereference (name)))
+
+================
+Unary &
+:syntax
+================
+
+&x;
+
+---
+
+(block (unary_addressof (name)))
+
+================
+Unary -
+:syntax
+================
+
+;; leading ';' so test parser doesn't get confused
+; -x;
+
+---
+
+(block (unary_negation (name)))
+
+================
+Unary ~
+:syntax
+================
+
+~0;
+
+---
+
+(block (unary_bitnegation (integer_literal)))
+
+================
+Unary ++
+:syntax
+================
+
+++0;
+
+---
+
+(block (unary_plusplus (integer_literal)))
+
+================
+Unary --
+:syntax
+================
+
+; --0;
+
+---
+
+
+(block (unary_minusminus (integer_literal)))
+
+================
+Unary !
+:syntax
+================
+
+!0;
+
+---
+
+
+(block (unary_not (integer_literal)))
+
+================
+Unary not
+:syntax
+================
+
+not 0;
+
+---
+
+
+(block (unary_not (integer_literal)))
+
