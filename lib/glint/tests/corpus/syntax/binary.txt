@@ -52,3 +52,91 @@
 ---
 
 (block (binary_modulo (integer_literal) (integer_literal)))
+
+================
+&
+:syntax
+================
+
+85 & 101;
+
+---
+
+(block (binary_bitand (integer_literal) (integer_literal)))
+
+================
+|
+:syntax
+================
+
+64 | 5;
+
+---
+
+(block (binary_bitor (integer_literal) (integer_literal)))
+
+================
+^
+:syntax
+================
+
+21 ^ 80;
+
+---
+
+(block (binary_bitxor (integer_literal) (integer_literal)))
+
+================
+<<
+:syntax
+================
+
+105 << 2;
+
+---
+
+(block (binary_shl (integer_literal) (integer_literal)))
+
+================
+>>
+:syntax
+================
+
+138 >> 1;
+
+---
+
+(block (binary_shr (integer_literal) (integer_literal)))
+
+================
+:=
+:syntax
+================
+
+x := 42;
+
+---
+
+(block (binary_assignment (name) (integer_literal)))
+
+================
+: <type> =
+:syntax
+================
+
+x : int = 42;
+
+---
+
+(block (variable_declaration (integer_literal)))
+
+================
+::
+:syntax
+================
+
+x :: 42;
+
+---
+
+(block (variable_declaration (integer_literal)))
