@@ -58,3 +58,25 @@ Block, Multiple Expression, Hard Separators
 
 (block (block (integer_literal) (integer_literal)))
 
+================
+Return, empty
+:syntax
+================
+
+return;
+
+---
+
+(block (return))
+
+================
+Return, non-empty
+:syntax
+================
+
+return 0;
+
+---
+
+(block (return (integer_literal)))
+

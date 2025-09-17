@@ -1,0 +1,747 @@
+================
+void
+:syntax
+================
+
+void;
+
+---
+
+(block (t_void))
+
+================
+int
+:syntax
+================
+
+int;
+
+---
+
+(block (t_int))
+
+================
+uint
+:syntax
+================
+
+uint;
+
+---
+
+(block (t_uint))
+
+================
+bool
+:syntax
+================
+
+bool;
+
+---
+
+(block (t_bool))
+
+================
+byte
+:syntax
+================
+
+byte;
+
+---
+
+(block (t_byte))
+
+================
+FFI, cshort
+:syntax
+================
+
+cshort;
+
+---
+
+(block (t_ffi))
+
+================
+FFI, cint
+:syntax
+================
+
+cint;
+
+---
+
+(block (t_ffi))
+
+================
+FFI, clong
+:syntax
+================
+
+clong;
+
+---
+
+(block (t_ffi))
+
+================
+FFI, clonglong
+:syntax
+================
+
+clonglong;
+
+---
+
+(block (t_ffi))
+
+================
+FFI, cushort
+:syntax
+================
+
+cushort;
+
+---
+
+(block (t_ffi))
+
+================
+FFI, cuint
+:syntax
+================
+
+cuint;
+
+---
+
+(block (t_ffi))
+
+================
+FFI, culong
+:syntax
+================
+
+culong;
+
+---
+
+(block (t_ffi))
+
+================
+FFI, culonglong
+:syntax
+================
+
+culonglong;
+
+---
+
+(block (t_ffi))
+
+================
+.ptr
+:syntax
+================
+
+int.ptr;
+
+---
+
+(block (t_ptr))
+
+================
+.pptr
+:syntax
+================
+
+int.pptr
+
+---
+
+(block (t_ptr))
+
+================
+.ref
+:syntax
+================
+
+int.ref;
+
+---
+
+(block (t_ref))
+
+================
+fixed array
+:syntax
+================
+
+[int 5];
+
+---
+
+(block (t_fixarray (evaluated_constant)))
+
+================
+dynamic array
+:syntax
+================
+
+[int];
+
+---
+
+(block (t_dynarray))
+
+================
+view
+:syntax
+================
+
+[int view];
+
+---
+
+(block (t_view))
+
+================
+struct, empty
+:syntax
+================
+
+struct {};
+
+---
+
+(block (t_struct))
+
+================
+struct, fail without body
+:fail_parse
+================
+
+struct;
+
+---
+
+()
+
+================
+struct, single member
+:syntax
+================
+
+struct { x : int };
+
+---
+
+(block (t_struct))
+
+================
+struct, single member, hard sep.
+:syntax
+================
+
+struct { x : int; };
+
+---
+
+(block (t_struct))
+
+================
+struct, single member, soft sep.
+:syntax
+================
+
+struct { x : int, };
+
+---
+
+(block (t_struct))
+
+================
+struct, multiple members, no sep.
+:syntax
+================
+
+struct { x : int y :int };
+
+---
+
+(block (t_struct))
+
+================
+struct, multiple members, one hard sep.
+:syntax
+================
+
+struct { x : int; y : int };
+
+---
+
+(block (t_struct))
+
+================
+struct, multiple members, one soft sep.
+:syntax
+================
+
+struct { x : int, y : int };
+
+---
+
+(block (t_struct))
+
+================
+struct, multiple members, hard sep.
+:syntax
+================
+
+struct { x : int; y : int; };
+
+---
+
+(block (t_struct))
+
+================
+struct, multiple members, soft sep.
+:syntax
+================
+
+struct { x : int, y : int, };
+
+---
+
+(block (t_struct))
+
+================
+struct, just supplant
+:syntax
+================
+
+struct { supplant int; };
+
+---
+
+(block (t_struct))
+
+================
+struct, supplant after member
+:syntax
+================
+
+struct { x : int; supplant int; };
+
+---
+
+(block (t_struct))
+
+================
+struct, supplant as first member
+:syntax
+================
+
+struct { supplant int; x : int; };
+
+---
+
+(block (t_struct))
+
+================
+sum, empty
+:syntax
+================
+
+sum {};
+
+---
+
+(block (t_sum))
+
+================
+sum, fail without body
+:fail_parse
+================
+
+sum;
+
+---
+
+()
+
+================
+sum, single member
+:syntax
+================
+
+sum { x : int };
+
+---
+
+(block (t_sum))
+
+================
+sum, multiple members
+:syntax
+================
+
+sum { x : int  y : int };
+
+---
+
+(block (t_sum))
+
+================
+sum, multiple members, one hard sep.
+:syntax
+================
+
+sum { x : int; y : int };
+
+---
+
+(block (t_sum))
+
+================
+sum, multiple members, one soft sep.
+:syntax
+================
+
+sum { x : int, y : int };
+
+---
+
+(block (t_sum))
+
+================
+sum, multiple members, hard sep.
+:syntax
+================
+
+sum { x : int; y : int; };
+
+---
+
+(block (t_sum))
+
+================
+sum, multiple members, soft sep.
+:syntax
+================
+
+sum { x : int, y : int, };
+
+---
+
+(block (t_sum))
+
+================
+enum, empty
+:syntax
+================
+
+enum {};
+
+---
+
+(block (t_enum))
+
+================
+enum, fail without body
+:fail_parse
+================
+
+enum;
+
+---
+
+(block (t_enum))
+
+================
+enum, explicit underlying type
+:syntax
+================
+
+enum(int) {};
+
+---
+
+(block (t_enum))
+
+================
+enum, single member, no value
+:syntax
+================
+
+enum { x };
+
+---
+
+(block (t_enum))
+
+================
+enum, single member, equal value
+:syntax
+================
+
+enum { x = 42 };
+
+---
+
+(block (t_enum))
+
+================
+enum, single member, assigned value
+:syntax
+================
+
+enum { x := 42 };
+
+---
+
+(block (t_enum))
+
+================
+enum, single member, type-inferred value
+:syntax
+================
+
+enum { x :: 42 };
+
+---
+
+(block (t_enum))
+
+================
+enum, multiple members, no values
+:syntax
+================
+
+enum { x y z };
+
+---
+
+(block (t_enum))
+
+================
+enum, multiple members, one value
+:syntax
+================
+
+enum { x y := 42 z };
+
+---
+
+(block (t_enum))
+
+================
+enum, multiple members, one soft sep.
+:syntax
+================
+
+enum { x, y, z };
+
+---
+
+(block (t_enum))
+
+================
+enum, multiple members, soft sep.
+:syntax
+================
+
+enum { x, y, z, };
+
+---
+
+(block (t_enum))
+
+================
+enum, multiple members, one hard sep.
+:syntax
+================
+
+enum { x; y; z };
+
+---
+
+(block (t_enum))
+
+================
+enum, multiple members, hard sep.
+:syntax
+================
+
+enum { x; y; z; };
+
+---
+
+(block (t_enum))
+
+================
+union, empty
+:syntax
+================
+
+union {};
+
+---
+
+(block (t_union))
+
+================
+union, fail without body
+:fail_parse
+================
+
+union;
+
+---
+
+(block (t_union))
+
+================
+union, single member
+:syntax
+================
+
+union { x : int };
+
+---
+
+(block (t_union))
+
+================
+union, single member, hard sep.
+:syntax
+================
+
+union { x : int; };
+
+---
+
+(block (t_union))
+
+================
+union, single member, soft sep.
+:syntax
+================
+
+union { x : int, };
+
+---
+
+(block (t_union))
+
+================
+union, multiple members, one soft sep.
+:syntax
+================
+
+union { x : int, y : int };
+
+---
+
+(block (t_union))
+
+================
+union, multiple members, soft sep.
+:syntax
+================
+
+union { x : int, y : int, };
+
+---
+
+(block (t_union))
+
+================
+union, multiple members, one hard sep.
+:syntax
+================
+
+union { x : int; y : int };
+
+---
+
+(block (t_union))
+
+================
+union, multiple members, hard sep.
+:syntax
+================
+
+union { x : int; y : int; };
+
+---
+
+(block (t_union))
+
+================
+function
+:syntax
+================
+
+void();
+
+---
+
+(block (t_function))
+
+================
+function, single parameter
+:syntax
+================
+
+void(x : int);
+
+---
+
+(block (t_function))
+
+================
+function, multiple parameter
+:syntax
+================
+
+void(x : int  y : int);
+
+---
+
+(block (t_function))
+
+================
+function, multiple parameter, one soft sep.
+:syntax
+================
+
+void(x : int, y : int);
+
+---
+
+(block (t_function))
+
+================
+function, multiple parameter, soft sep.
+:syntax
+================
+
+void(x : int, y : int,);
+
+---
+
+(block (t_function))
+
+================
+function, multiple parameter, hard sep.
+:fail_parse
+================
+
+void(x : int; y : int);
+
+---
+
+(block (t_function))
