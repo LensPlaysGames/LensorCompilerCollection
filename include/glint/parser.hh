@@ -41,7 +41,7 @@ private:
         Scope* scope;
 
         explicit ScopeRAII(Parser* parser_, Scope* parent = nullptr)
-            : parser(parser_), scope(new(*parser->mod) Scope(parent ? parent : parser->CurrScope())) {
+            : parser(parser_), scope(new (*parser->mod) Scope(parent ? parent : parser->CurrScope())) {
             parser->scope_stack.push_back(scope);
         }
 

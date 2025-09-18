@@ -592,8 +592,7 @@ auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
         enumerators.emplace_back(new (*mod) EnumeratorDecl(std::move(name), value, enumerator_loc));
 
         // Eat separators, if any.
-        while (+ConsumeExpressionSeparator())
-            ;
+        while (+ConsumeExpressionSeparator());
     }
 
     if (not Consume(Tk::RBrace))
@@ -625,7 +624,8 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
 
     /// Parse the LHS.
     switch (tok.kind) {
-        case Tk::Gensym: LCC_ASSERT(false, "Gensym token in parser: there is a bug in the lexer");
+        case Tk::Gensym:
+            LCC_ASSERT(false, "Gensym token in parser: there is a bug in the lexer");
 
         /// AST node bound by macro.
         case Tk::Expression:
@@ -1129,15 +1129,18 @@ auto lcc::glint::Parser::ParseForExpr() -> Result<ForExpr*> {
 
     auto init = ParseExpr();
     if (not init) return init.diag();
-    if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) Error("Expected expression separator after 'for' initialisation expression");
+    if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard))
+        Error("Expected expression separator after 'for' initialisation expression");
 
     auto cond = ParseExpr();
     if (not cond) return cond.diag();
-    if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) Error("Expected expression separator after 'for' condition expression");
+    if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard))
+        Error("Expected expression separator after 'for' condition expression");
 
     auto increment = ParseExpr();
     if (not increment) return increment.diag();
-    if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) Error("Expected expression separator after 'for' increment expression");
+    if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard))
+        Error("Expected expression separator after 'for' increment expression");
 
     auto body = ParseExpr();
     if (not body) return body.diag();
@@ -1383,8 +1386,7 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<void> {
         module_kind
     );
 
-    while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard))
-        ;
+    while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
 
     // Parse imports.
     while (At(Tk::Ident) and tok.text == "import" and not tok.artificial) {
@@ -1396,8 +1398,7 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<void> {
         mod->add_import(tok.text, {loc, tok.location});
         NextToken(); // Yeet module name.
 
-        while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard))
-            ;
+        while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
     }
 
     return {};
@@ -1863,8 +1864,7 @@ void lcc::glint::Parser::ParseTopLevel() {
 
     /// Parse the file.
     for (;;) {
-        while (+ConsumeExpressionSeparator())
-            ;
+        while (+ConsumeExpressionSeparator());
 
         /// Stop if we’re at end of file.
         if (At(Tk::Eof)) break;

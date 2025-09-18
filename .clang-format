@@ -335,8 +335,8 @@ SortUsingDeclarations: true
 ## Space after C-style cast.
 SpaceAfterCStyleCast: true
 
-## No space after `!`.
-SpaceAfterLogicalNot: false
+## Space after `not`.
+SpaceAfterLogicalNot: true
 
 ## Put a space after `template`
 SpaceAfterTemplateKeyword: true
