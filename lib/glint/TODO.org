@@ -17,3 +17,7 @@ Just implement =format : [byte](:T) { ... }= for your type, and rely on function
 ** String Interpolation
 
 Eventually we will probably want a way to do =printf "foo:{} bar:{}\n" 42 27;= or something like that.
+
+* <Development Aid> Tests Recall
+
+Basically, when you run =glinttests=, save the results. If old results are found, show comparison between old results and new results (i.e. "this test is NOW FAILING").
