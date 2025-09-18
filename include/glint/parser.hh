@@ -176,6 +176,8 @@ private:
     using Lexer::Note;
     using Lexer::Warning;
 
+    auto ParseExpressionListUntil(TokenKind until) -> Result<std::vector<Expr*>>;
+
     auto ParseBlock() -> Result<BlockExpr*>;
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
     auto ParseDecl() -> Result<Decl*>;

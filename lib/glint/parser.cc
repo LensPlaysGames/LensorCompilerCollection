@@ -380,20 +380,9 @@ auto lcc::glint::Parser::ParseBlock() -> Result<BlockExpr*> {
     return ParseBlock(ScopeRAII{this});
 }
 
-auto lcc::glint::Parser::ParseBlock(
-    /// The only purpose of this parameter is to open a new scope
-    /// for this block. Do NOT remove it, even if it appears unused.
-    [[maybe_unused]] ScopeRAII sc
-) -> Result<BlockExpr*> {
-    auto loc = tok.location;
-    LCC_ASSERT(
-        Consume(Tk::LBrace),
-        "ParseBlock called while not at '{{'"
-    );
-
-    /// Parse expressions.
+auto lcc::glint::Parser::ParseExpressionListUntil(lcc::glint::TokenKind until) -> Result<std::vector<Expr*>> {
     std::vector<Expr*> exprs;
-    while (not At(Tk::RBrace, Tk::Eof)) {
+    while (not At(until, Tk::Eof)) {
         if (+ConsumeExpressionSeparator()) continue;
 
         auto expr = ParseExpr();
@@ -407,8 +396,25 @@ auto lcc::glint::Parser::ParseBlock(
             }
         }
         if (not expr) return expr.diag();
-        exprs.push_back(expr.value());
+        exprs.emplace_back(expr.value());
     }
+    return exprs;
+};
+
+auto lcc::glint::Parser::ParseBlock(
+    /// The only purpose of this parameter is to open a new scope
+    /// for this block. Do NOT remove it, even if it appears unused.
+    [[maybe_unused]] ScopeRAII sc
+) -> Result<BlockExpr*> {
+    auto loc = tok.location;
+    LCC_ASSERT(
+        Consume(Tk::LBrace),
+        "ParseBlock called while not at '{{'"
+    );
+
+    /// Parse expressions.
+    auto exprs = ParseExpressionListUntil(Tk::RBrace);
+    if (not exprs) return exprs.diag();
 
     /// Yeet "}".
     if (not Consume(Tk::RBrace))
@@ -416,7 +422,7 @@ auto lcc::glint::Parser::ParseBlock(
 
     loc = {loc, tok.location};
 
-    return new (*mod) BlockExpr(std::move(exprs), loc);
+    return new (*mod) BlockExpr(std::move(*exprs), loc);
 }
 
 /// Parse an object or type declaration.
@@ -788,6 +794,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         case Tk::LParen: {
             // Eat '('
             NextToken();
+
             // Empty expression isn't an expression, becomes no ast node. If we are
             // parsing an expression, we need to keep going (or return an empty
             // expression).
@@ -797,28 +804,40 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             if (Consume(Tk::RParen))
                 return Error("Empty parenthetical expression probably has unintended consequences: try `,` or `;`.");
 
-            lhs = ParseExpr();
-            if (not lhs) return lhs.diag();
-            // If there is more syntax before the paren expression closes, this may be
-            // a function call or type instantiation.
-            if (not At(Tk::RParen)) {
-                std::vector<Expr*> args;
+            auto exprs = ParseExpressionListUntil(Tk::RParen);
+            if (not exprs) return exprs.diag();
 
-                while (AtStartOfExpression()) {
-                    auto expr = ParseExpr(CallPrecedence, true);
-                    if (not expr) return expr.diag();
-                    args.push_back(expr.value());
-                }
-
-                // Iff there are arguments, create a call expression.
-                // Handles (5) and (2 + 3) just being "5", while also making (foo 5) a
-                // call expression.
-                if (not args.empty()) {
+            // FIXME: This is an issue; basically, we are doing semantic analysis
+            // within syntactic analysis, and it's making things /messy/.
+            // Ideally, we should parse expressions within parentheses using
+            // ParseExpressionListUntil (just like ParseBlock does), but currently we have
+            // no AST node that represents the generic expression list, only calls.
+            // So, this code would have to (and does) manually generate any single
+            // node that could be constructed from an expression list (like a call).
+            // This is obviously semantics and has nothing to do with parsing
+            // syntactically; we /should/ have an expression list node that is invalid
+            // if it shows up in the final program but may be converted by semantic
+            // analysis into valid code. i.e. expression list containing all integers
+            // would multiply all of them together, but an expression list containing
+            // a function followed by integers would be a call to that functions with
+            // the integers as arguments.
+            {
+                auto& e = *exprs;
+                if (e.size() == 1) {
+                    lhs = e.at(0);
+                } else if (e.size() > 1) {
+                    // expression list becomes call
+                    // (foo x y) -> foo(x,y)
                     lhs = new (*mod) CallExpr(
-                        lhs.value(),
-                        std::move(args),
+                        e.at(0),
+                        {e.begin() + 1, e.end()},
                         {lhs->location(), tok.location}
                     );
+                } else {
+                    // non-empty empty ()
+                    // Basically, we only ever get here if we have a paren expression with
+                    // hard separators or other empty paren expressions inside.
+                    return Error("Empty parenthetical expression probably has unintended consequences.");
                 }
             }
 
@@ -1159,9 +1178,9 @@ auto lcc::glint::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
         {"nomangle", FuncAttr::NoMangle},
         {"noreturn", FuncAttr::NoReturn},
         {"pure", FuncAttr::Pure},
-        {"returns_twice", FuncAttr::ReturnsTwice},
+        {"returns_twice", FuncAttr::ReturnsTwice}, // i.e. fork()
         {"used", FuncAttr::Used},
-        {"__noopt__", FuncAttr::NoOpt},
+        {"__noopt__", FuncAttr::NoOpt}, // not part of Glint, but rather a compiler extension
     };
 
     /// Parse attributes while we’re at an identifier.
