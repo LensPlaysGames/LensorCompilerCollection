@@ -1,0 +1,73 @@
+* Value =match=
+
+When the expression directly following =match= is NOT of a sum type, make it syntactic sugar for =if x = 42 <thing> else if x = 69 <thing>= etc. Or we could just use =switch= instead of =match= for this.
+
+#+begin_src glint-ts
+  ;; optional FEATURE: value match
+  x :: 69;
+  match x {
+    42 :: print "the answer\n";
+    69 :: print "noice\n";
+  };
+#+end_src
+
+** Extra Feature =fallthrough=
+
+Only really useful for value match.
+
+#+begin_src glint-ts
+  ;; optional FEATURE: value match fallthrough
+  x :: 69;
+  match x {
+    42 :: print "the answer\n";
+    69 :: fallthrough;
+    420 :: print "noice\n";
+  };
+#+end_src
+
+* Finish =supplant=
+
+** Allow Supplanting Sum Types into Structs
+
+#+begin_src glint-ts
+  location_t : struct { begin:int, end:int };
+  token_data_t : sum {
+    x:int
+    y:[byte]
+  };
+  token : struct {
+    ;; every token can share common data members, since it's a struct
+    loc :location_t
+    supplant token_data_t;
+  };
+  ;; but, instances of a token don't require explicitly reaching through
+  ;; `token_data_t` (which also means you can change the implementation)
+  t :: lex ...;
+
+  ;; not t.data.x or whatever, just t.x! Very handy.
+  if (has t.x) ...;
+#+end_src
+
+* When assigning to the same lvalue twice in a row
+
+Probably a mistake to assign something and then overwrite it immediately.
+
+Can you spot the mistake in the below program? It is meant to return 69 (and demonstrate implicit cast of =supplant='ed members).
+
+#+begin_src glint-ts
+  foo : struct {
+    x : int;
+    y : int;
+  };
+  calculate_foo : int(f : foo.ref) f.x + f.y;
+
+  bar : struct {
+    a : int;
+    supplant foo;
+  };
+
+  baz : bar;
+  baz.x := 42;
+  baz.x := 27;
+  calculate_foo baz;
+#+end_src

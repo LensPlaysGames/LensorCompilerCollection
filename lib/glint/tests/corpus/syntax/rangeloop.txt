@@ -1,0 +1,11 @@
+================
+Range-based Loop
+:syntax
+================
+
+;; for <identifier> in <container-expression> <body-expression>
+for x in y z;
+
+---
+
+(block (loop_for (name) (name) (name)))
