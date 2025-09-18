@@ -1,4 +1,5 @@
 #include <lcc/diags.hh>
+#include <lcc/location.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
@@ -335,6 +336,39 @@ constexpr auto TypeQualifierPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         default: return -1;
     }
 }
+
+auto GetRightmostLocation(lcc::glint::Expr* expr) -> lcc::Location {
+    if (not expr) return {};
+
+    lcc::Location location{expr->location()};
+
+    // Attempt to get the location that is as close to where the semi-colon should be.
+
+    // For variable declarations, choose the initializer. If there is no
+    // initializer present, choose the type.
+    if (expr->kind() == lcc::glint::Expr::Kind::VarDecl) {
+        auto var_decl = lcc::as<lcc::glint::VarDecl>(expr);
+        if (var_decl->init())
+            location = var_decl->init()->location();
+        else location = var_decl->type()->location();
+    }
+
+    // For function declarations, choose the body. If there is no body
+    // present, choose the type.
+    if (expr->kind() == lcc::glint::Expr::Kind::FuncDecl) {
+        if (lcc::as<lcc::glint::FuncDecl>(expr)->body())
+            location = lcc::as<lcc::glint::FuncDecl>(expr)->body()->location();
+        else location = lcc::as<lcc::glint::FuncDecl>(expr)->type()->location();
+    }
+
+    // Limit location to length of one, discarding the beginning (fold right).
+    if (location.len > 1) {
+        location.pos += location.len - 1;
+        location.len = 1;
+    }
+
+    return location;
+}
 } // namespace
 
 auto lcc::glint::Parser::AtStartOfExpression() -> bool {
@@ -367,28 +401,8 @@ auto lcc::glint::Parser::ParseBlock(
             if (At(Tk::Eof)) {
                 Warning("Expected ';' but got end of file");
             } else if (expr) {
-                Location location{};
-                if (expr.value()->location().is_valid())
-                    location = expr.value()->location();
-
-                // Attempt to get the location that is as close to where the semi-colon should be.
-                if (expr->kind() == Expr::Kind::VarDecl) {
-                    auto var_decl = as<VarDecl>(expr.value());
-                    if (var_decl->init())
-                        location = var_decl->init()->location();
-                    else location = var_decl->type()->location();
-                }
-                if (expr->kind() == Expr::Kind::FuncDecl and as<FuncDecl>(expr.value())->body())
-                    location = as<FuncDecl>(expr.value())->body()->location();
-
-                // Limit location to length of one, discarding the beginning (fold right).
-                if (location.len > 1) {
-                    location.pos += location.len - 1;
-                    location.len = 1;
-                }
-
                 // Error(location, "Expected ';'")
-                Warning(location, "Expected ';'")
+                Warning(GetRightmostLocation(*expr), "Expected ';'")
                     .attach(Diag::Note(context, tok.location, "Before this"));
             }
         }
@@ -1861,36 +1875,7 @@ void lcc::glint::Parser::ParseTopLevel() {
             if (At(Tk::Eof)) {
                 Warning("Expected hard expression separator but got end of file");
             } else if (expr) {
-                Location rightmost_location{};
-                if (expr.value()->location().is_valid())
-                    rightmost_location = expr.value()->location();
-
-                // Attempt to get the location that is as close to where the semi-colon
-                // should be.
-
-                // For a variable declaration, choose the init expression, if it's
-                // available, or the type.
-                if (auto* var_decl = cast<VarDecl>(*expr)) {
-                    if (var_decl->init())
-                        rightmost_location = var_decl->init()->location();
-                    else rightmost_location = var_decl->type()->location();
-                }
-
-                // For a function declaration, choose the body location, if it's
-                // available, or the type.
-                if (auto* fdecl = cast<FuncDecl>(*expr)) {
-                    if (fdecl->body())
-                        rightmost_location = fdecl->body()->location();
-                    else rightmost_location = fdecl->type()->location();
-                }
-
-                // Limit location to length of one, discarding the beginning (fold right).
-                if (rightmost_location.len > 1) {
-                    rightmost_location.pos += rightmost_location.len - 1;
-                    rightmost_location.len = 1;
-                }
-
-                Warning(rightmost_location, "Expected hard expression separator")
+                Warning(GetRightmostLocation(*expr), "Expected hard expression separator")
                     .attach(Note("Before this"));
             }
         }
