@@ -33,6 +33,7 @@ enum struct Opcode : u32 {
     Not, // One's Complement Negation
     And,
     Or,
+    Xor,
     ShiftRightArithmetic,
     ShiftRightLogical,
     ShiftLeft,
@@ -40,7 +41,8 @@ enum struct Opcode : u32 {
     Add,      // add
     Multiply, // mul
 
-    Sub, // sub
+    Sub,          // sub
+    SignedDivide, // idiv
 
     Compare,        // cmp
     Test,           // test
@@ -134,12 +136,14 @@ constexpr auto ToString(Opcode op) -> std::string_view {
         case Opcode::Not: return "not";
         case Opcode::And: return "and";
         case Opcode::Or: return "or";
+        case Opcode::Xor: return "xor";
         case Opcode::ShiftLeft: return "shl";
         case Opcode::ShiftRightLogical: return "shr";
         case Opcode::ShiftRightArithmetic: return "sar";
         case Opcode::Add: return "add";
         case Opcode::Multiply: return "imul";
         case Opcode::Sub: return "sub";
+        case Opcode::SignedDivide: return "idiv";
         case Opcode::Push: return "push";
         case Opcode::Pop: return "pop";
         case Opcode::Test: return "test";

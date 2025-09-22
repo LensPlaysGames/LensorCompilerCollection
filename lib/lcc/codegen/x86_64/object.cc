@@ -1050,6 +1050,8 @@ static void assemble_inst(
         case Opcode::MoveSignExtended:
         case Opcode::MoveZeroExtended:
         case Opcode::ShiftRightLogical:
+        case Opcode::SignedDivide:
+        case Opcode::Xor:
             LCC_TODO("Assemble {}\n", PrintMInstImpl(inst, opcode_to_string));
 
         case Opcode::Poison: LCC_UNREACHABLE();
