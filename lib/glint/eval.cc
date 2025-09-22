@@ -33,7 +33,6 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
         case Kind::TypeAliasDecl:
         case Kind::TypeDecl:
         case Kind::VarDecl:
-        case Kind::Match:
             return not_a_constant_expr();
 
         case Kind::Alignof:
@@ -46,6 +45,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
         case Kind::Return:
         case Kind::Sizeof:
         case Kind::While:
+        case Kind::Match:
             return unhandled_constant_expr();
 
         case Kind::IntegerLiteral:
