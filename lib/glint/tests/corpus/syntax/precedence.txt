@@ -41,7 +41,7 @@ subscript over multiplicative, x[y] * z
 :syntax
 ================
 
-x[y] * z
+x[y] * z;
 
 ---
 
