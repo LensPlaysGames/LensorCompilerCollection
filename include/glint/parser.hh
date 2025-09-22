@@ -176,7 +176,13 @@ private:
     using Lexer::Note;
     using Lexer::Warning;
 
-    auto ParseExpressionListUntil(TokenKind until) -> Result<std::vector<Expr*>>;
+    // Use this when you need a bunch of expressions until you get a closing
+    // delimiter (like a bunch of expressions before a rbrace, or a rparen).
+    auto ParseExpressionsUntil(TokenKind until) -> Result<std::vector<Expr*>>;
+
+    // Use this when you need a bunch of expressions until you get a hard
+    // expression separator (like for parsing arguments).
+    auto ParseExpressionList() -> Result<std::vector<Expr*>>;
 
     auto ParseBlock() -> Result<BlockExpr*>;
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;

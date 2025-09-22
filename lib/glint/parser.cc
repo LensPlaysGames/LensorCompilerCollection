@@ -380,7 +380,7 @@ auto lcc::glint::Parser::ParseBlock() -> Result<BlockExpr*> {
     return ParseBlock(ScopeRAII{this});
 }
 
-auto lcc::glint::Parser::ParseExpressionListUntil(lcc::glint::TokenKind until) -> Result<std::vector<Expr*>> {
+auto lcc::glint::Parser::ParseExpressionsUntil(lcc::glint::TokenKind until) -> Result<std::vector<Expr*>> {
     std::vector<Expr*> exprs;
     while (not At(until, Tk::Eof)) {
         if (+ConsumeExpressionSeparator()) continue;
@@ -401,6 +401,19 @@ auto lcc::glint::Parser::ParseExpressionListUntil(lcc::glint::TokenKind until) -
     return exprs;
 };
 
+auto lcc::glint::Parser::ParseExpressionList() -> Result<std::vector<Expr*>> {
+    std::vector<Expr*> exprs;
+    while (not At(Tk::Semicolon, Tk::Eof)) {
+        if (+ConsumeExpressionSeparator(ExpressionSeparator::Soft)) continue;
+
+        auto expr = ParseExpr();
+        ConsumeExpressionSeparator(ExpressionSeparator::Soft);
+        if (not expr) return expr.diag();
+        exprs.emplace_back(expr.value());
+    }
+    return exprs;
+}
+
 auto lcc::glint::Parser::ParseBlock(
     /// The only purpose of this parameter is to open a new scope
     /// for this block. Do NOT remove it, even if it appears unused.
@@ -413,7 +426,7 @@ auto lcc::glint::Parser::ParseBlock(
     );
 
     /// Parse expressions.
-    auto exprs = ParseExpressionListUntil(Tk::RBrace);
+    auto exprs = ParseExpressionsUntil(Tk::RBrace);
     if (not exprs) return exprs.diag();
 
     /// Yeet "}".
@@ -804,16 +817,11 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             if (Consume(Tk::RParen))
                 return Error("Empty parenthetical expression probably has unintended consequences: try `,` or `;`.");
 
-            auto exprs = ParseExpressionListUntil(Tk::RParen);
+            auto exprs = ParseExpressionsUntil(Tk::RParen);
             if (not exprs) return exprs.diag();
 
             // FIXME: This is an issue; basically, we are doing semantic analysis
             // within syntactic analysis, and it's making things /messy/.
-            // Ideally, we should parse expressions within parentheses using
-            // ParseExpressionListUntil (just like ParseBlock does), but currently we have
-            // no AST node that represents the generic expression list, only calls.
-            // So, this code would have to (and does) manually generate any single
-            // node that could be constructed from an expression list (like a call).
             // This is obviously semantics and has nothing to do with parsing
             // syntactically; we /should/ have an expression list node that is invalid
             // if it shows up in the final program but may be converted by semantic
