@@ -231,8 +231,7 @@ void lcc::Diag::print() {
     const auto digits = utils::NumberWidth(line);
 
     // Underline the range.
-    // NOTE: I don't know why, but I find single-character underlines
-    // annoying.
+    // TODO: Multiline location underline calculation
     if (not location_is_multiline) {
         // We first pad the line based on the number of digits in the line number
         // and append more spaces to line us up with the range.

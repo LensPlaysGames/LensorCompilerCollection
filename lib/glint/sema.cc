@@ -942,7 +942,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         // expression that returns the converted last expression.
         // FIXME: Probably a bug elsewhere, but last type can be void after
         // conversion if deproceduring happens to a function that returns void.
-        if (Convert(last, ty->return_type()) and not(*last)->type()->is_void()) {
+        if (Convert(last, ty->return_type()) and not (*last)->type()->is_void()) {
             if (is<BlockExpr>(decl->body()))
                 *last = new (mod) ReturnExpr(*last, {});
             else decl->body() = new (mod) ReturnExpr(*last, {});
@@ -1828,6 +1828,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     m->set_sema_errored();
                     break;
                 }
+
                 // Member access to supplanted member
                 // (m->object) . (m->name)  ->  (m->object) . (supplanted_member) . (m->name)
                 auto* supplanted_member_access = new (mod) MemberAccessExpr(m->object(), it->name, m->location());
@@ -1946,7 +1947,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
     }
 
     /// Do *not* use `expr` here, as it may have been replaced by something else.
-    if (not(*expr_ptr)->sema_done_or_errored())
+    if (not (*expr_ptr)->sema_done_or_errored())
         (*expr_ptr)->set_sema_done();
 
     return (*expr_ptr)->ok();
@@ -4023,7 +4024,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
     }
 
     /// Do *not* use `type` here, as it may have been replaced by something else.
-    if (not(*type_ptr)->sema_done_or_errored())
+    if (not (*type_ptr)->sema_done_or_errored())
         (*type_ptr)->set_sema_done();
     return (*type_ptr)->ok();
 }

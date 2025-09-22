@@ -141,11 +141,11 @@ private:
 public:
     MInst(Kind kind, Register reg)
         : _register(reg),
-          _opcode(static_cast<usz>(kind)){};
+          _opcode(static_cast<usz>(kind)) {};
 
     MInst(usz opcode, Register reg)
         : _register(reg),
-          _opcode(opcode){};
+          _opcode(opcode) {};
 
     [[nodiscard]]
     usz reg() const { return _register.value; }
@@ -252,7 +252,7 @@ class MBlock {
     Location _location;
 
 public:
-    MBlock(std::string name) : _name(name){};
+    MBlock(std::string name) : _name(name) {};
 
     [[nodiscard]]
     auto instructions() -> std::vector<MInst>& {

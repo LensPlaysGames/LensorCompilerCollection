@@ -678,7 +678,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 generate_expression(lhs_expr);
                 Value* lhs = generated_ir[lhs_expr];
 
-                if (!lhs) LCC_ASSERT(false, "lvalue codegen for lhs of subscript didn't go as expected; sorry");
+                if (not lhs) LCC_ASSERT(false, "lvalue codegen for lhs of subscript didn't go as expected; sorry");
 
                 generate_expression(rhs_expr);
                 auto* rhs = generated_ir[rhs_expr];
@@ -1298,7 +1298,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         case K::NameRef: {
             auto* name_ref = as<NameRefExpr>(expr);
 
-            if (is<ObjectDecl>(name_ref->target()) and as<ObjectDecl>(name_ref->target())->linkage() == Linkage::Imported)
+            if (is<ObjectDecl>(name_ref->target())
+                and as<ObjectDecl>(name_ref->target())->linkage() == Linkage::Imported)
                 generate_expression(name_ref->target());
 
             LCC_ASSERT(
@@ -1514,7 +1515,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         insert(load);
                     }
                 }
-                if (not(generated_ir[arg]->type() == function_type->params().at(usz(i)))) {
+                if (not (generated_ir[arg]->type() == function_type->params().at(usz(i)))) {
                     Diag::ICE(
                         ctx,
                         arg->location(),

@@ -435,7 +435,7 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
                     coloring_stack.push_back(usz(i));
                 }
             }
-        } while (!done && count);
+        } while ((not done) and count);
 
         if (count) {
             /// Determine node with minimal spill cost.
@@ -483,7 +483,7 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
 
         usz reg_value = 0;
         for (auto reg : desc.registers) {
-            if (not(register_interferences & (usz(1) << reg))) {
+            if (not (register_interferences & (usz(1) << reg))) {
                 reg_value = reg;
                 break;
             }

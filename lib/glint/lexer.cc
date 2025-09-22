@@ -613,7 +613,7 @@ void lcc::glint::Lexer::NextNumber() {
         else if (lastc == 'x' or lastc == 'X') ParseNumber("hexadecimal", IsHexDigit, 16);
 
         // If the next character is a space or delimiter, then this is a literal 0.
-        if (IsSpace(lastc) or !IsAlpha(lastc)) return;
+        if (IsSpace(lastc) or not IsAlpha(lastc)) return;
 
         // Anything else is an error.
         Error("Invalid integer literal");
