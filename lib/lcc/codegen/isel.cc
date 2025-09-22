@@ -168,6 +168,14 @@ void select_instructions(Module* mod, MFunction& function) {
 
                     default: break;
                 }
+
+                LCC_ASSERT(
+                    block.instructions().at(index).opcode() >= +MInst::Kind::ArchStart,
+                    "Unlowered instruction:\n{}\n  (found in block {}, function {})",
+                    PrintMInstImpl(block.instructions().at(index), x86_64::opcode_to_string),
+                    block.name(),
+                    function.names().at(0).name
+                );
             }
         }
     } else LCC_ASSERT(false, "Unhandled architecture in instruction selection");
