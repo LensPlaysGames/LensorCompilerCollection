@@ -991,6 +991,77 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
 };
 } // namespace
 
+auto lcc::glint::Type::representation() const -> std::string {
+    switch (kind()) {
+        case Kind::Builtin:
+            return fmt::format("B{}", usz(as<BuiltinType>(this)->builtin_kind()));
+        case Kind::FFIType:
+            return fmt::format("FFI{}", usz(as<FFIType>(this)->ffi_kind()));
+        case Kind::Named:
+            return fmt::format("N{}_{}", as<NamedType>(this)->name().size(), as<NamedType>(this)->name());
+        case Kind::Pointer:
+            return fmt::format("P{}", elem()->representation());
+        case Kind::Reference:
+            return fmt::format("R{}", elem()->representation());
+        case Kind::DynamicArray:
+            return fmt::format("DY{}", elem()->representation());
+        case Kind::Array:
+            LCC_ASSERT(is<ConstantExpr>(as<ArrayType>(this)->size()), "Array type size is not a constant expression");
+            return fmt::format("ARR{}_{}", as<ConstantExpr>(as<ArrayType>(this)->size())->value().as_int(), elem()->representation());
+        case Kind::ArrayView:
+            return fmt::format("VW{}", elem()->representation());
+        case Kind::Function: {
+            auto f = as<FuncType>(this);
+            auto out = fmt::format("F{}_{}", f->params().size(), f->return_type()->representation());
+            for (auto p : f->params()) {
+                out += '_';
+                out += p.type->representation();
+            }
+            return out;
+        }
+        case Kind::Sum: {
+            auto s = as<SumType>(this);
+            auto out = fmt::format("SUM{}", s->members().size());
+            for (auto m : s->members()) {
+                out += '_';
+                out += m.type->representation();
+            }
+            return out;
+        }
+        case Kind::Union: {
+            auto u = as<UnionType>(this);
+            auto out = fmt::format("UNN{}", u->members().size());
+            for (auto m : u->members()) {
+                out += '_';
+                out += m.type->representation();
+            }
+            return out;
+        }
+        case Kind::Enum: {
+            auto e = as<EnumType>(this);
+            auto out = fmt::format(
+                "ENM{}_{}",
+                e->enumerators().size(),
+                e->underlying_type()->representation()
+            );
+            return out;
+        }
+        case Kind::Struct: {
+            auto s = as<StructType>(this);
+            auto out = fmt::format("SCT{}", s->members().size());
+            for (auto m : s->members()) {
+                out += '_';
+                out += m.type->representation();
+            }
+            return out;
+        }
+        case Kind::Integer: {
+            return fmt::format("INT{}", as<IntegerType>(this)->size({}));
+        }
+    }
+    LCC_UNREACHABLE();
+}
+
 auto lcc::glint::Type::string(bool use_colours) const -> std::string {
     static constexpr lcc::utils::Colour type_colour{lcc::utils::Colour::Cyan};
 
@@ -1268,6 +1339,5 @@ auto lcc::glint::ObjectDecl::mangled_name() const -> std::string {
         return name();
     }
 
-    // TODO: Include type representation
-    return fmt::format("_XGlint{}", name());
+    return fmt::format("_XGlint{}{}", name(), type()->representation());
 }

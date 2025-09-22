@@ -618,6 +618,9 @@ public:
     [[nodiscard]]
     auto is_overload_set() const -> bool;
 
+    // Get the identifier-friendly encoding of this type.
+    auto representation() const -> std::string;
+
     /// Get the size of this type. It may be target-dependent,
     /// which is why this takes a context parameter.
     ///
