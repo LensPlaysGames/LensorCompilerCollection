@@ -267,6 +267,46 @@ using sub_reg_imm = Pattern<
         Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
+using sdiv_reg_reg = Pattern<
+    InstList<
+        Inst<Clobbers<>, usz(MKind::SDiv), Register<>, Register<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
+        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+
+using sdiv_reg_imm = Pattern<
+    InstList<
+        Inst<Clobbers<>, usz(MKind::SDiv), Register<>, Immediate<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
+        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+
+using srem_reg_reg = Pattern<
+    InstList<
+        Inst<Clobbers<>, usz(MKind::SRem), Register<>, Register<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
+        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RDX), Sizeof<0>>, i<0>>>>;
+
+using srem_reg_imm = Pattern<
+    InstList<
+        Inst<Clobbers<>, usz(MKind::SRem), Register<>, Immediate<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
+        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RDX), Sizeof<0>>, i<0>>>>;
+
 using cond_branch_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::CondBranch), Register<>, Block<>, Block<>>>,
     InstList<
@@ -421,6 +461,12 @@ using AllPatterns = PatternList<
 
     sub_reg_reg,
     sub_reg_imm,
+
+    sdiv_reg_reg,
+    sdiv_reg_imm,
+
+    srem_reg_reg,
+    srem_reg_imm,
 
     bitcast_imm,
 
