@@ -44,6 +44,11 @@ auto lcc::glint::Scope::declare(
     std::string&& name,
     Decl* decl
 ) -> Result<Decl*> {
+    LCC_ASSERT(
+        name == decl->name(),
+        "The name given to declare() is different to the name from the declaration given to declare()!"
+    );
+
     // If the symbol already exists, then this is an error, (unless that symbol
     // resolves to one or more function declarations, and we are declaring a
     // function).
