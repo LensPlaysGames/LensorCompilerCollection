@@ -470,6 +470,11 @@ public:
     }
 
     // \see SemaNode::State
+    bool sema_no_longer_viable() const {
+        return _state == State::NoLongerViable;
+    }
+
+    // \see SemaNode::State
     void set_sema_in_progress() {
         LCC_ASSERT(not sema_done_or_errored());
         _state = State::InProgress;
