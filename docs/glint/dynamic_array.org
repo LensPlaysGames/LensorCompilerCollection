@@ -3,3 +3,19 @@
 It's a vector.
 
 The dynamic array type attempts to make a generic container type that may be used for all or most non-performance applications.
+
+A dynamic array is basically a fancy way to make a struct, and a fancy way to operate on structs created in that way...
+
+=[byte]= is equivalent to =struct { data: byte.ptr; size: uint; capacity: uint; }=. You can access these members on any instance of a dynamic array.
+
+** Range-based Loops
+
+Glint's =for= keyword works on any type with =data= and =size= members, which includes dynamic arrays. You can iterate every element of a dynamic array using =for=.
+
+** Allocating Memory
+
+As you may already know, a dynamic array/vector allocates memory at runtime to store values in. These allocations are /implicit/ in Glint. That is, the act of creating a dynamic array has the side effect of allocating memory.
+
+So, uh, when does it get freed?
+
+The programmer is responsible for freeing the allocated memory using the unary minus operator =-=. It is an error in a Glint program for a dynamic array to be created and never be freed. This means, for the most part, that Glint programs are statically checked to be memory safe regarding use-after-free errors.
