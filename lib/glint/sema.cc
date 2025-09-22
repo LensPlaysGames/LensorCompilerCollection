@@ -2059,6 +2059,132 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             break;
 
         case TokenKind::PlusEq:
+            if (lhs_t->is_dynamic_array()) {
+                // Ensure rhs is convertible to lhs element type
+                if (not Convert(&b->rhs(), lhs_t->elem())) {
+                    Error(b->location(), "Cannot append to {} with value of type {}", lhs_t, rhs_t);
+                    b->set_sema_errored();
+                    break;
+                }
+                // TODO: Either replace with append code in AST or leave it and let IRGen
+                // deal with that mess.
+                // Generate following pseudo-code:
+                //   if b->lhs().size >= b->lhs().capacity - 1, {
+                //       // Allocate memory, capacity * 2
+                //       newmem :: malloc 2 b->lhs().capacity;
+                //       // Copy <size> elements into newly-allocated memory
+                //       memcpy newmem, b->lhs().data, b->lhs().size;
+                //       // De-allocate old memory
+                //       free b->lhs().data;
+                //       // Assign b->lhs().data to newly-allocated memory
+                //       b->lhs().data := newmem;
+                //       // Assign b->lhs().capacity to b->lhs().capacity * 2
+                //       b->lhs().capacity *= 2;
+                //   };
+                //   @b->lhs().data[b->lhs().size] := b->rhs();
+                //   b->lhs().size += 1;
+
+                auto lhs_data = new (mod) MemberAccessExpr(b->lhs(), "data", {});
+                auto lhs_size = new (mod) MemberAccessExpr(b->lhs(), "size", {});
+                auto lhs_capacity = new (mod) MemberAccessExpr(b->lhs(), "capacity", {});
+
+                // lhs.capacity - 1
+                auto cap_less_one = new (mod) BinaryExpr(
+                    TokenKind::Minus,
+                    lhs_capacity,
+                    new (mod) IntegerLiteral(1, {}),
+                    {}
+                );
+                // lhs.size >= lhs.capacity - 1
+                auto condition = new (mod) BinaryExpr(TokenKind::Ge, lhs_size, cap_less_one, {});
+
+                std::vector<Expr*> exprs{};
+
+                {
+                    // Local variable declaration init to malloc(capacity * 2).
+                    auto malloc_ref = new (mod) NameRefExpr("malloc", mod.global_scope(), {});
+                    auto cap_double = new (mod) BinaryExpr(
+                        TokenKind::Star,
+                        lhs_capacity,
+                        new (mod) IntegerLiteral(2, {}),
+                        {}
+                    );
+                    (void) Analyse((Expr**) &malloc_ref);
+                    (void) Analyse((Expr**) &cap_double);
+                    auto malloc_call = new (mod) CallExpr(malloc_ref, {cap_double}, {});
+                    *malloc_call->type_ref() = new (mod) PointerType(lhs_t->elem());
+                    malloc_call->set_sema_done();
+
+                    // TODO/FIXME: This (scope) is most-certainly wrong. We probably want to
+                    // open a new one for this block expression we are creating.
+                    auto scope = curr_func->scope();
+                    auto newmem_name = mod.unique_name("dynarray_grow_");
+                    auto newmem_decl = scope->declare(
+                        context,
+                        std::move(newmem_name),
+                        new (mod) VarDecl(
+                            newmem_name,
+                            new (mod) PointerType(lhs_t->elem()),
+                            malloc_call,
+                            &mod,
+                            Linkage::LocalVar,
+                            {}
+                        )
+                    );
+                    exprs.emplace_back(*newmem_decl);
+
+                    // memcpy from lhs_data to memory at local variable
+                    auto memcpy_ref = new (mod) NameRefExpr("memcpy", mod.global_scope(), {});
+                    auto memcpy_call = new (mod) CallExpr(
+                        memcpy_ref,
+                        {new (mod) NameRefExpr(newmem_decl->name(), scope, {}), lhs_data, lhs_size},
+                        {}
+                    );
+                    exprs.emplace_back(memcpy_call);
+
+                    // free(lhs_data)
+                    auto free_ref = new (mod) NameRefExpr("free", mod.global_scope(), {});
+                    auto free_call = new (mod) CallExpr(free_ref, {lhs_data}, {});
+                    exprs.emplace_back(free_call);
+
+                    // lhs_data := <local variable>
+                    auto update_data = new (mod) BinaryExpr(
+                        TokenKind::ColonEq,
+                        lhs_data,
+                        new (mod) NameRefExpr(newmem_decl->name(), scope, {}),
+                        {}
+                    );
+                    exprs.emplace_back(update_data);
+
+                    // lhs_capacity *= 2
+                    auto update_capacity = new (mod) BinaryExpr(
+                        TokenKind::StarEq,
+                        lhs_capacity,
+                        new (mod) IntegerLiteral(2, {}),
+                        {}
+                    );
+                    exprs.emplace_back(update_capacity);
+                }
+                auto grow_block = new (mod) BlockExpr(exprs, {});
+
+                auto grow_if = new (mod) IfExpr(condition, grow_block, nullptr, {});
+
+                auto subscript_lhs = new (mod) BinaryExpr(TokenKind::LBrack, lhs_data, lhs_size, {});
+                auto dereference_subscript = new (mod) UnaryExpr(TokenKind::At, subscript_lhs, false, {});
+                auto assign = new (mod) BinaryExpr(TokenKind::ColonEq, dereference_subscript, b->rhs(), {});
+
+                auto update_size = new (mod) BinaryExpr(
+                    TokenKind::PlusEq,
+                    lhs_size,
+                    new (mod) IntegerLiteral(1, {}),
+                    {}
+                );
+
+                *expr_ptr = new (mod) BlockExpr({grow_if, assign, update_size}, b->location());
+                (void) Analyse(expr_ptr);
+
+                break;
+            }
             RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Plus, b);
             break;
 
