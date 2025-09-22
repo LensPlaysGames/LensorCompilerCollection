@@ -2101,7 +2101,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 b->set_sema_errored();
                 break;
             }
-            LCC_TODO("Sema dynamic array prepend with {}", ToString(b->op()));
+            LCC_TODO("GlintSema: Handle dynamic array prepend with {}", ToString(b->op()));
+        } break;
 
         case TokenKind::And:
         case TokenKind::Or: {
@@ -2110,7 +2111,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
             /// Both types must be integers or booleans.
             if (not lhs_t->is_integer(true) or not rhs_t->is_integer(true)) {
-                Error(b->location(), "Cannot perform arithmetic on {} and {}", lhs_t, rhs_t);
+                Error(b->location(), "Cannot perform logical operation on {} and {}", lhs_t, rhs_t);
                 b->set_sema_errored();
                 return;
             }
@@ -2745,7 +2746,11 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             if (O.empty()) {
                 Error(
                     expr->location(),
-                    "Given arguments didn't match any of the possible candidates in the overload set"
+                    "Given arguments {} didn't match any of the possible candidates in the overload set",
+                    fmt::join(
+                        vws::transform(expr->args(), [&](auto A) { return fmt::format("{}", *A->type()); }),
+                        ", "
+                    )
                 );
             } else {
                 Error(
@@ -2927,6 +2932,8 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     // stack to fetch from later. Because that is so complicated and bug-prone
                     // to implement, I'll wait until I really feel like it.
                     // Attempt to get to location one-past end of callee expression.
+
+                    // TODO: Use GetRightmostLocation from parser.cc (probably move it, too)
 
                     Location rightmost_location = callee_location;
 
