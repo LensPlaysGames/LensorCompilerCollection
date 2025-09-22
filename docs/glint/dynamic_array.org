@@ -1,0 +1,5 @@
+* Glint's Dynamic Array Type
+
+It's a vector.
+
+The dynamic array type attempts to make a generic container type that may be used for all or most non-performance applications.

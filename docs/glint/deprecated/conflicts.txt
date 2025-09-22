@@ -1,0 +1,21 @@
+Some would-be conflicts in the grammar, and how to deal with them.
+
+- DECLARATION/CALL WITH TYPE EXPRESSION ARGUMENT
+
+```
+a : b;
+```
+
+could either be parsed as:
+
+(a : b)
+
+or
+
+((a) : b)
+
+where `:b` is a type expression.
+
+Clearly, someone who writes this would want it to be a declaration, so, that has precedence over the type expression.
+
+Future note: this isn't really an issue if you consider that this is just parsed as an expression list containing an identifier and a type expression, and the expression list of identifier and type expression and an optional initializer is semantically converted into a declaration. However, a parser may choose to create declarations at parse-time to build scopes and stuff.

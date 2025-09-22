@@ -1,3 +1,5 @@
+Self-evaluating expressions, also known as literals, are fundamental building blocks of fixed data that are embedded in Glint programs. They are called "self-evaluating" because, in terms of execution, when you evaluate the expression, the result is the same expression: itself. That is, execution may not further alter this expression.
+
 ================
 Single Digit Integer
 :syntax

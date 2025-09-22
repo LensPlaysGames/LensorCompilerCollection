@@ -1,0 +1,19 @@
+* Print
+
+When all you want to do is see something...
+
+Use =print= keyword to begin a list of expressions whose results will be printed.
+
+=print 42;= will print =42= to standard out (or whatever you've defined the int formatter to do).
+
+** How it works
+
+=print= is sort of like a fancy macro. It just gets converted into other code. Namely, every argument expression =E= is /placed into/ the following template, and then replaced with the template result.
+
+#+begin_src prog
+  {tmp :: format(E); puts(tmp.data); -tmp;};
+#+end_src
+
+As you can see, the single argument expression is converted into a block expression containing three expressions: a call to =format= (implemented in Glint), a call to =puts= (part of LibC), and a decrement of the dynamic array that format returns, which frees the associated memory.
+
+However, if the argument is already of "dynamic array of byte" type, the call to =format= and the decrement will not be inserted. The same goes for arguments of =byte.ptr= type, fixed array of byte, view of byte, etc.

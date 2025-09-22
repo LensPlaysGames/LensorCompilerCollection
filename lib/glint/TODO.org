@@ -18,6 +18,12 @@ Just implement =format : [byte](:T) { ... }= for your type, and rely on function
 
 Eventually we will probably want a way to do =printf "foo:{} bar:{}\n" 42 27;= or something like that.
 
+* Byte Literals
+
+Basically, a way to convert characters to their ASCII byte representation. We just need a syntax, basically.
+
+You'll run into this writing code that gets the string representation of a number, and the other way around.
+
 * <Development Aid> Tests Recall
 
 Basically, when you run =glinttests=, save the results. If old results are found, show comparison between old results and new results (i.e. "this test is NOW FAILING").

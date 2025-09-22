@@ -1,0 +1,48 @@
+SOURCE      := { EXPRESSION }
+
+EXPRESSION  := (INVOKE LIST_END)
+             | (DECLARATION LIST_END)
+             | (TYPE_EXPRESSION_EXPLICIT LIST_END)
+
+INVOKE      := LIST_BEGIN { EXPRESSION }
+
+STORAGE_SPECIFIER := "export" | "external"
+
+DECLARATION := [ STORAGE_SPECIFIER ]
+               ( DECLARATION_TYPED | DECLARATION_TYPE_INFERRED )
+
+DECLARATION_TYPED         := IDENTIFIER ":" TYPE [ [ "=" ] EXPRESSION ]
+DECLARATION_TYPE_INFERRED := IDENTIFIER "::" EXPRESSION
+
+TYPE_EXPRESSION_EXPLICIT := ":" TYPE
+
+TYPE := ARRAY_T | FFI_T | PRIMITIVE_T | FUNCTION_T | PTR_T | REF_T
+
+PTRPTR_T := TYPE "." "pptr"
+PTR_T := TYPE "." "ptr"
+REF_T := TYPE "." "ref"
+
+PRIMITIVE_T := "byte" | "bool"
+             | "int" | "uint"
+             | "void"
+
+FFI_T := "cshort" | "cushort"
+       | "cint" | "cuint"
+       | "clong" | "culong"
+       | "clonglong" | "culonglong"
+
+ARRAY_T := "[" TYPE [ EXPRESSION ] "]"
+
+FUNCTION_T_ATTR := "discardable" | "nomangle"
+
+FUNCTION_T := TYPE
+              "("
+              { ( DECLARATION_TYPED | TYPE_EXPRESSION_EXPLICIT ) [ "," ] }
+              ")"
+              { FUNCTION_T_ATTR }
+
+IDENTIFIER  := ...the usual
+
+// NOTE: LIST_BEGIN may be the LIST_END of a previous matching rule
+LIST_BEGIN  := BOF | LIST_END
+LIST_END    := ';'
