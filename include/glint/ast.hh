@@ -361,9 +361,11 @@ public:
         // "If there are no such elements, past-the-end (see end()) iterators are
         // returned as both elements of the pair."
         if (it.first == it.second) return {};
+
         std::vector<Decl*> out{};
         for (auto decl = it.first; decl != it.second; ++decl)
-            out.push_back(decl->second);
+            out.emplace_back(decl->second);
+
         return out;
     }
 
