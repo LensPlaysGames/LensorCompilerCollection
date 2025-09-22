@@ -960,6 +960,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
                 (*last)->type(),
                 ty->return_type()
             );
+            decl->set_sema_errored();
             return;
         }
 
@@ -990,7 +991,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
 
 void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
     /// Set a name for the decl if it’s empty.
-    if (decl->name().empty()) decl->name(mod.unique_function_name());
+    if (decl->name().empty()) decl->name(mod.unique_name("emptydecl_"));
 
     /// Typecheck the function type.
     if (not Analyse(decl->type_ref())) {
@@ -1989,6 +1990,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 "Sorry, but {} doesn't do anything yet.",
                 ToString(b->op())
             );
+            b->set_sema_errored();
             break;
 
         case TokenKind::PlusEq:
@@ -2023,14 +2025,16 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Caret, b);
             break;
 
-        case TokenKind::TildeEq:
-            if (not b->lhs()->type()->is_dynamic_array()) {
+        case TokenKind::TildeEq: {
+            if (not lhs_t->is_dynamic_array()) {
                 Error(
                     b->location(),
                     "Lhs of prepend operator {} must be a dynamic array, but is {} instead",
                     ToString(b->op()),
                     b->lhs()->type()
                 );
+                b->set_sema_errored();
+                break;
             }
             LCC_TODO("Sema dynamic array prepend with {}", ToString(b->op()));
 
@@ -2105,6 +2109,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             LValueToRValue(&b->rhs());
             if (not Convert(&b->rhs(), Type::Int)) {
                 Error(b->rhs()->location(), "RHS of subscript must be an integer");
+                b->set_sema_errored();
                 return;
             }
 
@@ -2113,8 +2118,11 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 EvalResult res;
                 if (b->rhs()->evaluate(context, res, false)) {
                     if (res.as_int().is_negative()
-                        or res.as_int() >= as<ConstantExpr>(arr->size())->value().as_int().value())
+                        or res.as_int() >= as<ConstantExpr>(arr->size())->value().as_int().value()) {
                         Error(b->location(), "Array subscript out of bounds");
+                        b->set_sema_errored();
+                        break;
+                    }
 
                     /// Since we already have the result, store it for later.
                     b->rhs() = new (mod) ConstantExpr(b->rhs(), res);
@@ -2134,15 +2142,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Ampersand:
         case TokenKind::Pipe:
         case TokenKind::Caret: {
-            // fmt::print("BEGIN {}\n", ToString(b->op()));
-            // b->lhs()->print(true);
-            // b->rhs()->print(true);
-
             LValueToRValue(&b->lhs());
             LValueToRValue(&b->rhs());
-
-            // b->lhs()->print(true);
-            // b->rhs()->print(true);
 
             /// Both types must be integers.
             if (not lhs_t->is_integer() or not rhs_t->is_integer()) {
@@ -2156,9 +2157,6 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 return;
             }
 
-            // b->lhs()->print(true);
-            // b->rhs()->print(true);
-
             /// Convert both operands to their common type.
             if (not ConvertToCommonType(&b->lhs(), &b->rhs())) {
                 Error(
@@ -2170,9 +2168,6 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 b->set_sema_errored();
                 return;
             }
-
-            // b->lhs()->print(true);
-            // b->rhs()->print(true);
 
             /// The result type is the common type.
             b->type(lhs_t);
