@@ -199,7 +199,7 @@ private:
     std::vector<Decl*> exports{};
     std::vector<FuncDecl*> _functions{};
 
-    usz _lambda_counter = 0;
+    usz _unique_counter = 0;
 
 public:
     enum ModuleStatus : bool {
@@ -256,8 +256,14 @@ public:
     [[nodiscard]]
     auto top_level_function() const { return _top_level_function; }
 
+    // Get a variable name that is unique within this module.
+    // If passed a value, it is guaranteed to show up somewhere in the output.
+    // Useful for giving at least /some/ semantic meaning to the guaranteed-
+    // unique name.
+    auto unique_name(std::string v = "tmp") { return fmt::format("_XGlint__{}{}", v, _unique_counter++); }
+
     /// Get a function name that is unique within this module.
-    auto unique_function_name() { return fmt::format("_XGlint__lambda_{}", _lambda_counter++); }
+    auto unique_function_name() { return unique_name("lambda_"); }
 
     // Get the name of this module
     [[nodiscard]]
