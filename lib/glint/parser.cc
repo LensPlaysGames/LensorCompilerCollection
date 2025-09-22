@@ -858,7 +858,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
                     lhs = new (*mod) CallExpr(
                         e.at(0),
                         {e.begin() + 1, e.end()},
-                        {lhs->location(), tok.location}
+                        {e.at(0)->location(), tok.location}
                     );
                 } else {
                     // non-empty empty ()
