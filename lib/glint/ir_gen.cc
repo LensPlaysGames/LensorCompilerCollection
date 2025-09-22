@@ -1355,8 +1355,17 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             insert(new (*module) CondBranchInst(generated_ir[while_expr->condition()], body, exit, expr->location()));
 
             update_block(body);
+            const auto copy = generated_ir;
             generate_expression(while_expr->body());
             insert(new (*module) BranchInst(conditional, expr->location()));
+
+            // Instructions generated in the while loop must not be used by
+            // instructions in the exit block (in case the while loop never runs).
+            // This resets the cache of AST Node -> IR Instruction to what it was
+            // before we generated the while body, which means if a node that was
+            // referenced for the first time in the while body is referenced after
+            // this, it will have new instructions generated for it (as it should be).
+            generated_ir = copy;
 
             update_block(exit);
         } break;
@@ -1430,7 +1439,19 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 insert(new (*module) CondBranchInst(generated_ir[if_expr->condition()], then, exit, expr->location()));
 
                 update_block(then);
+                const auto then_copy = generated_ir;
                 generate_expression(if_expr->then());
+
+                // I tried using set_difference and it DID NOT work. So, this works just fine.
+                decltype(generated_ir) diff{};
+                for (auto i : generated_ir)
+                    if (not then_copy.contains(i.first)) diff.emplace(i);
+
+                // If anything outside of the then branch references an AST node that was
+                // used in this then branch, it needs to re-generate the IR for that
+                // node (as it wasn't in the control flow of this branch).
+                for (auto d : diff)
+                    generated_ir.erase(d.first);
 
                 update_block(exit);
                 break;
@@ -1448,14 +1469,28 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             auto* phi = new (*module) PhiInst(Convert(ctx, if_expr->type()), expr->location());
 
             update_block(then);
+            const auto then_copy = generated_ir;
             generate_expression(if_expr->then());
             auto* last_then_block = block;
             insert(new (*module) BranchInst(exit, expr->location()));
 
+            decltype(generated_ir) then_diff{};
+            for (auto i : generated_ir)
+                if (not then_copy.contains(i.first)) then_diff.emplace(i);
+            for (auto d : then_diff)
+                generated_ir.erase(d.first);
+
             update_block(otherwise);
+            const auto otherwise_copy = generated_ir;
             generate_expression(if_expr->otherwise());
             auto* last_else_block = block;
             insert(new (*module) BranchInst(exit, expr->location()));
+
+            decltype(generated_ir) otherwise_diff{};
+            for (auto i : generated_ir)
+                if (not otherwise_copy.contains(i.first)) otherwise_diff.emplace(i);
+            for (auto d : otherwise_diff)
+                generated_ir.erase(d.first);
 
             update_block(exit);
             // If the type of an if isn't void, it must return a value, so generate
