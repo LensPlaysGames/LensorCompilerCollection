@@ -595,7 +595,7 @@ struct PatternList {
                             if constexpr (clobber::kind == ClobberKind::Operand)
                                 output->add_operand_clobber(clobber::index);
                             else if constexpr (clobber::kind == ClobberKind::RegisterValue)
-                                LCC_ASSERT(false, "TODO: Register clobbers member in MIR");
+                                output->add_register_clobber(clobber::value);
                         });
 
                         inst::foreach_operand([&]<typename op> {

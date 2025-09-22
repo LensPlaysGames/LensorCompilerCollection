@@ -129,6 +129,12 @@ private:
     // If multiple register operands appear in an instruction, they usually
     // interfere with each other, but clobbering alters that behaviour.
     std::vector<usz> _operand_clobbers{};
+    // Ids of registers that this instruction clobbers.
+    // An instruction is said to clobber a register iff that instruction will
+    // overwrite the contents of that register.
+    // NOTE: Only for use when the clobbered register is /not/ an operand of
+    // the instruction.
+    std::vector<usz> _register_clobbers{};
 
     Location _location;
 
@@ -201,14 +207,24 @@ public:
     std::vector<usz>& operand_clobbers() {
         return _operand_clobbers;
     }
-
     [[nodiscard]]
     std::vector<usz> operand_clobbers() const {
         return _operand_clobbers;
     }
-
     void add_operand_clobber(usz operand_index) {
         _operand_clobbers.push_back(operand_index);
+    }
+
+    [[nodiscard]]
+    std::vector<usz>& register_clobbers() {
+        return _register_clobbers;
+    }
+    [[nodiscard]]
+    std::vector<usz> register_clobbers() const {
+        return _register_clobbers;
+    }
+    void add_register_clobber(usz register_id) {
+        _register_clobbers.emplace_back(register_id);
     }
 
     [[nodiscard]]

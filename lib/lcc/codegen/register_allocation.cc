@@ -155,6 +155,14 @@ void collect_interferences_from_block(
             }
         }
 
+        for (auto r_id : inst.register_clobbers()) {
+            auto live_idx = live_idx_from_register_value(r_id);
+            for (auto live : live_values) {
+                matrix.set(live_idx_from_register_value(live), live_idx);
+                // fmt::print("Clobber r{} interferes with live value r{}\n", reg.value, live);
+            }
+        }
+
         // Collect all register operands from this instruction that are
         // used as operands somewhere in the function (i.e. within the list of
         // registers). Cache the index within the adjacency matrix so we don't
