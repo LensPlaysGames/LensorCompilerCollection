@@ -121,6 +121,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Lambda:
         case Tk::Supplant:
         case Tk::Match:
+        case Tk::Print:
         case Tk::CShort:
         case Tk::CUShort:
         case Tk::CInt:
@@ -212,6 +213,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::Has:
         case Tk::Supplant:
         case Tk::Match:
+        case Tk::Print:
         // Types
         case Tk::ArbitraryInt:
         case Tk::Byte:
@@ -673,6 +675,23 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             lhs = new (*mod) IntegerLiteral(aint(0), BuiltinType::Bool(*mod, tok.location), tok.location);
             NextToken();
             break;
+
+        case Tk::Print: {
+            auto loc = tok.location;
+            // Yeet `print`
+            NextToken();
+
+            auto exprs = ParseExpressionList();
+            if (not exprs) return exprs.diag();
+
+            auto& e = *exprs;
+            lhs = new (*mod) CallExpr(
+                new (*mod) NameRefExpr("__glintprint", GlobalScope(), loc),
+                e,
+                {loc, tok.location}
+            );
+
+        } break;
 
         case Tk::Match: {
             auto loc = tok.location;

@@ -141,6 +141,7 @@ enum struct TokenKind {
     Lambda,
     Supplant,
     Match,
+    Print,
 
     CShort,     // cshort
     CUShort,    // cushort

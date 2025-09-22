@@ -212,6 +212,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::Struct:
                 case TokenKind::Supplant:
                 case TokenKind::Match:
+                case TokenKind::Print:
                 case TokenKind::Sum:
                 case TokenKind::TildeEq:
                 case TokenKind::True:
@@ -391,6 +392,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::Lambda:
                 case TokenKind::Supplant:
                 case TokenKind::Match:
+                case TokenKind::Print:
                 case TokenKind::CShort:
                 case TokenKind::CUShort:
                 case TokenKind::CInt:

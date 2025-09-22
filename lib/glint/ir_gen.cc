@@ -563,6 +563,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Sizeof:
                 case TokenKind::Alignof:
                 case TokenKind::Match:
+                case TokenKind::Print:
                 case TokenKind::For:
                 case TokenKind::Return:
                 case TokenKind::Export:
@@ -849,6 +850,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::LBrack: // handled above
                 case TokenKind::RBrack:
                 case TokenKind::Match:
+                case TokenKind::Print:
                 case TokenKind::Sizeof:
                 case TokenKind::Alignof:
                 case TokenKind::LParen:

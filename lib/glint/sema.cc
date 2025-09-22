@@ -298,12 +298,17 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
     return ConversionImpossible;
 }
 
-void lcc::glint::Sema::ConvertOrError(Expr** expr, Type* to) {
-    if (not Convert(expr, to)) Error(
-        (*expr)->location(),
-        "Expression is not convertible to type {}",
-        to
-    );
+bool lcc::glint::Sema::ConvertOrError(Expr** expr, Type* to) {
+    if (not Convert(expr, to)) {
+        Error(
+            (*expr)->location(),
+            "Expression is not convertible to type {}",
+            to
+        );
+        (*expr)->set_sema_errored();
+        return false;
+    }
+    return true;
 }
 
 auto lcc::glint::Sema::ConvertToCommonType(Expr** a, Expr** b) -> bool {
@@ -788,6 +793,23 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_assembly(
     return false;
 }
 
+void lcc::glint::Sema::DeclareImportedGlobalFunction(std::string name, Type* return_ty, std::vector<FuncType::Param> param_ty) {
+    (void) mod.global_scope()->declare(
+        context,
+        std::move(name),
+        new (mod) FuncDecl(
+            name,
+            new (mod) FuncType(param_ty, return_ty, {{FuncAttr::NoMangle, true}}, {}),
+            nullptr,
+            mod.global_scope(),
+            &mod,
+            Linkage::Imported,
+            {},
+            CallConv::C
+        )
+    );
+}
+
 void lcc::glint::Sema::AnalyseModule() {
     // Load imported modules.
     for (auto& import : mod.imports()) {
@@ -819,6 +841,32 @@ void lcc::glint::Sema::AnalyseModule() {
             std::exit(1);
         }
     }
+
+    // Register functions that may be called by expressions inserted by
+    // semantic analysis HERE. The reason we have to do this now and not each
+    // time it's needed is because it may cause iterator invalidation if
+    // analysing the functions causes a function to be added to the list.
+
+    DeclareImportedGlobalFunction(
+        "puts",
+        Type::Void,
+        {{"ptr", Type::VoidPtr, {}}}
+    );
+    DeclareImportedGlobalFunction(
+        "malloc",
+        Type::VoidPtr,
+        {{"size", FFIType::CInt(mod), {}}}
+    );
+    DeclareImportedGlobalFunction(
+        "free",
+        Type::Void,
+        {{"ptr", Type::VoidPtr, {}}}
+    );
+    DeclareImportedGlobalFunction(
+        "memcpy",
+        Type::Void,
+        {{"dest", Type::VoidPtr, {}}, {"src", Type::VoidPtr, {}}, {"size", FFIType::CInt(mod), {}}}
+    );
 
     /// Analyse the signatures of all functions. This must be done
     /// before analysing bodies since, in order to perform overload
@@ -883,18 +931,10 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     if (not decl->ok()) return;
 
     /// Analyse the body.
-    (void) Analyse(&decl->body(), ty->return_type());
-
-    // Report every dynamic array declared in this function (and that is not
-    // returned) which doesn't have NoLongerViable status (aka freed).
-    // Parameters are owned by caller, don't count those.
-    for (auto* dynarray : decl->dangling_dynarrays()) {
-        // TODO: Maybe a warning?
-        Error(
-            dynarray->location(),
-            "You forgot to free this dynamic array"
-        );
-    }
+    // If we fail to analyse the function body, then the function is ill-
+    // formed, and there's no need to continue checking the declaration.
+    if (not Analyse(&decl->body(), ty->return_type()))
+        return;
 
     /// The last expression in a function must be a return expression or convertible
     /// to the return type of the function. If it is a return expression, then it has
@@ -926,6 +966,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             auto* inserted_return_value = new (mod) IntegerLiteral(0, {});
             decl->body() = new (mod) ReturnExpr(inserted_return_value, {});
             last = &decl->body();
+            (void) Analyse(last);
         }
 
         // We have a return expression, hurray!
@@ -946,6 +987,12 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             if (is<BlockExpr>(decl->body()))
                 *last = new (mod) ReturnExpr(*last, {});
             else decl->body() = new (mod) ReturnExpr(*last, {});
+
+            // Analyse inserted return
+            if (not Analyse(last)) {
+                Error((*last)->location(), "Inserted return failed semantic analysis (probably a compiler error)");
+            }
+
             return;
         }
         // Otherwise, if the last expression is not a return expression and the
@@ -971,6 +1018,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             b->add(inserted_return);
             last = b->last_expr();
         } else {
+            // FIXME: Should this be an error instead of replacing the body?
             decl->body() = inserted_return;
             last = &decl->body();
         }
@@ -986,6 +1034,22 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         }
 
         Discard(&decl->body());
+    }
+
+    // Report every dynamic array declared in this function (and that is not
+    // returned) which doesn't have NoLongerViable status (aka freed).
+    // Parameters are owned by caller, don't count those.
+    // NOTE: We must do this /after/ the last expression has been implicitly
+    // returned, if that is going to happen. Otherwise, if we implicitly
+    // return a dynamic array, and we do the check before we insert the
+    // implicit return, we will falsely get an error that it is never
+    // freed (when in reality it's ownership is passed to the call-site).
+    for (auto* dynarray : decl->dangling_dynarrays()) {
+        // TODO: Maybe a warning?
+        Error(
+            dynarray->location(),
+            "You forgot to free this dynamic array"
+        );
     }
 }
 
@@ -2319,6 +2383,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Lambda:
         case TokenKind::Supplant:
         case TokenKind::Match:
+        case TokenKind::Print:
         case TokenKind::CShort:
         case TokenKind::CUShort:
         case TokenKind::CInt:
@@ -2341,6 +2406,9 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     /// If the callee is a name ref, check for builtins first.
     if (auto* name = cast<NameRefExpr>(expr->callee())) {
+        auto n = name->name();
+
+        /// Check if this is the name of a builtin.
         static const StringMap<IntrinsicKind> builtin_names{
             {"__builtin_debugtrap", IntrinsicKind::BuiltinDebugtrap},
             {"__builtin_filename", IntrinsicKind::BuiltinFilename},
@@ -2350,9 +2418,6 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             {"__builtin_memset", IntrinsicKind::BuiltinMemSet},
             {"__builtin_syscall", IntrinsicKind::BuiltinSyscall},
         };
-
-        /// Check if this is the name of a builtin.
-        auto n = name->name();
         if (auto kind = builtin_names.find(n); kind != builtin_names.end()) {
             /// We copy the arguments and leave the original expression unchanged
             /// since this node may be references in multiple places, all of which
@@ -2366,6 +2431,80 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             /// Make sure to actually analyse this intrinsic, as it will otherwise
             /// just be marked as done without actually being analysed.
             *expr_ptr = intrinsic;
+            (void) Analyse(expr_ptr);
+            return;
+        }
+
+        // TODO: Incorrect and incomplete!
+        if (n == "__glintprint") {
+            // __glintprint 42; ;; -> { tmp :: format 42; puts(tmp.data); -tmp; };
+
+            fmt::print("Glint's `print` is still a WIP: !BEWARE BUGS!\n");
+
+            std::vector<Expr*> exprs{};
+            for (auto& arg : expr->args()) {
+                if (not Analyse(&arg)) {
+                    expr->set_sema_errored();
+                    return;
+                }
+
+                if (Type::Equal(arg->type(), Type::Void)) {
+                    arg->print(true);
+                    expr->set_sema_errored();
+                    Error(arg->location(), "Argument to print has void type; no formatter available");
+                    return;
+                }
+
+                // TODO: Only insert format call if argument type is not already a byte
+                // pointer, dynamic array of byte, fixed array of byte, array view of byte, etc.
+                auto format_call = new (mod) CallExpr(
+                    new (mod) NameRefExpr("format", mod.top_level_scope(), expr->location()),
+                    {arg},
+                    expr->location()
+                );
+                auto format_decl_name = mod.unique_name("formattmp_");
+                // auto scope = curr_func->scope();
+                auto scope = name->scope();
+                auto format_decl = scope->declare(
+                    context,
+                    std::move(format_decl_name),
+                    new (mod) VarDecl(
+                        format_decl_name,
+                        new (mod) DynamicArrayType(Type::Byte, nullptr),
+                        format_call,
+                        &mod,
+                        Linkage::LocalVar,
+                        arg->location()
+                    )
+                );
+                exprs.emplace_back(*format_decl);
+
+                // member access on dynamic array from format call (to get pointer for puts)
+                // NOTE: Valid members defined in `ast.hh` in DynamicArrayType declaration.
+                auto member_access = new (mod) MemberAccessExpr(
+                    new (mod) NameRefExpr(format_decl->name(), scope, {}),
+                    "data",
+                    expr->location()
+                );
+                auto puts_call = new (mod) CallExpr(
+                    new (mod) NameRefExpr("puts", mod.global_scope(), expr->location()),
+                    {member_access},
+                    expr->location()
+                );
+
+                exprs.emplace_back(puts_call);
+
+                auto unary = new (mod) UnaryExpr(
+                    TokenKind::Minus,
+                    new (mod) NameRefExpr(format_decl->name(), scope, {}),
+                    false,
+                    {}
+                );
+
+                exprs.emplace_back(unary);
+            }
+
+            *expr_ptr = new (mod) BlockExpr(exprs, expr->location());
             (void) Analyse(expr_ptr);
             return;
         }
@@ -2994,9 +3133,9 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
 
             /// Analyse the arguments.
             for (auto*& arg : expr->args()) (void) Analyse(&arg);
-            ConvertOrError(&expr->args()[0], Type::VoidPtr);
-            ConvertOrError(&expr->args()[1], Type::VoidPtr);
-            ConvertOrError(&expr->args()[2], Type::Int);
+            if (not ConvertOrError(&expr->args()[0], Type::VoidPtr)) return;
+            if (not ConvertOrError(&expr->args()[1], Type::VoidPtr)) return;
+            if (not ConvertOrError(&expr->args()[2], Type::Int)) return;
             LValueToRValue(&expr->args()[0]);
             LValueToRValue(&expr->args()[1]);
             LValueToRValue(&expr->args()[2]);
@@ -3012,9 +3151,9 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
 
             /// Analyse the arguments.
             for (auto*& arg : expr->args()) (void) Analyse(&arg);
-            ConvertOrError(&expr->args()[0], Type::VoidPtr);
-            ConvertOrError(&expr->args()[1], Type::Byte);
-            ConvertOrError(&expr->args()[2], Type::Int);
+            if (not ConvertOrError(&expr->args()[0], Type::VoidPtr)) return;
+            if (not ConvertOrError(&expr->args()[1], Type::Byte)) return;
+            if (not ConvertOrError(&expr->args()[2], Type::Int)) return;
             LValueToRValue(&expr->args()[0]);
             LValueToRValue(&expr->args()[1]);
             LValueToRValue(&expr->args()[2]);
@@ -3032,7 +3171,7 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
             for (auto*& arg : expr->args()) {
                 (void) Analyse(&arg);
                 InsertPointerToIntegerCast(&arg);
-                ConvertOrError(&arg, Type::Int);
+                if (not ConvertOrError(&arg, Type::Int)) return;
                 LValueToRValue(&arg);
             }
 
@@ -3100,7 +3239,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
     // Look up the thing in its scope, if there is no definition of the symbol
     // in its scope, search its parent scopes until we find one.
     auto* scope = expr->scope();
-    std::vector<Decl*> syms = expr->scope()->find_recursive(expr->name());
+    std::vector<Decl*> syms = scope->find_recursive(expr->name());
 
     // If we’re at the global scope and there still is no symbol, then this
     // symbol is apparently not declared.
@@ -3126,7 +3265,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             auto distance = optimal_string_alignment_distance(expr->name(), decl->name());
             LCC_ASSERT(
                 distance,
-                "If distance from '{}' to '{}' was zero, then symbol would have been found. Likely error in distance calculation.\n",
+                "If distance from '{}' to '{}' was zero, then symbol would have been found. Likely error in distance calculation OR you passed a different name to declare() than the given declaration had.\n",
                 expr->name(),
                 decl->name()
             );
@@ -3525,6 +3664,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::Lambda:
         case TokenKind::Supplant:
         case TokenKind::Match:
+        case TokenKind::Print:
         case TokenKind::CShort:
         case TokenKind::CUShort:
         case TokenKind::CInt:

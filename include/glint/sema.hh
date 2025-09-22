@@ -97,6 +97,12 @@ private:
             b->location()
         );
     }
+
+    // Declare an external function (imported) at the global scope with the
+    // given name. Useful for registering C library functions that may be
+    // called by expressions inserted by semantic analysis.
+    void DeclareImportedGlobalFunction(std::string name, Type* return_ty, std::vector<FuncType::Param> param_ty);
+
     /// Analyse an expression and discard it.
     /// \see Discard.
     [[nodiscard]]
@@ -126,7 +132,8 @@ private:
     /// Prefer using Convert() and issuing an error manually as that is usually
     /// more informative. Use this only when there really are no semantics to the
     /// conversion other than ‘type X must be convertible to type Y’.
-    void ConvertOrError(Expr** expr, Type* to);
+    [[nodiscard]]
+    bool ConvertOrError(Expr** expr, Type* to);
 
     /// Like Convert(), but tries converting a to b and b to a.
     ///
