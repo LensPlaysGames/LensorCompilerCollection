@@ -1,0 +1,130 @@
+================
+Empty Macro
+:syntax
+================
+
+macro foo emits endmacro
+
+foo
+
+---
+
+(block)
+
+================
+Error on Empty Macro w/ MISSING Fixed Macro Parameter
+:fail_parse
+================
+
+macro foo + emits endmacro
+
+foo
+
+---
+
+()
+
+================
+Error on Empty Macro w/ INCORRECT Fixed Macro Parameter
+:fail_parse
+================
+
+macro foo + emits endmacro
+
+foo -
+
+---
+
+()
+
+================
+Empty Macro w/ Fixed Macro Parameter
+:syntax
+================
+
+macro foo + emits endmacro
+
+foo +
+
+---
+
+(block)
+
+================
+Macro w/ Defines
+:syntax
+================
+
+macro foo defines x emits x endmacro
+
+foo
+
+---
+
+(block (name))
+
+================
+elif
+:syntax
+================
+
+macro elif emits else if endmacro
+
+if x, {}
+elif y, {};
+
+---
+
+(block (if (name) (block) (if (name) (block))))
+
+================
+== to = (explicit remap invocation)
+:syntax
+================
+
+macro remap == emits = endmacro
+
+x remap == y;
+
+---
+
+(block
+ (binary_equal (name) (name)))
+
+================
+== to = (token is name)
+:syntax
+================
+
+macro == emits = endmacro
+
+x == y;
+
+---
+
+(block
+ (binary_equal (name) (name)))
+
+================
+Error on Macro Redefinition
+:fail_parse
+================
+
+macro foo emits endmacro
+macro foo emits endmacro
+
+---
+
+()
+
+================
+Error on Macro Duplicate Macro Argument
+:fail_parse
+================
+
+macro foo $x $x emits endmacro
+
+---
+
+()
+

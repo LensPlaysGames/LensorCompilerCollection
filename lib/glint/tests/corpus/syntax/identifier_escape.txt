@@ -20,3 +20,14 @@ Identifier Escape Known Keyword
 
 (block (name))
 
+================
+Identifier Escape Known Keyword 2
+:syntax
+================
+
+\return;
+
+---
+
+(block (name))
+
