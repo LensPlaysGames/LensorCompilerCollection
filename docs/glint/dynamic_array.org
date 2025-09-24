@@ -8,6 +8,20 @@ A dynamic array is basically a fancy way to make a struct, and a fancy way to op
 
 =[byte]= is equivalent to =struct { data: byte.ptr; size: uint; capacity: uint; }=. You can access these members on any instance of a dynamic array.
 
+In C++, =std::vector=.
+In Rust, =Vec=.
+
+** Accessing Elements
+
+Dereference the data pointer, basically.
+
+#+begin_src glint-ts
+  out : [byte];
+  out += 69;
+
+  @out.data[0];
+#+end_src
+
 ** Range-based Loops
 
 Glint's =for= keyword works on any type with =data= and =size= members, which includes dynamic arrays. You can iterate every element of a dynamic array using =for=.

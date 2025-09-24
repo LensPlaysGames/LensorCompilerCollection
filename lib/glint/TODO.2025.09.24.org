@@ -2,7 +2,21 @@
 
 =for <identifier> in <container-expression> <body-expression>=
 
-=for x in y, z;=
+=for x in y z;=
+
+* =print=
+
+Basically, I think I want =print= to just be syntactic sugar for mapping all given arguments to =puts()= via =format()=.
+
+=print "foo:" 42;= should print =foo:42=. Via =puts("foo:");puts(format(42));=.
+
+** Custom Types
+
+Just implement =format : [byte](:T) { ... }= for your type, and rely on function overloading for everything to "just work"™.
+
+** String Interpolation
+
+Eventually we will probably want a way to do =printf "foo:{} bar:{}\n" 42 27;= or something like that.
 
 * Byte Literals
 

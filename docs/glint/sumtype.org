@@ -1,0 +1,54 @@
+* Glint's Sum Type
+
+It's a sum type. You can store multiple variables in the space that a single variable takes up, if you would, and keep it type-safe the whole time.
+
+To define a sum type:
+#+begin_src glint-ts
+  sum {
+    x : int;
+    y : [byte];
+  };
+#+end_src
+
+** =has= and =match=
+
+Let's call this sum type =foo=.
+#+begin_src glint-ts
+  foo : sum {
+    x : int;
+    y : [byte];
+  };
+#+end_src
+
+Now, any instance of this type may have EITHER the =x= member, OR the =y= member. Only one member is valid at one time. To check if a given member is valid, use the unary prefix operator =has=.
+#+begin_src glint-ts
+  foo : sum {
+    x : int;
+    y : [byte];
+  };
+  bar : foo;
+
+  if has bar.x, ...
+#+end_src
+
+As you can imagine, this could get quite cumbersome quite quickly; adding a member to the sum type may mean tracking down long =if has= chains all over the codebase. If you forgot one, it could be catastrophic for your program! This is where =match= comes in. =match= lets you pick a different control flow based on the member held in any given instance of a sum type. =match= requires that all sum type members are handled.
+
+#+begin_src glint-ts
+  foo : sum {
+    x : int;
+    y : [byte];
+  };
+  bar : foo;
+
+  out : int;
+  match bar {
+    .x: out := bar.x;
+    .y: out := 69;
+  };
+  out;
+#+end_src
+
+As you can see, sum types allow you to define generic types while still retaining type safety. You could say that sum types allow you to define a variable that is one of a group of other types.
+
+In C++, =std::variant=.
+In Rust, =enum=.
