@@ -1,0 +1,22 @@
+================
+Identifier Escape
+:syntax
+================
+
+\x;
+
+---
+
+(block (name))
+
+================
+Identifier Escape Known Keyword
+:syntax
+================
+
+\if;
+
+---
+
+(block (name))
+
