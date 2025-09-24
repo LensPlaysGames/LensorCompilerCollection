@@ -1,0 +1,7 @@
+* Glint's Identifier Escape
+
+Let's say you want to call a variable =module=. Er, that's sort of tough, because, when you write =module= in the source code, it thinks it's a =ModuleExpr= or something and there are errors when trying to compile.
+
+To fix this, you can write a backslash before the token you would like to treat as an identifier. So, by writing =\module= in the source code, you could feasibly call a variable =module=.
+
+You could also use this to call a variable any other keyword in the language, like =\if= for =if=, or =\return= for =return=. This means that, ideally, the language itself should never get in the way of the programmer.

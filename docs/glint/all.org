@@ -1,0 +1,7 @@
+* Glint Programming Language
+
+The Glint programming language is a high level programming language low-level capabilities. Focused on the programmer, the Glint programming language spearheads ease of use while also letting people who know what they are doing, do it better.
+
+#+INCLUDE: "./dynamic_array.org"
+#+INCLUDE: "./print.org"
+#+INCLUDE: "./identifier_escape.org"

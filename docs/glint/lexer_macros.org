@@ -1,0 +1,73 @@
+* Glint's Token Macros
+
+** Theory
+
+First, let's look at the first couple "steps" of compilation of a Glint program.
+
+The Glint source code is read, and separated into logical units known as tokens. The tokens are used by the parser (or, more tersely, the syntactic analyser) to form a tree structure that represents the /meaning/ of the Glint program, or what it is meant to be doing.
+
+#+begin_example
+  SOURCE CODE
+       |
+       V
+  LEXICAL ANALYSIS
+       |
+       V
+  SYNTACTIC ANALYSIS
+       |
+       V
+  SEMANTIC ANALYSYS
+       |
+       V
+  ...
+#+end_example
+
+Okay, cool, why did we have to learn all that just to learn about lexer macros? Well, lexer macros are a way to "reach into" the Glint compiler from the source code.
+
+#+begin_example
+  SOURCE CODE<-----.
+       |           V
+       |           LEXER MACROS
+       V           ^
+  LEXICAL ANALYSIS-°
+       |
+       V
+  ...
+#+end_example
+
+And, truthfully, once a macro has been lexed, it's application (or /expansion/) is more like this (where the lexer is operating on itself).
+
+#+begin_example
+  SOURCE CODE
+       |
+       |     ,-----LEXER MACROS
+       V     V     ^
+  LEXICAL ANALYSIS-°
+       |
+       V
+  ...
+#+end_example
+
+So, why would we want to reach into the inner workings of the language? Most of the time, to do weird or stupid stuff, or to make life easier (and sometimes both!). Also, why not.
+
+** Practice
+
+To begin a macro, we use the =macro= keyword.
+To end a macro, we use the =endmacro= keyword.
+
+The following is lexer macros in their simplest form.
+#+begin_src glint-ts
+  macro <name> emits <output> endmacro
+#+end_src
+
+Note that lexer macros do not require expression separators, as expressions have not yet been formed at the time of lexical analysis. There are only tokens. So, it could be said that the macro is "eaten" by the lexer (more accurately, the tokens that make up the macro's definition).
+
+#+begin_src glint-ts
+  macro empty_macro emits endmacro
+  macro simple_macro emits 69 endmacro ;; writing simple_macro anywhere in the program following this will macro-expand into the number literal 69.
+  ;; macro emits endmacro; ;; invalid! no name :(
+#+end_src
+
+*** TODO Hygienic Expansion and Generating Symbols
+*** TODO Macro Arguments
+**** TODO Macro Argument Selectors
