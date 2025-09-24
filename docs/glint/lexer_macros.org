@@ -64,11 +64,13 @@ Note that lexer macros do not require expression separators, as expressions have
 
 #+begin_src glint-ts
   macro empty_macro emits endmacro
-  macro simple_macro emits 69 endmacro ;; writing simple_macro anywhere in the program following this will macro-expand into the number literal 69.
+  macro simple_macro emits 69 endmacro
   ;; macro emits endmacro; ;; invalid! no name :(
 #+end_src
 
-*** Macro Parameters and Macro Arguments
+Writing =simple_macro= anywhere in the program following it's definition above will macro-expand into the number literal =69=.
+
+** Macro Parameters
 
 A macro parameter is a token that is discarded upon expansion of the macro, but also enforced that it is there.
 
@@ -82,7 +84,7 @@ A macro parameter is a token that is discarded upon expansion of the macro, but 
 
 This doesn't appear that useful in our little example, but it can be very powerful to enforce a syntax for something that is not supported in the language (i.e. braces wrapped around something means it is dereferenced, or something). It can also be useful when used in conjunction with macro arguments.
 
-**** Macro Arguments
+** Macro Arguments
 
 A macro may be given named parameters such that they may be duplicated in it's output.
 
@@ -101,7 +103,7 @@ The idea is that, sometimes, you want to be able to take input into your macro t
   foo 20 ;; ¡ERROR! Ill-formed macro invocation: got '20', expected '+'
 #+end_src
 
-**** Macro Argument Selectors
+** Macro Argument Selectors
 
 Macro arguments may be given a single selector following the name identifier.
 
@@ -115,7 +117,7 @@ Macro arguments may be given a single selector following the name identifier.
 
 This becomes very powerful, as macros may operate on parsed expressions rather than lexed tokens. This reaches another layer further into the inner workings of the language, interacting with syntactic analysis.
 
-*** Hygienic Expansion and Generating Symbols
+** Hygienic Expansion and Generating Symbols
 
 #+begin_src glint-ts
   macro <name> defines <identifiers> emits <output> endmacro
@@ -131,5 +133,4 @@ The TL;DR is that =defines= allows you to create a definitely-unused name within
   foo
 #+end_src
 
-This would emit an error: something like =Unknown symbol '__L0'=. As you can see, the compiler generates a unique name to replace =x= with for each invocation. If we called =foo= again, we'd probably get =__L1=, and so on and so forth.
-
+This would emit an error: something like =Unknown symbol '__L0'=. The compiler generates a unique name, =__L0= in this case, to replace =x= with for each invocation. If we called =foo= again, we'd probably get =__L1= for that invocation, and so on and so forth.
