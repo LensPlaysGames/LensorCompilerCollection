@@ -1,5 +1,8 @@
+#include <lcc/diags.hh>
 #include <lcc/utf8.hh>
+#include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
+#include <lcc/utils/result.hh>
 
 #include <glint/ast.hh>
 #include <glint/lexer.hh>
@@ -8,6 +11,7 @@
 #include <concepts>
 #include <cstdlib>
 #include <iterator>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -448,6 +452,22 @@ void lcc::glint::Lexer::NextToken() {
         } break;
     }
 
+    // Roundabout way to shoe-horn regular tokens into existing identifier-
+    // only macro system.
+    if (not raw_mode and tok.kind != TokenKind::Invalid and tok.kind != TokenKind::Eof) {
+        auto stringified_token = ToSource(tok);
+        if (stringified_token) {
+            auto macro = rgs::find_if(
+                macros,
+                [&](const auto& m) { return m.name == *stringified_token; }
+            );
+            if (macro != macros.end()) {
+                ExpandMacro(*macro);
+                return;
+            }
+        }
+    }
+
     // If we have a token that's been expanded from a macro, then it's
     // location is already set, and would be severely mucked up if we tried to
     // adjust the length all the way from the macro definition until after the
@@ -674,7 +694,11 @@ void lcc::glint::Lexer::ExpandMacro(Macro& m) {
         /// Otherwise, make sure the tokens match.
         if (tok != param_tok and not error_reported) {
             error_reported = true;
-            Error("Ill-formed macro invocation");
+            auto arg = ToSource(tok);
+            auto param = ToSource(param_tok);
+            if (arg and param)
+                Error("Ill-formed macro invocation: got token '{}', but expected token '{}' (parameter of macro {})", *arg, *param, m.name);
+            else Error("Ill-formed macro invocation: argument token does not match fixed parameter token of macro {}", m.name);
         }
     }
 
@@ -712,18 +736,27 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
     NextToken(); // eat "macro", plate macro name identifier
 
     /// Lex macro name.
-    if (tok.kind != Tk::Ident) Error("Expected macro name after 'macro'");
-    auto name = tok.text;
+    // TODO: I think a macro should be able to be named other tokens as well.
+    // So, you should be able to name a macro `+`, `+=`, etc (to re-define
+    // those things).
+    // if (tok.kind != Tk::Ident) Error("Expected macro name after 'macro'");
+    // auto name = tok.text;
+
+    auto name_result = ToSource(tok);
+    if (not name_result) Error("Could not lex name of macro...");
+    auto name = *name_result;
 
     /// Check that the macro isn’t already defined.
     if (rgs::find_if(macros, [&](auto&& m) { return m.name == name; }) != macros.end())
         Error("Macro '{}' is already defined", name);
 
-    /// Lex parameter token list.
     auto& macro = macros.emplace_back(name);
+
+    /// Lex parameter token list.
     for (;;) {
         // First iteration eats macro name; afterwards, eats parameter tokens.
         NextToken();
+
         if (AtEof()) return;
         if (AtMacroKw("emits", "defines")) break;
 
@@ -770,6 +803,7 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
     for (;;) {
         // First iteration eats "emits"; afterwards, eats output tokens.
         NextToken();
+
         if (AtEof()) return;
         if (AtMacroKw("endmacro")) break;
 
@@ -803,7 +837,7 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
 
     LCC_ASSERT(
         tok.kind == Tk::Ident && tok.text == "endmacro",
-        "At end of macro but token is not endmacro"
+        "At end of macro but token is not endmacro; likely error in macro lexing code"
     );
 
     /// Yeet 'endmacro'.
@@ -1054,4 +1088,123 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
     }
 
     return "<unknown>";
+}
+
+/// Convert a token back to the source it may have been lexed from.
+auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::string> {
+    switch (t.kind) {
+        case lcc::glint::TokenKind::Invalid:
+            return lcc::Diag::Error(
+                "Cannot create source from invalid token {}",
+                lcc::glint::ToString(t.kind)
+            );
+
+        case lcc::glint::TokenKind::Eof: return {""};
+        case lcc::glint::TokenKind::LParen: return {"("};
+        case lcc::glint::TokenKind::RParen: return {")"};
+        case lcc::glint::TokenKind::LBrack: return {"["};
+        case lcc::glint::TokenKind::RBrack: return {"]"};
+        case lcc::glint::TokenKind::LBrace: return {"{"};
+        case lcc::glint::TokenKind::RBrace: return {"}"};
+        case lcc::glint::TokenKind::BangLBrace: return {"!{"};
+        case lcc::glint::TokenKind::Comma: return {","};
+        case lcc::glint::TokenKind::Colon: return {":"};
+        case lcc::glint::TokenKind::Semicolon: return {";"};
+        case lcc::glint::TokenKind::Dot: return {"."};
+        case lcc::glint::TokenKind::Plus: return {"+"};
+        case lcc::glint::TokenKind::Minus: return {"-"};
+        case lcc::glint::TokenKind::Star: return {"*"};
+        case lcc::glint::TokenKind::Slash: return {"/"};
+        case lcc::glint::TokenKind::Percent: return {"%"};
+        case lcc::glint::TokenKind::Ampersand: return {"&"};
+        case lcc::glint::TokenKind::Pipe: return {"|"};
+        case lcc::glint::TokenKind::Caret: return {"^"};
+        case lcc::glint::TokenKind::Tilde: return {"~"};
+        case lcc::glint::TokenKind::Exclam: return {"!"};
+        case lcc::glint::TokenKind::At: return {"@"};
+        case lcc::glint::TokenKind::Hash: return {"#"};
+        case lcc::glint::TokenKind::Shl: return {"<<"};
+        case lcc::glint::TokenKind::Shr: return {">>"};
+        case lcc::glint::TokenKind::Eq: return {"="};
+        case lcc::glint::TokenKind::Ne: return {"!="};
+        case lcc::glint::TokenKind::Lt: return {"<"};
+        case lcc::glint::TokenKind::Gt: return {">"};
+        case lcc::glint::TokenKind::Le: return {"<="};
+        case lcc::glint::TokenKind::Ge: return {">="};
+        case lcc::glint::TokenKind::PlusPlus: return {"++"};
+        case lcc::glint::TokenKind::MinusMinus: return {"--"};
+        case lcc::glint::TokenKind::StarStar: return {"**"};
+        case lcc::glint::TokenKind::PlusEq: return {"+="};
+        case lcc::glint::TokenKind::MinusEq: return {"-="};
+        case lcc::glint::TokenKind::StarEq: return {"*="};
+        case lcc::glint::TokenKind::SlashEq: return {"/="};
+        case lcc::glint::TokenKind::PercentEq: return {"%="};
+        case lcc::glint::TokenKind::AmpersandEq: return {"&="};
+        case lcc::glint::TokenKind::PipeEq: return {"|="};
+        case lcc::glint::TokenKind::CaretEq: return {"^="};
+        case lcc::glint::TokenKind::TildeEq: return {"~="};
+        case lcc::glint::TokenKind::ColonEq: return {":="};
+        case lcc::glint::TokenKind::ColonColon: return {"::"};
+        case lcc::glint::TokenKind::RightArrow: return {"->"};
+        case lcc::glint::TokenKind::Ident: return t.text;
+        case lcc::glint::TokenKind::Number: return std::to_string(t.integer_value);
+        case lcc::glint::TokenKind::String: return fmt::format("\"{}\"", t.text);
+        case lcc::glint::TokenKind::If: return {"if"};
+        case lcc::glint::TokenKind::Else: return {"else"};
+        case lcc::glint::TokenKind::While: return {"while"};
+        case lcc::glint::TokenKind::Void: return {"void"};
+        case lcc::glint::TokenKind::Byte: return {"byte"};
+        case lcc::glint::TokenKind::Bool: return {"bool"};
+        case lcc::glint::TokenKind::External: return {"external"};
+        case lcc::glint::TokenKind::True: return {"true"};
+        case lcc::glint::TokenKind::False: return {"false"};
+        case lcc::glint::TokenKind::And: return {"and"};
+        case lcc::glint::TokenKind::Or: return {"or"};
+        case lcc::glint::TokenKind::Int: return {"int"};
+        case lcc::glint::TokenKind::UInt: return {"uint"};
+        case lcc::glint::TokenKind::ArbitraryInt: {
+            auto c = t.text[0] == 'u' ? 'u' : 's';
+            return fmt::format("{}{}", c, t.integer_value);
+        }
+        case lcc::glint::TokenKind::Sizeof: return {"sizeof"};
+        case lcc::glint::TokenKind::Alignof: return {"alignof"};
+        case lcc::glint::TokenKind::Has: return {"has"};
+        case lcc::glint::TokenKind::For: return {"for"};
+        case lcc::glint::TokenKind::Return: return {"return"};
+        case lcc::glint::TokenKind::Export: return {"export"};
+        case lcc::glint::TokenKind::Struct: return {"struct"};
+        case lcc::glint::TokenKind::Enum: return {"enum"};
+        case lcc::glint::TokenKind::Union: return {"union"};
+        case lcc::glint::TokenKind::Sum: return {"sum"};
+        case lcc::glint::TokenKind::Lambda: return {"lambda"};
+        case lcc::glint::TokenKind::Supplant: return {"supplant"};
+        case lcc::glint::TokenKind::Match: return {"match"};
+        case lcc::glint::TokenKind::Print: return {"print"};
+        case lcc::glint::TokenKind::CShort: return {"cshort"};
+        case lcc::glint::TokenKind::CUShort: return {"cushort"};
+        case lcc::glint::TokenKind::CInt: return {"cint"};
+        case lcc::glint::TokenKind::CUInt: return {"cuint"};
+        case lcc::glint::TokenKind::CLong: return {"clong"};
+        case lcc::glint::TokenKind::CULong: return {"culong"};
+        case lcc::glint::TokenKind::CLongLong: return {"clonglong"};
+        case lcc::glint::TokenKind::CULongLong: return {"culonglong"};
+        case lcc::glint::TokenKind::MacroArg: return fmt::format("${}", t.text);
+
+        // Er, I'm not sure you can have a gensym token in the input, as they are
+        // only ever created by the lexer itself (by parsing an identifier in
+        // macro context that was found in the definitions of the expanding
+        // macro...).
+        // If we were to try to turn it back into source, might we need the
+        // originating macro and it's list of defines?
+        case lcc::glint::TokenKind::Gensym:
+            return lcc::Diag::Error(
+                "Cannot convert gensym token into source, seeing as the user should never be able to create these themselves."
+            );
+
+        case lcc::glint::TokenKind::Expression:
+            return lcc::Diag::Error(
+                "Cannot convert expression token into source, seeing as we can't (yet) turn AST node's back to source code."
+            );
+    }
+    LCC_UNREACHABLE();
 }

@@ -167,7 +167,7 @@ enum class CastKind {
     ReferenceToLValue,  ///< Reference-to-lvalue conversion.
 };
 
-/// Convert a token kind to a string representation.
+/// Convert a token kind to a human-readable string representation.
 auto ToString(TokenKind kind) -> std::string_view;
 
 class Module {
@@ -307,6 +307,9 @@ struct GlintToken : public syntax::Token<TokenKind> {
 
     bool operator==(const GlintToken& rhs) const;
 };
+
+/// Convert a token back to the source it may have been lexed from.
+auto ToSource(const GlintToken& t) -> Result<std::string>;
 
 struct Macro {
     std::string name;
