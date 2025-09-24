@@ -68,6 +68,68 @@ Note that lexer macros do not require expression separators, as expressions have
   ;; macro emits endmacro; ;; invalid! no name :(
 #+end_src
 
-*** TODO Hygienic Expansion and Generating Symbols
-*** TODO Macro Arguments
-**** TODO Macro Argument Selectors
+*** Macro Parameters and Macro Arguments
+
+A macro parameter is a token that is discarded upon expansion of the macro, but also enforced that it is there.
+
+#+begin_src glint-ts
+  ;; empty macro with '!' macro parameter
+  macro foo ! emits endmacro;
+
+  foo ! ;; expands to nothing
+  foo ;; ¡ERROR! Ill-formed macro invocation: got '', expected '!'
+#+end_src
+
+This doesn't appear that useful in our little example, but it can be very powerful to enforce a syntax for something that is not supported in the language (i.e. braces wrapped around something means it is dereferenced, or something). It can also be useful when used in conjunction with macro arguments.
+
+**** Macro Arguments
+
+A macro may be given named parameters such that they may be duplicated in it's output.
+
+#+begin_src glint-ts
+  macro foo $x emits $x $x endmacro;
+
+  foo 20 ;; expands to "20 20"
+#+end_src
+
+The idea is that, sometimes, you want to be able to take input into your macro to expand into different code based on what the user passes to it, not just a hard-coded sequence of tokens. This does that.
+
+#+begin_src glint-ts
+  macro foo + $x emits $x endmacro;
+
+  foo + 20 ;; expands to "20"
+  foo 20 ;; ¡ERROR! Ill-formed macro invocation: got '20', expected '+'
+#+end_src
+
+**** Macro Argument Selectors
+
+Macro arguments may be given a single selector following the name identifier.
+
+#+begin_src glint-ts
+  $<name><selector>
+#+end_src
+
+- =:token= :: Captures a token. (default)
+- =:expr= :: Captures a parsed expression rather than a lexed token.
+- =:expr_once= :: Captures a parsed expression rather than a lexed token, and ensures that the expression is only ever evaluated once, no matter how many times it appears in the macro's output during expansion.
+
+This becomes very powerful, as macros may operate on parsed expressions rather than lexed tokens. This reaches another layer further into the inner workings of the language, interacting with syntactic analysis.
+
+*** Hygienic Expansion and Generating Symbols
+
+#+begin_src glint-ts
+  macro <name> defines <identifiers> emits <output> endmacro
+#+end_src
+
+=defines= allows the macro author to declare that the macro defines a variable. The compiler will give (or generate) that variable a unique name (or symbol) upon each invocation of the macro, such that weird shadowing errors do not occur. For example, if the macro user defines a variable named the same thing that the macro author uses, then the macro expansion would cause a redefinition error. Since nobody wants programs with errors, Glint provides the =defines= list so that any use of that defined identifier in the macro expansion will be given a unique name within that expansion.
+
+The TL;DR is that =defines= allows you to create a definitely-unused name within a macro's output to avoid redefinition errors, and things like that.
+
+#+begin_src glint-ts
+  macro foo defines x emits x endmacro
+
+  foo
+#+end_src
+
+This would emit an error: something like =Unknown symbol '__L0'=. As you can see, the compiler generates a unique name to replace =x= with for each invocation. If we called =foo= again, we'd probably get =__L1=, and so on and so forth.
+
