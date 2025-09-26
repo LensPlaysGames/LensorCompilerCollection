@@ -113,6 +113,7 @@ enum struct TokenKind {
     Ident,
     Number,
     String,
+    ByteLiteral,
 
     If,
     Else,

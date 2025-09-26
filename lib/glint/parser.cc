@@ -133,6 +133,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Gensym:
         case Tk::MacroArg:
         case Tk::Expression:
+        case Tk::ByteLiteral:
             return -1;
     }
     LCC_UNREACHABLE();
@@ -182,6 +183,7 @@ constexpr bool IsRightAssociative(lcc::glint::TokenKind t) {
 constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
     using Tk = lcc::glint::TokenKind;
     switch (kind) {
+        case Tk::ByteLiteral:
         case Tk::LParen:
         case Tk::LBrack:
         case Tk::LBrace:
@@ -664,6 +666,15 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         /// Expression that starts with an identifier.
         case Tk::Ident:
             lhs = ParseIdentExpr();
+            break;
+
+        case Tk::ByteLiteral:
+            lhs = new (*mod) IntegerLiteral(
+                aint(tok.integer_value),
+                BuiltinType::Byte(*mod, tok.location),
+                tok.location
+            );
+            NextToken();
             break;
 
         case Tk::True:

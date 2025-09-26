@@ -16,6 +16,22 @@ You'll run into this writing code that gets the string representation of a numbe
 
 Or, think of this, a single-length byte array known at compile time could be implicitly convertible to it's single element. So, just use ='a'= or ="a"=. The problem is that, then, a single-length string literal is implicitly convertible to an integer, and that kind of may cause bugs/be unexpected?
 
+** Syntax Options
+
+In no order:
+- =b'0'=
+- =_0=
+- =_0_=
+- =byte.0=, =byte.a=, etc. (would require type parsing to also be able to return an expression)
+- =°0=
+- =`0`=
+- =`0=
+- =b`0=
+
+While I /understand/ the whole =b= prefix thing, I don't really /like/ it. If I had to prefix every integer literal with =i= and every string literal with =s=, I'd be kind of upset.
+
+I like the grave-based ones.
+
 * <Development Aid> Tests Recall
 
 Basically, when you run =glinttests=, save the results. If old results are found, show comparison between old results and new results (i.e. "this test is NOW FAILING").

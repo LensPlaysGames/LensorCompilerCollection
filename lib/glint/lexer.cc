@@ -130,6 +130,27 @@ void lcc::glint::Lexer::NextToken() {
             tok.kind = TokenKind::Eof;
         } break;
 
+        // `<character>` byte literal
+        case '`': {
+            // Yeet opening grave.
+            NextChar();
+            tok.kind = TokenKind::ByteLiteral;
+
+            if (lastc > 0xff)
+                Error("Byte literal contains a character with a value greater than a byte may contain");
+
+            tok.integer_value = lastc;
+
+            // Yeet character used for byte literal value.
+            NextChar();
+
+            // Yeet closing grave.
+            if (not (lastc == '`'))
+                Error("Expected '`' character to close byte literal, but got '{}', U+{:04x} instead", (char) lastc, lastc);
+
+            NextChar();
+        } break;
+
         case '\\': {
             /// Yeet backslash;
             NextChar();
@@ -896,6 +917,7 @@ auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
             return text == rhs.text;
 
         case TokenKind::Number:
+        case TokenKind::ByteLiteral:
             return integer_value == rhs.integer_value;
 
         case TokenKind::ArbitraryInt:
@@ -1085,6 +1107,7 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
         case Tk::PipeEq: return "|=";
         case Tk::CaretEq: return "^=";
         case Tk::TildeEq: return "~=";
+        case Tk::ByteLiteral: return "byte literal";
     }
 
     return "<unknown>";
@@ -1148,6 +1171,7 @@ auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::s
         case lcc::glint::TokenKind::RightArrow: return {"->"};
         case lcc::glint::TokenKind::Ident: return t.text;
         case lcc::glint::TokenKind::Number: return std::to_string(t.integer_value);
+        case lcc::glint::TokenKind::ByteLiteral: return fmt::format("`{}`", (char) t.integer_value);
         case lcc::glint::TokenKind::String: return fmt::format("\"{}\"", t.text);
         case lcc::glint::TokenKind::If: return {"if"};
         case lcc::glint::TokenKind::Else: return {"else"};
