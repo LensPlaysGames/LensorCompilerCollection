@@ -1123,6 +1123,24 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             [[fallthrough]];
         }
 
+        case Expr::Kind::While: {
+            auto* l = as<Loop>(expr);
+            if (not Analyse(&l->condition())) {
+                expr->set_sema_errored();
+                return false;
+            };
+            if (not Convert(&l->condition(), Type::Bool)) Error(
+                l->location(),
+                "Invalid type for loop condition: {}",
+                l->condition()->type()
+            );
+            LValueToRValue(&l->condition());
+            if (not AnalyseAndDiscard(&l->body())) {
+                expr->set_sema_errored();
+                return false;
+            }
+        } break;
+
         case Expr::Kind::Match: {
             auto* match = as<MatchExpr>(expr);
 
@@ -1212,24 +1230,6 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 }
             }
             *expr_ptr = if_expr;
-        } break;
-
-        case Expr::Kind::While: {
-            auto* l = as<Loop>(expr);
-            if (not Analyse(&l->condition())) {
-                expr->set_sema_errored();
-                return false;
-            };
-            if (not Convert(&l->condition(), Type::Bool)) Error(
-                l->location(),
-                "Invalid type for loop condition: {}",
-                l->condition()->type()
-            );
-            LValueToRValue(&l->condition());
-            if (not AnalyseAndDiscard(&l->body())) {
-                expr->set_sema_errored();
-                return false;
-            }
         } break;
 
         /// For return expressions, make sure that the type of the
