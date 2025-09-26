@@ -1,0 +1,11 @@
+================
+cfor
+:syntax
+================
+
+cfor true; true; {}; {};
+
+---
+
+(block
+ (for (integer_literal) (integer_literal) (block) (block)))
