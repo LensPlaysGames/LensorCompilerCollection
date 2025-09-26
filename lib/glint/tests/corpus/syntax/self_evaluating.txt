@@ -269,3 +269,38 @@ String Literal, Double Quote, \\ escape
 
 (block (string_literal))
 
+================
+Byte Literal, Empty
+:fail_parse
+================
+``;
+---
+
+()
+
+================
+Byte Literal, in-range
+:syntax
+================
+`0`;
+---
+
+(block (integer_literal))
+
+================
+Byte Literal, out-of-range
+:fail_parse
+================
+`Ʀ`;
+---
+
+()
+
+================
+Byte Literal, Missing closing `
+:fail_parse
+================
+`°;
+---
+
+()

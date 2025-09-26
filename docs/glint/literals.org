@@ -1,0 +1,51 @@
+* Glint's Literals
+
+A literal is defined as fixed values embedded in the source code. Also known as self-evaluating expressions.
+
+** Number Literals
+
+#+begin_src lisp
+  69 420 ;; regular decimal literals
+  ;; 042 ;; ERROR! Leading zeroes not allowed
+
+  0b0 0b01000101 ;; regular binary literals
+  0o0 0o377      ;; regular octal literals
+  0x69 0xbeef    ;; regular hexadecimal literals
+
+  1'004       ;; decimal literal with separator
+  0b0010'0100 ;; binary literal with separator
+  0xb0'0b     ;; hexadecimal literal with separator
+#+end_src
+
+A number literal is of integer type.
+
+** String Literals
+
+A string is a contained sequence of bytes in the source code that is converted into data that is embedded in the final program.
+
+#+begin_src glint-ts
+  '' 'i am data?' ;; regular string literals
+
+  "" "i\'m data?" ;; escapable string literals
+#+end_src
+
+A string literal is of array of byte type.
+
+** Byte Literals
+
+Sometimes, it's convenient to get a number representation of a byte in the source code (i.e. =0= or =a=). Mostly for ASCII math stuff, to be honest, but still needed often enough to be necessary.
+
+#+begin_src glint-ts
+  `6` `9` `A` ;; regular byte literals
+
+  ;; `` ;; ERROR! Empty byte literal
+#+end_src
+
+** Boolean Literals
+
+There are two of them.
+
+#+begin_src glint-ts
+  true
+  false
+#+end_src

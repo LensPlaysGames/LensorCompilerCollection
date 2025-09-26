@@ -9,6 +9,7 @@ A dynamic array is basically a fancy way to make a struct, and a fancy way to op
 =[byte]= is equivalent to =struct { data: byte.ptr; size: uint; capacity: uint; }=. You can access these members on any instance of a dynamic array.
 
 In C++, =std::vector=.
+
 In Rust, =Vec=.
 
 ** Accessing Elements
@@ -33,3 +34,5 @@ As you may already know, a dynamic array/vector allocates memory at runtime to s
 So, uh, when does it get freed?
 
 The programmer is responsible for freeing the allocated memory using the unary minus operator =-=. It is an error in a Glint program for a dynamic array to be created and never be freed. This means, for the most part, that Glint programs are statically checked to be memory safe regarding use-after-free errors.
+
+The only time the programmer is not responsible for freeing the allocated memory of a dynamic array is when that dynamic array is automatically inserted by the compiler. In that case, the compiler is also required to insert it's de-allocation.

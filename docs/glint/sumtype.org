@@ -1,6 +1,8 @@
 * Glint's Sum Type
 
-It's a sum type. You can store multiple variables in the space that a single variable takes up, if you would, and keep it type-safe the whole time.
+It's a sum type.
+
+You can store multiple variables in the space that a single variable takes up, and keep it type-safe the whole time.
 
 To define a sum type:
 #+begin_src glint-ts
@@ -9,6 +11,10 @@ To define a sum type:
     y : [byte];
   };
 #+end_src
+
+In C++, =std::variant=.
+
+In Rust, =enum=.
 
 ** =has= and =match=
 
@@ -49,6 +55,3 @@ As you can imagine, this could get quite cumbersome quite quickly; adding a memb
 #+end_src
 
 As you can see, sum types allow you to define generic types while still retaining type safety. You could say that sum types allow you to define a variable that is one of a group of other types.
-
-In C++, =std::variant=.
-In Rust, =enum=.
