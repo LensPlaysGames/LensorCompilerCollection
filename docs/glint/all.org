@@ -4,6 +4,7 @@ The Glint programming language is a high level programming language with low-lev
 
 If you are new to Glint, keep in mind that subscript doesn't dereference. =x[0]= is of pointer type, to get the value at that pointer you need to use =@x[0]=. The only way to achieve pointer arithmetic in Glint is through the subscript operator.
 
+#+INCLUDE: "./literals.org"
 #+INCLUDE: "./dynamic_array.org"
 #+INCLUDE: "./sumtype.org"
 #+INCLUDE: "./print.org"

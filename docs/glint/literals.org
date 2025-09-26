@@ -49,3 +49,17 @@ There are two of them.
   true
   false
 #+end_src
+
+** Compound Literals
+
+A way to write a literal of more complex types (like structs).
+
+Just a list of expressions separated by soft separators, with the extra ability to name expressions.
+
+#+begin_src glint-ts
+  ;; regular compound literals
+  !{}; !{420}; !{420, 69};
+
+  ;; compound literal with named expressions
+  !{.value 420}; !{.x 420, .y 69};
+#+end_src
