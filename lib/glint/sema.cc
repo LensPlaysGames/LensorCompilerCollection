@@ -2522,6 +2522,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Gensym:
         case TokenKind::MacroArg:
         case TokenKind::Expression:
+        case TokenKind::ByteLiteral:
             Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
             LCC_UNREACHABLE();
     }
@@ -3809,6 +3810,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::Gensym:
         case TokenKind::MacroArg:
         case TokenKind::Expression:
+        case TokenKind::ByteLiteral:
             Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
             LCC_UNREACHABLE();
     }
