@@ -12,21 +12,5 @@ format : [byte](x : int) = {
   out;
 };
 
-print 42;
-
-foo : struct {
-  x : int;
-};
-
-;; There are currently issues with LCC regarding returning structs that
-;; fit in registers from a temporary created from a returned call
-;; expression. So, we create the temporary ourselves within Glint.
-format : [byte](x : foo) = {
-  out :: format x.x;
-  out;
-};
-
-bar : foo;
-bar.x := 42;
-
-print bar;
+print 96;
+print "wow!!"[0];

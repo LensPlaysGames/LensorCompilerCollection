@@ -2588,8 +2588,38 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     return;
                 }
 
-                // TODO: Only insert format call if argument type is not already a byte
-                // pointer, dynamic array of byte, fixed array of byte, array view of byte, etc.
+                // Just call puts on byte pointers
+                bool arg_is_pointer_to_byte = arg->type()->is_pointer() and Type::Equal(arg->type()->elem(), Type::Byte);
+                if (arg_is_pointer_to_byte) {
+                    auto puts_call = new (mod) CallExpr(
+                        new (mod) NameRefExpr("puts", mod.global_scope(), expr->location()),
+                        {arg},
+                        expr->location()
+                    );
+                    exprs.emplace_back(puts_call);
+                    continue;
+                }
+
+                // Don't format dynamic byte arrays...
+                bool arg_is_dynamic_array_of_byte
+                    = arg->type()->strip_references()->is_dynamic_array() and Type::Equal(arg->type()->elem(), Type::Byte);
+                if (arg_is_dynamic_array_of_byte) {
+                    auto member_access = new (mod) MemberAccessExpr(
+                        arg,
+                        "data",
+                        expr->location()
+                    );
+                    auto puts_call = new (mod) CallExpr(
+                        new (mod) NameRefExpr("puts", mod.global_scope(), expr->location()),
+                        {member_access},
+                        expr->location()
+                    );
+                    exprs.emplace_back(puts_call);
+                    continue;
+                }
+
+                // TODO: Handle fixed byte arrays, byte array views.
+
                 auto format_call = new (mod) CallExpr(
                     new (mod) NameRefExpr("format", mod.top_level_scope(), expr->location()),
                     {arg},
