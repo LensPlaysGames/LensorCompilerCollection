@@ -1,4 +1,14 @@
 ================
+Inserted Return, Top Level
+================
+
+69;
+
+---
+
+(block (return (integer_literal)))
+
+================
 Invoking Integers Multiplies
 ================
 
