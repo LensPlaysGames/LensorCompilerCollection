@@ -2131,6 +2131,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                             {}
                         )
                     );
+                    // newmem :elem_t.ptr = malloc 2 old.capacity;
                     exprs.emplace_back(*newmem_decl);
 
                     // memcpy from lhs_data to memory at local variable
@@ -2140,11 +2141,13 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                         {new (mod) NameRefExpr(newmem_decl->name(), scope, {}), lhs_data, lhs_size},
                         {}
                     );
+                    // memcpy newmem, old.data, old.size;
                     exprs.emplace_back(memcpy_call);
 
                     // free(lhs_data)
                     auto free_ref = new (mod) NameRefExpr("free", mod.global_scope(), {});
                     auto free_call = new (mod) CallExpr(free_ref, {lhs_data}, {});
+                    // free old.data;
                     exprs.emplace_back(free_call);
 
                     // lhs_data := <local variable>
@@ -2154,6 +2157,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                         new (mod) NameRefExpr(newmem_decl->name(), scope, {}),
                         {}
                     );
+                    // old.data := newmem;
                     exprs.emplace_back(update_data);
 
                     // lhs_capacity *= 2
@@ -2163,6 +2167,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                         new (mod) IntegerLiteral(2, {}),
                         {}
                     );
+                    // old.capacity *= 2;
                     exprs.emplace_back(update_capacity);
                 }
                 auto grow_block = new (mod) BlockExpr(exprs, {});
@@ -2591,7 +2596,6 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     expr->location()
                 );
                 auto format_decl_name = mod.unique_name("formattmp_");
-                // auto scope = curr_func->scope();
                 auto scope = name->scope();
                 auto format_decl = scope->declare(
                     context,
@@ -2605,6 +2609,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                         arg->location()
                     )
                 );
+                // formattmp :[byte] = format arg;
                 exprs.emplace_back(*format_decl);
 
                 // member access on dynamic array from format call (to get pointer for puts)
@@ -2620,8 +2625,10 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     expr->location()
                 );
 
+                // puts formattmp.data;
                 exprs.emplace_back(puts_call);
 
+                // -formattmp;
                 auto unary = new (mod) UnaryExpr(
                     TokenKind::Minus,
                     new (mod) NameRefExpr(format_decl->name(), scope, {}),
