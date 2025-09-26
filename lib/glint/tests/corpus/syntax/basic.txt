@@ -80,3 +80,62 @@ return 0;
 
 (block (return (integer_literal)))
 
+================
+Compound Literal, Empty
+:syntax
+================
+
+!{};
+
+---
+
+(block (compound_literal))
+
+================
+Compound Literal, Single Expression
+:syntax
+================
+
+!{420};
+
+---
+
+(block (compound_literal (integer_literal)))
+
+================
+Compound Literal, Multiple Expressions
+:syntax
+================
+
+!{420, 69};
+
+---
+
+(block
+ (compound_literal
+  (integer_literal) (integer_literal)))
+
+================
+Compound Literal, Multiple Named Expressions
+:syntax
+================
+
+!{.value 420, .x 69};
+
+---
+
+(block
+ (compound_literal
+  (integer_literal) (integer_literal)))
+
+================
+Compound Literal, Nested
+:syntax
+================
+
+!{!{}};
+
+---
+
+(block (compound_literal (compound_literal)))
+
