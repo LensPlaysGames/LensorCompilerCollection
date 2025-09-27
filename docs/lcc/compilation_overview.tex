@@ -22,7 +22,7 @@
 \begin{document}
 
 \begin{center}
-  {\Large \textbf{Intercept Compilation Overview}}
+  {\Large \textbf{Glint Compilation Overview}}
 
   \vspace{1ex}
   {\large From Source Code to Machine Code}
@@ -64,7 +64,7 @@
     \node (frontend) [draw, thick, line width=0.3ex, dash pattern=on 0.05ex off 0.9ex, line cap=round, fit=(tok)(ast)(ir), inner sep=1.2ex, label=left:Frontend] {};
     \node (backend) [draw, solid, fit=(ir)(gmir)(lmir), inner sep=1.2ex, label=left:Backend] {};
   \end{tikzpicture}
-  \caption{Steps of the compilation process implemented by Intercept.}
+  \caption{Steps of the compilation process implemented by Glint.}
 \end{figure}
 \FloatBarrier
 
@@ -79,7 +79,7 @@ This is what programmers will write, expecting this compiler to be able to turn 
 \begin{figure}[h]
   \centering
   foo :: 69; foo
-  \caption{Source code of a very simple Intercept program.}
+  \caption{Source code of a very simple Glint program.}
   \label{fig:int-source}
 \end{figure}
 \FloatBarrier
@@ -143,7 +143,7 @@ Each node within the tree has a node kind, some sort of value (text, an integer)
 \label{subsec:node-tree:notable-actions}
 
 \noindent\textbf{Semantic Analysis}\\
-Semantic analysis is the act of ensuring a given program is semantically valid. That is, the rules of the program don't contradict each other. For example, this is where type checking is done, as well as ensuring program correctness (i.e. Intercept requires a program return value as the last expression present in a program).
+Semantic analysis is the act of ensuring a given program is semantically valid. That is, the rules of the program don't contradict each other. For example, this is where type checking is done, as well as ensuring program correctness (i.e. Glint requires a program return value as the last expression present in a program).
 
 \section{Intermediate Representation (IR)}
 \label{sec:ir}
