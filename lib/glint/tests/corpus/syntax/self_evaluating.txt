@@ -96,10 +96,6 @@ Integer, Leading 0s
 
 0069;
 
----
-
-()
-
 ================
 Integer, Leading 0s, hexadecimal
 :syntax
@@ -129,10 +125,6 @@ Integer, Invalid Duplicate Digit Separator
 ================
 
 6''''9;
-
----
-
-(block (integer_literal))
 
 ================
 Integer, Multiple Digit Separator
@@ -274,9 +266,6 @@ Byte Literal, Empty
 :fail_parse
 ================
 ``;
----
-
-()
 
 ================
 Byte Literal, in-range
@@ -292,15 +281,9 @@ Byte Literal, out-of-range
 :fail_parse
 ================
 `Ʀ`;
----
-
-()
 
 ================
 Byte Literal, Missing closing `
 :fail_parse
 ================
 `°;
----
-
-()

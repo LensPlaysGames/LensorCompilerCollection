@@ -4,6 +4,7 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 
+#include <cctype>
 #include <concepts>
 #include <filesystem>
 #include <span>
@@ -144,9 +145,10 @@ void parse_matchtree(
     // Get to beginning of list
     while (i < fsize and contents[i] != '(' and contents[i] != '=')
         ++i;
+
     if (i >= fsize or contents[i] == '=') {
         // TODO: file location
-        fmt::print("ERROR nothing expected");
+        fmt::print("ERROR parse_matchtree was called but the test expects nothing (no matcher)\n");
         return;
     }
 
@@ -158,7 +160,7 @@ void parse_matchtree(
 
     if (i >= fsize or contents[i] == '=') {
         // TODO: file location near list opening symbol
-        fmt::print("ERROR expected list closing symbol but got end of input");
+        fmt::print("ERROR expected list closing symbol but got end of input\n");
         return;
     }
 
@@ -178,7 +180,7 @@ void parse_matchtree(
     // Eat whitespace
     while (i < fsize and isspace(contents[i])) ++i;
     if (i >= fsize or contents[i] == '=') {
-        fmt::print("ERROR expected list closing symbol but got end of input");
+        fmt::print("ERROR expected list closing symbol but got end of input\n");
         return;
     }
 
@@ -190,7 +192,7 @@ void parse_matchtree(
         // Skip whitespace
         while (i < fsize and isspace(contents[i])) ++i;
         if (i >= fsize or contents[i] == '=') {
-            fmt::print("ERROR expected list closing symbol but got end of input");
+            fmt::print("ERROR expected list closing symbol but got end of input\n");
             return;
         }
     }
@@ -205,22 +207,50 @@ auto parse_test(
     size_t& i,
     Test& test
 ) -> bool {
-    { // Parse test name
-        // Skip '=' line
+    auto ToBeginningOfNextTest = [&]() {
+        bool bol{true};
+        while (i < fsize and not (bol and contents[i] == '=')) {
+            bol = contents[i] == '\n';
+            ++i;
+        }
+    };
+
+    auto ToNewline = [&]() {
+        // Eat everything until '\n'
         while (i < fsize and contents[i] != '\n')
             ++i;
+    };
+
+    // Move 'i' to the offset of the beginning of the next non-empty line
+    auto ToBeginningOfNextLine = [&]() {
+        ToNewline();
+        // Eat all consecutive '\n'
+        while (i < fsize and contents[i] == '\n')
+            ++i;
+    };
+
+    auto ToBeginningOfNextTestSegment = [&]() {
+        bool bol{true};
+        while (
+            i < fsize
+            and not (bol and contents[i] == '-')
+            and not (bol and contents[i] == '=')
+        ) {
+            bol = contents[i] == '\n';
+            ++i;
+        }
+    };
+
+    { // Parse test name
+        ToBeginningOfNextLine();
         if (i >= fsize) {
             fmt::print("ERROR parsing first line of test\n");
             return false;
         }
 
-        // Eat '\n'
-        while (i < fsize and contents[i] == '\n') ++i;
-
         // Parse test name
         size_t begin{i};
-        while (i < fsize and contents[i] != '\n')
-            ++i;
+        ToNewline();
         if (i >= fsize) {
             fmt::print("ERROR parsing name of test\n");
             return false;
@@ -232,23 +262,24 @@ auto parse_test(
         };
 
         // Eat '\n'
-        while (i < fsize and contents[i] == '\n') ++i;
+        ToBeginningOfNextLine();
 
         // Handle lines beginning with `:` following name before ending `=` line
         // (test specifiers).
         while (contents[i] == ':') {
+            // eat ':'
             ++i;
+
             size_t specifier_begin{i};
-            while (i < fsize and contents[i] != '\n')
-                ++i;
+            ToNewline();
 
             auto specifier = std::string_view{
                 contents.begin() + lcc::isz(specifier_begin),
                 contents.begin() + lcc::isz(i)
             };
 
-            // Eat newline
-            ++i;
+            // Eat newlines
+            ToBeginningOfNextLine();
 
             if (specifier.starts_with("desc")) {
                 // do nothing (test description)
@@ -264,38 +295,36 @@ auto parse_test(
             }
         }
 
-        // Skip '=' line
-        while (i < fsize and contents[i] != '\n')
-            ++i;
+        if (contents[i] != '=') {
+            fmt::print("ERROR parsing closing name line of test {}. It should be all `=` characters\n", test.name);
+            return false;
+        }
+
+        ToBeginningOfNextLine();
         if (i >= fsize) {
             fmt::print("ERROR parsing closing line of name of test {}\n", test.name);
             return false;
         }
-
-        // Eat '\n'
-        while (i < fsize and contents[i] == '\n') ++i;
     }
 
     { // Parse test source
         // Record beginning of source
         size_t begin_source{i};
-        // Eat all lines that don't begin with '-', to begin with
-        while (i < fsize and contents[i] != '-') {
-            // Eat line
-            while (i < fsize and contents[i] != '\n')
-                ++i;
-            // Eat '\n'
-            while (i < fsize and contents[i] == '\n') ++i;
-        }
-        if (i >= fsize) {
-            // Got EOF when expected `---` followed by expected test output (AST matcher)
-            fmt::print("ERROR parsing source of test {}\n", test.name);
-            return false;
-        }
+        ToBeginningOfNextTestSegment();
         test.source = {
             contents.begin() + lcc::isz(begin_source),
             contents.begin() + lcc::isz(i)
         };
+
+        // Beginning of next test or end of input...
+        if (i >= fsize or contents[i] == '=') {
+            // Error if the test is not expected to fail (nothing to match if it is specified to fail)
+            if (not (test.should_fail_parse or test.should_fail_check)) {
+                fmt::print("ERROR test has no matcher declared but it is not specified to fail... {}\n", test.name);
+                return false;
+            }
+            return true;
+        }
     }
 
     { // Parse test expected AST
@@ -309,59 +338,50 @@ auto parse_test(
         }
 
         parse_matchtree(contents, fsize, i, test.matcher);
+
+        ToBeginningOfNextTestSegment();
     }
+
+    // Beginning of next test or end of input...
+    if (i >= fsize or contents[i] == '=')
+        return true;
 
     // `---` following the expected AST matcher means there may be expected
     // LCC IR.
+    LCC_ASSERT(
+        contents[i] == '-',
+        "LangTest parser must leave parsing index at EOF, start of next test ('='), or start of next test segment ('-'). Instead, it was left at '{}'",
+        contents[i]
+    );
 
     { // Parse test expected IR
         // NOTE: Optional
 
-        // Skip until start of expectation, or start of another test.
-        bool bol{true};
-        while (
-            i < fsize
-            and not(bol and contents[i] == '-')
-            and not(bol and contents[i] == '=')
-        ) {
-            bol = contents[i] == '\n';
-            ++i;
+        // Skip `---` line
+        ToBeginningOfNextLine();
+        if (i >= fsize) {
+            fmt::print("ERROR parsing expected IR of test {}\n", test.name);
+            return false;
         }
-        // If NOT at start of another test
-        if (contents[i] != '=') {
-            // Skip `---` line
-            while (i < fsize and contents[i] != '\n') ++i;
-            // Eat newline
-            ++i;
-            // If there is more to parse that isn't just whitespace before an equals,
-            // then it is LCC IR.
-            if (i < fsize) {
-                // Skip whitespace
-                while (i < fsize and isspace(contents[i])) ++i;
-                if (i < fsize and contents[i] != '=') {
-                    // Found LCC IR
-                    size_t lcc_ir_begin = i;
-                    size_t lcc_ir_end = i;
-                    // While in bounds and not at start of test...
 
-                    bol = true;
-                    while (i < fsize and not(bol and contents[i] == '=')) {
-                        if (not isspace(contents[i])) lcc_ir_end = i;
-                        bol = contents[i] == '\n';
-                        ++i;
-                    }
-                    test.ir = {
-                        contents.begin() + lcc::isz(lcc_ir_begin),
-                        contents.begin() + lcc::isz(lcc_ir_end) + 1
-                    };
-                }
-            }
+        // If not at EOF and not at start of test, we are at LCC IR.
+        if (contents[i] != '=') {
+            // Found LCC IR
+            size_t lcc_ir_begin = i;
+            ToBeginningOfNextTest();
+            size_t lcc_ir_end = i;
+            // keep end in-bounds and strip trailing whitespace.
+            if (lcc_ir_end >= fsize) lcc_ir_end = fsize - 1;
+            while (isspace(contents[lcc_ir_end])) --lcc_ir_end;
+
+            test.ir = {
+                contents.begin() + lcc::isz(lcc_ir_begin),
+                contents.begin() + lcc::isz(lcc_ir_end) + 1
+            };
         }
     }
 
-    // Skip to beginning of next test or end of input.
-    while (i < fsize and contents[i] != '=') ++i;
-
+    ToBeginningOfNextTest();
     return true;
 }
 
