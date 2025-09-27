@@ -11,9 +11,21 @@ Named Example Test
 ================
 #+end_example
 
-As you can see, the name goes between two lines that have === /in the first column/, and (currently) must be on a single line.
+As you can see, the name is a single, non-empty line that goes between two lines with === /in the first column/.
 
-After the name of a test, write the source code of your language.
+*** Test Specifiers
+
+Optionally, there are test specifiers that you may declare (one on each line) before the closing line of ===.
+
+Non-exhaustive list of specifiers:
+- =:syntax= :: Stop at parsing before performing the AST match
+- =:fail_syntax= :: Test passes iff parsing fails (invalid syntax)
+- =:sema= :: Stop at semantic analysis before performing the AST match
+- =:fail_sema= :: Test passes iff semantic analysis fails
+
+*** Test Input: Where to Put Source Code
+
+After the closing line of the name of a test, write the source code of your language.
 
 #+begin_example
 ================
@@ -23,7 +35,9 @@ Named Example Test
 foo;
 #+end_example
 
-Once you have finished the code you would like to make sure "works correctly", you then write the expected output from your parser after a line beginning with =---=.
+If the test is not specified as failing, you may then write the expected output from your parser after a line beginning with =---=.
+
+The AST representation uses =langtest_name()= and =langtest_children()= member functions to traverse and match AST.
 
 #+begin_example
 ================
@@ -66,7 +80,7 @@ As you can see, by starting the line with a =>==, we may define another named te
 
 *** IR Matcher
 
-Assuming our example language was a little more complicated and actually made sense to have an IRGen step, you may also verify that a given AST generates the given LCC IR.
+You may also verify that a given AST generates the given LCC IR.
 
 #+begin_example
 ================
@@ -95,5 +109,7 @@ main : i64(i32 %0, ptr %1, ptr %2):
 #+end_example
 
 By starting a line with =---= /after an AST matcher has already been successfully parsed/, we parse expected LCC IR starting after it.
+
+* Conclusion
 
 This testing framework should allow any language to have a basic verification step for constructs in the language parsing properly and generating the expected code.
