@@ -94,6 +94,7 @@ enum struct TokenKind {
     // AtEq,     // @=
     // HashEq,   // #=
     // DotEq,    // .=
+    // HashPlus, // #+
     PlusPlus,    // ++
     MinusMinus,  // --
     StarStar,    // **
@@ -1413,8 +1414,10 @@ public:
     [[nodiscard]]
     auto evaluate(const Context* ctx, EvalResult& out, bool required) -> bool;
 
+    // A somewhat human readable name that represents this expression.
     [[nodiscard]]
     auto name() const -> std::string;
+
     [[nodiscard]]
     auto children() const -> std::vector<lcc::glint::Expr*>;
 
@@ -1767,11 +1770,11 @@ class TypeAliasDecl : public Decl {
 public:
     TypeAliasDecl(std::string name, Type* aliased_type, Location location)
         : Decl(
-            Kind::TypeAliasDecl,
-            std::move(name),
-            aliased_type,
-            location
-        ) {}
+              Kind::TypeAliasDecl,
+              std::move(name),
+              aliased_type,
+              location
+          ) {}
 
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {
@@ -2010,6 +2013,9 @@ public:
 
     /// May return null. This is the case if a constant value of non-`int`
     /// type needs to be synthesised by the compiler.
+    // NOTE: Technically const because it can't change the pointer in this
+    // expression but it definitely can change the expression the pointer
+    // points to.
     [[nodiscard]]
     auto expr() const { return _expression; }
 

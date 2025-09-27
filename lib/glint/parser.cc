@@ -183,22 +183,18 @@ constexpr bool IsRightAssociative(lcc::glint::TokenKind t) {
 constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
     using Tk = lcc::glint::TokenKind;
     switch (kind) {
+        // Self-evaluating
+        case Tk::True:
+        case Tk::False:
+        case Tk::Number:
         case Tk::ByteLiteral:
+        case Tk::String:
+        // Regular Expressions
         case Tk::LParen:
         case Tk::LBrack:
         case Tk::LBrace:
         case Tk::BangLBrace:
-        case Tk::Plus:
-        case Tk::Minus:
-        case Tk::PlusPlus:
-        case Tk::MinusMinus:
-        case Tk::Ampersand:
-        case Tk::Tilde:
-        case Tk::Exclam:
-        case Tk::At:
         case Tk::Ident:
-        case Tk::Number:
-        case Tk::String:
         case Tk::If:
         case Tk::While:
         case Tk::External:
@@ -207,15 +203,22 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::Export:
         case Tk::Lambda:
         case Tk::Expression:
-        case Tk::True:
-        case Tk::False:
         case Tk::Colon:
-        case Tk::Sizeof:
-        case Tk::Alignof:
-        case Tk::Has:
         case Tk::Supplant:
         case Tk::Match:
         case Tk::Print:
+        // Unary Prefix
+        case Tk::Plus:
+        case Tk::Minus:
+        case Tk::PlusPlus:
+        case Tk::MinusMinus:
+        case Tk::Ampersand:
+        case Tk::Tilde:
+        case Tk::Exclam:
+        case Tk::At:
+        case Tk::Sizeof:
+        case Tk::Alignof:
+        case Tk::Has:
         // Types
         case Tk::ArbitraryInt:
         case Tk::Byte:

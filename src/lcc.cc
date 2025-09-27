@@ -290,7 +290,7 @@ auto main(int argc, const char** argv) -> int {
 
         if (
             options.verbose
-            and not(
+            and not (
                 options.stopat_syntax
                 or options.stopat_sema
                 or options.stopat_ir

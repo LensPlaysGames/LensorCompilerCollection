@@ -96,9 +96,9 @@ public:
     [[nodiscard]] bool is_value() { return std::holds_alternative<ValueType>(data); }
 
     /// Get the value.
-    [[nodiscard]] auto value() -> ValueType&
-    requires (not std::is_void_v<Type>)
-    { return std::get<ValueType>(data); }
+    [[nodiscard]] auto value() -> ValueType& requires (not std::is_void_v<Type>) {
+        return std::get<ValueType>(data);
+    }
 
     /// Check if this has a value.
     explicit operator bool() { return is_value(); }
