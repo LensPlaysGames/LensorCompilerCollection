@@ -1,0 +1,9 @@
+================
+Template Expression Invocation
+================
+
+(template(x : int) x) 69;
+
+---
+
+(block (integer_literal))
