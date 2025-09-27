@@ -2996,6 +2996,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     }
 
     for (auto*& arg : expr->args()) (void) Analyse(&arg);
+
     // If any of the arguments errored, we can’t resolve this.
     if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
         expr->set_sema_errored();
@@ -3167,12 +3168,23 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     from,
                     to
                 );
-            } else Error(
-                expr->args().at(i)->location(),
-                "Type of argument {} is not convertible to parameter type {}",
-                from,
-                to
-            );
+            } else {
+                std::string fname{};
+                if (auto fdecl = cast<FuncDecl>(expr->callee()))
+                    fname = fdecl->name();
+                if (auto nameref = cast<NameRefExpr>(expr->callee()))
+                    fname = nameref->target()->name();
+
+                Error(
+                    expr->args().at(i)->location(),
+                    "Type of argument {} is not convertible to parameter type {}{} (parameter {} in function signature {})",
+                    from,
+                    to,
+                    (not fname.empty()) ? fmt::format(" in function {}", fname) : "",
+                    i,
+                    func_type
+                );
+            }
         }
     }
 }
