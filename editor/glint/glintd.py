@@ -7,10 +7,19 @@
 #  '('glint-ts-mode :language-id "glint")
 #   . ("python3" "./editor/glint/glintd.py"))
 
+import re
 from pygls.server import LanguageServer
 from lsprotocol import types
 
 server = LanguageServer("glint-server", "v0.1")
+
+_MARKDOWN_CHARACTERS_TO_ESCAPE = set(r"\`*_{}[]<>()#+-.!|")
+
+def escaped_markdown(text: str) -> str:
+    return "".join(
+        f"\\{character}" if character in _MARKDOWN_CHARACTERS_TO_ESCAPE else character
+        for character in text
+    )
 
 # TODO: Make this more complex
 def tokenize(source: str):
@@ -31,6 +40,7 @@ def tokenize(source: str):
         current_pos = next_delimiter_pos + 1
 
     return results
+
 
 @server.feature(types.TEXT_DOCUMENT_HOVER)
 def hover(ls: LanguageServer, params: types.HoverParams):
@@ -56,12 +66,25 @@ def hover(ls: LanguageServer, params: types.HoverParams):
         None
     )
 
-    # TODO: if selected_token is identifier, find declaration with that
-    # identifier and print it's type, if possible
+    # In Emacs syntax... "out\s*:\s*\\([^;=]+\\)"
+    pattern = f"{re.escape(selected_token[0])}\\s*:\\s*(?P<type>[^;=]+)"
+    found = re.search(pattern, "".join(document.lines), re.MULTILINE)
+    found_type = ""
+    if found:
+        found_type = found.group("type").strip()
 
-    hover_content = f"The tokens you are hovering over is: {tokens}, selectedc={selectedc}, selected_token={selected_token}"
+    # Hack to remove extra types surrounding found type (usually parameters)...
+    # TODO: Just parse an actual type (either using bindings to the compiler
+    # itself, or calling the compiler executable).
+    if not "(" in found_type:
+        found_type = found_type.strip().strip(")")
+        if "," in found_type:
+            found_type = found_type.split(",")[0]
 
-    hover_flat = "".join(hover_content)
+    # hover_content = f"The tokens you are hovering over is: {tokens}, selectedc={selectedc}, selected_token={selected_token}"
+    hover_content = f"{pos.line}:{selected_token[1]}: {escaped_markdown(selected_token[0])}"
+    if found:
+        hover_content += f" : **{escaped_markdown(found_type)}**"
 
     return types.Hover(
         contents=types.MarkupContent(
@@ -79,10 +102,16 @@ def hover(ls: LanguageServer, params: types.HoverParams):
     types.CompletionOptions(trigger_characters=["."]),
 )
 def completions(params: types.CompletionParams):
-    document = server.workspace.get_text_document(params.text_document.uri)
-    current_line = document.lines[params.position.line].strip()
+    pos = params.position
+    document_uri = params.text_document.uri
+    document = ls.workspace.get_text_document(document_uri)
 
-    if not current_line.endswith("hello."):
+    try:
+        line = document.lines[pos.line]
+    except IndexError:
+        return []
+
+    if not line.endswith("hello."):
         return []
 
     return [
