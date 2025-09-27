@@ -2112,7 +2112,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     (void) Analyse((Expr**) &malloc_ref);
                     (void) Analyse((Expr**) &cap_double);
                     auto malloc_call = new (mod) CallExpr(malloc_ref, {cap_double}, {});
-                    *malloc_call->type_ref() = new (mod) PointerType(lhs_t->elem());
+                    *malloc_call->type_ref() = Ptr(lhs_t->elem());
                     malloc_call->set_sema_done();
 
                     // TODO/FIXME: This (scope) is most-certainly wrong. We probably want to
@@ -2124,7 +2124,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                         std::move(newmem_name),
                         new (mod) VarDecl(
                             newmem_name,
-                            new (mod) PointerType(lhs_t->elem()),
+                            Ptr(lhs_t->elem()),
                             malloc_call,
                             &mod,
                             Linkage::LocalVar,
