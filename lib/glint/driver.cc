@@ -11,6 +11,18 @@
 namespace lcc::glint {
 
 auto produce_module(Context* context, File& source) -> lcc::Module* {
+    if (context->option_stopat_lex()) {
+        auto tokens = Parser::GetTokens(context, source);
+
+        fmt::print("KIND (LINE:COLUMN)\n");
+        for (const auto& t : tokens) {
+            auto info = t.location.seek_line_column(context);
+            fmt::print("{} ({}:{})\n", ToString(t.kind), info.line, info.col);
+        }
+
+        return {};
+    }
+
     // Parse the file.
     auto mod = Parser::Parse(context, source);
     if (context->option_print_ast() and mod) mod->print(context->option_use_colour());

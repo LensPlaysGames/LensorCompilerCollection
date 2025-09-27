@@ -32,6 +32,10 @@ public:
     static auto Parse(Context* context, std::string_view source) -> std::unique_ptr<Module>;
     static auto Parse(Context* context, File& file) -> std::unique_ptr<Module>;
 
+    // Don't do syntactic analysis, just lexical.
+    [[nodiscard]]
+    static auto GetTokens(Context* context, File& file) -> std::vector<GlintToken>;
+
 private:
     static constexpr usz PrefixOperatorPrecedence = 10000;
 
@@ -219,6 +223,10 @@ private:
     /// This is different from the global scope, as a Glint source file is
     /// entirely within `main`.
     auto TopLevelScope() -> Scope* { return scope_stack[1]; }
+
+    // Doesn't do any parsing, just collects tokens.
+    [[nodiscard]]
+    std::vector<GlintToken> JustGetTokens();
 
     friend Scope;
     friend ScopeRAII;

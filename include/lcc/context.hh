@@ -24,6 +24,10 @@ public:
         DoNotPrintAST,
         PrintAST = true,
     };
+    enum OptionStopatLex : bool {
+        DoNotStopatLex,
+        StopatLex = true,
+    };
     enum OptionStopatSyntax : bool {
         DoNotStopatSyntax,
         StopatSyntax = true,
@@ -46,6 +50,7 @@ public:
         OptionColour _colour_diagnostics;
 
         OptionPrintAST _should_print_ast;
+        OptionStopatLex _stopat_lex;
         OptionStopatSyntax _stopat_syntax;
         OptionStopatSema _stopat_sema;
 
@@ -151,6 +156,10 @@ public:
     [[nodiscard]]
     auto option_print_ast() const {
         return _options._should_print_ast;
+    }
+    [[nodiscard]]
+    auto option_stopat_lex() const {
+        return _options._stopat_lex;
     }
     [[nodiscard]]
     auto option_stopat_syntax() const {

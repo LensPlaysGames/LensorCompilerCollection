@@ -20,6 +20,7 @@ void help() {
         {"  --ast", "Emit AST in human-readable format\n"},
         {"  --ir", "Emit LCC intermediate representation\n"},
         {"  --mir", "Emit LCC machine instruction representation at various stages\n"},
+        {"  --stopat-lex", "Request language does not process input further than lexical analysis\n"},
         {"  --stopat-syntax", "Request language does not process input further than syntactic analysis\n"},
         {"  --stopat-sema", "Request language does not process input further than semantic analysis\n"},
         {"  --stopat-ir", "Do not process input further than LCC's intermediate representation (IR)\n"},
@@ -73,6 +74,8 @@ auto parse(int argc, const char** argv) -> Options {
             o.aluminium = true;
         else if (arg == "--ast")
             o.ast = lcc::Context::PrintAST;
+        else if (arg == "--stopat-lex")
+            o.stopat_lex = lcc::Context::StopatLex;
         else if (arg == "--stopat-syntax")
             o.stopat_syntax = lcc::Context::StopatSyntax;
         else if (arg == "--stopat-sema")

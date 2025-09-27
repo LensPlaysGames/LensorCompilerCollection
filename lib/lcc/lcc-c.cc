@@ -36,11 +36,13 @@ LccContextRef lcc_context_create(LccTargetRef target, LccFormatRef format) {
         lcc::Context::Options{
             lcc::Context::DoNotUseColour,
             lcc::Context::DoNotPrintAST,
+            lcc::Context::DoNotStopatLex,
             lcc::Context::DoNotStopatSyntax,
             lcc::Context::DoNotStopatSema,
             lcc::Context::DoNotPrintMIR,
             lcc::Context::DoNotStopatMIR //
-        }});
+        }
+    });
 }
 
 LccModuleRef lcc_module_create(LccContextRef context) {

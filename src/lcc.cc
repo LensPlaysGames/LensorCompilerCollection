@@ -161,11 +161,12 @@ auto main(int argc, const char** argv) -> int {
         lcc::Context::Options{
             (lcc::Context::OptionColour) use_colour,
             options.ast,
+            options.stopat_lex,
             options.stopat_syntax,
             options.stopat_sema,
             options.mir,
-            options.stopat_mir //
-        }                      //
+            options.stopat_mir
+        }
     };
 
     context.add_include_directory(".");

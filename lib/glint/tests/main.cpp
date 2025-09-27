@@ -50,6 +50,7 @@ struct GlintTest : langtest::Test {
             lcc::Context::Options{
                 lcc::Context::DoNotUseColour,
                 lcc::Context::DoNotPrintAST,
+                lcc::Context::DoNotStopatLex,
                 lcc::Context::DoNotStopatSyntax,
                 lcc::Context::DoNotStopatSema,
                 lcc::Context::DoNotPrintMIR,
@@ -304,6 +305,7 @@ void output_ast(std::filesystem::path p) {
         lcc::Context::Options{
             lcc::Context::DoNotUseColour,
             lcc::Context::DoNotPrintAST,
+            lcc::Context::DoNotStopatLex,
             lcc::Context::DoNotStopatSyntax,
             lcc::Context::DoNotStopatSema,
             lcc::Context::DoNotPrintMIR,

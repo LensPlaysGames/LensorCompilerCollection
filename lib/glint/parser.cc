@@ -1978,3 +1978,18 @@ auto lcc::glint::Parser::Parse(Context* context, File& file) -> std::unique_ptr<
 
     return std::move(parser.mod);
 }
+
+auto lcc::glint::Parser::JustGetTokens() -> std::vector<GlintToken> {
+    std::vector<GlintToken> out{};
+    while (not At(Tk::Eof)) {
+        out.emplace_back(tok);
+        NextToken();
+    }
+    return out;
+}
+
+// Doesn't do any parsing, just collects tokens.
+auto lcc::glint::Parser::GetTokens(Context* context, File& file) -> std::vector<GlintToken> {
+    Parser parser(context, &file);
+    return parser.JustGetTokens();
+}
