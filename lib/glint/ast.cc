@@ -457,11 +457,6 @@ std::string lcc::glint::Expr::name() const {
         case Kind::While:
         case Kind::For:
         case Kind::Return:
-        case Kind::TypeDecl:
-        case Kind::TypeAliasDecl:
-        case Kind::EnumeratorDecl:
-        case Kind::VarDecl:
-        case Kind::FuncDecl:
         case Kind::IntegerLiteral:
         case Kind::StringLiteral:
         case Kind::CompoundLiteral:
@@ -476,9 +471,18 @@ std::string lcc::glint::Expr::name() const {
         case Kind::Call:
         case Kind::IntrinsicCall:
         case Kind::Cast:
-        case Kind::NameRef:
         case Kind::Match:
             return ToString(kind());
+
+        case Kind::NameRef:
+            return as<NameRefExpr>(this)->name();
+
+        case Kind::TypeDecl:
+        case Kind::TypeAliasDecl:
+        case Kind::EnumeratorDecl:
+        case Kind::VarDecl:
+        case Kind::FuncDecl:
+            return as<Decl>(this)->name();
 
         case Kind::Unary: {
             switch (as<UnaryExpr>(this)->op()) {
@@ -569,7 +573,7 @@ std::string lcc::glint::Expr::name() const {
                 case Type::Kind::Struct: return "t_struct";
                 case Type::Kind::Integer: return "t_int";
             }
-            return type()->string();
+            LCC_UNREACHABLE();
         } break;
     }
     LCC_UNREACHABLE();
@@ -682,7 +686,39 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
 }
 
 auto lcc::glint::Expr::langtest_name() const -> std::string {
-    return name();
+    switch (kind()) {
+        case Kind::While:
+        case Kind::For:
+        case Kind::Return:
+        case Kind::IntegerLiteral:
+        case Kind::StringLiteral:
+        case Kind::CompoundLiteral:
+        case Kind::OverloadSet:
+        case Kind::EvaluatedConstant:
+        case Kind::If:
+        case Kind::Block:
+        case Kind::MemberAccess:
+        case Kind::Module:
+        case Kind::Sizeof:
+        case Kind::Alignof:
+        case Kind::Call:
+        case Kind::IntrinsicCall:
+        case Kind::Cast:
+        case Kind::Match:
+        case Kind::TypeDecl:
+        case Kind::TypeAliasDecl:
+        case Kind::EnumeratorDecl:
+        case Kind::VarDecl:
+        case Kind::FuncDecl:
+        case Kind::NameRef:
+            return ToString(kind());
+
+        case Kind::Unary:
+        case Kind::Binary:
+        case Kind::Type:
+            return name();
+    }
+    LCC_UNREACHABLE();
 }
 auto lcc::glint::Expr::langtest_children() const -> std::vector<lcc::glint::Expr*> {
     // Return function body as child of function declaration.
