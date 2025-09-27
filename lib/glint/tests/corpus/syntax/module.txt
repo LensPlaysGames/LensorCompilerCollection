@@ -1,0 +1,30 @@
+================
+`module foo;`
+:syntax
+================
+
+module foo;
+
+---
+
+(block (module (name)))
+
+================
+`import foo;`
+:syntax
+================
+
+import foo;
+
+---
+
+(block)
+
+================
+`import foo;` after header
+:fail_parse
+================
+
+{};
+
+import foo;

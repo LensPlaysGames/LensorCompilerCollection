@@ -1,0 +1,32 @@
+================
+Basic Template Expression
+:syntax
+================
+
+template() {};
+
+---
+
+(block (template (block)))
+
+================
+Template Expression w/ Parameter
+:syntax
+================
+
+template(x : int) x;
+
+---
+
+(block (template (name) (var_decl)))
+
+================
+Template Expression w/ Type Parameter
+:syntax
+================
+
+template(x : type) x;
+
+---
+
+(block (template (name) (var_decl)))
