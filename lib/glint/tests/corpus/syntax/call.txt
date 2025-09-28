@@ -1,0 +1,43 @@
+================
+() following anything is a call
+:syntax
+================
+
+foo();
+
+---
+
+(block (call (name)))
+
+================
+Multiple Unseparated Expressions Becomes Call
+:syntax
+================
+
+foo 69;
+
+---
+
+(block (call (name) (integer_literal)))
+
+================
+Multiple Separated Expressions Doesn't Become Call
+:syntax
+================
+
+foo, 69;
+
+---
+
+(block (name) (integer_literal))
+
+================
+Multiple Expressions w/ Soft Separated Arguments Becomes Call
+:syntax
+================
+
+foo 69, 42;
+
+---
+
+(block (call (name) (integer_literal) (integer_literal)))
