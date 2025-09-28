@@ -1,0 +1,10 @@
+================
+Disallow Implicit Return Of `Int` Type Expression
+================
+
+int;
+
+---
+
+(block (t_int) (return (integer_literal)))
+
