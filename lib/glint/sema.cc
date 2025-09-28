@@ -2618,7 +2618,21 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     continue;
                 }
 
-                // TODO: Handle fixed byte arrays, byte array views.
+                // Don't format fixed byte arrays
+                bool arg_is_fixed_array_of_byte
+                    = arg->type()->strip_references()->is_array() and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
+                if (arg_is_fixed_array_of_byte) {
+                    auto subscript = new (mod) BinaryExpr(TokenKind::LBrack, arg, new (mod) IntegerLiteral(0, {}), {});
+                    auto puts_call = new (mod) CallExpr(
+                        new (mod) NameRefExpr("puts", mod.global_scope(), expr->location()),
+                        {subscript},
+                        expr->location()
+                    );
+                    exprs.emplace_back(puts_call);
+                    continue;
+                }
+
+                // TODO: Handle array view of byte.
 
                 auto format_call = new (mod) CallExpr(
                     new (mod) NameRefExpr("format", mod.top_level_scope(), expr->location()),

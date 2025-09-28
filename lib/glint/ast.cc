@@ -449,7 +449,97 @@ auto lcc::glint::CallExpr::callee_type() const -> FuncType* {
 }
 
 auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
-    LCC_ASSERT(false, "TODO: Clone expressions");
+    // Don't pass me nullptr, I won't return it.
+    if (not expr) return nullptr;
+
+    switch (expr->kind()) {
+        case Kind::While: {
+            auto w = as<WhileExpr>(expr);
+            return new (mod) WhileExpr(
+                Expr::Clone(mod, w->condition()),
+                Expr::Clone(mod, w->body()),
+                w->location()
+            );
+        }
+        case Kind::For: {
+            auto f = as<ForExpr>(expr);
+            return new (mod) ForExpr(
+                Expr::Clone(mod, f->init()),
+                Expr::Clone(mod, f->condition()),
+                Expr::Clone(mod, f->increment()),
+                Expr::Clone(mod, f->body()),
+                f->location()
+            );
+        }
+        case Kind::If: {
+            auto i = as<IfExpr>(expr);
+            return new (mod) IfExpr(
+                Expr::Clone(mod, i->condition()),
+                Expr::Clone(mod, i->then()),
+                Expr::Clone(mod, i->otherwise()),
+                i->location()
+            );
+        }
+        case Kind::Return: {
+            auto r = as<ReturnExpr>(expr);
+            return new (mod) ReturnExpr(
+                Expr::Clone(mod, r->value()),
+                r->location()
+            );
+        }
+        case Kind::Unary: {
+            auto u = as<UnaryExpr>(expr);
+            return new (mod) UnaryExpr(
+                u->op(),
+                Expr::Clone(mod, u->operand()),
+                u->is_postfix(),
+                u->location()
+            );
+        }
+        case Kind::Binary: {
+            auto b = as<BinaryExpr>(expr);
+            return new (mod) BinaryExpr(
+                b->op(),
+                Expr::Clone(mod, b->lhs()),
+                Expr::Clone(mod, b->rhs()),
+                b->location()
+            );
+        }
+        case Kind::IntegerLiteral: {
+            auto i = as<IntegerLiteral>(expr);
+            return new (mod) IntegerLiteral(i->value(), i->location());
+        }
+        case Kind::NameRef: {
+            auto n = as<NameRefExpr>(expr);
+            return new (mod) NameRefExpr(
+                n->name(),
+                n->scope(),
+                n->location()
+            );
+        }
+        case Kind::TypeDecl:
+        case Kind::TypeAliasDecl:
+        case Kind::EnumeratorDecl:
+        case Kind::VarDecl:
+        case Kind::FuncDecl:
+        case Kind::StringLiteral:
+        case Kind::CompoundLiteral:
+        case Kind::OverloadSet:
+        case Kind::EvaluatedConstant:
+        case Kind::Block:
+        case Kind::Call:
+        case Kind::IntrinsicCall:
+        case Kind::Cast:
+        case Kind::Type:
+        case Kind::MemberAccess:
+        case Kind::Module:
+        case Kind::Match:
+        case Kind::Sizeof:
+        case Kind::Alignof:
+            LCC_ASSERT(false, "TODO: Clone expressions");
+    }
+    LCC_UNREACHABLE();
+}
 }
 
 std::string lcc::glint::Expr::name() const {
