@@ -1,9 +1,77 @@
 ================
-Template Expression Invocation
+Identity Template Expression Invocation
 ================
 
 (template(x : int) x) 69;
 
 ---
 
-(block (integer_literal))
+(block (return (integer_literal)))
+
+================
+Template Invocation, Mismatch Between Type of argument and parameter
+:fail_check
+================
+
+(template(x : [byte]) x) 69;
+
+================
+Template Invocation, Mismatch Between amount of arguments and parameters
+:fail_check
+================
+
+(template(x : int) x) 69, 42;
+
+================
+Template Expression, `expr` compile-time type
+================
+
+template(x : expr) x;
+
+---
+
+(block (template (name)) (return (integer_literal)))
+
+================
+Template Invocation, `expr` compile-time type
+================
+
+(template(x : expr) x) 42;
+
+---
+
+(block (return (integer_literal)))
+
+================
+Template Expression, `type` compile-time type
+================
+
+template(x : type) x;
+
+---
+
+(block (template (name)) (return (integer_literal)))
+
+================
+Template Invocation, `type` compile-time type
+================
+
+(template(x : type) x) :[byte];
+
+---
+
+(block (t_dynarray) (return (integer_literal)))
+
+================
+Template Invocation, `type` compile-time type passed non-type expression
+:fail_check
+================
+
+(template(x : type) x) 69;
+
+================
+Template Expression, No Parameters
+:fail_check
+================
+
+(template() 69);

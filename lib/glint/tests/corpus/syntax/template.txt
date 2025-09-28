@@ -1,5 +1,5 @@
 ================
-Basic Template Expression
+Empty Template Expression
 :syntax
 ================
 
@@ -18,7 +18,7 @@ template(x : int) x;
 
 ---
 
-(block (template (name) (var_decl)))
+(block (template (name)))
 
 ================
 Template Expression w/ Type Parameter
@@ -29,4 +29,4 @@ template(x : type) x;
 
 ---
 
-(block (template (name) (var_decl)))
+(block (template (name)))

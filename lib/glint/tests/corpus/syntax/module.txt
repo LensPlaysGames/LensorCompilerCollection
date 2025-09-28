@@ -7,7 +7,7 @@ module foo;
 
 ---
 
-(block (module (name)))
+(block)
 
 ================
 `import foo;`
