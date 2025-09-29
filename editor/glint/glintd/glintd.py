@@ -3,9 +3,16 @@
 # pip install pygls
 #
 # To use in Emacs (replace path to `glintd.py`):
-# (add-to-list 'eglot-server-programs '(('glint-ts-mode) . ("python3" "/home/lens_r/Programming/play/LensorCompilerCollection/editor/glint/glintd.py")))
+# (add-to-list 'eglot-server-programs '(glint-ts-mode . ("python3" "/home/lens_r/Programming/play/LensorCompilerCollection/editor/glint/glintd.py")))
+
+# TODO:
+# - Implement "go to"s and "find" server features (see https://pygls.readthedocs.io/en/latest/servers/examples/goto.html)
+
 
 import re
+
+# You have to build this yourself, like, with a C++ compiler
+from glinttools import getCompletions, findDecl
 
 from itertools import islice
 
@@ -37,19 +44,17 @@ def tokenize(source: str):
     results = []
     current_pos = 0
     while True:
-        next_delimiter_pos = find_many(source, current_pos, [' ', ';', ',', '(', ')', '\n'])
+        next_delimiter_pos = find_many(source, current_pos, [' ', ';', ',', '(', ')', '\n', ':', '<', '>', '=', '-', '*', '@', '{', '}', '!', '%', '~', '^', '|', '&'])
 
         if next_delimiter_pos == -1:
-            results.append((source[current_pos:next_delimiter_pos].strip().strip(",;"), current_pos))
+            results.append((source[current_pos:], current_pos))
             break
 
-        # Skip delimiter-only results
-        if next_delimiter_pos == current_pos:
-            current_pos = next_delimiter_pos + 1
-            continue
+        token_source = source[current_pos:next_delimiter_pos]
 
-        # Strip source of whitespace and expression separators
-        token_source = source[current_pos:next_delimiter_pos].strip().strip(",;")
+        if token_source == ' ' or token_source == '\n':
+            current_pos = next_delimiter_pos + 1
+            break
 
         results.append((token_source, current_pos))
         current_pos = next_delimiter_pos + 1
@@ -74,38 +79,41 @@ def hover(ls: LanguageServer, params: types.HoverParams):
     except IndexError:
         return None
 
-    # context_source = "".join(document.lines[:pos.line])
-    # tokenized_lines = ((i, tokenize(line)) for i,line in enumerate(document.lines[:pos.line]))
-
     selected_token = next(
         (token for token in reversed(tokenize(line))
          if token[1] <= pos.character and pos.character < token[1] + len(token[0])),
         None
     )
+    def token_pos_string(token):
+        return f"{pos.line}:{token[1]}"
 
-    hover_content = f"{pos.line}:{pos.character}"
+    # If there is nothing we can do to add info about the selected token/
+    # context at point, print this.
+    # hover_content = f"{pos.line}:{pos.character}"
+    hover_content = ""
     if selected_token:
-        # hover_content = f"The tokens you are hovering over is: {tokenize(line)}, selectedc={selectedc}, selected_token={selected_token}"
-        hover_content = f"{pos.line}:{selected_token[1]}: {escaped_markdown(selected_token[0])}"
-        # TODO: find first occurences of the selected token and use them to do something meaningful
-        # first_occurence = next(
-        #     (token for token in (tokenized_line for tokenized_line in islice(tokenized_lines, 0, pos.line - 1))
-        #      if token[0] == selected_token[0]),
-        #     None
-        # )
-        # if first_occurence:
-        #     hover_content += f" declared at byte offset {first_occurence[1]}"
+        context_source = "".join(document.lines[:pos.line])
+        # TODO: if isIdentifier(selected_token)
+        decl_info = findDecl(context_source, selected_token[0])
+        if decl_info.decl_location.byte_offset >= 0:
+            decl_source = context_source[decl_info.location.byte_offset:decl_info.location.byte_offset+decl_info.location.length]
+            hover_content = f"{token_pos_string(selected_token)}: {selected_token[0]} : **{escaped_markdown(decl_info.type_representation)}**"
+        else:
+            hover_content = f"{token_pos_string(selected_token)}: {escaped_markdown(selected_token[0])}"
 
-    return types.Hover(
-        contents=types.MarkupContent(
-            kind=types.MarkupKind.Markdown,
-            value=hover_content,
-        ),
-        range=types.Range(
-            start=types.Position(line=pos.line, character=0),
-            end=types.Position(line=pos.line + 1, character=0),
-        ),
-    )
+    if len(hover_content) != 0:
+        return types.Hover(
+            contents=types.MarkupContent(
+                kind=types.MarkupKind.Markdown,
+                value=hover_content,
+            ),
+            range=types.Range(
+                start=types.Position(line=pos.line, character=0),
+                end=types.Position(line=pos.line + 1, character=0),
+            ),
+        )
+    else:
+        return None
 
 @server.feature(
     types.TEXT_DOCUMENT_COMPLETION,
@@ -113,6 +121,8 @@ def hover(ls: LanguageServer, params: types.HoverParams):
 )
 def completions(params: types.CompletionParams):
     document = params.text_document
+
+    return []
 
     try:
         line = document.lines[pos.line]

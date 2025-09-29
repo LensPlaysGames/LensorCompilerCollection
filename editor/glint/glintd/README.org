@@ -1,0 +1,23 @@
+* =glintd=, A Language Server Implementation for the Glint Programming Language
+
+Do you like auto-complete, "go to definition" functionality, or maybe just some good, old-fashioned useful hover popups? Good.
+
+** Building
+
+Requirements: Python 3. =pip install pygls=. C++23 Compiler. CMake.
+
+=cmake -B bld=
+=cmake --build bld=
+
+This should produce =./bld/libglinttools.so= or whatever it's called on your system. Go ahead and copy that to this directory (with =glintd. py=), and then you are all good to use =python3= on the command line to run the language server.
+
+** Using
+
+I only know of one editor, and that's Emacs. Here's a drag-and-drop eglot config.
+#+begin_src emacs-lisp
+  (add-to-list
+   'eglot-server-programs
+   '(glint-ts-mode . ("python3" "/home/lens_r/Programming/play/LensorCompilerCollection/editor/glint/glintd.py")))
+#+end_src
+
+Obviously, fixup the path to wherever it is on your system.
