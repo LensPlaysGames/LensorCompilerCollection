@@ -69,10 +69,14 @@ Named Template Invocation
 foo :: template(x : expr) x;
 
 foo 69;
+foo 42;
 
 ---
 
-(block (return (integer_literal)))
+(block
+ (variable_declaration (template (name)))
+ (integer_literal)
+ (return (integer_literal)))
 
 ================
 Template Invocation, `type` compile-time type passed non-type expression

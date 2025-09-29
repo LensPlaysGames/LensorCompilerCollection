@@ -2716,7 +2716,8 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
         is<TemplateExpr>(expr->callee())
             or ( //
                 is<NameRefExpr>(expr->callee())
-                and is<TemplateExpr>(as<NameRefExpr>(expr->callee())->target())
+                and is<VarDecl>(as<NameRefExpr>(expr->callee())->target())
+                and is<TemplateExpr>(as<VarDecl>(as<NameRefExpr>(expr->callee())->target())->init())
             ),
         "Invalid arguments of call to \"analyse template call\" function"
     );
@@ -2759,7 +2760,10 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
     };
 
     TemplateExpr* t = cast<TemplateExpr>(expr->callee());
-    if (not t) t = as<TemplateExpr>(as<NameRefExpr>(expr->callee())->target());
+    if (not t)
+        t = as<TemplateExpr>(
+            as<VarDecl>(as<NameRefExpr>(expr->callee())->target())->init()
+        );
 
     // Ensure types of arguments apply to constraint types given by template
     // parameters.
@@ -3257,7 +3261,8 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         is<TemplateExpr>(expr->callee())
         or ( //
             is<NameRefExpr>(expr->callee())
-            and is<TemplateExpr>(as<NameRefExpr>(expr->callee())->target())
+            and is<VarDecl>(as<NameRefExpr>(expr->callee())->target())
+            and is<TemplateExpr>(as<VarDecl>(as<NameRefExpr>(expr->callee())->target())->init())
         )
     ) {
         AnalyseCall_Template(expr_ptr, expr);
