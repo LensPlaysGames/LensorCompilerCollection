@@ -63,6 +63,18 @@ Template Invocation, `type` compile-time type
 (block (t_dynarray) (return (integer_literal)))
 
 ================
+Named Template Invocation
+================
+
+foo :: template(x : expr) x;
+
+foo 69;
+
+---
+
+(block (return (integer_literal)))
+
+================
 Template Invocation, `type` compile-time type passed non-type expression
 :fail_check
 ================
