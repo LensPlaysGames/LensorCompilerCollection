@@ -272,7 +272,7 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 
 ## Indent lambda bodies relative to the outer scope, and not
 ## relative to the indentation of the signature.
-LambdaBodyIndentation: OuterScope
+# LambdaBodyIndentation: OuterScope
 
 ## Use LF, never CRLF.
 LineEnding: LF
