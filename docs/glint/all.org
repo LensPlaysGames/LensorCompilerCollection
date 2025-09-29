@@ -6,10 +6,6 @@ This document is manually generated and may be a couple commits behind.
 
 The Glint programming language is a high level programming language with low-level capabilities. Focused on the programmer, the Glint programming language spearheads ease of use while also letting people who know what they are doing, do it better.
 
-If you are new to Glint, keep in mind that subscript doesn't dereference. =x[0]= is of pointer type, to get the value at that pointer you need to use =@x[0]=. The only way to achieve pointer arithmetic in Glint is through the subscript operator.
-
-The subscript operator is also the only way to get a pointer from an array type.
-
 #+INCLUDE: "./literals.org"
 #+INCLUDE: "./dynamic_array.org"
 #+INCLUDE: "./sumtype.org"
@@ -17,3 +13,15 @@ The subscript operator is also the only way to get a pointer from an array type.
 #+INCLUDE: "./identifier_escape.org"
 #+INCLUDE: "./templates.org"
 #+INCLUDE: "./lexer_macros.org"
+
+* Misc Notes
+
+If you are new to Glint, keep in mind that subscript doesn't dereference. =x[0]= is of pointer type, to get the value at that pointer you need to use =@x[0]=. The only way to achieve pointer arithmetic in Glint is through the subscript operator.
+
+The subscript operator is also the only way to get a pointer from an array type.
+
+On grouping expressions: A group containing one expression should be represented in a parenthesized expression (using =(= and =)=). A group containing multiple expressions should be represented in a block expression (using ={= and =}=). A block expression also opens a new scope, whereas a parenthesized expression does not. The idea is, you won't need a new scope if you only have a single expression, and a parenthesized expression should only ever have a single expression within it. Do note, however, that multiple expressions /are/ allowed within a parenthesized expression, it's just an exception-proves-the-rule sort of deal where you have multiple expressions that you need to treat as a single expression.
+
+* Conclusion
+
+Congrats if you made it this far, you get a gold star.
