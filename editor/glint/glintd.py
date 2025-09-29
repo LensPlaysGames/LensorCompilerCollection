@@ -3,15 +3,17 @@
 # pip install pygls
 #
 # To use in Emacs (replace path to `glintd.py`):
-# (add-to-list 'eglot-server-programs
-#  '('glint-ts-mode :language-id "glint")
-#   . ("python3" "./editor/glint/glintd.py"))
+# (add-to-list 'eglot-server-programs '(('glint-ts-mode) . ("python3" "/home/lens_r/Programming/play/LensorCompilerCollection/editor/glint/glintd.py")))
 
 import re
+
+from itertools import islice
+
 from pygls.server import LanguageServer
 from lsprotocol import types
 
 server = LanguageServer("glint-server", "v0.1")
+
 
 _MARKDOWN_CHARACTERS_TO_ESCAPE = set(r"\`*_{}[]<>()#+-.!|")
 
@@ -21,14 +23,24 @@ def escaped_markdown(text: str) -> str:
         for character in text
     )
 
+def find_many(instring: str, start_position: int, substrings):
+    pat = re.compile('|'.join([re.escape(s) for s in substrings]))
+    match = pat.search(instring[start_position:])
+    if match is None:
+        return -1
+    else:
+        return start_position + match.start()
+
+
 # TODO: Make this more complex
 def tokenize(source: str):
     results = []
     current_pos = 0
     while True:
-        next_delimiter_pos = source.find(" ", current_pos)
+        next_delimiter_pos = find_many(source, current_pos, [' ', ';', ',', '(', ')', '\n'])
+
         if next_delimiter_pos == -1:
-            results.append((source[current_pos:].strip().strip(",;"), current_pos))
+            results.append((source[current_pos:next_delimiter_pos].strip().strip(",;"), current_pos))
             break
 
         # Skip delimiter-only results
@@ -36,7 +48,10 @@ def tokenize(source: str):
             current_pos = next_delimiter_pos + 1
             continue
 
-        results.append((source[current_pos:next_delimiter_pos].strip().strip(",;"), current_pos))
+        # Strip source of whitespace and expression separators
+        token_source = source[current_pos:next_delimiter_pos].strip().strip(",;")
+
+        results.append((token_source, current_pos))
         current_pos = next_delimiter_pos + 1
 
     return results
@@ -45,6 +60,7 @@ def tokenize(source: str):
 @server.feature(types.TEXT_DOCUMENT_HOVER)
 def hover(ls: LanguageServer, params: types.HoverParams):
     pos = params.position
+
     document_uri = params.text_document.uri
     document = ls.workspace.get_text_document(document_uri)
 
@@ -58,33 +74,27 @@ def hover(ls: LanguageServer, params: types.HoverParams):
     except IndexError:
         return None
 
-    tokens = tokenize(line)
+    # context_source = "".join(document.lines[:pos.line])
+    # tokenized_lines = ((i, tokenize(line)) for i,line in enumerate(document.lines[:pos.line]))
 
     selected_token = next(
-        (token for token in reversed(tokens)
+        (token for token in reversed(tokenize(line))
          if token[1] <= pos.character and pos.character < token[1] + len(token[0])),
         None
     )
 
-    # In Emacs syntax... "out\s*:\s*\\([^;=]+\\)"
-    pattern = f"{re.escape(selected_token[0])}\\s*:\\s*(?P<type>[^;=]+)"
-    found = re.search(pattern, "".join(document.lines), re.MULTILINE)
-    found_type = ""
-    if found:
-        found_type = found.group("type").strip()
-
-    # Hack to remove extra types surrounding found type (usually parameters)...
-    # TODO: Just parse an actual type (either using bindings to the compiler
-    # itself, or calling the compiler executable).
-    if not "(" in found_type:
-        found_type = found_type.strip().strip(")")
-        if "," in found_type:
-            found_type = found_type.split(",")[0]
-
-    # hover_content = f"The tokens you are hovering over is: {tokens}, selectedc={selectedc}, selected_token={selected_token}"
-    hover_content = f"{pos.line}:{selected_token[1]}: {escaped_markdown(selected_token[0])}"
-    if found:
-        hover_content += f" : **{escaped_markdown(found_type)}**"
+    hover_content = f"{pos.line}:{pos.character}"
+    if selected_token:
+        # hover_content = f"The tokens you are hovering over is: {tokenize(line)}, selectedc={selectedc}, selected_token={selected_token}"
+        hover_content = f"{pos.line}:{selected_token[1]}: {escaped_markdown(selected_token[0])}"
+        # TODO: find first occurences of the selected token and use them to do something meaningful
+        # first_occurence = next(
+        #     (token for token in (tokenized_line for tokenized_line in islice(tokenized_lines, 0, pos.line - 1))
+        #      if token[0] == selected_token[0]),
+        #     None
+        # )
+        # if first_occurence:
+        #     hover_content += f" declared at byte offset {first_occurence[1]}"
 
     return types.Hover(
         contents=types.MarkupContent(
@@ -102,9 +112,7 @@ def hover(ls: LanguageServer, params: types.HoverParams):
     types.CompletionOptions(trigger_characters=["."]),
 )
 def completions(params: types.CompletionParams):
-    pos = params.position
-    document_uri = params.text_document.uri
-    document = ls.workspace.get_text_document(document_uri)
+    document = params.text_document
 
     try:
         line = document.lines[pos.line]
