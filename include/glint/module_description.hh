@@ -105,6 +105,7 @@ struct ModuleDescription {
                 case K::Type:
                 case K::Sizeof:
                 case K::Alignof:
+                case K::Template:
                     break;
             }
             LCC_UNREACHABLE();

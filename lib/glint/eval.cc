@@ -22,9 +22,6 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
         return false;
     };
     switch (kind()) {
-        /// These are here not necessarily because they are not constant
-        /// expressions but rather because evaluating them has not yet
-        /// been implemented.
         case Kind::EnumeratorDecl:
         case Kind::FuncDecl:
         case Kind::Module:
@@ -35,6 +32,10 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
         case Kind::VarDecl:
             return not_a_constant_expr();
 
+        /// These are here not necessarily because they are not constant
+        /// expressions but rather because evaluating them has not yet
+        /// been implemented.
+        case Kind::Template:
         case Kind::Alignof:
         case Kind::Call:
         case Kind::CompoundLiteral:
@@ -221,6 +222,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::Void:
                 case TokenKind::While:
                 case TokenKind::ByteLiteral:
+                case TokenKind::Template:
                     Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
                     LCC_UNREACHABLE();
             }
@@ -406,6 +408,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::MacroArg:
                 case TokenKind::Expression:
                 case TokenKind::ByteLiteral:
+                case TokenKind::Template:
                     Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
                     LCC_UNREACHABLE();
             }

@@ -91,10 +91,27 @@ enum struct TokenKind {
     Le, // <=
     Ge, // >=
 
-    // AtEq,     // @=
-    // HashEq,   // #=
-    // DotEq,    // .=
-    // HashPlus, // #+
+    // DotDot,      // ..  range binary?
+    // HashPlus,    // #+  compile-time unary prefix?
+    // DoubleArrow, // =>
+    // PipeGt,      // |>
+    // PipeLt,      // <|
+    // DotEq,       // .=
+    // AtEq,        // @=
+    // HashEq,      // #=
+    // VCaret,      // v^  zip binary?
+    // BangGt,      // !>
+    // LParenGt,    // (>
+    // RParenLt,    // <)
+    // LParenPipe,  // (|
+    // RParenPipe,  // |)
+    // LBrackGt,    // [>
+    // RBrackLt,    // <]
+    // LBraceGt,    // {>
+    // RBraceLt,    // <}
+    // PipeShip,    // <|>
+    // EqShip,      // <=>
+    // BangShip,    // <!>
     PlusPlus,    // ++
     MinusMinus,  // --
     StarStar,    // **
@@ -144,6 +161,7 @@ enum struct TokenKind {
     Supplant,
     Match,
     Print,
+    Template,
 
     CShort,     // cshort
     CUShort,    // cushort
@@ -237,6 +255,9 @@ public:
     /// Get the functions that are part of this module.
     auto functions() -> std::vector<FuncDecl*>& { return _functions; }
 
+    // Get a list of functions by their name
+    auto function(std::string_view name) -> std::vector<FuncDecl*>;
+
     /// Get the module imports.
     auto imports() -> std::vector<Ref>& { return _imports; }
 
@@ -291,6 +312,15 @@ public:
     [[nodiscard]]
     auto deserialise(lcc::Context*, std::vector<u8> module_metadata_blob) -> bool;
 
+    /// Convert a type back to the source it may have been lexed from.
+    [[nodiscard]]
+    auto ToSource(const Type& t) -> Result<std::string>;
+
+    /// Convert an AST expression node into the Glint source it may have been
+    /// parsed from.
+    [[nodiscard]]
+    auto ToSource(const Expr& e) -> Result<std::string>;
+
     std::vector<Expr*> nodes;
     std::vector<Type*> types;
     std::vector<Scope*> scopes;
@@ -311,6 +341,7 @@ struct GlintToken : public syntax::Token<TokenKind> {
 };
 
 /// Convert a token back to the source it may have been lexed from.
+[[nodiscard]]
 auto ToSource(const GlintToken& t) -> Result<std::string>;
 
 struct Macro {
@@ -1010,7 +1041,10 @@ public:
 
     /// Associate this type with a declaration.
     void associate_with_decl(TypeDecl* decl) {
-        LCC_ASSERT(not _decl, "Cannot associate a struct type with two struct decls");
+        LCC_ASSERT(
+            not _decl,
+            "Cannot associate a single declared type with two type declarations (instead, make two declared types)"
+        );
         _decl = decl;
     }
 
@@ -1385,6 +1419,7 @@ public:
         Match,
         Sizeof,
         Alignof,
+        Template,
     };
 
 private:
@@ -1422,6 +1457,9 @@ public:
     auto children() const -> std::vector<lcc::glint::Expr*>;
 
     [[nodiscard]]
+    auto children_ref() -> std::vector<lcc::glint::Expr**>;
+
+    [[nodiscard]]
     auto langtest_name() const -> std::string;
     [[nodiscard]]
     auto langtest_children() const -> std::vector<lcc::glint::Expr*>;
@@ -1445,6 +1483,17 @@ public:
     /// Deep-copy an expression.
     [[nodiscard]]
     static auto Clone(Module& mod, Expr* expr) -> Expr*;
+
+    /// Deep copy a vector of expressions.
+    [[nodiscard]]
+    static auto Clone(Module& mod, std::vector<Expr*> exprs) -> std::vector<Expr*> {
+        std::vector<Expr*> out{};
+        out.reserve(exprs.size());
+        for (auto e : exprs)
+            out.emplace_back(Clone(mod, e));
+
+        return out;
+    }
 };
 
 [[nodiscard]]
@@ -2023,6 +2072,9 @@ public:
     auto value() -> EvalResult& { return _value; }
 
     [[nodiscard]]
+    auto value() const -> const EvalResult& { return _value; }
+
+    [[nodiscard]]
     static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::EvaluatedConstant; }
 };
 
@@ -2182,6 +2234,8 @@ public:
     auto target() const -> Expr* { return _target; }
     void target(Expr* target) { _target = target; }
 
+    auto target_ref() -> Expr** { return &_target; }
+
     static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::NameRef; }
 };
 
@@ -2288,6 +2342,46 @@ public:
 
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Alignof; }
+};
+
+class TemplateExpr : public Expr {
+public:
+    struct Param {
+        std::string name{};
+        Type* type{nullptr};
+        Location location{};
+    };
+
+private:
+    Expr* _body;
+    std::vector<Param> _params;
+
+public:
+    TemplateExpr(Expr* body, std::vector<Param> params, Location location)
+        : Expr(Kind::Template, location), _body(body), _params(std::move(params)) {}
+
+    [[nodiscard]]
+    auto body() const -> Expr* {
+        return _body;
+    }
+
+    [[nodiscard]]
+    auto body_ref() -> Expr** {
+        return &_body;
+    }
+
+    [[nodiscard]]
+    auto params() const -> const std::vector<Param>& {
+        return _params;
+    }
+
+    [[nodiscard]]
+    auto params_ref() -> std::vector<Param>& {
+        return _params;
+    }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Template; }
 };
 
 } // namespace lcc::glint

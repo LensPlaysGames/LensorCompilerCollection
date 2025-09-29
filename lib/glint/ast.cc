@@ -5,10 +5,12 @@
 #include <lcc/utils/rtti.hh>
 
 #include <glint/ast.hh>
+#include <glint/eval.hh>
 #include <glint/module_description.hh>
 #include <glint/parser.hh>
 
 #include <bit>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -24,7 +26,7 @@ lcc::glint::StringLiteral::StringLiteral(
     std::string_view value,
     Location location
 ) : TypedExpr{
-    // clang-format off
+        // clang-format off
         Kind::StringLiteral,
         location,
         new(mod) ReferenceType(
@@ -509,6 +511,16 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
             auto i = as<IntegerLiteral>(expr);
             return new (mod) IntegerLiteral(i->value(), i->location());
         }
+
+        case Kind::StringLiteral: {
+            auto s = as<StringLiteral>(expr);
+            return new (mod) StringLiteral(
+                mod,
+                mod.strings.at(s->string_index()),
+                s->location()
+            );
+        }
+
         case Kind::NameRef: {
             auto n = as<NameRefExpr>(expr);
             return new (mod) NameRefExpr(
@@ -517,29 +529,172 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
                 n->location()
             );
         }
-        case Kind::TypeDecl:
-        case Kind::TypeAliasDecl:
-        case Kind::EnumeratorDecl:
-        case Kind::VarDecl:
-        case Kind::FuncDecl:
-        case Kind::StringLiteral:
-        case Kind::CompoundLiteral:
-        case Kind::OverloadSet:
-        case Kind::EvaluatedConstant:
-        case Kind::Block:
-        case Kind::Call:
-        case Kind::IntrinsicCall:
-        case Kind::Cast:
+
+        case Kind::Sizeof: {
+            auto s = as<SizeofExpr>(expr);
+            return new (mod) SizeofExpr(Expr::Clone(mod, s->expr()), s->location());
+        }
+        case Kind::Alignof: {
+            auto a = as<AlignofExpr>(expr);
+            return new (mod) AlignofExpr(Expr::Clone(mod, a->expr()), a->location());
+        }
+
+        case Kind::Block: {
+            auto b = as<BlockExpr>(expr);
+            return new (mod) BlockExpr(Expr::Clone(mod, b->children()), b->location());
+        }
+
+        case Kind::Call: {
+            auto c = as<CallExpr>(expr);
+            return new (mod) CallExpr(
+                Expr::Clone(mod, c->callee()),
+                Expr::Clone(mod, c->args()),
+                c->location()
+            );
+        }
+
+        case Kind::CompoundLiteral: {
+            auto c = as<CompoundLiteral>(expr);
+            std::vector<CompoundLiteral::Member> members{};
+            members.reserve(c->values().size());
+            for (auto m : c->values())
+                members.emplace_back(m.name, Expr::Clone(mod, m.value));
+
+            return new (mod) CompoundLiteral(members, c->location());
+        }
+
+        case Kind::Cast: {
+            auto c = as<CastExpr>(expr);
+            return new (mod) CastExpr(
+                Expr::Clone(mod, c->operand()),
+                c->type(),
+                c->cast_kind(),
+                c->location()
+            );
+        }
+
+        case Kind::MemberAccess: {
+            auto m = as<MemberAccessExpr>(expr);
+            return new (mod) MemberAccessExpr(
+                Expr::Clone(mod, m->object()),
+                m->name(),
+                m->location()
+            );
+        }
+
+        case Kind::TypeDecl: {
+            auto t = as<TypeDecl>(expr);
+            auto t_declared = as<DeclaredType>(t->type());
+            return new (mod) TypeDecl(
+                t->module(),
+                t->name(),
+                t_declared,
+                t->location()
+            );
+        }
+
+        case Kind::TypeAliasDecl: {
+            auto a = as<TypeAliasDecl>(expr);
+            return new (mod) TypeAliasDecl(
+                a->name(),
+                a->type(),
+                a->location()
+            );
+        };
+
+        case Kind::EnumeratorDecl: {
+            auto e = as<EnumeratorDecl>(expr);
+            return new (mod) EnumeratorDecl(
+                e->name(),
+                Expr::Clone(mod, e->init()),
+                e->location()
+            );
+        }
+
+        case Kind::VarDecl: {
+            auto v = as<VarDecl>(expr);
+            return new (mod) VarDecl(
+                v->name(),
+                v->type(),
+                Expr::Clone(mod, v->init()),
+                v->module(),
+                v->linkage(),
+                v->location()
+            );
+        }
+
+        case Kind::FuncDecl: {
+            auto f = as<FuncDecl>(expr);
+            return new (mod) FuncDecl(
+                f->name(),
+                f->function_type(),
+                Expr::Clone(mod, f->body()),
+                f->scope(),
+                f->module(),
+                f->linkage(),
+                f->location()
+            );
+        }
+
+        case Kind::IntrinsicCall: {
+            auto i = as<IntrinsicCallExpr>(expr);
+            return new (mod) IntrinsicCallExpr(
+                i->intrinsic_kind(),
+                Expr::Clone(mod, i->args())
+            );
+        }
+
         case Kind::Type:
-        case Kind::MemberAccess:
-        case Kind::Module:
-        case Kind::Match:
-        case Kind::Sizeof:
-        case Kind::Alignof:
-            LCC_ASSERT(false, "TODO: Clone expressions");
+            return new (mod) TypeExpr(expr->type(), expr->location());
+
+        case Kind::Module: {
+            auto m = as<ModuleExpr>(expr);
+            return new (mod) ModuleExpr(m->mod(), m->location());
+        }
+
+        case Kind::Match: {
+            auto m = as<MatchExpr>(expr);
+            auto m_new = new (mod) MatchExpr(Expr::Clone(mod, m->object()), m->location());
+            m_new->names() = m->names();
+            m_new->bodies() = Expr::Clone(mod, m->bodies());
+            return m_new;
+        }
+
+        case Kind::EvaluatedConstant: {
+            auto c = as<ConstantExpr>(expr);
+            return new (mod) ConstantExpr(c->expr(), c->value());
+        }
+
+        case Kind::Template: {
+            auto t = as<TemplateExpr>(expr);
+            return new (mod) TemplateExpr(
+                Expr::Clone(mod, t->body()),
+                t->params(),
+                t->location()
+            );
+        }
+
+        case Kind::OverloadSet: {
+            auto o = as<OverloadSet>(expr);
+            std::vector<FuncDecl*> overloads{};
+            overloads.reserve(o->overloads().size());
+            for (auto f : o->overloads())
+                overloads.emplace_back(
+                    as<FuncDecl>(Expr::Clone(mod, f))
+                );
+
+            return new (mod) OverloadSet(overloads, o->location());
+        }
     }
     LCC_UNREACHABLE();
 }
+
+auto lcc::glint::Module::function(std::string_view name) -> std::vector<lcc::glint::FuncDecl*> {
+    std::vector<FuncDecl*> out{};
+    for (auto* foo : _functions) {
+        if (foo->name() == name) out.emplace_back(foo);
+    }
+    return out;
 }
 
 std::string lcc::glint::Expr::name() const {
@@ -562,6 +717,7 @@ std::string lcc::glint::Expr::name() const {
         case Kind::IntrinsicCall:
         case Kind::Cast:
         case Kind::Match:
+        case Kind::Template:
             return ToString(kind());
 
         case Kind::NameRef:
@@ -669,6 +825,125 @@ std::string lcc::glint::Expr::name() const {
     LCC_UNREACHABLE();
 }
 
+auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
+    switch (kind()) {
+        // These expressions never have children
+        case Kind::OverloadSet:
+        case Kind::EvaluatedConstant:
+        case Kind::TypeDecl:
+        case Kind::FuncDecl:
+        case Kind::TypeAliasDecl:
+        case Kind::EnumeratorDecl:
+        case Kind::IntegerLiteral:
+        case Kind::StringLiteral:
+        case Kind::IntrinsicCall:
+        case Kind::Module:
+            return {};
+
+        case Kind::Type:
+            // TODO: Structs with initialised members?
+            if (auto* t_dynarray = cast<DynamicArrayType>(type())) {
+                if (t_dynarray->initial_size())
+                    return {&t_dynarray->initial_size()};
+            }
+            if (auto* t_fixarray = cast<ArrayType>(type()))
+                return {&t_fixarray->size()};
+            return {};
+
+        case Kind::While: {
+            auto* w = as<lcc::glint::WhileExpr>(this);
+            auto out = std::vector<Expr**>{&w->condition()};
+            out.emplace_back(&w->body());
+            return out;
+        }
+
+        case Kind::For: {
+            auto* f = as<lcc::glint::ForExpr>(this);
+            return {&f->init(), &f->condition(), &f->increment(), &f->body()};
+        }
+
+        case Kind::If: {
+            auto* i = as<lcc::glint::IfExpr>(this);
+            if (i->otherwise())
+                return {&i->condition(), &i->then(), &i->otherwise()};
+            else return {&i->condition(), &i->then()};
+        }
+
+        case Kind::Return: {
+            auto* ret = as<lcc::glint::ReturnExpr>(this);
+            if (ret->value()) return {&ret->value()};
+            return {};
+        }
+
+        case Kind::Match: {
+            auto* match = as<lcc::glint::MatchExpr>(this);
+            std::vector<lcc::glint::Expr**> children{&match->object()};
+            for (auto*& b : match->bodies()) children.push_back(&b);
+            return children;
+        }
+
+        case Kind::MemberAccess:
+            return {&as<lcc::glint::MemberAccessExpr>(this)->object()};
+
+        case Kind::CompoundLiteral: {
+            auto* c = as<lcc::glint::CompoundLiteral>(this);
+            return c->children_ref();
+        }
+
+        case Kind::Cast:
+            return {&as<lcc::glint::CastExpr>(this)->operand()};
+
+        case Kind::Call: {
+            auto* c = as<lcc::glint::CallExpr>(this);
+            std::vector<lcc::glint::Expr**> children{&c->callee()};
+            for (auto& a : c->args())
+                children.emplace_back(&a);
+            return children;
+        } break;
+
+        case Kind::Sizeof:
+            return {as<lcc::glint::SizeofExpr>(this)->expr_ref()};
+
+        case Kind::Alignof:
+            return {as<lcc::glint::AlignofExpr>(this)->expr_ref()};
+
+        case Kind::Template: {
+            auto* t = as<lcc::glint::TemplateExpr>(this);
+            return {t->body_ref()};
+        }
+
+        case Kind::VarDecl: {
+            auto* v = as<lcc::glint::VarDecl>(this);
+            if (v->init()) return {&v->init()};
+            return {};
+        }
+
+        case Kind::NameRef: {
+            auto* n = as<lcc::glint::NameRefExpr>(this);
+            if (n->target())
+                return {n->target_ref()};
+            return {};
+        }
+
+        case Kind::Block: {
+            auto* b = as<lcc::glint::BlockExpr>(this);
+            auto children = vws::transform(b->children(), [](auto*& e) { return &e; });
+            return {children.begin(), children.end()};
+        }
+
+        case Kind::Unary: {
+            auto* u = as<lcc::glint::UnaryExpr>(this);
+            return {&u->operand()};
+        }
+
+        case Kind::Binary: {
+            auto* b = as<lcc::glint::BinaryExpr>(this);
+            return {&b->lhs(), &b->rhs()};
+        }
+    }
+    LCC_UNREACHABLE();
+}
+
 auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
     switch (kind()) {
         case Kind::FuncDecl:
@@ -681,6 +956,8 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
         case Kind::StringLiteral:
         case Kind::IntrinsicCall:
         case Kind::Module:
+            return {};
+
         case Kind::Type:
             if (auto* t_dynarray = cast<DynamicArrayType>(type())) {
                 if (t_dynarray->initial_size())
@@ -744,6 +1021,11 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
         case Kind::Alignof:
             return {as<lcc::glint::AlignofExpr>(this)->expr()};
 
+        case Kind::Template: {
+            const auto* t = as<lcc::glint::TemplateExpr>(this);
+            return {t->body()};
+        }
+
         case Kind::VarDecl: {
             const auto* v = as<lcc::glint::VarDecl>(this);
             if (v->init()) return {v->init()};
@@ -795,6 +1077,7 @@ auto lcc::glint::Expr::langtest_name() const -> std::string {
         case Kind::IntrinsicCall:
         case Kind::Cast:
         case Kind::Match:
+        case Kind::Template:
         case Kind::TypeDecl:
         case Kind::TypeAliasDecl:
         case Kind::EnumeratorDecl:
@@ -826,8 +1109,162 @@ auto lcc::glint::EnumeratorDecl::value() const -> aint {
              : as<IntegerLiteral>(init())->value();
 }
 
+auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std::string> {
+    switch (t.kind()) {
+        case lcc::glint::Type::Kind::Pointer: {
+            auto elem_t = ToSource(*t.elem());
+            if (not elem_t) return elem_t.diag();
+            return fmt::format("{}.ptr", *elem_t);
+        }
+
+        case lcc::glint::Type::Kind::Reference: {
+            auto elem_t = ToSource(*t.elem());
+            if (not elem_t) return elem_t.diag();
+            return fmt::format("{}.ref", *elem_t);
+        }
+
+        case lcc::glint::Type::Kind::Builtin: {
+            auto builtin_t = lcc::as<lcc::glint::BuiltinType>(&t);
+            switch (builtin_t->builtin_kind()) {
+                case lcc::glint::BuiltinType::BuiltinKind::Unknown:
+                    return lcc::Diag::Error("Unknown builtin type...");
+                case lcc::glint::BuiltinType::BuiltinKind::OverloadSet:
+                    return lcc::Diag::Error("Cannot convert overload set to source...");
+                case lcc::glint::BuiltinType::BuiltinKind::Bool: return {"bool"};
+                case lcc::glint::BuiltinType::BuiltinKind::Byte: return {"byte"};
+                case lcc::glint::BuiltinType::BuiltinKind::Int: return {"int"};
+                case lcc::glint::BuiltinType::BuiltinKind::UInt: return {"uint"};
+                case lcc::glint::BuiltinType::BuiltinKind::Void: return {"void"};
+            }
+            LCC_UNREACHABLE();
+        }
+        case lcc::glint::Type::Kind::FFIType: {
+            auto ffi_t = lcc::as<lcc::glint::FFIType>(&t);
+            switch (ffi_t->ffi_kind()) {
+                case lcc::glint::FFIType::FFIKind::CChar: return {"cchar"};
+                case lcc::glint::FFIType::FFIKind::CSChar: return {"cschar"};
+                case lcc::glint::FFIType::FFIKind::CUChar: return {"cuchar"};
+                case lcc::glint::FFIType::FFIKind::CShort: return {"cshort"};
+                case lcc::glint::FFIType::FFIKind::CUShort: return {"cushort"};
+                case lcc::glint::FFIType::FFIKind::CInt: return {"cint"};
+                case lcc::glint::FFIType::FFIKind::CUInt: return {"cuint"};
+                case lcc::glint::FFIType::FFIKind::CLong: return {"clong"};
+                case lcc::glint::FFIType::FFIKind::CULong: return {"culong"};
+                case lcc::glint::FFIType::FFIKind::CLongLong: return {"clonglong"};
+                case lcc::glint::FFIType::FFIKind::CULongLong: return {"culonglong"};
+            }
+            LCC_UNREACHABLE();
+        }
+
+        case lcc::glint::Type::Kind::Named: return lcc::as<lcc::glint::NamedType>(&t)->name();
+
+        case lcc::glint::Type::Kind::DynamicArray: {
+            auto elem_t = ToSource(*t.elem());
+            if (not elem_t) return elem_t;
+            return fmt::format("[{}]", *elem_t);
+        }
+
+        case lcc::glint::Type::Kind::Array: {
+            auto array_t = lcc::as<lcc::glint::ArrayType>(&t);
+            auto elem_t = ToSource(*array_t->elem());
+            if (not elem_t) return elem_t;
+            auto size = ToSource(*array_t->size());
+            return fmt::format("[{} {}]", *elem_t, *size);
+        }
+
+        case lcc::glint::Type::Kind::ArrayView: {
+            auto elem_t = ToSource(*t.elem());
+            if (not elem_t) return elem_t;
+            return fmt::format("[{} view]", *elem_t);
+        }
+
+        case lcc::glint::Type::Kind::Function: {
+            auto function_t = lcc::as<lcc::glint::FuncType>(&t);
+            auto ret_t = ToSource(*function_t->return_type());
+            if (not ret_t) return ret_t;
+            std::string params_string{};
+            bool first_it{true};
+            for (auto p : function_t->params()) {
+                auto param_t = ToSource(*p.type);
+                if (not param_t) return param_t;
+                if (not first_it) params_string += ',';
+                params_string += fmt::format("{}:{}", p.name, *param_t);
+
+                first_it = false;
+            }
+            return fmt::format("{}({})", *ret_t, params_string);
+        }
+
+        case lcc::glint::Type::Kind::Integer: {
+            auto i_t = lcc::as<lcc::glint::IntegerType>(&t);
+            return fmt::format(
+                "{}{}",
+                i_t->is_signed() ? 's' : 'u',
+                i_t->bit_width()
+            );
+        }
+
+        case lcc::glint::Type::Kind::Sum: {
+            auto sum_t = lcc::as<lcc::glint::SumType>(&t);
+            std::string members_string{};
+            for (auto m : sum_t->members()) {
+                auto member_t = ToSource(*m.type);
+                if (not member_t) return member_t;
+
+                if (m.expr) {
+                    auto member_init = ToSource(*m.expr);
+                    if (not member_init) return member_init;
+                    members_string += fmt::format("{}:{}={};", m.name, *member_t, *member_init);
+                } else
+                    members_string += fmt::format("{}:{};", m.name, *member_t);
+            }
+            return fmt::format("sum {{{}}}", members_string);
+        }
+
+        case lcc::glint::Type::Kind::Union: {
+            auto union_t = lcc::as<lcc::glint::UnionType>(&t);
+            std::string members_string{};
+            for (auto m : union_t->members()) {
+                auto member_t = ToSource(*m.type);
+                if (not member_t) return member_t;
+                members_string += fmt::format("{}:{};", m.name, *member_t);
+            }
+            return fmt::format("union {{{}}}", members_string);
+        }
+
+        case lcc::glint::Type::Kind::Struct: {
+            auto struct_t = lcc::as<lcc::glint::StructType>(&t);
+            std::string members_string{};
+            for (auto m : struct_t->members()) {
+                auto member_t = ToSource(*m.type);
+                if (not member_t) return member_t;
+
+                members_string += fmt::format("{}:{};", m.name, *member_t);
+            }
+            return fmt::format("struct {{{}}}", members_string);
+        }
+
+        case lcc::glint::Type::Kind::Enum: {
+            auto enum_t = lcc::as<lcc::glint::EnumType>(&t);
+            std::string enumerators_string{};
+            for (auto e : enum_t->enumerators()) {
+                enumerators_string += fmt::format("{}", e->name());
+                if (e->init()) {
+                    auto e_init = ToSource(*e->init());
+                    if (not e_init) return e_init;
+                    enumerators_string += fmt::format(" {}", *e_init);
+                }
+                enumerators_string += ';';
+            }
+            return fmt::format("enum {{{}}}", enumerators_string);
+        }
+    }
+    LCC_UNREACHABLE();
+}
+
 auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
     switch (k) {
+        case lcc::glint::Expr::Kind::Template: return "template";
         case lcc::glint::Expr::Kind::While: return "while";
         case lcc::glint::Expr::Kind::For: return "for";
         case lcc::glint::Expr::Kind::Return: return "return";
@@ -855,6 +1292,278 @@ auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
         case lcc::glint::Expr::Kind::Sizeof: return "sizeof";
         case lcc::glint::Expr::Kind::Alignof: return "alignof";
         case lcc::glint::Expr::Kind::Match: return "match";
+    }
+    LCC_UNREACHABLE();
+}
+
+auto lcc::glint::Module::ToSource(const Expr& e) -> Result<std::string> {
+    switch (e.kind()) {
+        case Expr::Kind::While: {
+            auto e_while = as<WhileExpr>(&e);
+            auto e_condition = ToSource(*e_while->condition());
+            if (not e_condition) return e_condition;
+            auto e_body = ToSource(*e_while->body());
+            if (not e_body) return e_body;
+            return fmt::format("while {}, {}", *e_condition, *e_body);
+        }
+
+        case Expr::Kind::For: {
+            auto e_for = as<ForExpr>(&e);
+            auto e_init = ToSource(*e_for->init());
+            if (not e_init) return e_init;
+            auto e_cond = ToSource(*e_for->condition());
+            if (not e_cond) return e_cond;
+            auto e_increment = ToSource(*e_for->increment());
+            if (not e_increment) return e_increment;
+            auto e_body = ToSource(*e_for->body());
+            if (not e_body) return e_body;
+            return fmt::format("cfor {};{};{};{}", *e_init, *e_cond, *e_increment, *e_body);
+        }
+
+        case Expr::Kind::If: {
+            auto e_if = as<IfExpr>(&e);
+            auto e_cond = ToSource(*e_if->condition());
+            if (not e_cond) return e_cond;
+            auto e_then = ToSource(*e_if->then());
+            if (not e_then) return e_then;
+            if (e_if->otherwise()) {
+                auto e_otherwise = ToSource(*e_if->then());
+                if (not e_otherwise) return e_otherwise;
+                return fmt::format("if {},{} else {}", *e_cond, *e_then, *e_otherwise);
+            }
+            return fmt::format("if {},{}", *e_cond, *e_then);
+        }
+
+        case Expr::Kind::Return: {
+            auto e_ret = as<ReturnExpr>(&e);
+            if (e_ret->value()) {
+                auto e_expression = ToSource(*e_ret->value());
+                if (not e_expression) return e_expression;
+                return fmt::format("return {}", *e_expression);
+            }
+            return {"return"};
+        }
+
+        case Expr::Kind::Template: {
+            auto e_t = as<TemplateExpr>(&e);
+            auto e_body = ToSource(*e_t->body());
+            std::string params_string = fmt::format(
+                "{}",
+                fmt::join(
+                    vws::transform(e_t->params(), [this](const auto& p) {
+                        auto e_ptype = ToSource(*p.type);
+                        if (not e_ptype) return std::string{"ERROR"};
+                        return fmt::format("{}:{}", p.name, *e_ptype);
+                    }),
+                    ", "
+                )
+            );
+            return fmt::format("template({}) {}", params_string, *e_body);
+        }
+
+        case Expr::Kind::Sizeof: {
+            auto e_sizeof = as<SizeofExpr>(&e);
+            auto e_expression = ToSource(*e_sizeof->expr());
+            if (not e_expression) return e_expression;
+            return fmt::format("sizeof {}", *e_expression);
+        }
+
+        case Expr::Kind::Alignof: {
+            auto e_alignof = as<AlignofExpr>(&e);
+            auto e_expression = ToSource(*e_alignof->expr());
+            if (not e_expression) return e_expression;
+            return fmt::format("alignof {}", *e_expression);
+        }
+
+        case Expr::Kind::Cast: {
+            auto e_cast = as<CastExpr>(&e);
+            auto e_expression = ToSource(*e_cast->operand());
+            if (not e_expression) return e_expression;
+            auto e_type = ToSource(*e.type());
+            if (not e_type) return e_type;
+            return fmt::format("{} {}", *e_type, *e_expression);
+        }
+
+        case Expr::Kind::Type: return ToSource(*e.type());
+
+        case Expr::Kind::Unary: {
+            auto e_unary = as<UnaryExpr>(&e);
+            auto e_expression = ToSource(*e_unary->operand());
+            if (not e_expression) return e_expression;
+            return fmt::format("{} {}", ToString(e_unary->op()), *e_expression);
+        }
+
+        case Expr::Kind::Binary: {
+            auto e_binary = as<BinaryExpr>(&e);
+            auto e_lhs = ToSource(*e_binary->lhs());
+            if (not e_lhs) return e_lhs;
+            auto e_rhs = ToSource(*e_binary->rhs());
+            if (not e_rhs) return e_rhs;
+            return fmt::format("{} {} {}", *e_lhs, ToString(e_binary->op()), *e_rhs);
+        }
+
+        case Expr::Kind::NameRef: {
+            auto e_name = as<NameRefExpr>(&e);
+            return e_name->name();
+        }
+
+        case Expr::Kind::MemberAccess: {
+            auto e_access = as<MemberAccessExpr>(&e);
+            auto e_object = ToSource(*e_access->object());
+            if (not e_object) return e_object;
+            return fmt::format("{}.{}", *e_object, e_access->name());
+        }
+
+        case Expr::Kind::Module: {
+            auto e_module = as<ModuleExpr>(&e);
+            return fmt::format("import {}", e_module->mod()->name());
+        }
+
+        case Expr::Kind::IntegerLiteral:
+            return fmt::format("{}", as<IntegerLiteral>(&e)->value());
+
+        case Expr::Kind::StringLiteral:
+            return fmt::format("\"{}\"", strings.at(as<StringLiteral>(&e)->string_index()));
+
+        case Expr::Kind::Block: {
+            std::string exprs_string{};
+            for (auto child : e.children()) {
+                auto expr_string = ToSource(*child);
+                if (not expr_string) return expr_string;
+                exprs_string += *expr_string;
+                exprs_string += ';';
+            }
+            return fmt::format("{{{}}}", exprs_string);
+        }
+
+        case Expr::Kind::Call: {
+            auto e_call = as<CallExpr>(&e);
+            auto e_callee = ToSource(*e_call->callee());
+            if (not e_callee) return e_callee;
+
+            std::string args_string{};
+            bool first_it{true};
+            for (auto arg : e_call->args()) {
+                auto arg_string = ToSource(*arg);
+                if (not arg_string) return arg_string;
+
+                // Separate callee and first argument by a space.
+                // Separate arguments by a soft separator.
+                if (not first_it) args_string += ',';
+                else args_string += ' ';
+
+                args_string += *arg_string;
+
+                first_it = false;
+            }
+
+            return fmt::format("{}{}", *e_callee, args_string);
+        }
+
+        case Expr::Kind::CompoundLiteral: {
+            std::string exprs_string{};
+            for (auto child : e.children()) {
+                auto expr_string = ToSource(*child);
+                if (not expr_string) return expr_string;
+                exprs_string += *expr_string;
+                exprs_string += ',';
+            }
+            return fmt::format("!{{{}}}", exprs_string);
+        }
+
+        case Expr::Kind::VarDecl: {
+            auto e_decl = as<VarDecl>(&e);
+
+            auto e_decltype = ToSource(*e_decl->type());
+            if (not e_decltype) return e_decltype;
+
+            std::string specifier{};
+            switch (e_decl->linkage()) {
+                case Linkage::LocalVar:
+                case Linkage::Internal:
+                case Linkage::Used:
+                    break;
+
+                case Linkage::Exported:
+                    specifier = "export";
+                    break;
+                case Linkage::Imported:
+                    specifier = "import";
+                    break;
+                case Linkage::Reexported:
+                    specifier = "export import";
+                    break;
+            }
+
+            if (e_decl->init()) {
+                auto e_init = ToSource(*e_decl->init());
+                if (not e_init) return e_init;
+                return fmt::format("{}:{} {}", e_decl->name(), *e_decltype, *e_init);
+            }
+            return fmt::format("{}:{}", e_decl->name(), *e_decltype);
+        }
+
+        case Expr::Kind::TypeDecl: {
+            auto e_decl = as<TypeDecl>(&e);
+
+            auto e_decltype = ToSource(*e_decl->type());
+            if (not e_decltype) return e_decltype;
+
+            return fmt::format("{}:{}", e_decl->name(), *e_decltype);
+        }
+
+        case Expr::Kind::FuncDecl: {
+            auto e_fdecl = as<FuncDecl>(&e);
+
+            auto e_decltype = ToSource(*e_fdecl->function_type());
+            if (not e_decltype) return e_decltype;
+
+            return fmt::format("{}:{}", e_fdecl->name(), *e_decltype);
+        }
+
+        case Expr::Kind::EnumeratorDecl: {
+            auto e_decl = as<EnumeratorDecl>(&e);
+
+            if (e_decl->init()) {
+                auto e_init = ToSource(*e_decl->init());
+                if (not e_init) return e_init;
+
+                return fmt::format("{}={}", e_decl->name(), *e_init);
+            }
+
+            return fmt::format("{}", e_decl->name());
+        }
+
+        case Expr::Kind::EvaluatedConstant: {
+            auto e_constant = as<ConstantExpr>(&e);
+            if (e_constant->expr())
+                return ToSource(*e_constant->expr());
+            if (e_constant->value().is_int()) return fmt::format("{}", e_constant->value().as_int());
+            if (e_constant->value().is_string()) return fmt::format("\"{}\"", strings.at(e_constant->value().as_string()->string_index()));
+            if (e_constant->value().is_null()) return {"NULL"};
+            LCC_ASSERT(false, "Cannot generate source from ill-formed constant expression");
+        }
+
+        case Expr::Kind::Match: {
+            auto e_match = as<MatchExpr>(&e);
+
+            auto e_matchee = ToSource(*e_match->object());
+            if (not e_matchee) return e_matchee;
+
+            std::string match_exprs_string{};
+            for (auto [name, body] : vws::zip(e_match->names(), e_match->bodies())) {
+                auto e_body = ToSource(*body);
+                if (not e_body) return e_body;
+                match_exprs_string += fmt::format(".{}:{};", name, *e_body);
+            }
+
+            return fmt::format("match {} {{{}}}", *e_matchee, match_exprs_string);
+        }
+
+        case Expr::Kind::TypeAliasDecl:
+        case Expr::Kind::IntrinsicCall:
+        case Expr::Kind::OverloadSet:
+            LCC_TODO("Implement ToSource for expression kind {}", ToString(e.kind()));
     }
     LCC_UNREACHABLE();
 }
@@ -1018,6 +1727,23 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                     C(name_colour),
                     m->object()->name(),
                     m->object()->type()->string(use_colour)
+                );
+                out += '\n';
+                return;
+            }
+
+            case K::Template: {
+                PrintBasicHeader("TemplateExpr", e);
+                const auto* t = as<lcc::glint::TemplateExpr>(e);
+                out += fmt::format("{}(", C(Reset));
+                out += fmt::format(
+                    "{})",
+                    fmt::join(
+                        lcc::vws::transform(t->params(), [](const auto& p) {
+                            return fmt::format("{}:{}", p.name, *p.type);
+                        }),
+                        ", "
+                    )
                 );
                 out += '\n';
                 return;

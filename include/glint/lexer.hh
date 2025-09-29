@@ -83,6 +83,7 @@ protected:
 
     [[nodiscard]]
     static auto IsIdentStart(u32 c) -> bool { return IsAlpha(c) or c == '_'; }
+    // Search Terms: delimiter
     [[nodiscard]]
     static auto IsIdentContinue(u32 c) -> bool {
         /// Note: '!' is *not* a start character so `!foo` still gets

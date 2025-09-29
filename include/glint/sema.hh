@@ -61,6 +61,14 @@ private:
     void AnalyseBinary(Expr** expr_ptr, BinaryExpr* b);
     // expr_ptr points to call expression `expr`
     void AnalyseCall(Expr** expr_ptr, CallExpr* expr);
+    [[nodiscard]]
+    auto AnalyseOverload(OverloadSet* expr, std::vector<Expr*> args) -> Result<FuncDecl*>;
+    // Integer Multiplication
+    void AnalyseCall_Integer(Expr** expr_ptr, CallExpr* expr);
+    // Type Instantiation
+    void AnalyseCall_Type(Expr** expr_ptr, CallExpr* expr);
+    // Template Invocation
+    void AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr);
     void AnalyseCast(CastExpr* expr);
     void AnalyseFunctionBody(FuncDecl* decl);
     void AnalyseFunctionSignature(FuncDecl* decl);

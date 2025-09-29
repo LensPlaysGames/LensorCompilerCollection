@@ -122,6 +122,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Supplant:
         case Tk::Match:
         case Tk::Print:
+        case Tk::Template:
         case Tk::CShort:
         case Tk::CUShort:
         case Tk::CInt:
@@ -207,6 +208,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::Supplant:
         case Tk::Match:
         case Tk::Print:
+        case Tk::Template:
         // Unary Prefix
         case Tk::Plus:
         case Tk::Minus:
@@ -393,7 +395,7 @@ auto lcc::glint::Parser::ParseExpressionsUntil(lcc::glint::TokenKind until) -> R
         if (+ConsumeExpressionSeparator()) continue;
 
         auto expr = ParseExpr();
-        if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
+        if (not At(until) and not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (At(Tk::Eof)) {
                 Warning("Expected ';' but got end of file");
             } else if (expr) {
@@ -689,6 +691,46 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             lhs = new (*mod) IntegerLiteral(aint(0), BuiltinType::Bool(*mod, tok.location), tok.location);
             NextToken();
             break;
+
+        case Tk::Template: {
+            auto loc = tok.location;
+            // Yeet 'template'
+            NextToken();
+
+            if (not Consume(Tk::LParen))
+                return Error(loc, "Expected template parameter list (beginning with `(`) following `template`");
+
+            std::vector<TemplateExpr::Param> parameters{};
+            while (not At(Tk::RParen)) {
+                // We have a (maybe comma-separated) list of names followed by a type.
+                usz idx = parameters.size();
+                if (not At(Tk::Ident)) return Error(loc, "Expected identifier in template parameter declaration");
+                do {
+                    parameters.emplace_back(tok.text, nullptr, tok.location);
+                    NextToken();
+                    ConsumeExpressionSeparator(ExpressionSeparator::Soft);
+                } while (At(Tk::Ident));
+
+                /// Parse the parameter type.
+                if (not Consume(Tk::Colon)) return Error("Expected ':' in template parameter declaration");
+                auto type = ParseType();
+                if (not type) return type.diag();
+
+                /// Fixup the type for all the parameters.
+                for (; idx < parameters.size(); ++idx) parameters[idx].type = *type;
+
+                /// Discard trailing comma.
+                ConsumeExpressionSeparator(ExpressionSeparator::Soft);
+            }
+
+            /// Yeet ')'.
+            if (not Consume(Tk::RParen)) return Error("Expected ')' closing template parameter list");
+
+            lhs = ParseExpr(current_precedence, true);
+            if (not lhs) return lhs.diag();
+
+            lhs = new (*mod) TemplateExpr(*lhs, parameters, {loc, lhs->location()});
+        } break;
 
         case Tk::Print: {
             auto loc = tok.location;
@@ -1033,7 +1075,9 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
     // as if it's a semi-colon. But, it won't cause a function call to stop
     // being parsed (i.e. a comma can be used to separate function arguments,
     // but not a function and it's arguments). Hope that makes sense.
-    if (Consume(Tk::Comma)) return lhs;
+
+    // Eat soft expression separator
+    if (+ConsumeExpressionSeparator(ExpressionSeparator::Soft)) return lhs;
 
     /// The rules for operator precedence parsing are as follows:
     ///   - unary prefix operators are unambiguously handled up above;
@@ -1102,13 +1146,15 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         NextToken();
     }
 
+    if (+ConsumeExpressionSeparator(ExpressionSeparator::Soft)) return lhs;
+
     /// While we’re at the start of an expression, if we’re not parsing
     /// a single-expression, parse call arguments.
     // Exception: parsed expression (would-be callee) must be an identifier or
     // a lambda or a number.
     else if (
         not single_expression
-        and (is<NameRefExpr>(*lhs) or is<TypeExpr>(*lhs) or is<IntegerLiteral>(*lhs) or (is<FuncDecl>(*lhs) and as<FuncDecl>(*lhs)->name().empty()))
+        and (is<NameRefExpr>(*lhs) or is<TypeExpr>(*lhs) or is<IntegerLiteral>(*lhs) or is<TemplateExpr>(*lhs) or (is<FuncDecl>(*lhs) and as<FuncDecl>(*lhs)->name().empty()))
     ) {
         std::vector<Expr*> args;
 
@@ -1167,7 +1213,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
     }
 
     // Eat any amount of commas following an expression
-    while (Consume(Tk::Comma));
+    while (+ConsumeExpressionSeparator(ExpressionSeparator::Soft));
 
     return lhs;
 }

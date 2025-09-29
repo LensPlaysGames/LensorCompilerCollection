@@ -3,6 +3,7 @@
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
+
 #include <object/elf.h>
 #include <object/elf.hh>
 
@@ -14,6 +15,7 @@
 #include <filesystem>
 #include <functional>
 #include <iterator>
+#include <numeric>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -465,6 +467,9 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
 
         case Expr::Kind::Unary:
             return HasSideEffects(as<UnaryExpr>(expr)->operand());
+
+        case Expr::Kind::Template:
+            return HasSideEffects(as<TemplateExpr>(expr)->body());
 
         case Expr::Kind::MemberAccess:
             return HasSideEffects(as<MemberAccessExpr>(expr)->object());
@@ -1363,6 +1368,50 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 block->set_lvalue(block->children().back()->is_lvalue());
                 block->type(block->children().back()->type());
             }
+        } break;
+
+        case Expr::Kind::Template: {
+            auto t = as<TemplateExpr>(expr);
+
+            if (not t->params().size())
+                Error(t->location(), "A template with no parameters is not allowed");
+
+            // Analyse parameter types
+            if (not rgs::any_of(
+                    t->params_ref(),
+                    [&](auto& p) {
+                        // Custom compile-time type handling
+                        if (auto n = cast<NamedType>(p.type); n and (n->name() == "expr" or n->name() == "type"))
+                            return true;
+                        return Analyse(&p.type);
+                    }
+                )) {
+                expr->set_sema_errored();
+                return false;
+            }
+
+            // Point target of NameRefExpr referencing template parameters to this TemplateExpr
+            if (auto name = cast<NameRefExpr>(t->body())) name->target(expr);
+            else {
+                for (auto e : expr->children()) {
+                    if (auto n = cast<NameRefExpr>(e)) {
+                        auto found_it = rgs::find_if(
+                            t->params(),
+                            [&](auto p) { return n->name() == p.name; }
+                        );
+                        if (found_it != t->params().end()) {
+                            n->target(expr);
+                        }
+                    }
+                }
+            }
+
+            // TODO: If we know all of the parameters types, then we should be good to analyse the body.
+            // Things that would change this are template parameters with "incomplete"
+            // types (like the type type, or the expr type).
+
+            // NOTE: TemplateExpr does not have a type, because it can't be operated
+            // on like an expression, because it is a code generator.
         } break;
 
         /// This mainly handles explicit casts, which allow more
@@ -2528,12 +2577,513 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::MacroArg:
         case TokenKind::Expression:
         case TokenKind::ByteLiteral:
+        case TokenKind::Template:
             Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
             LCC_UNREACHABLE();
     }
 
 #undef lhs_t
 #undef rhs_t
+}
+
+// `100 x;` -> 100 * x
+//   CallExpr(
+//       ConstantExpr 100
+//       NameRefExpr x
+//   )
+// becomes
+//   BinaryExpr(
+//       '*'
+//       ConstantExpr 100
+//       NameRefExpr x
+// )
+//
+// `100 x y` -> 100 * x * y
+//   CallExpr(
+//       ConstantExpr 100
+//       NameRefExpr x
+//       NameRefExpr y
+//   )
+// becomes
+//   BinaryExpr(
+//       '*'
+//       ConstantExpr 100
+//       BinaryExpr(
+//           NameRefExpr x
+//           NameRefExpr y
+//       )
+// )
+void lcc::glint::Sema::AnalyseCall_Integer(Expr** expr_ptr, CallExpr* expr) {
+    LCC_ASSERT(
+        expr->callee()->type()->is_integer(),
+        "Invalid arguments of call to \"analyse integer call\" function"
+    );
+
+    // NOTE: Call of integer with zero arguments by deproceduring should not
+    // be valid syntax, but this handles `100();` just in case.
+    if (expr->args().empty() and not HasSideEffects(expr)) {
+        Warning(
+            expr->location(),
+            "Expression result unused"
+        );
+        return;
+    }
+
+    auto* rhs = expr->args().back();
+    // NOTE: Relies on unsigned underflow
+    for (usz i = expr->args().size() - 2; i < expr->args().size(); --i) {
+        auto* lhs = expr->args().at(i);
+        rhs = new (mod) BinaryExpr(
+            TokenKind::Star,
+            lhs,
+            rhs,
+            {lhs->location(), rhs->location()}
+        );
+    }
+
+    *expr_ptr = new (mod) BinaryExpr(
+        TokenKind::Star,
+        expr->callee(),
+        rhs,
+        expr->location()
+    );
+
+    (void) Analyse(expr_ptr);
+}
+
+void lcc::glint::Sema::AnalyseCall_Type(Expr** expr_ptr, CallExpr* expr) {
+    LCC_ASSERT(
+        is<TypeExpr>(expr->callee()) or ( //
+            is<NameRefExpr>(expr->callee()) and is<TypeDecl>(as<NameRefExpr>(expr->callee())->target())
+        ),
+        "Invalid arguments of call to \"analyse type call\" function"
+    );
+    // Calling a type expression with a single compound literal argument is a
+    // declaration that the compound literal is expected to be of that type.
+    if (
+        expr->args().size() == 1
+        and is<CompoundLiteral>(expr->args().at(0))
+    ) {
+        // Replace the type expression with the now-properly-typed compound
+        // literal.
+        *expr_ptr = new (mod) CompoundLiteral(
+            as<CompoundLiteral>(expr->args().at(0))->values(),
+            expr->location(),
+            expr->callee()->type()
+        );
+        // Perform conversions (like a compound literal with a single unnamed
+        // argument being converted to it's argument expression).
+        (void) Analyse(expr_ptr);
+        return;
+    }
+
+    for (auto*& arg : expr->args()) (void) Analyse(&arg);
+    /// If any of the arguments errored, we do too.
+    if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
+        expr->set_sema_errored();
+        return;
+    }
+
+    if (expr->args().size() == 1) {
+        // Calling a type expression with a single compound literal argument is a
+        // declaration that the compound literal is expected to be of that type.
+        LCC_ASSERT(
+            not is<CompoundLiteral>(expr->args().at(0)),
+            "Call of type expression with single compound literal argument should have been handled above"
+        );
+
+        // Do conversions like lvalue to rvalue and stuffs.
+        (void) Convert(&expr->args().at(0), expr->callee()->type());
+
+        *expr_ptr = new (mod) CastExpr(
+            expr->args().at(0),
+            expr->callee()->type(),
+            CastKind::HardCast,
+            expr->location()
+        );
+    } else {
+        *expr_ptr = new (mod) CompoundLiteral(
+            expr->args(),
+            expr->location(),
+            expr->callee()->type()
+        );
+    }
+    return;
+}
+
+void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
+    LCC_ASSERT(
+        is<TemplateExpr>(expr->callee())
+            or ( //
+                is<NameRefExpr>(expr->callee())
+                and is<TemplateExpr>(as<NameRefExpr>(expr->callee())->target())
+            ),
+        "Invalid arguments of call to \"analyse template call\" function"
+    );
+
+    // "Place" expr->args() within CLONE of template body
+    auto expand_template_parameter_references =
+        [](this auto&& self, const TemplateExpr* t, const std::vector<Expr*> args, Expr** current_expr) -> void {
+        // Expand template using call arguments as template arguments.
+        // Replace reference to parameter with argument
+        if (auto e_name = cast<NameRefExpr>(*current_expr)) {
+            // The body is the argument
+            auto found_it = rgs::find_if(
+                t->params(),
+                [&](auto p) { return e_name->name() == p.name; }
+            );
+            if (found_it != t->params().end()) {
+                auto parameter_index = std::distance(t->params().begin(), found_it);
+                auto argument = args.at(usz(parameter_index));
+                *current_expr = argument;
+            }
+        } else {
+            // Search template body for template parameter references and fix them up
+            // into their actual argument.
+            for (auto e : (*current_expr)->children_ref()) {
+                if (auto e_n = cast<NameRefExpr>(*e)) {
+                    auto found_it = rgs::find_if(
+                        t->params(),
+                        [&](auto p) { return e_n->name() == p.name; }
+                    );
+                    if (found_it != t->params().end()) {
+                        auto parameter_index = std::distance(t->params().begin(), found_it);
+                        auto argument = args.at(usz(parameter_index));
+                        *e = argument;
+                    }
+                }
+                // C++23 recurse
+                self(t, args, e);
+            }
+        }
+    };
+
+    TemplateExpr* t = cast<TemplateExpr>(expr->callee());
+    if (not t) t = as<TemplateExpr>(as<NameRefExpr>(expr->callee())->target());
+
+    // Ensure types of arguments apply to constraint types given by template
+    // parameters.
+    if (expr->args().size() != t->params().size()) {
+        Error(
+            expr->location(),
+            "Incorrect number of arguments for template expansion. Expected {} instead of {}",
+            t->params().size(),
+            expr->args().size()
+        );
+        expr->set_sema_errored();
+    }
+    for (usz i = 0, end = std::min(expr->args().size(), t->params().size()); i < end; i++) {
+        auto param_t = t->params().at(i).type;
+        // Any expression is valid for "expr" compile-time type.
+        if (auto n = cast<NamedType>(param_t); n and n->name() == "expr")
+            continue;
+
+        // Only type expressions are valid for "type" compile-time type.
+        if (auto n = cast<NamedType>(param_t); n and n->name() == "type") {
+            if (not is<TypeExpr>(expr->args().at(i))) {
+                Error(
+                    expr->args().at(i)->location(),
+                    "Expected argument to be a type expression during template expression, but instead got {}",
+                    expr->args().at(i)->name()
+                );
+                expr->set_sema_errored();
+                return;
+            }
+            continue;
+        }
+
+        if (not Convert(expr->args().data() + i, t->params().at(i).type)) {
+            // got
+            auto* from = expr->args().at(i)->type();
+            // expected
+            auto* to = t->params().at(i).type;
+
+            if (from->is_dynamic_array() and to->is_array()) {
+                Error(
+                    expr->args().at(i)->location(),
+                    "Creation of a fixed array has to be done manually, with elements copied in from a dynamic array.\n"
+                    "This way, /you/ can ensure that /all/ of the array's elements are initialised.\n",
+                    from,
+                    to
+                );
+                expr->set_sema_errored();
+            } else {
+                Error(
+                    expr->args().at(i)->location(),
+                    "Type of argument {} is not convertible to parameter type {}",
+                    from,
+                    to
+                );
+                expr->set_sema_errored();
+            }
+            return;
+        }
+    }
+
+    // Clone template body...
+    auto body = Expr::Clone(mod, t->body());
+    expand_template_parameter_references(t, expr->args(), &body);
+
+    // Now that the body has been expanded, it's location is actually the
+    // location of the call expression that it expanded from (not the template
+    // it was expanded from).
+    // TODO: We probably want to keep track of expanded templates, at least
+    // for location purposes in diagnostics.
+    //     template(x : expr) ()
+    body->location((*expr_ptr)->location());
+    // Replace call with expanded template body
+    *expr_ptr = body;
+    // Analyse expanded template body
+    if (not Analyse(expr_ptr)) {
+        (*expr_ptr)->set_sema_errored();
+        return;
+    }
+}
+
+auto lcc::glint::Sema::AnalyseOverload(OverloadSet* expr, std::vector<Expr*> args) -> Result<FuncDecl*> {
+    for (auto*& arg : args) (void) Analyse(&arg);
+
+    // If any of the arguments errored, we can’t resolve this.
+    if (rgs::any_of(args, &Expr::sema_errored)) {
+        expr->set_sema_errored();
+        // TODO: Er, ideally we would be able to return not a diagnostic but also
+        // not a func decl...
+        return Error(expr->location(), "Invalid argument of overload set");
+    }
+
+    std::vector<FuncDecl*> O = expr->overloads();
+    std::vector<FuncDecl*> O_unchanged = O;
+
+    // *** 0
+    //
+    // Skip anything that is not a function reference, or any function
+    // references previously resolved.
+
+    // *** 1
+    //
+    // Collect all functions with the same name as the function being
+    // resolved into an *overload set* O. We cannot filter out any
+    // functions just yet.
+    //
+    // If the overload set size is zero, it is an error (no function may be resolved).
+    //
+    // It is advisable to ensure any invariants you require across function
+    // overloads, given the semantics of the language. For example, in
+    // Intercept, all overloads of a function must have the same return type.
+
+    // *** 2
+    //
+    // If the parent expression is a call expression, and the function being
+    // resolved is the callee of the call, then:
+
+    // **** 2a
+    //
+    // Typecheck all arguments of the call that are not unresolved function
+    // references themselves. Note: This takes care of resolving nested calls.
+
+    // **** 2b
+    //
+    // Remove from O all functions that have a different number of
+    // parameters than the call expression has arguments.
+    std::vector<FuncDecl*> invalid{};
+    for (auto* f : O) {
+        if (f->param_types().size() != args.size()) {
+            // Note(
+            //     f->location(),
+            //     "Candidate {} removed because parameter count doesn't match given arguments: {} vs {}",
+            //     f->type(),
+            //     f->param_types().size(),
+            //     args.size()
+            // );
+            invalid.emplace_back(f);
+        }
+    }
+    for (auto* f : invalid) std::erase(O, f);
+    invalid.clear();
+
+    // **** 2c
+    //
+    // Let A_1, ... A_n be the arguments of the call expression.
+    //
+    // For candidate C in O, let P_1, ... P_n be the parameters of C. For each
+    // argument A_i of the call, iff it is not an unresolved function, check
+    // if it is convertible to P_i. Remove C from O if it is not. Note down
+    // the number of A_i’s that required a (series of) implicit conversions to
+    // their corresponding P_i’s. Also collect unresolved function references.
+
+    // For candidate C in O,
+    for (auto* C : O) {
+        // let P_... be the parameters of C.
+        for (auto* P : C->param_types()) {
+            // For each argument A_i,
+            for (auto*& A : args) {
+                // check if it is convertible to P_i.
+                auto conversion_score = TryConvert(&A, P);
+                // TODO: Record score to choose lowest if multiple in overload set at the
+                // end. Currently approximated via type equal check.
+                if (conversion_score < 0) {
+                    // Note(
+                    //     A->location(),
+                    //     "Argument type {} is not convertible to parameter type {}\n",
+                    //     A->type(),
+                    //     P
+                    // );
+
+                    // Remove C from O if it is not.
+                    invalid.emplace_back(C);
+                }
+            }
+        }
+    }
+    for (auto* f : invalid) std::erase(O, f);
+    invalid.clear();
+
+    // **** 2e
+    //
+    // If there are unresolved function references:
+
+    // ***** 2eα
+    //
+    // Collect their overload sets.
+
+    // ***** 2eβ
+    // Remove from O all candidates C that do no accept any overload of this
+    // argument as a parameter.
+
+    // ***** 2eγ
+    //
+    // Remove from O all functions except those with the least number of
+    // implicit conversions as per step 2d.
+
+    // ***** 2eδ
+    //
+    // Resolve the function being resolved.
+
+    // ***** 2eε
+    //
+    // For each argument, remove from its overload set all candidates that are
+    // not equivalent to the type of the corresponding parameter of the
+    // resolved function.
+
+    // ***** 2eζ
+    //
+    // Resolve the argument.
+
+    // **** 2f
+    //
+    // Remove from O all functions except those with the least number of
+    // implicit conversions as per step 2d.
+
+    // *** 3
+    //
+    // Otherwise, depending on the type of the parent expression:
+
+    // **** 3a
+    //
+    // If the parent expression is a unary prefix expression with operator
+    // address-of, then replace the parent expression with the unresolved
+    // function and go to step 2/3 depending on the type of the new parent.
+
+    // **** 3b
+    //
+    // If the parent expression is a declaration, and the lvalue is not of
+    // function pointer type, this is a type error. Otherwise, remove from O
+    // all functions that are not equivalent to the lvalue being assigned to.
+
+    // **** 3c
+    //
+    // If the parent expression is an assignment expression, then if we are
+    // the LHS, then this is a type error, as we cannot assign to a function
+    // reference.
+    //
+    // If the lvalue is not of function pointer type, this is a type error.
+    //
+    // Otherwise, remove from O all functions that are not equivalent to the lvalue being assigned to.
+
+    // **** 3d
+    //
+    // If the parent expression is a return expression, and the return type of
+    // the function F containing that return expression is not of function
+    // pointer type, this is a type error. Otherwise, remove from O all
+    // functions that are not equivalent to the return type of F.
+
+    // **** 3e
+    //
+    // If the parent expression is a cast expression, and the result type of
+    // the cast is a function or function pointer type, remove from O all
+    // functions that are not equivalent to that type.
+
+    // **** 3f
+    //
+    // Otherwise, do nothing.
+
+    // FIXME: See step 2c for more info.
+    // This is a last hail-mary attempt to narrow down an overload set not
+    // just to convertible arguments, but to ones that are exactly equal.
+    // But don't remove all of them!
+    if (O.size() > 1) {
+        for (auto* C : O) {
+            for (auto* P : C->param_types()) {
+                for (auto* A : args) {
+                    if (not Type::Equal(A->type(), P)) {
+                        // Note(
+                        //     A->location(),
+                        //     "Argument type {} is not equal to parameter type {}\n",
+                        //     A->type(),
+                        //     P
+                        // );
+
+                        // Remove C from O if it is not.
+                        invalid.emplace_back(C);
+                    }
+                }
+            }
+        }
+        // Only remove if we won't be removing all of them.
+        if (invalid.size() != O.size())
+            for (auto* f : invalid) std::erase(O, f);
+        invalid.clear();
+    }
+
+    // *** 4
+    //
+    // Resolve the function reference.
+    //
+    // For the most part, entails finding the one function that is still
+    // marked viable in the overload set.
+
+    if (not invalid.empty()) {
+        Diag::ICE("Overload resolution has leftover invalid. This usually means the developer has forgotten to remove them from the overload set, so make sure that is happening and then clear the invalid list.");
+        LCC_UNREACHABLE();
+    }
+
+    if (O.size() != 1) {
+        Diag e;
+        if (O.empty()) {
+            e = Error(
+                expr->location(),
+                "Given arguments {} didn't match any of the possible candidates in the overload set",
+                fmt::join(
+                    vws::transform(args, [&](auto A) { return fmt::format("{}", *A->type()); }),
+                    ", "
+                )
+            );
+            expr->set_sema_errored();
+        } else {
+            e = Error(
+                expr->location(),
+                "Unresolved function overload: ambiguous, here are the possible candidates"
+            );
+            expr->set_sema_errored();
+        }
+
+        for (auto* C : O_unchanged)
+            e.attach(Note(C->location(), "Candidate defined here"));
+
+        return e;
+    }
+
+    return O.at(0);
 }
 
 void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
@@ -2581,6 +3131,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     return;
                 }
 
+                // print x:void -> ERROR
                 if (Type::Equal(arg->type(), Type::Void)) {
                     arg->print(true);
                     expr->set_sema_errored();
@@ -2588,7 +3139,8 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     return;
                 }
 
-                // Just call puts on byte pointers
+                // Just call puts on byte pointerss
+                // print x:byte.ptr -> puts x
                 bool arg_is_pointer_to_byte = arg->type()->is_pointer() and Type::Equal(arg->type()->elem(), Type::Byte);
                 if (arg_is_pointer_to_byte) {
                     auto puts_call = new (mod) CallExpr(
@@ -2601,8 +3153,9 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 }
 
                 // Don't format dynamic byte arrays...
+                // print x:[byte] -> puts x.data
                 bool arg_is_dynamic_array_of_byte
-                    = arg->type()->strip_references()->is_dynamic_array() and Type::Equal(arg->type()->elem(), Type::Byte);
+                    = arg->type()->strip_references()->is_dynamic_array() and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
                 if (arg_is_dynamic_array_of_byte) {
                     auto member_access = new (mod) MemberAccessExpr(
                         arg,
@@ -2619,6 +3172,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 }
 
                 // Don't format fixed byte arrays
+                // print x:[byte 4] -> puts x[0]
                 bool arg_is_fixed_array_of_byte
                     = arg->type()->strip_references()->is_array() and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
                 if (arg_is_fixed_array_of_byte) {
@@ -2634,6 +3188,8 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 
                 // TODO: Handle array view of byte.
 
+                // Otherwise, format argument
+                // print x -> { tmp :: format x; puts tmp.data; -tmp; }
                 auto format_call = new (mod) CallExpr(
                     new (mod) NameRefExpr("format", mod.top_level_scope(), expr->location()),
                     {arg},
@@ -2695,255 +3251,17 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         return;
     }
 
-    /// If the callee is an overload set, perform overload resolution.
-    if (is<OverloadSet>(expr->callee()) or expr->callee()->type()->is_overload_set()) {
-        for (auto*& arg : expr->args()) (void) Analyse(&arg);
-        // If any of the arguments errored, we can’t resolve this.
-        if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
-            expr->set_sema_errored();
-            return;
-        }
-
-        std::vector<FuncDecl*> O;
-        if (is<OverloadSet>(expr->callee())) {
-            O = as<OverloadSet>(expr->callee())->overloads();
-        } else if (expr->callee()->type()->is_overload_set()) {
-            LCC_ASSERT(is<NameRefExpr>(expr->callee()));
-
-            auto* set = as<NameRefExpr>(expr->callee())->target();
-            LCC_ASSERT(is<OverloadSet>(set));
-
-            O = as<OverloadSet>(set)->overloads();
-        }
-        std::vector<FuncDecl*> O_unchanged = O;
-
-        // *** 0
-        //
-        // Skip anything that is not a function reference, or any function
-        // references previously resolved.
-
-        // *** 1
-        //
-        // Collect all functions with the same name as the function being
-        // resolved into an *overload set* O. We cannot filter out any
-        // functions just yet.
-        //
-        // If the overload set size is zero, it is an error (no function may be resolved).
-        //
-        // It is advisable to ensure any invariants you require across function
-        // overloads, given the semantics of the language. For example, in
-        // Intercept, all overloads of a function must have the same return type.
-
-        // *** 2
-        //
-        // If the parent expression is a call expression, and the function being
-        // resolved is the callee of the call, then:
-
-        // **** 2a
-        //
-        // Typecheck all arguments of the call that are not unresolved function
-        // references themselves. Note: This takes care of resolving nested calls.
-
-        // **** 2b
-        //
-        // Remove from O all functions that have a different number of
-        // parameters than the call expression has arguments.
-        std::vector<FuncDecl*> invalid{};
-        for (auto* f : O) {
-            if (f->param_types().size() != expr->args().size()) {
-                Note(
-                    f->location(),
-                    "Candidate {} removed because parameter count doesn't match given arguments: {} vs {}",
-                    f->type(),
-                    f->param_types().size(),
-                    expr->args().size()
-                );
-                invalid.emplace_back(f);
-            }
-        }
-        for (auto* f : invalid) std::erase(O, f);
-        invalid.clear();
-
-        // **** 2c
-        //
-        // Let A_1, ... A_n be the arguments of the call expression.
-        //
-        // For candidate C in O, let P_1, ... P_n be the parameters of C. For each
-        // argument A_i of the call, iff it is not an unresolved function, check
-        // if it is convertible to P_i. Remove C from O if it is not. Note down
-        // the number of A_i’s that required a (series of) implicit conversions to
-        // their corresponding P_i’s. Also collect unresolved function references.
-
-        // For candidate C in O,
-        for (auto* C : O) {
-            // let P_... be the parameters of C.
-            for (auto* P : C->param_types()) {
-                // For each argument A_i,
-                for (auto*& A : expr->args()) {
-                    // check if it is convertible to P_i.
-                    auto conversion_score = TryConvert(&A, P);
-                    // TODO: Record score to choose lowest if multiple in overload set at the
-                    // end. Currently approximated via type equal check.
-                    if (conversion_score < 0) {
-                        // Note(
-                        //     A->location(),
-                        //     "Argument type {} is not convertible to parameter type {}\n",
-                        //     A->type(),
-                        //     P
-                        // );
-
-                        // Remove C from O if it is not.
-                        invalid.emplace_back(C);
-                    }
-                }
-            }
-        }
-        for (auto* f : invalid) std::erase(O, f);
-        invalid.clear();
-
-        // **** 2e
-        //
-        // If there are unresolved function references:
-
-        // ***** 2eα
-        //
-        // Collect their overload sets.
-
-        // ***** 2eβ
-        // Remove from O all candidates C that do no accept any overload of this
-        // argument as a parameter.
-
-        // ***** 2eγ
-        //
-        // Remove from O all functions except those with the least number of
-        // implicit conversions as per step 2d.
-
-        // ***** 2eδ
-        //
-        // Resolve the function being resolved.
-
-        // ***** 2eε
-        //
-        // For each argument, remove from its overload set all candidates that are
-        // not equivalent to the type of the corresponding parameter of the
-        // resolved function.
-
-        // ***** 2eζ
-        //
-        // Resolve the argument.
-
-        // **** 2f
-        //
-        // Remove from O all functions except those with the least number of
-        // implicit conversions as per step 2d.
-
-        // *** 3
-        //
-        // Otherwise, depending on the type of the parent expression:
-
-        // **** 3a
-        //
-        // If the parent expression is a unary prefix expression with operator
-        // address-of, then replace the parent expression with the unresolved
-        // function and go to step 2/3 depending on the type of the new parent.
-
-        // **** 3b
-        //
-        // If the parent expression is a declaration, and the lvalue is not of
-        // function pointer type, this is a type error. Otherwise, remove from O
-        // all functions that are not equivalent to the lvalue being assigned to.
-
-        // **** 3c
-        //
-        // If the parent expression is an assignment expression, then if we are
-        // the LHS, then this is a type error, as we cannot assign to a function
-        // reference.
-        //
-        // If the lvalue is not of function pointer type, this is a type error.
-        //
-        // Otherwise, remove from O all functions that are not equivalent to the lvalue being assigned to.
-
-        // **** 3d
-        //
-        // If the parent expression is a return expression, and the return type of
-        // the function F containing that return expression is not of function
-        // pointer type, this is a type error. Otherwise, remove from O all
-        // functions that are not equivalent to the return type of F.
-
-        // **** 3e
-        //
-        // If the parent expression is a cast expression, and the result type of
-        // the cast is a function or function pointer type, remove from O all
-        // functions that are not equivalent to that type.
-
-        // **** 3f
-        //
-        // Otherwise, do nothing.
-
-        // FIXME: See step 2c for more info.
-        // This is a last hail-mary attempt to narrow down an overload set not
-        // just to convertible arguments, but to ones that are exactly equal.
-        // But don't remove all of them!
-        if (O.size() > 1) {
-            for (auto* C : O) {
-                for (auto* P : C->param_types()) {
-                    for (auto* A : expr->args()) {
-                        if (not Type::Equal(A->type(), P)) {
-                            // Note(
-                            //     A->location(),
-                            //     "Argument type {} is not equal to parameter type {}\n",
-                            //     A->type(),
-                            //     P
-                            // );
-
-                            // Remove C from O if it is not.
-                            invalid.emplace_back(C);
-                        }
-                    }
-                }
-            }
-            // Only remove if we won't be removing all of them.
-            if (invalid.size() != O.size())
-                for (auto* f : invalid) std::erase(O, f);
-            invalid.clear();
-        }
-
-        // *** 4
-        //
-        // Resolve the function reference.
-        //
-        // For the most part, entails finding the one function that is still
-        // marked viable in the overload set.
-
-        if (not invalid.empty()) {
-            Diag::ICE("Overload resolution has leftover invalid. This usually means the developer has forgotten to remove them from the overload set, so make sure that is happening and then clear the invalid list.");
-            LCC_UNREACHABLE();
-        }
-
-        if (O.size() != 1) {
-            if (O.empty()) {
-                Error(
-                    expr->location(),
-                    "Given arguments {} didn't match any of the possible candidates in the overload set",
-                    fmt::join(
-                        vws::transform(expr->args(), [&](auto A) { return fmt::format("{}", *A->type()); }),
-                        ", "
-                    )
-                );
-            } else {
-                Error(
-                    expr->location(),
-                    "Unresolved function overload: ambiguous, here are the possible candidates"
-                );
-            }
-
-            for (auto* C : O_unchanged)
-                Note(C->location(), "Candidate defined here");
-
-            return;
-        }
-
-        expr->callee() = O.at(0);
+    // If the callee is a template, this is a template expansion.
+    // Search Terms: template expansion, expand, ast macro
+    if (
+        is<TemplateExpr>(expr->callee())
+        or ( //
+            is<NameRefExpr>(expr->callee())
+            and is<TemplateExpr>(as<NameRefExpr>(expr->callee())->target())
+        )
+    ) {
+        AnalyseCall_Template(expr_ptr, expr);
+        return;
     }
 
     // If the callee is a type expression, this is a type instantiation.
@@ -2956,56 +3274,13 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             and is<TypeDecl>(as<NameRefExpr>(expr->callee())->target())
         )
     ) {
-        // Calling a type expression with a single compound literal argument is a
-        // declaration that the compound literal is expected to be of that type.
-        if (
-            expr->args().size() == 1
-            and is<CompoundLiteral>(expr->args().at(0)) //
-        ) {
-            // Replace the type expression with the now-properly-typed compound
-            // literal.
-            *expr_ptr = new (mod) CompoundLiteral(
-                as<CompoundLiteral>(expr->args().at(0))->values(),
-                expr->location(),
-                expr->callee()->type()
-            );
-            // Perform conversions (like a compound literal with a single unnamed
-            // argument being converted to it's argument expression).
-            (void) Analyse(expr_ptr);
-            return;
-        }
+        AnalyseCall_Type(expr_ptr, expr);
+        return;
+    }
 
-        for (auto*& arg : expr->args()) (void) Analyse(&arg);
-        /// If any of the arguments errored, we do too.
-        if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
-            expr->set_sema_errored();
-            return;
-        }
-
-        if (expr->args().size() == 1) {
-            // Calling a type expression with a single compound literal argument is a
-            // declaration that the compound literal is expected to be of that type.
-            LCC_ASSERT(
-                not is<CompoundLiteral>(expr->args().at(0)),
-                "Call of type expression with single compound literal argument should have been handled above"
-            );
-
-            // Do conversions like lvalue to rvalue and stuffs.
-            (void) Convert(&expr->args().at(0), expr->callee()->type());
-
-            *expr_ptr = new (mod) CastExpr(
-                expr->args().at(0),
-                expr->callee()->type(),
-                CastKind::HardCast,
-                expr->location()
-            );
-        } else {
-            *expr_ptr = new (mod) CompoundLiteral(
-                expr->args(),
-                expr->location(),
-                expr->callee()->type()
-            );
-        }
+    // If the callee is an integer, multiply all the arguments.
+    if (auto* callee_ty = expr->callee()->type(); callee_ty->is_integer()) {
+        AnalyseCall_Integer(expr_ptr, expr);
         return;
     }
 
@@ -3017,76 +3292,36 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         return;
     }
 
+    /// If the callee is an overload set, perform overload resolution.
+    if (is<OverloadSet>(expr->callee()) or expr->callee()->type()->is_overload_set()) {
+        OverloadSet* O{nullptr};
+        if (is<OverloadSet>(expr->callee())) {
+            O = as<OverloadSet>(expr->callee());
+        } else if (expr->callee()->type()->is_overload_set()) {
+            LCC_ASSERT(is<NameRefExpr>(expr->callee()));
+
+            auto* set = as<NameRefExpr>(expr->callee())->target();
+            LCC_ASSERT(is<OverloadSet>(set));
+
+            O = as<OverloadSet>(set);
+        }
+
+        auto resolved = AnalyseOverload(O, expr->args());
+        if (not resolved) return;
+        expr->callee() = *resolved;
+    }
+
     /// If the callee is a function pointer, dereference it.
     if (auto* ty = expr->callee()->type(); ty->is_pointer() and ty->elem()->is_function())
         InsertImplicitCast(&expr->callee(), ty->elem());
 
-    // if the callee is an integer, multiply all the arguments.
-    // `100 x;` -> 100 * x
-    //   CallExpr(
-    //       ConstantExpr 100
-    //       NameRefExpr x
-    //   )
-    // becomes
-    //   BinaryExpr(
-    //       '*'
-    //       ConstantExpr 100
-    //       NameRefExpr x
-    // )
-    //
-    // `100 x y` -> 100 * x * y
-    //   CallExpr(
-    //       ConstantExpr 100
-    //       NameRefExpr x
-    //       NameRefExpr y
-    //   )
-    // becomes
-    //   BinaryExpr(
-    //       '*'
-    //       ConstantExpr 100
-    //       BinaryExpr(
-    //           NameRefExpr x
-    //           NameRefExpr y
-    //       )
-    // )
-    else if (auto* callee_ty = expr->callee()->type(); callee_ty->is_integer()) {
-        // NOTE: Call of integer with zero arguments by deproceduring should not
-        // be valid syntax, but this handles `100();` just in case.
-        if (expr->args().empty() and not HasSideEffects(expr)) {
-            Warning(
-                expr->location(),
-                "Expression result unused"
-            );
-            return;
-        }
-
-        auto* rhs = expr->args().back();
-        // NOTE: Relies on unsigned underflow
-        for (usz i = expr->args().size() - 2; i < expr->args().size(); --i) {
-            auto* lhs = expr->args().at(i);
-            rhs = new (mod) BinaryExpr(
-                TokenKind::Star,
-                lhs,
-                rhs,
-                {lhs->location(), rhs->location()}
-            );
-        }
-
-        *expr_ptr = new (mod) BinaryExpr(
-            TokenKind::Star,
-            expr->callee(),
-            rhs,
-            expr->location()
+    // If the type is not already a function type, we can’t call this.
+    if (not expr->callee()->type()->is_function()) {
+        auto e = Error(
+            expr->callee()->location(),
+            "Cannot call non-function type {}",
+            expr->callee()->type()
         );
-
-        (void) Analyse(expr_ptr);
-
-        return;
-    }
-
-    // Otherwise, if the type is not already a function type, we can’t call this.
-    else if (not callee_ty->is_function()) {
-        auto e = Error(expr->callee()->location(), "Cannot call non-function type {}", callee_ty);
         expr->set_sema_errored();
 
         // So, when writing Glint, if you leave out a semi-colon separator (you
@@ -3445,7 +3680,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         for (const auto& ref : mod.imports()) {
             if (expr->name() == ref.name) {
                 // Set expr->target() and expr->type() to something reasonable.
-                auto* module_expr = new (mod) ModuleExpr(&mod, expr->location());
+                auto* module_expr = new (mod) ModuleExpr(ref.module, expr->location());
                 expr->target(module_expr);
                 expr->type(Type::Void);
                 return;
@@ -3874,6 +4109,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::MacroArg:
         case TokenKind::Expression:
         case TokenKind::ByteLiteral:
+        case TokenKind::Template:
             Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
             LCC_UNREACHABLE();
     }

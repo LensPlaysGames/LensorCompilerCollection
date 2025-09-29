@@ -29,7 +29,9 @@ class Parser : public Lexer {
     FuncDecl* curr_func{};
 
 public:
+    [[nodiscard]]
     static auto Parse(Context* context, std::string_view source) -> std::unique_ptr<Module>;
+    [[nodiscard]]
     static auto Parse(Context* context, File& file) -> std::unique_ptr<Module>;
 
     // Don't do syntactic analysis, just lexical.

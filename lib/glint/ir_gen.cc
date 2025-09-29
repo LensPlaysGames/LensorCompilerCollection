@@ -594,6 +594,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::CaretEq:
                 case TokenKind::TildeEq:
                 case TokenKind::ByteLiteral:
+                case TokenKind::Template:
                     LCC_ASSERT(false, "Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
             }
         } break;
@@ -876,6 +877,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::MinusMinus:
                 case TokenKind::StarStar:
                 case TokenKind::ByteLiteral:
+                case TokenKind::Template:
                     Diag::ICE(
                         ctx,
                         expr->location(),
@@ -1616,6 +1618,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         case K::TypeAliasDecl:
         case K::FuncDecl:
         case K::OverloadSet:
+        case Expr::Kind::Template:
             break;
     }
 }
