@@ -1,11 +1,15 @@
 #include <glint/ast.hh>
 #include <glint/parser.hh>
+#include <glint/sema.hh>
 
 #include <lcc/context.hh>
 #include <lcc/format.hh>
 #include <lcc/target.hh>
+#include <lcc/utils.hh>
 
+#include <pybind11/complex.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 /// Default target.
 const lcc::Target* default_target =
@@ -54,13 +58,24 @@ bool invalid(const PythonDeclInfo& p) {
     return invalid(p.decl_location);
 }
 
-PythonDeclInfo findDeclImpl(lcc::glint::Module& m, lcc::Context* ctx, std::string_view name, lcc::glint::Expr* e) {
+struct DeclInfo {
+    PythonDeclInfo py_info{};
+    lcc::glint::Expr* decl{nullptr};
+};
+
+bool invalid(const DeclInfo& d) {
+    return d.decl == nullptr;
+}
+
+DeclInfo findDeclImpl(lcc::glint::Module& m, lcc::Context* ctx, std::string_view name, lcc::glint::Expr* e) {
     if (e->name() == name) {
         return {
-            py_location(ctx, {e->location(), e->type()->location()}),
-            py_location(ctx, e->location()),
-            py_location(ctx, e->type()->location()),
-            *m.ToSource(*e->type())
+            {py_location(ctx, {e->location(), e->type()->location()}),
+             py_location(ctx, e->location()),
+             py_location(ctx, e->type()->location()),
+             *m.ToSource(*e->type())
+            },
+            e
         };
     }
     for (auto* c : e->children()) {
@@ -97,12 +112,94 @@ PythonDeclInfo findDecl(std::string source, std::string name) {
         f
     );
 
-    return findDeclImpl(*m, &context, name, m->top_level_function()->body());
+    return findDeclImpl(*m, &context, name, m->top_level_function()->body()).py_info;
 }
 
-std::vector<std::string> getCompletions() {
-    // TODO: Parse source up until the incomplete member access (ideally,
-    // exactly to the dot).
+std::vector<std::string> getValidTypeConstituents(lcc::glint::Type* t) {
+    switch (t->kind()) {
+        case lcc::glint::Type::Kind::Builtin:
+        case lcc::glint::Type::Kind::FFIType:
+        case lcc::glint::Type::Kind::Pointer:
+        case lcc::glint::Type::Kind::Reference:
+        case lcc::glint::Type::Kind::Array:
+        case lcc::glint::Type::Kind::ArrayView:
+        case lcc::glint::Type::Kind::Function:
+        case lcc::glint::Type::Kind::Integer:
+        case lcc::glint::Type::Kind::Named:
+            return {};
+
+        case lcc::glint::Type::Kind::DynamicArray:
+            return getValidTypeConstituents(lcc::as<lcc::glint::DynamicArrayType>(t)->struct_type());
+
+        case lcc::glint::Type::Kind::Sum:
+            return getValidTypeConstituents(lcc::as<lcc::glint::SumType>(t)->struct_type());
+
+        case lcc::glint::Type::Kind::Union: {
+            auto u = lcc::as<lcc::glint::UnionType>(t);
+            std::vector<std::string> out{};
+            out.reserve(u->members().size());
+            for (const auto& m : u->members())
+                out.emplace_back(m.name);
+
+            return out;
+        }
+
+        case lcc::glint::Type::Kind::Enum: {
+            auto e = lcc::as<lcc::glint::EnumType>(t);
+            std::vector<std::string> out{};
+            out.reserve(e->enumerators().size());
+            for (auto d : e->enumerators())
+                out.emplace_back(d->name());
+
+            return out;
+        }
+
+        case lcc::glint::Type::Kind::Struct: {
+            auto s = lcc::as<lcc::glint::StructType>(t);
+            std::vector<std::string> out{};
+            out.reserve(s->members().size());
+            for (const auto& m : s->members())
+                out.emplace_back(m.name);
+
+            return out;
+        }
+    }
+    LCC_UNREACHABLE();
+}
+
+std::vector<std::string> getCompletions(std::string source, std::string name) {
+    lcc::Context context{
+        default_target,
+        default_format,
+        lcc::Context::Options{
+            lcc::Context::DoNotUseColour,
+            lcc::Context::DoNotPrintAST,
+            lcc::Context::DoNotStopatLex,
+            lcc::Context::DoNotStopatSyntax,
+            lcc::Context::DoNotStopatSema,
+            lcc::Context::DoNotPrintMIR,
+            lcc::Context::DoNotStopatMIR
+        }
+    };
+
+    auto& f = context.create_file(
+        "tmp",
+        std::vector<char>{source.begin(), source.end()}
+    );
+
+    auto m = lcc::glint::Parser::Parse(
+        &context,
+        f
+    );
+
+    // Replace named types with what they were before, etc
+    lcc::glint::Sema::Analyse(&context, *m);
+
+    auto decl_info
+        = findDeclImpl(*m, &context, name, m->top_level_function()->body());
+    if (not invalid(decl_info))
+        return getValidTypeConstituents(decl_info.decl->type());
+
     return {};
 }
 

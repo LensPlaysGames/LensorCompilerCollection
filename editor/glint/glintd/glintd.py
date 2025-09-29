@@ -32,30 +32,31 @@ def escaped_markdown(text: str) -> str:
 
 def find_many(instring: str, start_position: int, substrings):
     pat = re.compile('|'.join([re.escape(s) for s in substrings]))
-    match = pat.search(instring[start_position:])
-    if match is None:
+    m = pat.search(instring[start_position:])
+    if m is None:
         return -1
     else:
-        return start_position + match.start()
+        return start_position + m.start()
 
 
-# TODO: Make this more complex
+TOKENIZE_DELIMITERS = set(
+    [' ', '.', ';', ',', '(', ')', '\n', ':', '<', '>', '=', '-', '*', '@', '{', '}', '!', '%', '~', '^', '|', '&', '`']
+);
 def tokenize(source: str):
     results = []
-    current_pos = 0
+    current_pos :int = 0
     while True:
-        next_delimiter_pos = find_many(source, current_pos, [' ', ';', ',', '(', ')', '\n', ':', '<', '>', '=', '-', '*', '@', '{', '}', '!', '%', '~', '^', '|', '&'])
+        next_delimiter_pos :int = find_many(source, current_pos, TOKENIZE_DELIMITERS)
 
         if next_delimiter_pos == -1:
             results.append((source[current_pos:], current_pos))
             break
 
-        token_source = source[current_pos:next_delimiter_pos]
+        if current_pos == next_delimiter_pos:
+            current_pos += 1
+            continue
 
-        if token_source == ' ' or token_source == '\n':
-            current_pos = next_delimiter_pos + 1
-            break
-
+        token_source :str = source[current_pos:next_delimiter_pos]
         results.append((token_source, current_pos))
         current_pos = next_delimiter_pos + 1
 
@@ -120,23 +121,39 @@ def hover(ls: LanguageServer, params: types.HoverParams):
     types.CompletionOptions(trigger_characters=["."]),
 )
 def completions(params: types.CompletionParams):
-    document = params.text_document
-
-    return []
+    pos = params.position
+    document = server.workspace.get_text_document(params.text_document.uri)
 
     try:
         line = document.lines[pos.line]
     except IndexError:
-        return []
+        return None
 
-    if not line.endswith("hello."):
-        return []
+    selected_token = None
+    # Move character selected backwards until we reach a token we can lookup...
+    # Ideally, we would just be able to parse the lhs of the member access
+    # (or everything left of '.' until ';' or ','), buuuut... yeah
+    i = pos.character - 1
+    tokens = tokenize(line)
+    while not selected_token and i >= 0:
+        selected_token = next(
+            (token for token in tokens
+             if token[1] <= i and i < token[1] + len(token[0])),
+            None
+        )
+        i -= 1
 
-    return [
-        types.CompletionItem(label="world"),
-        types.CompletionItem(label="friend"),
-    ]
+    if selected_token:
+        context_source = "".join(document.lines[:pos.line])
+        completions = getCompletions(context_source, selected_token[0])
+        return types.CompletionList(
+            is_incomplete=False, # completion list is complete
+            items=(types.CompletionItem(
+                label=completion
+            ) for completion in completions)
+        )
 
+    return None
 
 if __name__ == "__main__":
     server.start_io()
