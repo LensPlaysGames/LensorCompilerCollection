@@ -34,3 +34,4 @@ Checks: <
     -*non-private-member-variables-in-classes
     -misc-no-recursion
     -*avoid-do-while*
+    -cppcoreguidelines-owning-memory
