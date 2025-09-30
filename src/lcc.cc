@@ -176,11 +176,28 @@ auto main(int argc, const char** argv) -> int {
     }
 
     auto ConvertFileExtensionToOutputFormat = [&](const std::string& path_string) {
-        const char* replacement = ".s";
-        if (context.format()->format() == lcc::Format::LLVM_TEXTUAL_IR)
-            replacement = ".ll";
-        if (context.format()->format() == lcc::Format::ELF_OBJECT or context.format()->format() == lcc::Format::COFF_OBJECT)
-            replacement = ".o";
+        const char* replacement = "";
+        switch (context.format()->format()) {
+            case lcc::Format::INVALID:
+                LCC_UNREACHABLE();
+
+            case lcc::Format::LCC_IR:
+                replacement = ".lcc";
+                break;
+
+            case lcc::Format::LLVM_TEXTUAL_IR:
+                replacement = ".ll";
+                break;
+
+            case lcc::Format::GNU_AS_ATT_ASSEMBLY:
+                replacement = ".s";
+                break;
+
+            case lcc::Format::ELF_OBJECT:
+            case lcc::Format::COFF_OBJECT:
+                replacement = ".o";
+                break;
+        }
 
         return std::filesystem::path{path_string}
             .replace_extension(replacement)
