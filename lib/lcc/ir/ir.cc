@@ -133,52 +133,52 @@ usz Type::align_bytes() const {
 }
 
 auto Type::string(bool use_colour) const -> std::string {
-    using enum utils::Colour;
+    using P = lcc::IRColourPalette;
     utils::Colours C{use_colour};
     switch (kind) {
-        case Kind::Unknown: return fmt::format("{}<?>{}", C(Cyan), C(Reset));
-        case Kind::Pointer: return fmt::format("{}ptr{}", C(Cyan), C(Reset));
-        case Kind::Void: return fmt::format("{}void{}", C(Cyan), C(Reset));
+        case Kind::Unknown: return fmt::format("{}<?>{}", C(P::Type), C(P::Reset));
+        case Kind::Pointer: return fmt::format("{}ptr{}", C(P::Type), C(P::Reset));
+        case Kind::Void: return fmt::format("{}void{}", C(P::Type), C(P::Reset));
 
         case Kind::Array: {
             auto arr = as<ArrayType>(this);
             return fmt::format(
                 "{}{}[{}{}{}]{}",
                 arr->element_type()->string(use_colour),
-                C(Red),
-                C(Magenta),
+                C(P::Filler),
+                C(P::Literal),
                 arr->length(),
-                C(Red),
-                C(Reset)
+                C(P::Filler),
+                C(P::Reset)
             );
         }
 
         case Kind::Integer: {
             auto integer = as<IntegerType>(this);
-            return fmt::format("{}i{}{}", C(Cyan), integer->bitwidth(), C(Reset));
+            return fmt::format("{}i{}{}", C(P::Type), integer->bitwidth(), C(P::Reset));
         }
 
         case Kind::Function: {
             auto f = as<FunctionType>(this);
             auto ToString = [&](auto t) { return t->string(use_colour); };
-            auto separator = fmt::format("{}, ", C(Red));
-            auto variadic = f->variadic() ? fmt::format(" {}variadic", C(Red)) : "";
+            auto separator = fmt::format("{}, ", C(P::Filler));
+            auto variadic = f->variadic() ? fmt::format(" {}variadic", C(P::Filler)) : "";
             return fmt::format(
                 "{}{}({}{}){}{}",
                 f->ret()->string(use_colour),
-                C(Red),
+                C(P::Filler),
                 fmt::join(vws::transform(f->params(), ToString), separator),
-                C(Red),
+                C(P::Filler),
                 variadic,
-                C(Reset)
+                C(P::Reset)
             );
         }
 
         // TODO: name, if it has one; otherwise, all the member types.
         case Kind::Struct: {
             auto s = as<StructType>(this);
-            if (s->named()) return fmt::format("{}{}{}", C(Green), s->name(), C(Reset));
-            return fmt::format("{}__struct_{}{}", C(Green), s->index(), C(Reset));
+            if (s->named()) return fmt::format("{}{}{}", C(P::Name), s->name(), C(P::Reset));
+            return fmt::format("{}__struct_{}{}", C(P::Name), s->index(), C(P::Reset));
         }
     }
     LCC_UNREACHABLE();
@@ -570,36 +570,39 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     using IRPrinter::IRPrinter;
 
     void PrintHeader(Module* mod) {
-        using enum utils::Colour;
-        Print("{}; LCC Module '{}'{}\n", C(White), mod->name(), C(Reset));
+        Print("{}; LCC Module '{}'{}\n", C(P::Comment), mod->name(), C(P::Reset));
     }
 
     std::string Ty(Type* ty) {
-        using enum utils::Colour;
         if (auto struct_type = cast<StructType>(ty)) {
-            return fmt::format("{}@{}{}", C(Green), struct_type->string(false), C(Reset));
+            return fmt::format(
+                "{}@{}{}",
+                C(P::Name),
+                struct_type->string(false),
+                C(P::Reset)
+            );
         } else if (auto arr = cast<ArrayType>(ty)) {
             return fmt::format(
                 "{}{}[{}{}{}]{}",
                 Ty(arr->element_type()),
-                C(Red),
-                C(Magenta),
+                C(P::Filler),
+                C(P::Literal),
                 arr->length(),
-                C(Red),
-                C(Reset)
+                C(P::Filler),
+                C(P::Reset)
             );
         } else if (auto f = cast<FunctionType>(ty)) {
             auto ToString = [&](auto t) { return Ty(t); };
-            auto separator = fmt::format("{}, ", C(Red));
-            auto variadic = f->variadic() ? fmt::format(" {}variadic", C(Red)) : "";
+            auto separator = fmt::format("{}, ", C(P::Filler));
+            auto variadic = f->variadic() ? fmt::format(" {}variadic", C(P::Filler)) : "";
             return fmt::format(
                 "{}{}({}{}){}{}",
                 Ty(f->ret()),
-                C(Red),
+                C(P::Filler),
                 fmt::join(vws::transform(f->params(), ToString), separator),
-                C(Red),
+                C(P::Filler),
                 variadic,
-                C(Reset)
+                C(P::Reset)
             );
         }
 
@@ -612,22 +615,22 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
         Print(
             "{}struct {}{}{} {{",
-            C(Red),
-            C(Green),
+            C(P::Filler),
+            C(P::Name),
             struct_name,
-            C(Red)
+            C(P::Filler)
         );
 
         if (not struct_type->members().empty()) {
             bool first = true;
             for (auto [i, member] : vws::enumerate(struct_type->members())) {
                 if (first) first = false;
-                else Print("{},", C(Red));
+                else Print("{},", C(P::Filler));
                 Print(" {}", Ty(member));
             }
         }
 
-        Print(" {}}}{}\n", C(Red), C(Reset));
+        Print(" {}}}{}\n", C(P::Filler), C(P::Reset));
     }
 
     /// Print the function signature.
@@ -635,35 +638,33 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         auto ftype = as<FunctionType>(f->type());
         for (auto n : f->names()) {
             if (n.name != f->names().at(0).name)
-                Print("{}, ", C(White));
+                Print("{}, ", C(P::Name));
             Print(
                 "{}{} {}({})",
-                C(Green),
+                C(P::Name),
                 n.name,
-                C(Red),
+                C(P::Filler),
                 StringifyEnum(n.linkage)
             );
         }
         Print(
             ": {}{} {}{}(",
-            C(Red),
+            C(P::Filler),
             StringifyEnum(f->call_conv()),
             Ty(ftype->ret()),
-            C(Red)
+            C(P::Filler)
         );
 
         bool first = true;
         for (auto [i, arg] : vws::enumerate(ftype->params())) {
             if (first) first = false;
-            else Print("{}, ", C(Red));
-            Print("{} {}%{}", Ty(arg), C(TempColour), i);
+            else Print("{}, ", C(P::Filler));
+            Print("{} {}%{}", Ty(arg), C(P::Temp), i);
         }
 
-        Print("{})", C(Red));
+        Print("{})", C(P::Filler));
 
-        if (ftype->variadic()) {
-            Print(" {}variadic", C(Red));
-        }
+        if (ftype->variadic()) Print(" {}variadic", C(P::Filler));
     }
 
     /// Print start/end of function body.
@@ -672,7 +673,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     /// Print the start of a temporary.
     void PrintTemp(Inst* i) {
-        Print("    {}%{} {}= {}", C(TempColour), Index(i), C(Red), C(Yellow));
+        Print("    {}%{} {}= {}", C(P::Temp), Index(i), C(P::Filler), C(P::Opcode));
     };
 
     /// Print a cast instruction.
@@ -683,7 +684,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             "{} {} {}to {}",
             mnemonic,
             Val(c->operand(), true),
-            C(Red),
+            C(P::Filler),
             Ty(c->type())
         );
     }
@@ -696,7 +697,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             "{} {}{}, {}",
             mnemonic,
             Val(b->lhs(), true),
-            C(Red),
+            C(P::Filler),
             Val(b->rhs(), false)
         );
     };
@@ -733,27 +734,27 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 auto* c = as<CallInst>(i);
                 auto* callee_ty = as<FunctionType>(c->callee()->type());
                 if (not callee_ty->ret()->is_void()) PrintTemp(i);
-                else Print("    {}", C(Yellow));
+                else Print("    {}", C(P::Opcode));
                 Print(
                     "{}call{}{} {} {}(",
                     c->is_tail_call() ? "tail "sv : ""sv,
                     c->call_conv() == CallConv::C ? ""sv : " "sv,
                     c->call_conv() == CallConv::C ? ""sv : StringifyEnum(c->call_conv()),
                     Val(c->callee(), false),
-                    C(Red)
+                    C(P::Filler)
                 );
 
                 bool first = true;
                 for (auto* arg : c->args()) {
                     if (first) first = false;
-                    else Print("{}, ", C(Red));
+                    else Print("{}, ", C(P::Filler));
                     Print("{}", Val(arg));
                 }
 
-                auto variadic = callee_ty->variadic() ? fmt::format(" {}variadic", C(Red)) : "";
+                auto variadic = callee_ty->variadic() ? fmt::format(" {}variadic", C(P::Filler)) : "";
 
-                if (callee_ty->ret()->is_void()) Print("{}){}", C(Red), variadic);
-                else Print("{}){} -> {}", C(Red), variadic, Ty(callee_ty->ret()));
+                if (callee_ty->ret()->is_void()) Print("{}){}", C(P::Filler), variadic);
+                else Print("{}){} -> {}", C(P::Filler), variadic, Ty(callee_ty->ret()));
                 return;
             }
 
@@ -763,9 +764,9 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 Print(
                     "gep {} {}from {} {}at {}",
                     Ty(gep->base_type()),
-                    C(Red),
+                    C(P::Filler),
                     Val(gep->ptr(), false),
-                    C(Red),
+                    C(P::Filler),
                     Val(gep->idx())
                 );
                 return;
@@ -777,9 +778,9 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 Print(
                     "gmp {} {}from {} {}at {}",
                     Ty(gmp->struct_type()),
-                    C(Red),
+                    C(P::Filler),
                     Val(gmp->ptr(), false),
-                    C(Red),
+                    C(P::Filler),
                     Val(gmp->idx())
                 );
                 return;
@@ -794,15 +795,15 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                     case IntrinsicKind::MemCopy: {
                         Print(
                             "    {}intrinsic {}@memcpy{}({}{}, {}{}, {}{})",
-                            C(Yellow),
-                            C(Green),
-                            C(Red),
+                            C(P::Opcode),
+                            C(P::Name),
+                            C(P::Filler),
                             Val(operands[0]),
-                            C(Red),
+                            C(P::Filler),
                             Val(operands[1]),
-                            C(Red),
+                            C(P::Filler),
                             Val(operands[2]),
-                            C(Red)
+                            C(P::Filler)
                         );
                         return;
                     }
@@ -815,7 +816,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 Print(
                     "load {} {}from {}",
                     Ty(load->type()),
-                    C(Red),
+                    C(P::Filler),
                     Val(load->ptr(), false)
                 );
                 return;
@@ -823,15 +824,15 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
             case Value::Kind::Phi: {
                 auto* phi = as<PhiInst>(i);
-                const auto separator = fmt::format("{}, ", C(Red));
+                const auto separator = fmt::format("{}, ", C(P::Filler));
                 const auto FormatPHIVal = [this](auto& val) {
                     return fmt::format(
                         "{}[{} {}: {}{}]",
-                        C(Red),
+                        C(P::Filler),
                         Val(val.block, false),
-                        C(Red),
+                        C(P::Filler),
                         Val(val.value, false),
-                        C(Red)
+                        C(P::Filler)
                     );
                 };
 
@@ -839,7 +840,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 Print(
                     "phi {}{}, {}",
                     Ty(phi->type()),
-                    C(Red),
+                    C(P::Filler),
                     fmt::join(vws::transform(phi->operands(), FormatPHIVal), separator)
                 );
                 return;
@@ -849,9 +850,9 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 auto* store = as<StoreInst>(i);
                 Print(
                     "    {}store {} {}into {}",
-                    C(Yellow),
+                    C(P::Opcode),
                     Val(store->val()),
-                    C(Red),
+                    C(P::Filler),
                     Val(store->ptr(), false)
                 );
                 return;
@@ -862,8 +863,8 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 auto* branch = as<BranchInst>(i);
                 Print(
                     "    {}branch {}to {}",
-                    C(Yellow),
-                    C(Red),
+                    C(P::Opcode),
+                    C(P::Filler),
                     Val(branch->target(), false)
                 );
                 return;
@@ -873,12 +874,12 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 auto* branch = as<CondBranchInst>(i);
                 Print(
                     "    {}branch {}on {} {}to {} {}else {}",
-                    C(Yellow),
-                    C(Red),
+                    C(P::Opcode),
+                    C(P::Filler),
                     Val(branch->cond(), false),
-                    C(Red),
+                    C(P::Filler),
                     Val(branch->then_block(), false),
-                    C(Red),
+                    C(P::Filler),
                     Val(branch->else_block(), false)
                 );
                 return;
@@ -886,13 +887,13 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
             case Value::Kind::Return: {
                 auto* ret = as<ReturnInst>(i);
-                if (ret->val()) Print("    {}return {}", C(Yellow), Val(ret->val()));
-                else Print("    {}return", C(Yellow));
+                if (ret->val()) Print("    {}return {}", C(P::Opcode), Val(ret->val()));
+                else Print("    {}return", C(P::Opcode));
                 return;
             }
 
             case Value::Kind::Unreachable: {
-                Print("    {}unreachable", C(Yellow));
+                Print("    {}unreachable", C(P::Opcode));
                 return;
             }
 
@@ -950,10 +951,10 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         bool imported{false};
         for (const auto& n : v->names()) {
             if (n.name != v->names().front().name)
-                Print("{}, ", C(White));
+                Print("{}, ", C(P::Name));
             Print(
                 "{}{}",
-                C(TempColour),
+                C(P::Temp),
                 n.name
             );
             if (IsImportedLinkage(n.linkage))
@@ -961,9 +962,9 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         }
         Print(
             " {}: {} {}",
-            C(Red),
+            C(P::Filler),
             Ty(v->allocated_type()),
-            C(Red)
+            C(P::Filler)
         );
 
         if (imported) {
@@ -972,7 +973,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         }
 
         if (v->init()) Print("= {}\n", Val(v->init(), false));
-        else Print("= {}0\n", C(Magenta));
+        else Print("= {}0\n", C(P::Literal));
     }
 
     /// Get the inline representation of a value.
@@ -995,34 +996,34 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
         switch (v->kind()) {
             case Value::Kind::Function:
-                return Format("{}@{}", C(Green), as<Function>(v)->names().at(0).name);
+                return Format("{}@{}", C(P::Name), as<Function>(v)->names().at(0).name);
 
             case Value::Kind::IntegerConstant:
-                return Format("{}{}", C(Magenta), as<IntegerConstant>(v)->value());
+                return Format("{}{}", C(P::Literal), as<IntegerConstant>(v)->value());
 
             case Value::Kind::Poison:
-                return Format("{}poison", C(Red));
+                return Format("{}poison", C(P::Filler));
 
             case Value::Kind::Parameter:
-                return Format("{}%{}", C(TempColour), as<Parameter>(v)->index());
+                return Format("{}%{}", C(P::Temp), as<Parameter>(v)->index());
 
             case Value::Kind::Block: {
                 return fmt::format(
                     "{}{}{}%bb{}",
-                    C(Cyan),
+                    C(P::Type),
                     include_type ? "block " : "",
-                    C(BlockColour),
+                    C(P::Block),
                     Index(as<Block>(v))
                 );
             }
 
             case Value::Kind::GlobalVariable: {
                 std::string val;
-                if (include_type) fmt::format_to(It(val), "{}ptr ", C(Cyan));
+                if (include_type) fmt::format_to(It(val), "{}ptr ", C(P::Type));
                 fmt::format_to(
                     It(val),
                     "{}@{}",
-                    C(TempColour),
+                    C(P::Temp),
                     as<GlobalVariable>(v)->names().at(0).name
                 );
                 return val;
@@ -1041,25 +1042,29 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                     };
 
                     return Format(
-                        "{}\"{}\"",
-                        C(Yellow),
+                        "{}\"{}\"{}",
+                        C(P::Literal),
                         fmt::join(
                             std::span<const char>(a->data(), a->size()) | vws::transform(FormatChar),
                             ""
-                        )
+                        ),
+                        C(P::Reset)
                     );
                 }
 
                 // Array
                 return Format(
                     "{}[{}{}{}]",
-                    C(Red),
-                    C(Magenta),
+                    C(P::Filler),
+                    C(P::Literal),
                     fmt::join(
-                        std::span<const u8>(reinterpret_cast<const u8*>(a->data()), a->size()),
+                        std::span<const u8>(
+                            reinterpret_cast<const u8*>(a->data()),
+                            a->size()
+                        ),
                         " "
                     ),
-                    C(Red)
+                    C(P::Reset)
                 );
             }
 
@@ -1118,7 +1123,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::ULe:
             case Value::Kind::UGt:
             case Value::Kind::UGe:
-                return Format("{}%{}", C(TempColour), Index(as<Inst>(v)));
+                return Format("{}%{}", C(P::Temp), Index(as<Inst>(v)));
 
             /// These do not yield a value.
             case Value::Kind::Store:

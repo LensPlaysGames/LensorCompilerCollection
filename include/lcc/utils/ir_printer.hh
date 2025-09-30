@@ -12,6 +12,27 @@
 #include <utility>
 
 namespace lcc {
+// Colour Palette
+struct IRColourPalette {
+    using enum utils::Colour;
+    // A color to use to write filler syntax, "unimportant" symbols, etc.
+    static constexpr auto Filler = NormalWhite;
+    // A color to use to write comments (beginning with ';')
+    static constexpr auto Comment = NormalWhite;
+    // A color to use to write names of declarations
+    static constexpr auto Name = BoldDefault;
+    // A color to use to write instruction opcodes (like store)
+    static constexpr auto Opcode = NormalDefault;
+    // A color to use to write the names of temporaries (like '%0')
+    static constexpr auto Temp = BoldBlue;
+    // A color to use to write the names of basic blocks (like 'bb0')
+    static constexpr auto Block = NormalDefault;
+    // A color to use to represent types
+    static constexpr auto Type = BoldCyan;
+    // A color to use to write literal data
+    static constexpr auto Literal = BoldMagenta;
+};
+
 template <typename Derived, usz block_indent>
 class IRPrinter {
 private:
@@ -33,13 +54,10 @@ public:
 protected:
     explicit IRPrinter(bool use_colour) : _use_colour(use_colour) {}
 
+    using P = IRColourPalette;
+
     bool _use_colour;
     utils::Colours C{_use_colour};
-    using enum utils::Colour;
-
-    /// Couldn’t decide on a colour for temporaries, so...
-    static constexpr auto TempColour = utils::Colour::Blue;
-    static constexpr auto BlockColour = utils::Colour::Green;
 
     /// Get the index of a block.
     auto Index(Block* b) const -> isz {
@@ -71,14 +89,14 @@ protected:
     /// Emit a block and its containing instructions.
     void PrintBlock(Block* b) {
         for (usz i = 0; i < block_indent; i++) s += ' ';
-        Print("{}bb{}{}:\n", C(BlockColour), block_indices[b], C(Red));
+        Print("{}bb{}{}:\n", C(P::Block), block_indices[b], C(P::Filler));
         for (auto inst : b->instructions()) {
             This()->PrintInst(inst);
             s += '\n';
         }
     }
 
-    /// Emit a function definition or declaration as LLVM IR.
+    /// Emit a function definition or declaration.
     void PrintFunction(Function* f) {
         /// Print function signature.
         tmp = isz(f->param_count());
@@ -99,17 +117,17 @@ protected:
     [[nodiscard]]
     auto PrintModule(Module* mod) -> std::string {
         This()->PrintHeader(mod);
-        for (auto struct_type : mod->context()->struct_types) This()->PrintStructType(struct_type);
-        if (not mod->context()->struct_types.empty()) s += '\n';
-        for (auto var : mod->vars()) This()->PrintGlobal(var);
-        if (not mod->vars().empty()) s += '\n';
-        bool first = true;
-        for (auto f : mod->code()) {
-            if (first) first = false;
-            else s += '\n';
+        for (auto struct_type : mod->context()->struct_types)
+            This()->PrintStructType(struct_type);
+        if (not mod->context()->struct_types.empty())
+            s += '\n';
+        for (auto var : mod->vars())
+            This()->PrintGlobal(var);
+        if (not mod->vars().empty())
+            s += '\n';
+        for (auto f : mod->code())
             PrintFunction(f);
-        }
-        s += C(Reset);
+        s += C(P::Reset);
         return std::move(s);
     }
 
