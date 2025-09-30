@@ -452,7 +452,9 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 return true;
 
             /// Instructions that may yield a value.
-            case Value::Kind::Call: return as<CallInst>(i)->type() != Type::VoidTy;
+            case Value::Kind::Call:
+                return as<CallInst>(i)->type() != Type::VoidTy;
+
             case Value::Kind::Intrinsic: {
                 auto intrinsic = as<IntrinsicInst>(i);
                 switch (intrinsic->intrinsic_kind()) {
@@ -480,7 +482,10 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
 
     /// Format a name for use in LLVM IR.
     auto FormatName(std::string_view name) -> std::string {
-        auto printable = rgs::none_of(name, [](auto c) { return std::isspace(c); });
+        auto printable = rgs::none_of(
+            name,
+            [](auto c) { return std::isspace(c); }
+        );
         if (printable) return fmt::format("@{}", name);
         else return fmt::format("@\"{}\"", name);
     };
@@ -654,6 +659,6 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
 } // namespace
 } // namespace lcc
 
-auto lcc::Module::llvm() -> std::string {
+auto lcc::Module::as_llvm_ir() -> std::string {
     return LLVMIRPrinter::Print(this, false);
 }

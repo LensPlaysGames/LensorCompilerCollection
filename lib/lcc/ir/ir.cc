@@ -1244,8 +1244,8 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 };
 } // namespace
 
-void Module::print_ir(bool use_colour) {
-    fmt::print(
+auto Module::as_lcc_ir(bool use_colour) -> std::string {
+    return fmt::format(
         "{}{}",
         LCCIRPrinter::Print(this, use_colour),
         lcc::utils::Colours{use_colour}(lcc::utils::Colour::Reset)

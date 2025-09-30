@@ -232,7 +232,8 @@ void Module::lower() {
                                             x86_64::GeneralPurposeBitwidth
                                         ),
                                         byte_count
-                                    )};
+                                    )
+                                };
                                 auto memcpy_inst = new (*this) IntrinsicInst(
                                     IntrinsicKind::MemCopy,
                                     memcpy_operands,
@@ -292,7 +293,8 @@ void Module::lower() {
                                 new (*this) IntegerConstant(
                                     IntegerType::Get(context(), x86_64::GeneralPurposeBitwidth),
                                     byte_count
-                                )};
+                                )
+                            };
                             auto* memcpy_inst = new (*this) IntrinsicInst(
                                 IntrinsicKind::MemCopy,
                                 memcpy_operands,
@@ -313,20 +315,23 @@ void Module::lower() {
 }
 
 void Module::emit(std::filesystem::path output_file_path) {
+    bool to_stdout = output_file_path.empty() or output_file_path == "-";
     switch (_ctx->format()->format()) {
         case Format::INVALID: LCC_UNREACHABLE();
 
         case Format::LCC_IR: {
-            // FIXME: Whoever made this only work on stdout is dumb.
-            fmt::print("; We are currently stupid about things and can only print IR to stdout (sorry)\n");
-            print_ir(false);
+            if (to_stdout)
+                fmt::print("{}", as_lcc_ir(context()->option_use_colour()));
+            else {
+                auto lcc_ir = as_lcc_ir(false);
+                File::WriteOrTerminate(lcc_ir.data(), lcc_ir.size(), output_file_path);
+            }
         } break;
 
         case Format::LLVM_TEXTUAL_IR: {
-            auto llvm_ir = llvm();
-            if (output_file_path.empty() || output_file_path == "-")
-                fmt::print("{}", llvm_ir);
-            else File::WriteOrTerminate(llvm_ir.c_str(), llvm_ir.size(), output_file_path);
+            auto llvm_ir = as_llvm_ir();
+            if (to_stdout) fmt::print("{}", llvm_ir);
+            else File::WriteOrTerminate(llvm_ir.data(), llvm_ir.size(), output_file_path);
         } break;
 
         case Format::COFF_OBJECT:

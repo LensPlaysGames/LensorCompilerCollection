@@ -473,8 +473,7 @@ void emit_gnu_att_assembly(
 
     out += ".section .note.GNU-stack\n";
 
-    if (output_path == "-")
-        fmt::print("{}", out);
+    if (output_path.empty() or output_path == "-") fmt::print("{}", out);
     else File::WriteOrTerminate(out.data(), out.size(), output_path);
 }
 

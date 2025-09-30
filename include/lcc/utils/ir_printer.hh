@@ -25,6 +25,7 @@ private:
 
 public:
     /// Entry point.
+    [[nodiscard]]
     static auto Print(Module* mod, bool use_colour) -> std::string {
         return IRPrinter{use_colour}.PrintModule(mod);
     }
@@ -95,6 +96,7 @@ protected:
         This()->ExitFunctionBody(f);
     }
 
+    [[nodiscard]]
     auto PrintModule(Module* mod) -> std::string {
         This()->PrintHeader(mod);
         for (auto struct_type : mod->context()->struct_types) This()->PrintStructType(struct_type);

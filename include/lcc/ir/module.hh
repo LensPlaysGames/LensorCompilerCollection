@@ -54,13 +54,16 @@ public:
     [[nodiscard]]
     auto mir() -> std::vector<MFunction>;
 
-    /// Emit the module as LLVM IR.
+    /// Emit the module as Textual LLVM IR.
+    /// NOTE: LLVM's Textual IR Representation is not guaranteed, so your
+    /// particular version of LLVM may not be happy compiling our particular
+    /// dialect of their textual representation.
     [[nodiscard]]
-    auto llvm() -> std::string;
+    auto as_llvm_ir() -> std::string;
 
-    /// Print the IR of this module.
-    // TODO: return string
-    void print_ir(bool use_colour);
+    /// Get the textual LCC IR of this module.
+    [[nodiscard]]
+    auto as_lcc_ir(bool use_colour) -> std::string;
 
     [[nodiscard]]
     auto code() -> std::vector<Function*>& { return _code; }

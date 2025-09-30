@@ -193,27 +193,23 @@ auto main(int argc, const char** argv) -> int {
 
         if (not options.optimisation_passes.empty()) {
             lcc::opt::RunPasses(m, options.optimisation_passes);
-            if (options.ir) m->print_ir(use_colour);
+            if (options.ir) fmt::print("{}", m->as_lcc_ir(use_colour));
         }
 
         if (options.ir)
-            m->print_ir(use_colour);
+            fmt::print("{}", m->as_lcc_ir(use_colour));
 
         // NOTE: Only apply full optimisation if specific passes were not requested.
         if (options.optimisation and options.optimisation_passes.empty())
             lcc::opt::Optimise(m, int(options.optimisation));
 
-        if (options.ir) {
-            fmt::print("\nAfter Optimisations:\n");
-            m->print_ir(use_colour);
-        }
+        if (options.ir)
+            fmt::print("\nAfter Optimisations:\n{}", m->as_lcc_ir(use_colour));
 
         m->lower();
 
-        if (options.ir) {
-            fmt::print("\nAfter Lowering:\n");
-            m->print_ir(use_colour);
-        }
+        if (options.ir)
+            fmt::print("\nAfter Lowering:\n{}", m->as_lcc_ir(use_colour));
 
         if (options.stopat_ir) return;
 

@@ -81,7 +81,7 @@ constexpr auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
 
 auto Module::mir() -> std::vector<MFunction> {
     if (_ctx->option_print_mir())
-        print_ir(_ctx->option_use_colour());
+        fmt::print("{}", as_lcc_ir(_ctx->option_use_colour()));
 
     // Begin MIR generation by assigning virtual registers to each and every
     // value in the IR. While the IR can reference the direct result of a
@@ -1201,7 +1201,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     MBlock* phi_operand_block{};
                     for (const auto& op : minst.all_operands()) {
                         // Phi's operands are arranged in groups of two in the form of <block, value>.
-                        if (!block) {
+                        if (not block) {
                             block = std::get<MOperandBlock>(op);
                             phi_operand_block = block->machine_block();
                             LCC_ASSERT(phi_operand_block, "Cannot phi2copy block that has no corresponding machine block");
