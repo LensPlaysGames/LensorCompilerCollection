@@ -571,6 +571,7 @@ auto lcc::glint::Parser::ParseDeclRest(
             );
 
             // Declarations that use type inference cannot have certain storage specifiers.
+            // FIXME: Is this syntactic or semantic?
             if (is_external) Error(cc_loc, "Type-inferred declarations cannot be made external");
             return DeclScope(var->linkage() == Linkage::LocalVar)->declare(context, std::move(ident), var);
         }
@@ -741,6 +742,8 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             if (not exprs) return exprs.diag();
 
             auto& e = *exprs;
+            // FIXME: We currently don't have "expression list" implemented, so we use
+            // a call to store everything until Sema.
             lhs = new (*mod) CallExpr(
                 new (*mod) NameRefExpr("__glintprint", GlobalScope(), loc),
                 e,

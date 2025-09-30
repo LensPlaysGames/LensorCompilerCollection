@@ -2833,7 +2833,6 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
     // it was expanded from).
     // TODO: We probably want to keep track of expanded templates, at least
     // for location purposes in diagnostics.
-    //     template(x : expr) ()
     body->location((*expr_ptr)->location());
     // Replace call with expanded template body
     *expr_ptr = body;
@@ -3337,7 +3336,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         if (not expr->args().empty()) {
             auto callee_location = expr->callee()->location();
             auto first_arg_location = expr->args()[0]->location();
-            if (callee_location.is_valid() and first_arg_location.is_valid()) {
+            if (callee_location.seekable(context) and first_arg_location.seekable(context)) {
                 auto callee_location_info = callee_location.seek_line_column(context);
                 auto first_arg_location_info = first_arg_location.seek_line_column(context);
                 if (callee_location_info.line != first_arg_location_info.line) {
