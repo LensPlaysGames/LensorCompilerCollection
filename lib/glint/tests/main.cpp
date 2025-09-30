@@ -109,10 +109,11 @@ struct GlintTest : langtest::Test {
                             ir_matches = false;
 
                             fmt::print(
-                                "IR MISMATCH: Expected function {} to be in IR, but didn't find it\n",
-                                expected_func->names().at(0).name
+                                "IR MISMATCH: Expected function {} to be in IR, but didn't find it\n"
+                                "{}",
+                                expected_func->names().at(0).name,
+                                got_ir->as_lcc_ir(true)
                             );
-                            got_ir->print_ir(true);
 
                             // Stop iterating IR functions since they already don't match.
                             break;
