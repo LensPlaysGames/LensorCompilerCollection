@@ -68,15 +68,27 @@ bool invalid(const DeclInfo& d) {
 }
 
 DeclInfo findDeclImpl(lcc::glint::Module& m, lcc::Context* ctx, std::string_view name, lcc::glint::Expr* e) {
+    if (not e) return {};
+
     if (e->name() == name) {
-        return {
-            {py_location(ctx, {e->location(), e->type()->location()}),
-             py_location(ctx, e->location()),
-             py_location(ctx, e->type()->location()),
-             *m.ToSource(*e->type())
-            },
-            e
-        };
+        if (e->type()) {
+            return {
+                {py_location(ctx, {e->location(), e->type()->location()}),
+                 py_location(ctx, e->location()),
+                 py_location(ctx, e->type()->location()),
+                 *m.ToSource(*e->type())
+                },
+                e
+            };
+        } else {
+            return {
+                {//
+                 py_location(ctx, e->location()),
+                 py_location(ctx, e->location())
+                },
+                e
+            };
+        }
     }
     for (auto* c : e->children()) {
         if (auto l = findDeclImpl(m, ctx, name, c); not invalid(l))
@@ -122,11 +134,13 @@ std::vector<std::string> getValidTypeConstituents(lcc::glint::Type* t) {
         case lcc::glint::Type::Kind::Pointer:
         case lcc::glint::Type::Kind::Reference:
         case lcc::glint::Type::Kind::Array:
-        case lcc::glint::Type::Kind::ArrayView:
         case lcc::glint::Type::Kind::Function:
         case lcc::glint::Type::Kind::Integer:
         case lcc::glint::Type::Kind::Named:
             return {};
+
+        case lcc::glint::Type::Kind::ArrayView:
+            return getValidTypeConstituents(lcc::as<lcc::glint::ArrayViewType>(t)->struct_type());
 
         case lcc::glint::Type::Kind::DynamicArray:
             return getValidTypeConstituents(lcc::as<lcc::glint::DynamicArrayType>(t)->struct_type());
@@ -195,9 +209,9 @@ std::vector<std::string> getCompletions(std::string source, std::string name) {
     // Replace named types with what they were before, etc
     lcc::glint::Sema::Analyse(&context, *m);
 
-    auto decl_info
-        = findDeclImpl(*m, &context, name, m->top_level_function()->body());
-    if (not invalid(decl_info))
+    auto decl_info = findDeclImpl(*m, &context, name, m->top_level_function()->body());
+
+    if (decl_info.decl and decl_info.decl->type())
         return getValidTypeConstituents(decl_info.decl->type());
 
     return {};
