@@ -187,6 +187,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
         case K::VarDecl: {
             const auto& decl = as<VarDecl>(expr);
+            if (is<TemplateExpr>(decl->init())) {
+                // named template is a no-op
+                return;
+            }
             switch (decl->linkage()) {
                 case Linkage::LocalVar: {
                     auto* alloca = new (*module) AllocaInst(
