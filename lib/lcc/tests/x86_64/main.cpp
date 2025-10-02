@@ -245,14 +245,284 @@ bool run_test(MIRMatcher& matcher, std::string_view test_source, int optimise_le
             allocate_registers(desc, mfunc);
     }
 
-    // for (auto& mir_f : machine_ir) {
-    //     fmt::print(
-    //         "{}",
-    //         PrintMFunctionImpl(mir_f, lcc::x86_64::opcode_to_string)
-    //     );
-    // }
+    for (auto& mir_f : machine_ir) {
+        fmt::print(
+            "{}",
+            PrintMFunctionImpl(mir_f, lcc::x86_64::opcode_to_string)
+        );
+    }
 
     return matcher.match(machine_ir);
+}
+
+[[nodiscard]]
+MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::usz& offset) {
+    auto ToNewline = [&]() {
+        // Eat everything until '\n'
+        while (offset < contents.size() and contents[offset] != '\n')
+            ++offset;
+    };
+
+    // Move 'i' to the offset of the beginning of the next non-empty line
+    auto ToBeginningOfNextLine = [&]() {
+        // Eat everything until '\n' (nothing if at '\n')
+        ToNewline();
+        // Eat all consecutive '\n'
+        while (offset < contents.size() and contents[offset] == '\n')
+            ++offset;
+    };
+
+    auto ToWhitespace = [&]() {
+        while (offset < contents.size() and not isspace(contents[offset]))
+            ++offset;
+    };
+
+    auto SkipWhitespaceWithinLine = [&]() {
+        // Skip all whitespace except newline
+        while (offset < contents.size() and isspace(contents[offset]) and contents[offset] != '\n')
+            ++offset;
+    };
+
+    MIRInstructionMatcher out{};
+
+    auto instruction_opcode_begin = offset;
+    ToWhitespace();
+    std::string instruction_opcode{
+        contents.begin() + lcc::isz(instruction_opcode_begin),
+        contents.begin() + lcc::isz(offset),
+    };
+    SkipWhitespaceWithinLine();
+
+    // TODO: Translate parsed instruction opcodes into x86_64 opcode values.
+
+    // Parse operands (until newline)
+    while (offset < contents.size() and contents[offset] != '\n') {
+        // TODO: Parse clobber list, if present
+        if (contents[offset] == '{') {
+            // Eat '{'
+            ++offset;
+
+            LCC_TODO("Parse clobber list");
+        }
+
+        auto operand_begin = offset;
+        ToWhitespace();
+        std::string operand{
+            contents.begin() + lcc::isz(operand_begin),
+            contents.begin() + lcc::isz(offset)
+        };
+        SkipWhitespaceWithinLine();
+
+        if (operand.starts_with("r")) {
+            lcc::Register r{};
+
+            if (operand.starts_with("rdi"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::RDI);
+            else if (operand.starts_with("rsi"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::RSI);
+            else if (operand.starts_with("rax"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::RAX);
+            else if (operand.starts_with("rbx"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::RBX);
+            else if (operand.starts_with("rcx"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::RCX);
+            else if (operand.starts_with("rdx"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::RDX);
+            else if (operand.starts_with("rbp"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::RBP);
+            else if (operand.starts_with("rsp"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::RSP);
+            else if (operand.starts_with("rip"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::RIP);
+            else if (operand.starts_with("r8"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::R8);
+            else if (operand.starts_with("r9"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::R9);
+            else if (operand.starts_with("r10"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::R10);
+            else if (operand.starts_with("r11"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::R11);
+            else if (operand.starts_with("r12"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::R12);
+            else if (operand.starts_with("r13"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::R13);
+            else if (operand.starts_with("r14"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::R14);
+            else if (operand.starts_with("r15"))
+                r.value = lcc::operator+(lcc::x86_64::RegisterId::R15);
+
+            if (operand.ends_with(".64"))
+                r.size = 64;
+            else if (operand.ends_with(".32"))
+                r.size = 32;
+            else if (operand.ends_with(".16"))
+                r.size = 16;
+            else if (operand.ends_with(".8"))
+                r.size = 8;
+
+            out.operands.emplace_back(lcc::MOperandRegister(r));
+        }
+
+        fmt::print("Parsed instruction operand={}\n", operand);
+    }
+
+    // TODO: Translate parsed register operands into MIR Registers.
+
+    fmt::print("Parsed instruction opcode={}\n", instruction_opcode);
+
+    // Move parse state to beginning of next line following successful parsing
+    // of an instruction.
+    ToBeginningOfNextLine();
+
+    return out;
+}
+
+[[nodiscard]]
+MIRBlockMatcher parse_block_matcher(std::span<char> contents, lcc::usz& offset) {
+    auto ConsumeFourSpaces = [&]() {
+        if (offset + 3 < contents.size() and contents[offset + 3] != ' ')
+            return false;
+        if (offset + 2 < contents.size() and contents[offset + 2] != ' ')
+            return false;
+        if (offset + 1 < contents.size() and contents[offset + 1] != ' ')
+            return false;
+        if (offset < contents.size() and contents[offset] != ' ')
+            return false;
+        offset += 4;
+        return true;
+    };
+
+    auto ToNewline = [&]() {
+        // Eat everything until '\n'
+        while (offset < contents.size() and contents[offset] != '\n')
+            ++offset;
+    };
+
+    // Move 'i' to the offset of the beginning of the next non-empty line
+    auto ToBeginningOfNextLine = [&]() {
+        // Eat everything until '\n' (nothing if at '\n')
+        ToNewline();
+        // Eat all consecutive '\n'
+        while (offset < contents.size() and contents[offset] == '\n')
+            ++offset;
+    };
+
+    auto ToColonCurrentLine = [&]() {
+        while (offset < contents.size() and contents[offset] != ':') {
+            if (contents[offset] == '\n') return false;
+            ++offset;
+        }
+        return true;
+    };
+
+    MIRBlockMatcher out{};
+
+    auto block_name_begin = offset;
+
+    if (not ToColonCurrentLine()) {
+        // ERROR: Expected block name followed by ':'
+        return {};
+    }
+
+    std::string block_name{
+        contents.begin() + lcc::isz(block_name_begin),
+        contents.begin() + lcc::isz(offset)
+    };
+
+    // The first line with less than four spaces after opening a basic block
+    // must either be indented with two spaces and the name of a new block,
+    // or indented with no spaces and the name of a new function.
+    ToBeginningOfNextLine();
+    while (ConsumeFourSpaces()) {
+        // Parse instruction
+        auto m = parse_instruction_matcher(contents, offset);
+        out.instructions.emplace_back(m);
+    }
+
+    fmt::print("Parsed block name={}\n", block_name);
+
+    // Block definition complete.
+    return out;
+}
+
+[[nodiscard]]
+MIRFunctionMatcher parse_function_matcher(std::span<char> contents, lcc::usz& offset) {
+    auto ConsumeTwoSpaces = [&]() {
+        if (offset + 1 < contents.size() and contents[offset + 1] != ' ')
+            return false;
+        if (offset < contents.size() and contents[offset] != ' ')
+            return false;
+        offset += 2;
+        return true;
+    };
+
+    auto ToNewline = [&]() {
+        // Eat everything until '\n'
+        while (offset < contents.size() and contents[offset] != '\n')
+            ++offset;
+    };
+
+    // Move 'i' to the offset of the beginning of the next non-empty line
+    auto ToBeginningOfNextLine = [&]() {
+        // Eat everything until '\n' (nothing if at '\n')
+        ToNewline();
+        // Eat all consecutive '\n'
+        while (offset < contents.size() and contents[offset] == '\n')
+            ++offset;
+    };
+
+    auto ToColonCurrentLine = [&]() {
+        while (offset < contents.size() and contents[offset] != ':') {
+            if (contents[offset] == '\n') return false;
+            ++offset;
+        }
+        return true;
+    };
+
+    MIRFunctionMatcher out{};
+
+    // Parse function name followed by ':' on first line
+    auto function_name_begin = offset;
+
+    if (not ToColonCurrentLine()) {
+        // ERROR: Expected function name followed by ':'
+        // TODO: Return meaningful error
+        return {};
+    }
+
+    std::string function_name{
+        contents.begin() + lcc::isz(function_name_begin),
+        contents.begin() + lcc::isz(offset)
+    };
+
+    // Eat ':'
+    ++offset;
+
+    // TODO: Optionally parse locals list, if present.
+    // TODO: Parse two spaces, then basic block name followed by ':' on next line
+    ToBeginningOfNextLine();
+    while (ConsumeTwoSpaces()) {
+        auto m = parse_block_matcher(contents, offset);
+        out.blocks.emplace_back(m);
+    }
+
+    fmt::print("Parsed function name={}\n", function_name);
+
+    return out;
+}
+
+[[nodiscard]]
+MIRMatcher parse_matcher(std::span<char> contents, lcc::usz& offset) {
+    MIRMatcher out{};
+
+    while (offset < contents.size()) {
+        auto m = parse_function_matcher(contents, offset);
+        out.functions.emplace_back(m);
+    }
+
+    fmt::print("Parsed matcher...\n");
+
+    return out;
 }
 
 int main(int argc, char** argv) {
@@ -266,6 +536,17 @@ int main(int argc, char** argv) {
             "    return i64 %0\n";
 
         // TODO: Parse matcher from file
+        // TODO: Parse matcher from something like the following
+        std::string test_result =
+            "func:\n"
+            "  bb0:\n"
+            "    mov rdi.64 rax.64 {CLOBBERS: op.1}\n"
+            "    ret\n"
+            "memcpy:\n";
+
+        lcc::usz i{0};
+        auto parsed_matcher = parse_matcher(test_result, i);
+
         MIRMatcher matcher{
             .functions = {
                 {.blocks = {
@@ -301,6 +582,16 @@ int main(int argc, char** argv) {
             "  bb0:\n"
             "    %2 = add i64 %0, %1\n"
             "    return i64 %2\n";
+
+        // TODO: Parse matcher from something like the following
+        std::string test_result =
+            "func:\n"
+            "  bb0:\n"
+            "    add rdi.64 rsi.64\n"
+            "    mov rsi.64 rax.64 {CLOBBERS: OP1}\n"
+            "    mov rax.64 rax.64 {CLOBBERS: OP1}\n"
+            "    ret\n"
+            "memcpy:\n";
 
         // TODO: Parse matcher from file
         MIRMatcher matcher{
