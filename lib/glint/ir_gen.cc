@@ -1680,38 +1680,14 @@ auto IRGen::Generate(Context* context, glint::Module& mod) -> lcc::Module* {
     // initialisation stuff into a builtin probably oh and definitely the
     // "grow" functionality and stuff like that.
 
-    { // malloc
-        auto* malloc_ty = FunctionType::Get(
-            context,
-            lcc::Type::PtrTy,
-            {lcc::IntegerType::Get(context, context->target()->ffi.size_of_long_long)}
-        );
-        // Registers in module, so, yes this does something.
-        new (*ir_gen.module) Function(
-            ir_gen.module,
-            "malloc",
-            malloc_ty,
-            Linkage::Imported,
-            CallConv::C,
-            {}
-        );
-    }
-
-    { // free
-        auto* free_ty = FunctionType::Get(
-            context,
-            lcc::Type::PtrTy,
-            {lcc::IntegerType::Get(context, context->target()->ffi.size_of_long_long)}
-        );
-        new (*ir_gen.module) Function(
-            ir_gen.module,
-            "free",
-            free_ty,
-            Linkage::Imported,
-            CallConv::C,
-            {}
-        );
-    }
+    LCC_ASSERT(
+        not mod.function("malloc").empty(),
+        "malloc does not exist, shouldn't Glint sema have created it?"
+    );
+    LCC_ASSERT(
+        not mod.function("free").empty(),
+        "free does not exist, shouldn't Glint sema have created it?"
+    );
 
     { // exit
         auto* exit_ty = FunctionType::Get(
