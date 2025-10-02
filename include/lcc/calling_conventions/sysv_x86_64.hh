@@ -2,19 +2,35 @@
 #define LCC_CALLING_CONVENTION_SYSV_X86_64_HH
 
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lcc/ir/ir.hh>
+
+#include <array>
+#include <vector>
 
 namespace lcc::cconv::sysv {
 
+constexpr x86_64::RegisterId return_register = x86_64::RegisterId::RAX;
+
 /// If you don't like the long signature, use like
 ///     `constexpr auto arg_regs = lcc::cconv::args_regs;`
-constexpr const std::array<usz, 6> arg_regs = {
-    +x86_64::RegisterId::RDI,
-    +x86_64::RegisterId::RSI,
-    +x86_64::RegisterId::RDX,
-    +x86_64::RegisterId::RCX,
-    +x86_64::RegisterId::R8,
-    +x86_64::RegisterId::R9 //
+constexpr const std::array<x86_64::RegisterId, 6> arg_regs = {
+    x86_64::RegisterId::RDI,
+    x86_64::RegisterId::RSI,
+    x86_64::RegisterId::RDX,
+    x86_64::RegisterId::RCX,
+    x86_64::RegisterId::R8,
+    x86_64::RegisterId::R9
+};
+
+constexpr const std::array<x86_64::RegisterId, 9> volatile_regs = {
+    x86_64::RegisterId::RAX,
+    x86_64::RegisterId::RCX,
+    x86_64::RegisterId::RDX,
+    x86_64::RegisterId::RSI,
+    x86_64::RegisterId::RDI,
+    x86_64::RegisterId::R8,
+    x86_64::RegisterId::R9,
+    x86_64::RegisterId::R10,
+    x86_64::RegisterId::R11
 };
 
 enum class ParameterClass {
@@ -28,57 +44,58 @@ enum class ParameterClass {
 
 struct ParameterDescription {
     struct Parameter {
-        ParameterClass kind{ParameterClass::INVALID};
+        ParameterClass location{ParameterClass::INVALID};
         /// The amount of argument registers, total, taken up by parameters BEFORE
-        /// (and NOT by) this parameter.
+        /// (and NOT by) this parameter. This is the first index into the argument
+        /// registers that is valid. The first index into the argument registers
+        /// that is /invalid/ is `arg_regs_used + arg_regs`
         usz arg_regs_used{};
         /// The amount of argument registers taken up by this parameter.
         usz arg_regs{};
+        /// The index of the "stack slot" this parameter is stored within.
+        /// Only valid for memory parameters.
         usz stack_slot_index{};
+        /// The offset, in bytes, of this parameter from the base of the stack.
+        /// That is, the first memory parameter will have it's own size in bytes as
+        /// it's offset.
+        /// Only valid for memory parameters.
         usz stack_byte_offset{};
-    };
-    std::vector<Parameter> info;
-};
+        /// The offset, in bytes, that the stack was already at due to previous
+        /// parameters.
+        usz stack_byte_offset_used{};
 
-auto parameter_description(Function* function) -> ParameterDescription {
-    // If we super-cared or measured this function as being really slow or
-    // called over and over (which won't happen), we could implement a cache
-    // on Function* here, or a name-based one.
+        bool is_memory() { return location == ParameterClass::MEMORY; }
+        bool is_register() { return location == ParameterClass::REGISTER; }
 
-    ParameterDescription out{};
-    ParameterDescription::Parameter working_param{};
+        bool is_single_register() { return is_register() and arg_regs == 1; }
+        bool is_double_register() { return is_register() and arg_regs == 2; }
 
-    out.info.reserve(function->params().size());
+        enum class Kinds {
+            SingleRegister,
+            DoubleRegister,
+            Memory,
+        };
 
-    usz next_stack_slot_index{};
-    for (const auto* param : function->params()) {
-        working_param.arg_regs_used += working_param.arg_regs;
-        working_param.stack_slot_index = next_stack_slot_index;
-
-        working_param.kind = ParameterClass::REGISTER;
-        working_param.arg_regs = 0;
-
-        if (
-            param->type()->bytes() <= x86_64::GeneralPurposeBytewidth
-            and working_param.arg_regs_used < arg_regs.size()
-        ) ++working_param.arg_regs;
-
-        else if (
-            param->type()->bytes() <= 2 * x86_64::GeneralPurposeBytewidth
-            and working_param.arg_regs_used < arg_regs.size() - 1
-        ) working_param.arg_regs += 2;
-
-        else {
-            working_param.kind = ParameterClass::MEMORY;
-            ++next_stack_slot_index;
-            working_param.stack_byte_offset += param->type()->bytes();
+        [[nodiscard]]
+        Kinds kind() {
+            if (arg_regs == 1) return Kinds::SingleRegister;
+            if (arg_regs == 2) return Kinds::DoubleRegister;
+            LCC_ASSERT(arg_regs == 0, "Invalid number of argument registers used by single parameter");
+            return Kinds::Memory;
         }
-
-        out.info.emplace_back(working_param);
-    }
-
-    return out;
+    };
+    std::vector<Parameter> info{};
 };
+
+// Return a description as if the given list of types were the types of
+// the parameters of a function.
+auto parameter_description(std::vector<Type*> parameter_types)
+    -> ParameterDescription;
+
+// Given an LCC IR function, return a description of how the parameters
+// would be passed in the SysV convention.
+auto parameter_description(Function* function)
+    -> ParameterDescription;
 
 } // namespace lcc::cconv::sysv
 

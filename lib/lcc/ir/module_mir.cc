@@ -1,3 +1,4 @@
+#include <lcc/calling_conventions/ms_x64.hh>
 #include <lcc/calling_conventions/sysv_x86_64.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
@@ -279,81 +280,57 @@ auto Module::mir() -> std::vector<MFunction> {
                 // parameters and memory parameters being referenced.
                 if (_ctx->target()->is_arch_x86_64()) {
                     if (_ctx->target()->is_platform_windows()) {
-                        constexpr std::array<x86_64::RegisterId, 4> reg_by_param_index{
-                            x86_64::RegisterId::RCX,
-                            x86_64::RegisterId::RDX,
-                            x86_64::RegisterId::R8,
-                            x86_64::RegisterId::R9 //
-                        };
-                        if (
-                            param->type()->bytes() <= x86_64::GeneralPurposeBytewidth
-                            and param->index() < reg_by_param_index.size()
-                        ) {
-                            return MOperandRegister(
-                                +reg_by_param_index.at(param->index()),
-                                uint(param->type()->bits())
-                            );
-                        }
-
-                        LCC_ASSERT(false, "TODO: Handle x64cc memory parameter");
-
-                    } else if (_ctx->target()->is_cconv_sysv()) {
-                        usz sysv_registers_used = 0;
-                        i32 sysv_memory_parameter_offset = 0;
-                        for (usz i = 0; i < param->index(); ++i) {
-                            auto* p = f_ir->param(i);
-                            if (
-                                p->type()->bytes() <= x86_64::GeneralPurposeBytewidth
-                                and sysv_registers_used < cconv::sysv::arg_regs.size()
-                            )
-                                ++sysv_registers_used;
-                            else if (
-                                p->type()->bytes() <= 2 * x86_64::GeneralPurposeBytewidth
-                                and sysv_registers_used < cconv::sysv::arg_regs.size() - 1
-                            ) {
-                                sysv_registers_used += 2;
-                            } else {
-                                // TODO: Take alignment into consideration.
-                                sysv_memory_parameter_offset += i32(p->type()->bytes());
+                        auto params_desc = cconv::msx64::parameter_description(f_ir);
+                        auto param_info = params_desc.info.at(param->index());
+                        switch (param_info.kind()) {
+                            case cconv::msx64::ParameterDescription::Parameter::Kinds::SingleRegister:
+                            // FIXME: Is this how PointerInRegister parameter is handled (here)?
+                            case cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister: {
+                                return MOperandRegister(
+                                    +cconv::msx64::arg_regs.at(param->index()),
+                                    uint(param->type()->bits())
+                                );
                             }
-                        }
 
-                        static constexpr std::array<x86_64::RegisterId, 6> reg_by_param_index{
-                            x86_64::RegisterId::RDI,
-                            x86_64::RegisterId::RSI,
-                            x86_64::RegisterId::RDX,
-                            x86_64::RegisterId::RCX,
-                            x86_64::RegisterId::R8,
-                            x86_64::RegisterId::R9 //
-                        };
-
-                        // Single register parameter
-                        if (
-                            param->type()->bytes() <= x86_64::GeneralPurposeBytewidth
-                            and sysv_registers_used < cconv::sysv::arg_regs.size()
-                        ) {
-                            return MOperandRegister(
-                                +reg_by_param_index.at(sysv_registers_used),
-                                uint(param->type()->bits())
-                            );
+                            case cconv::msx64::ParameterDescription::Parameter::Kinds::Stack:
+                                LCC_ASSERT(false, "TODO: Handle accessing x64cc memory parameter");
                         }
-                        // Multiple register parameter
-                        if (
-                            param->type()->bytes() <= 2 * x86_64::GeneralPurposeBytewidth
-                            and sysv_registers_used < cconv::sysv::arg_regs.size() - 1
-                        )
-                            LCC_ASSERT(false, "Cannot handle multiple register parameter in this way");
-                        else {
-                            // Return Local with positive offset into parent stack frame.
-                            // To get the actual offset, we need to know how many memory parameters
-                            // come before this parameter, as well as their size (and alignment, I'd
-                            // think).
-                            i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
-                            offset += sysv_memory_parameter_offset;
-                            return MOperandLocal(
-                                MOperandLocal::absolute_index,
-                                offset
-                            );
+                    } else if (_ctx->target()->is_cconv_sysv()) {
+                        auto params_desc = cconv::sysv::parameter_description(f_ir);
+                        auto param_info = params_desc.info.at(param->index());
+                        switch (param_info.kind()) {
+                            using Kinds = cconv::sysv::ParameterDescription::Parameter::Kinds;
+                            case Kinds::SingleRegister:
+                                return MOperandRegister(
+                                    +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
+                                    uint(param->type()->bits())
+                                );
+
+                            case Kinds::DoubleRegister:
+                                LCC_ASSERT(
+                                    false,
+                                    "Cannot handle multiple register parameter in this way."
+                                    " IIRC you have to lower that out further up the chain in passes on LCC IR, or something."
+                                );
+
+                            case Kinds::Memory: {
+                                // Return Local with positive offset into parent stack frame.
+                                // To get the actual offset, we need to know how many memory parameters
+                                // come before this parameter, as well as their size (and alignment, I'd
+                                // think).
+                                // FIXME: Magic number. Why 2 registers wide? I believe this is to get
+                                // past the stack frame, if present (i.e. saved base pointer), but I don't
+                                // remember exactly.
+                                i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
+                                // FIXME: I'm not sure if this should be stack_byte_offset (including size
+                                // of current parameter), or if it should be stack_byte_offset_used
+                                // (before the current parameter's size has been added).
+                                offset += i32(param_info.stack_byte_offset_used);
+                                return MOperandLocal(
+                                    MOperandLocal::absolute_index,
+                                    offset
+                                );
+                            }
                         }
                     }
                 }
@@ -540,57 +517,61 @@ auto Module::mir() -> std::vector<MFunction> {
                         usz arg_stack_bytes_used = 0;
                         if (_ctx->target()->is_arch_x86_64()) {
                             if (_ctx->target()->is_platform_windows()) {
-                                constexpr std::array<usz, 4> arg_regs = {
-                                    +x86_64::RegisterId::RCX,
-                                    +x86_64::RegisterId::RDX,
-                                    +x86_64::RegisterId::R8,
-                                    +x86_64::RegisterId::R9,
-                                };
+                                std::vector<Type*> arg_types{};
+                                rgs::transform(
+                                    call_ir->args(),
+                                    std::back_inserter(arg_types),
+                                    [](auto* v) { return v->type(); }
+                                );
+                                auto param_desc = cconv::msx64::parameter_description(arg_types);
 
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
-                                    if (
-                                        usz(arg_i) < arg_regs.size()
-                                        and arg->type()->bytes() <= x86_64::GeneralPurposeBytewidth
-                                    ) {
-                                        auto copy = MInst(
-                                            MInst::Kind::Copy,
-                                            {arg_regs.at(usz(arg_i)), x86_64::GeneralPurposeBitwidth}
-                                        );
-                                        copy.location(call_ir->location());
-                                        copy.add_operand(MOperandValueReference(function, f, arg));
-                                        bb.add_instruction(copy);
-                                    } else {
-                                        // Basically, if an argument is over-large, we allocate a copy on the
-                                        // stack (that way the caller can modify without doing bad bad), and then
-                                        // pass the pointer to the stack address in the regular place the argument
-                                        // would have gone (either the register the argument would have fit in, or
-                                        // on the stack).
-                                        // "Structs or unions (larger than 64 bits) are passed as a pointer to
-                                        // memory allocated by the caller. For these aggregate types passed as a
-                                        // pointer, including __m128, the caller-allocated temporary memory must
-                                        // be 16-byte aligned."
-                                        LCC_ASSERT(false, "Handle gMIR lowering of x64 memory arguments");
+                                    auto param_info = param_desc.info.at(usz(arg_i));
+                                    switch (param_info.kind()) {
+                                        using Kinds = cconv::msx64::ParameterDescription::Parameter::Kinds;
+                                        case Kinds::SingleRegister:
+                                        // FIXME: Is PointerInRegister handled like this?
+                                        case Kinds::PointerInRegister: {
+                                            auto copy = MInst(
+                                                MInst::Kind::Copy,
+                                                {//
+                                                 +cconv::msx64::arg_regs.at(usz(arg_i)),
+                                                 x86_64::GeneralPurposeBitwidth
+                                                }
+                                            );
+                                            copy.location(call_ir->location());
+                                            copy.add_operand(MOperandValueReference(function, f, arg));
+                                            bb.add_instruction(copy);
+                                        } break;
+
+                                        case Kinds::Stack: {
+                                            // Basically, if an argument is over-large, we allocate a copy on the
+                                            // stack (that way the caller can modify without doing bad bad), and then
+                                            // pass the pointer to the stack address in the regular place the argument
+                                            // would have gone (either the register the argument would have fit in, or
+                                            // on the stack).
+                                            // "Structs or unions (larger than 64 bits) are passed as a pointer to
+                                            // memory allocated by the caller. For these aggregate types passed as a
+                                            // pointer, including __m128, the caller-allocated temporary memory must
+                                            // be 16-byte aligned."
+                                            LCC_TODO("Handle gMIR lowering of x64 memory arguments");
+                                        }
                                     }
                                 }
-
                             } else if (_ctx->target()->is_cconv_sysv()) {
+                                std::vector<Type*> arg_types{};
+                                rgs::transform(
+                                    call_ir->args(),
+                                    std::back_inserter(arg_types),
+                                    [](auto* v) { return v->type(); }
+                                );
+                                auto param_desc = cconv::sysv::parameter_description(arg_types);
+
                                 // Handle all arguments that are passed in memory first, before register arguments.
-                                usz arg_regs_used = 0;
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
-                                    if (
-                                        arg_regs_used < cconv::sysv::arg_regs.size()
-                                        and arg->type()->bytes() <= x86_64::GeneralPurposeBytewidth
-                                    )
-                                        ++arg_regs_used;
-
-                                    else if (
-                                        arg_regs_used < cconv::sysv::arg_regs.size() - 1
-                                        and arg->type()->bytes() <= 2 * x86_64::GeneralPurposeBytewidth
-                                    )
-                                        arg_regs_used += 2;
-
-                                    else {
-                                        // Memory parameter
+                                    auto arg_info = param_desc.info.at(usz(arg_i));
+                                    // Memory parameter
+                                    if (arg_info.is_memory()) {
                                         // Basically just allocate a temporary on the stack, memcpy (or similar)
                                         // into that.
 
@@ -630,19 +611,28 @@ auto Module::mir() -> std::vector<MFunction> {
                                         // TODO: If memcpy sets return register we may end up having a bad time.
 
                                         { // Destination argument (stack pointer)
-                                            auto copy = MInst(MInst::Kind::Copy, {cconv::sysv::arg_regs[0], 64});
+                                            auto copy = MInst(
+                                                MInst::Kind::Copy,
+                                                {+cconv::sysv::arg_regs.at(0), 64}
+                                            );
                                             copy.location(call_ir->location());
                                             copy.add_operand(stack_pointer_reg);
                                             bb.add_instruction(copy);
                                         }
                                         { // Source argument
-                                            auto copy = MInst(MInst::Kind::Copy, {cconv::sysv::arg_regs[1], 64});
+                                            auto copy = MInst(
+                                                MInst::Kind::Copy,
+                                                {+cconv::sysv::arg_regs.at(1), 64}
+                                            );
                                             copy.location(call_ir->location());
                                             copy.add_operand(MOperandValueReference(function, f, arg_ptr));
                                             bb.add_instruction(copy);
                                         }
                                         { // Size argument
-                                            auto copy = MInst(MInst::Kind::Copy, {cconv::sysv::arg_regs[2], 64});
+                                            auto copy = MInst(
+                                                MInst::Kind::Copy,
+                                                {+cconv::sysv::arg_regs.at(2), 64}
+                                            );
                                             copy.location(call_ir->location());
                                             copy.add_operand(MOperandImmediate(byte_count));
                                             bb.add_instruction(copy);
@@ -658,35 +648,32 @@ auto Module::mir() -> std::vector<MFunction> {
                                     }
                                 }
 
-                                arg_regs_used = 0;
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
-                                    if (
-                                        arg_regs_used < cconv::sysv::arg_regs.size()
-                                        and arg->type()->bytes() <= x86_64::GeneralPurposeBytewidth
-                                    ) {
+                                    auto param_info = param_desc.info.at(usz(arg_i));
+                                    if (param_info.is_single_register()) {
                                         // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
                                         auto copy = MInst(
                                             MInst::Kind::Copy,
-                                            {cconv::sysv::arg_regs.at(arg_regs_used++), uint(arg->type()->bits())}
+                                            {
+                                                +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
+                                                uint(arg->type()->bits()) //
+                                            }
                                         );
                                         copy.location(call_ir->location());
                                         copy.add_operand(MOperandValueReference(function, f, arg));
                                         bb.add_instruction(copy);
-                                    } else if (
-                                        arg_regs_used < cconv::sysv::arg_regs.size() - 1
-                                        and arg->type()->bytes() <= 2 * x86_64::GeneralPurposeBytewidth
-                                    ) {
+                                    } else if (param_info.is_double_register()) {
                                         auto load_a = MInst(
                                             MInst::Kind::Load,
                                             {
-                                                cconv::sysv::arg_regs.at(arg_regs_used++),
+                                                +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
                                                 x86_64::GeneralPurposeBitwidth //
                                             }
                                         );
                                         auto load_b = MInst(
                                             MInst::Kind::Load,
                                             {
-                                                cconv::sysv::arg_regs.at(arg_regs_used++),
+                                                +cconv::sysv::arg_regs.at(param_info.arg_regs_used + 1),
                                                 uint(arg->type()->bits() - x86_64::GeneralPurposeBitwidth) //
                                             }
                                         );
@@ -712,7 +699,11 @@ auto Module::mir() -> std::vector<MFunction> {
                                                 // manually. So, we remove the load that was there before.
                                                 bb.remove_inst_by_reg(virts[load_arg]);
 
-                                            } else LCC_ASSERT(false, "TODO: Create a temporary, store into it, and then treat argument like any other alloca.");
+                                            } else {
+                                                LCC_TODO(
+                                                    "Create a temporary, store into it, and then treat argument like any other alloca."
+                                                );
+                                            }
                                         } else if (arg->kind() == Value::Kind::Alloca) {
                                             load_a.add_operand(MOperandValueReference(function, f, arg));
 
@@ -728,7 +719,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                             bb.add_instruction(add_b);
                                         } else {
                                             arg->print();
-                                            LCC_ASSERT(false, "Handle gMIR lowering of SysV multiple register argument");
+                                            LCC_TODO("Handle gMIR lowering of SysV multiple register argument");
                                         }
 
                                         bb.add_instruction(load_a);
@@ -747,7 +738,10 @@ auto Module::mir() -> std::vector<MFunction> {
                         bb.add_instruction(call);
 
                         if (arg_stack_bytes_used) {
-                            LCC_ASSERT(_ctx->target()->is_arch_x86_64(), "Handle architecture when resetting stack after a call");
+                            LCC_ASSERT(
+                                _ctx->target()->is_arch_x86_64(),
+                                "Handle architecture when resetting stack after a call"
+                            );
                             auto stack_fixup = MInst(
                                 +x86_64::Opcode::Add,
                                 {+x86_64::RegisterId::RSP, x86_64::GeneralPurposeBitwidth}
@@ -773,14 +767,17 @@ auto Module::mir() -> std::vector<MFunction> {
                                 std::vector<usz> arg_regs{};
                                 // TODO: Static assert for handling of targets.
                                 if (_ctx->target()->is_platform_windows()) {
-                                    arg_regs = {
-                                        +x86_64::RegisterId::RCX,
-                                        +x86_64::RegisterId::RDX,
-                                        +x86_64::RegisterId::R8,
-                                        +x86_64::RegisterId::R9,
-                                    };
+                                    rgs::transform(
+                                        cconv::msx64::arg_regs,
+                                        std::back_inserter(arg_regs),
+                                        [](auto r) { return +r; }
+                                    );
                                 } else if (_ctx->target()->is_cconv_sysv()) {
-                                    arg_regs = utils::to_vec(cconv::sysv::arg_regs);
+                                    rgs::transform(
+                                        cconv::sysv::arg_regs,
+                                        std::back_inserter(arg_regs),
+                                        [](auto r) { return +r; }
+                                    );
                                 } else {
                                     Diag::ICE("Unhandled target in argument lowering for memcpy intrinsic");
                                 }
@@ -994,17 +991,11 @@ auto Module::mir() -> std::vector<MFunction> {
                             // with any of this?
                             if (_ctx->target()->is_arch_x86_64() and _ctx->target()->is_cconv_sysv()) {
                                 auto param_description = cconv::sysv::parameter_description(function);
-
-                                auto arg_regs_used_before_parameter = param_description.info.at(param->index()).arg_regs_used;
+                                auto param_info = param_description.info.at(param->index());
+                                auto arg_regs_used_before_parameter = param_info.arg_regs_used;
 
                                 // Multiple register parameter
-                                if (
-                                    // The parameter value has to fit within two registers (and not one).
-                                    param->type()->bytes() > x86_64::GeneralPurposeBytewidth
-                                    and param->type()->bytes() <= 2 * x86_64::GeneralPurposeBytewidth
-                                    // There has to be two registers available, obviously.
-                                    and arg_regs_used_before_parameter < cconv::sysv::arg_regs.size() - 1
-                                ) {
+                                if (param_info.is_double_register()) {
                                     if (auto* alloca = cast<AllocaInst>(store_ir->ptr())) {
                                         // Multiple register parameter stored into alloca
                                         auto reg_a = MOperandRegister(
@@ -1252,7 +1243,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     indices_of_instructions_to_remove.push_back(minst_index);
                 }
             }
-            for (isz index : indices_of_instructions_to_remove | vws::reverse)
+            for (isz index : vws::reverse(indices_of_instructions_to_remove))
                 mblock.instructions().erase(mblock.instructions().begin() + index);
         }
     }

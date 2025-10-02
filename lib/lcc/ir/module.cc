@@ -1,4 +1,7 @@
 #include <fmt/format.h>
+
+#include <lcc/calling_conventions/ms_x64.hh>
+#include <lcc/calling_conventions/sysv_x86_64.hh>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
@@ -13,6 +16,7 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/ir_printer.hh>
+
 #include <object/generic.hh>
 
 #include <algorithm>
@@ -66,73 +70,78 @@ void Module::lower() {
             //     return (*xptr).a + (*xptr).b;
             // }
             //
-            for (size_t param_i{0}; param_i < function_type->params().size(); ++param_i) {
-                auto*& param = function_type->params().at(param_i);
-                // TODO: Calling convention here /may/ be affected by function calling
-                // convention (maybe `function->call_conv()`).
-                // TODO: This isn't a proper check of whether or not a parameter should go
-                // in memory or not. We need to make sure there are registers left, even
-                // if it would fit.
-                bool sysv_memory_param = _ctx->target()->is_cconv_sysv() and param->bytes() > 16;
-                bool x64_memory_param = _ctx->target()->is_cconv_ms() and param->bytes() >= 8;
 
-                // TODO: x64 will also use this style lowering when actually passing stack
-                // parameters, not memory parameters.
-                if (sysv_memory_param) {
-                    param = Type::PtrTy;
+            // TODO: Static assert for handling all calling conventions
+            if (_ctx->target()->is_cconv_sysv()) {
+                auto param_desc = cconv::sysv::parameter_description(function);
+                for (size_t param_i{0}; param_i < function_type->params().size(); ++param_i) {
                     auto* parameter = function->param(param_i);
-                    for (auto* user : parameter->users()) {
-                        if (auto store = cast<StoreInst>(user)) {
-                            LCC_ASSERT(
-                                is<Parameter>(store->val()),
-                                "Use of memory parameter in destination pointer of store instruction: we don't yet support this, sorry"
+                    auto*& param_t = function_type->params().at(param_i);
+                    auto param_info = param_desc.info.at(param_i);
+                    if (param_info.is_memory()) {
+                        // Update type
+                        param_t = Type::PtrTy;
+                        // Update uses
+                        for (auto* user : parameter->users()) {
+                            if (auto store = cast<StoreInst>(user)) {
+                                LCC_ASSERT(
+                                    is<Parameter>(store->val()),
+                                    "Use of memory parameter in destination pointer of store instruction: we don't yet support this, sorry"
+                                );
+                                LCC_ASSERT(
+                                    is<AllocaInst>(store->ptr()),
+                                    "We only support storing memory parameter into pointer returned by AllocaInst, sorry"
+                                );
+
+                                // Replace uses of store->ptr() with (a copy of) store->val()
+                                auto alloca = as<AllocaInst>(store->ptr());
+                                for (auto pointer_user : alloca->users()) {
+                                    // Alloca fetched with store->val() is (obviously) used by the store, but
+                                    // we don't want to replace the alloca in the store because we are going
+                                    // to be removing the store anyway..
+                                    if (pointer_user == store) continue;
+
+                                    // Replace use of Alloca.
+                                    auto copy = new (*this) Parameter(parameter->type(), parameter->index());
+                                    pointer_user->replace_children([&](Value* v) -> Value* {
+                                        if (v == alloca) return copy;
+                                        return nullptr;
+                                    });
+                                }
+                                // Erase store
+                                store->erase();
+                                alloca->erase();
+
+                            } else LCC_ASSERT(
+                                false,
+                                "Unhandled instruction type in replacement of users of memory parameter"
                             );
-                            LCC_ASSERT(
-                                is<AllocaInst>(store->ptr()),
-                                "We only support storing memory parameter into pointer returned by AllocaInst, sorry"
-                            );
-
-                            // Replace uses of store->ptr() with (a copy of) store->val()
-                            auto alloca = as<AllocaInst>(store->ptr());
-                            for (auto pointer_user : alloca->users()) {
-                                // Alloca fetched with store->val() is (obviously) used by the store, but
-                                // we don't want to replace the alloca in the store because we are going
-                                // to be removing the store anyway..
-                                if (pointer_user == store) continue;
-
-                                // Replace use of Alloca.
-                                auto copy = new (*this) Parameter(parameter->type(), parameter->index());
-                                pointer_user->replace_children([&](Value* v) -> Value* {
-                                    if (v == alloca) return copy;
-                                    return nullptr;
-                                });
-                            }
-                            // Erase store
-                            store->erase();
-                            alloca->erase();
-
-                        } else LCC_ASSERT(false, "Unhandled instruction type in replacement of users of memory parameter");
+                        }
                     }
                 }
-                // TODO: This lowering should only ever apply to memory parameters that
-                // have their pointer passed in a register.
-                else if (x64_memory_param) {
-                    param = Type::PtrTy;
+            } else if (_ctx->target()->is_cconv_ms()) {
+                auto param_desc = cconv::msx64::parameter_description(function);
+                for (size_t param_i{0}; param_i < function_type->params().size(); ++param_i) {
                     auto* parameter = function->param(param_i);
-                    for (auto* user : parameter->users()) {
-                        if (auto store = cast<StoreInst>(user)) {
-                            LCC_ASSERT(
-                                is<Parameter>(store->val()),
-                                "Use of memory parameter in destination pointer of store instruction: we don't yet support this, sorry"
-                            );
-                            LCC_ASSERT(
-                                is<AllocaInst>(store->ptr()),
-                                "We only support storing memory parameter into pointer returned by AllocaInst, sorry"
-                            );
+                    auto*& param_t = function_type->params().at(param_i);
+                    auto param_info = param_desc.info.at(param_i);
+                    if (param_info.kind() == cconv::msx64::ParameterDescription::Parameter::Kinds::Stack) {
+                        param_t = Type::PtrTy;
+                        for (auto* user : parameter->users()) {
+                            if (auto store = cast<StoreInst>(user)) {
+                                LCC_ASSERT(
+                                    is<Parameter>(store->val()),
+                                    "Use of memory parameter in destination pointer of store instruction: we don't yet support this, sorry"
+                                );
+                                LCC_ASSERT(
+                                    is<AllocaInst>(store->ptr()),
+                                    "We only support storing memory parameter into pointer returned by AllocaInst, sorry"
+                                );
 
-                            LCC_ASSERT(false, "TODO: MSx64 calling convention memory parameter (change alloca to ptr type, insert load before uses of alloca)");
+                                LCC_ASSERT(false, "TODO: MSx64 calling convention memory parameter (change alloca to ptr type, insert load before uses of alloca)");
 
-                        } else LCC_ASSERT(false, "Unhandled instruction type in replacement of users of memory parameter");
+                            } else LCC_ASSERT(false, "Unhandled instruction type in replacement of users of memory parameter");
+                        }
                     }
                 }
             }
@@ -140,7 +149,9 @@ void Module::lower() {
             // Add parameter for over-large return types (in-memory ones that alter
             // function signature).
             // SysV is able to return objects <= 16 bytes in two registers.
-            bool ret_t_tworeg = _ctx->target()->is_cconv_sysv() and function_type->ret()->bytes() > 8 and function_type->ret()->bytes() <= 16;
+            bool ret_t_tworeg = _ctx->target()->is_cconv_sysv()
+                            and function_type->ret()->bytes() > 8
+                            and function_type->ret()->bytes() <= 16;
             bool ret_t_large = function_type->ret()->bytes() > 8;
             Value* ret_v_large{nullptr};
             if (not ret_t_tworeg and ret_t_large) {
@@ -363,31 +374,21 @@ void Module::emit(std::filesystem::path output_file_path) {
             if (_ctx->target()->is_arch_x86_64()) {
                 desc.return_register_to_replace = +x86_64::RegisterId::RETURN;
                 if (_ctx->target()->is_cconv_ms()) {
-                    desc.return_register = +x86_64::RegisterId::RAX;
+                    desc.return_register = +cconv::msx64::return_register;
                     // Just the volatile registers
-                    desc.registers = {
-                        +x86_64::RegisterId::RAX,
-                        +x86_64::RegisterId::RCX,
-                        +x86_64::RegisterId::RDX,
-                        +x86_64::RegisterId::R8,
-                        +x86_64::RegisterId::R9,
-                        +x86_64::RegisterId::R10,
-                        +x86_64::RegisterId::R11,
-                    };
+                    rgs::transform(
+                        cconv::msx64::volatile_regs,
+                        std::back_inserter(desc.registers),
+                        [](auto r) { return +r; }
+                    );
                 } else {
-                    desc.return_register = +x86_64::RegisterId::RAX;
+                    desc.return_register = +cconv::sysv::return_register;
                     // Just the volatile registers
-                    desc.registers = {
-                        +x86_64::RegisterId::RAX,
-                        +x86_64::RegisterId::RCX,
-                        +x86_64::RegisterId::RDX,
-                        +x86_64::RegisterId::RSI,
-                        +x86_64::RegisterId::RDI,
-                        +x86_64::RegisterId::R8,
-                        +x86_64::RegisterId::R9,
-                        +x86_64::RegisterId::R10,
-                        +x86_64::RegisterId::R11,
-                    };
+                    rgs::transform(
+                        cconv::sysv::volatile_regs,
+                        std::back_inserter(desc.registers),
+                        [](auto r) { return +r; }
+                    );
                 }
             } else LCC_ASSERT(false, "Sorry, unhandled target architecture");
 

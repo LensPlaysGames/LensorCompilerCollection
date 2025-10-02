@@ -15,6 +15,8 @@ While the half-baked support we have with the basic compiler templates defined i
 
 We are calculating register classes, making argument register lists, etc. all over the place when we should probably just have a sysv header and a msx64 header that we have everything in. This should also clean up the call sites quite a bit (hopefully). Example =arg_regs= within =lib/lcc/ir/module_mir.cc=.
 
+[2025-09-30 Tue 02:19] Working on it...
+
 ** ~opt~
 
 *** TODO BUG
@@ -81,13 +83,6 @@ Probably from this portion of code from the SSA Construction pass running on the
 #+end_src
 
 NOTE: Running icmb pass /after/ ssa pass works, but I don't think that's reliable since multiple runs of all passes are possible. It also has the same affect as just removing the ssa pass.
-
-** DONE Get rid of clown colors in IR
-[2024-07-03 Wed 10:22]
-
-Just ughh.
-
-Done [2025-09-30 Tue 00:27]
 
 ** TODO [ISel] Add ~Where~ type to template of ~Pattern~
 [2023-12-14 Thu 17:06]
