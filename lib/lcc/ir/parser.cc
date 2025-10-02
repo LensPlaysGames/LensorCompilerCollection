@@ -63,7 +63,8 @@ constexpr auto StringifyEnum(TokenKind t) -> std::string_view {
 }
 
 std::unordered_map<std::string, IntrinsicKind> intrinsic_kinds{
-    {"@memcpy", IntrinsicKind::MemCopy}};
+    {"@memcpy", IntrinsicKind::MemCopy}
+};
 
 class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
     using Tk = TokenKind;
@@ -238,7 +239,7 @@ void lcc::parser::Parser::NextNumber() {
         else if (lastc == 'x' or lastc == 'X') ParseNumber("hexadecimal", IsHexDigit, 16);
 
         /// If the next character is a space or delimiter, then this is a literal 0.
-        if (IsSpace(lastc) or !IsAlpha(lastc)) return;
+        if (IsSpace(lastc) or not IsAlpha(lastc)) return;
 
         /// Anything else is an error.
         Error("Invalid integer literal");
@@ -565,23 +566,29 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     if (not At(Tk::Keyword)) return Error("Expected function name");
     auto name = tok.text;
     auto loc = tok.location;
+    // Eat name
     NextToken();
+
+    // Eat lparen to open linkage string
+    if (not Consume(Tk::LParen)) return Error("Expected '('");
+
+    if (not At(Tk::Keyword)) return Error("Expected linkage (local, imported, exported, etc.)");
+
+    auto linkage = Linkage::Exported;
+    if (tok.text == "local") linkage = Linkage::LocalVar;
+    else if (tok.text == "internal") linkage = Linkage::Internal;
+    else if (tok.text == "used") linkage = Linkage::Used;
+    else if (tok.text == "exported") linkage = Linkage::Exported;
+    else if (tok.text == "imported") linkage = Linkage::Imported;
+    else if (tok.text == "reexported") linkage = Linkage::Reexported;
+    else Error("Expected valid linkage (imported, exported, etc.), got '{}'", tok.text);
+
+    // Eat linkage
+    NextToken();
+
+    if (not Consume(Tk::RParen)) return Error("Expected ')'");
+
     if (not Consume(Tk::Colon)) return Error("Expected ':'");
-
-    Linkage linkage = Linkage::Exported;
-    if (At(Tk::Keyword)) {
-        auto SetLinkage = [&](Linkage l) {
-            linkage = l;
-            NextToken();
-        };
-
-        if (tok.text == "local") SetLinkage(Linkage::LocalVar);
-        else if (tok.text == "internal") SetLinkage(Linkage::Internal);
-        else if (tok.text == "used") SetLinkage(Linkage::Used);
-        else if (tok.text == "exported") SetLinkage(Linkage::Exported);
-        else if (tok.text == "imported") SetLinkage(Linkage::Imported);
-        else if (tok.text == "reexported") SetLinkage(Linkage::Reexported);
-    }
 
     CallConv cc = ParseCallConv();
 
