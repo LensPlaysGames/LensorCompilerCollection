@@ -1579,10 +1579,10 @@ auto lcc::glint::Parser::ParseUnionType() -> Result<UnionType*> {
         auto name = tok.text;
         auto start = tok.location;
         if (not Consume(Tk::Ident))
-            return Error("Expected member name in struct declaration");
+            return Error("Expected member name in union declaration");
 
         /// Type.
-        if (not Consume(Tk::Colon)) return Error("Expected ':' in struct declaration");
+        if (not Consume(Tk::Colon)) return Error("Expected ':' in union declaration");
         auto type = ParseType();
         if (not type) return type.diag();
 
@@ -1599,7 +1599,7 @@ auto lcc::glint::Parser::ParseUnionType() -> Result<UnionType*> {
 
     /// Yeet '}'.
     if (not Consume(Tk::RBrace))
-        return Error("Expected '' in struct declaration", ToString(Tk::RBrace));
+        return Error("Expected '' in union declaration", ToString(Tk::RBrace));
 
     /// Create the type.
     return new (*mod) UnionType(sc.scope, std::move(members), Location{loc, tok.location});
