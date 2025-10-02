@@ -255,6 +255,56 @@ bool run_test(MIRMatcher& matcher, std::string_view test_source, int optimise_le
     return matcher.match(machine_ir);
 }
 
+lcc::x86_64::RegisterId register_operand_value(std::string_view operand) {
+    if (operand.starts_with("rdi"))
+        return (lcc::x86_64::RegisterId::RDI);
+    if (operand.starts_with("rsi"))
+        return (lcc::x86_64::RegisterId::RSI);
+    if (operand.starts_with("rax"))
+        return (lcc::x86_64::RegisterId::RAX);
+    if (operand.starts_with("rbx"))
+        return (lcc::x86_64::RegisterId::RBX);
+    if (operand.starts_with("rcx"))
+        return (lcc::x86_64::RegisterId::RCX);
+    if (operand.starts_with("rdx"))
+        return (lcc::x86_64::RegisterId::RDX);
+    if (operand.starts_with("rbp"))
+        return (lcc::x86_64::RegisterId::RBP);
+    if (operand.starts_with("rsp"))
+        return (lcc::x86_64::RegisterId::RSP);
+    if (operand.starts_with("rip"))
+        return (lcc::x86_64::RegisterId::RIP);
+    if (operand.starts_with("r8"))
+        return (lcc::x86_64::RegisterId::R8);
+    if (operand.starts_with("r9"))
+        return (lcc::x86_64::RegisterId::R9);
+    if (operand.starts_with("r10"))
+        return (lcc::x86_64::RegisterId::R10);
+    if (operand.starts_with("r11"))
+        return (lcc::x86_64::RegisterId::R11);
+    if (operand.starts_with("r12"))
+        return (lcc::x86_64::RegisterId::R12);
+    if (operand.starts_with("r13"))
+        return (lcc::x86_64::RegisterId::R13);
+    if (operand.starts_with("r14"))
+        return (lcc::x86_64::RegisterId::R14);
+    if (operand.starts_with("r15"))
+        return (lcc::x86_64::RegisterId::R15);
+    return lcc::x86_64::RegisterId::INVALID;
+}
+
+lcc::usz register_operand_size(std::string_view operand) {
+    if (operand.ends_with(".64"))
+        return 64;
+    if (operand.ends_with(".32"))
+        return 32;
+    if (operand.ends_with(".16"))
+        return 16;
+    if (operand.ends_with(".8"))
+        return 8;
+    return 0;
+}
+
 [[nodiscard]]
 MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::usz& offset) {
     auto ToNewline = [&]() {
@@ -277,6 +327,11 @@ MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::u
             ++offset;
     };
 
+    auto ToWhitespaceOr = [&](std::string_view until_chars) {
+        while (offset < contents.size() and not isspace(contents[offset]) and not until_chars.contains(contents[offset]))
+            ++offset;
+    };
+
     auto SkipWhitespaceWithinLine = [&]() {
         // Skip all whitespace except newline
         while (offset < contents.size() and isspace(contents[offset]) and contents[offset] != '\n')
@@ -293,16 +348,78 @@ MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::u
     };
     SkipWhitespaceWithinLine();
 
-    // TODO: Translate parsed instruction opcodes into x86_64 opcode values.
+    // Translate parsed instruction opcodes into x86_64 opcode values.
+    if (instruction_opcode == "ret")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Return);
+    else if (instruction_opcode == "mov")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Move);
+    else if (instruction_opcode == "add")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Add);
+    else {
+        fmt::print(
+            "ERROR! Parsed invalid instruction opcode {}",
+            instruction_opcode
+        );
+        std::exit(1);
+    }
 
     // Parse operands (until newline)
     while (offset < contents.size() and contents[offset] != '\n') {
-        // TODO: Parse clobber list, if present
+        // Parse clobber list, if present
         if (contents[offset] == '{') {
             // Eat '{'
             ++offset;
 
-            LCC_TODO("Parse clobber list");
+            SkipWhitespaceWithinLine();
+            auto keyword_begin = offset;
+            ToWhitespace();
+            std::string keyword{
+                contents.begin() + lcc::isz(keyword_begin),
+                contents.begin() + lcc::isz(offset)
+            };
+            if (keyword != "CLOBBERS:") {
+                // ERROR! Expected "CLOBBERS:"
+                fmt::print("ERROR! Parser expected \"CLOBBERS:\" following '{{'");
+                std::exit(1);
+            }
+
+            while (
+                offset < contents.size()
+                and contents[offset] != '}'
+                and contents[offset] != '\n'
+            ) {
+                SkipWhitespaceWithinLine();
+                auto clobber_begin = offset;
+                ToWhitespaceOr("}");
+                std::string clobber{
+                    contents.begin() + lcc::isz(clobber_begin),
+                    contents.begin() + lcc::isz(offset)
+                };
+
+                if (clobber.starts_with("op.")) {
+                    // Parse number after '.'
+                    auto n = std::stoi(clobber.substr(3));
+                    if (lcc::usz(n) >= out.operands.size()) {
+                        // ERROR! Operand clobber out of range
+                        fmt::print("ERROR! Parsed operand clobber that is out of range");
+                        std::exit(1);
+                    }
+                    out.operand_clobbers.emplace_back(n);
+                } else if (clobber.starts_with("r")) {
+                    // Parse register
+                    auto r = lcc::operator+(register_operand_value(clobber));
+                    out.register_clobbers.emplace_back(r);
+                } else {
+                    fmt::print("ERROR! Parser expected clobber operand starting with \"op.\" or 'r'.");
+                    std::exit(1);
+                }
+            }
+
+            if (contents[offset] != '}') {
+                // ERROR! Expected '}'
+            }
+            // Eat '}'
+            ++offset;
         }
 
         auto operand_begin = offset;
@@ -316,59 +433,12 @@ MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::u
         if (operand.starts_with("r")) {
             lcc::Register r{};
 
-            if (operand.starts_with("rdi"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::RDI);
-            else if (operand.starts_with("rsi"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::RSI);
-            else if (operand.starts_with("rax"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::RAX);
-            else if (operand.starts_with("rbx"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::RBX);
-            else if (operand.starts_with("rcx"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::RCX);
-            else if (operand.starts_with("rdx"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::RDX);
-            else if (operand.starts_with("rbp"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::RBP);
-            else if (operand.starts_with("rsp"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::RSP);
-            else if (operand.starts_with("rip"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::RIP);
-            else if (operand.starts_with("r8"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::R8);
-            else if (operand.starts_with("r9"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::R9);
-            else if (operand.starts_with("r10"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::R10);
-            else if (operand.starts_with("r11"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::R11);
-            else if (operand.starts_with("r12"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::R12);
-            else if (operand.starts_with("r13"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::R13);
-            else if (operand.starts_with("r14"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::R14);
-            else if (operand.starts_with("r15"))
-                r.value = lcc::operator+(lcc::x86_64::RegisterId::R15);
-
-            if (operand.ends_with(".64"))
-                r.size = 64;
-            else if (operand.ends_with(".32"))
-                r.size = 32;
-            else if (operand.ends_with(".16"))
-                r.size = 16;
-            else if (operand.ends_with(".8"))
-                r.size = 8;
+            r.value = lcc::operator+(register_operand_value(operand));
+            r.size = (unsigned int) register_operand_size(operand);
 
             out.operands.emplace_back(lcc::MOperandRegister(r));
         }
-
-        fmt::print("Parsed instruction operand={}\n", operand);
     }
-
-    // TODO: Translate parsed register operands into MIR Registers.
-
-    fmt::print("Parsed instruction opcode={}\n", instruction_opcode);
 
     // Move parse state to beginning of next line following successful parsing
     // of an instruction.
@@ -380,13 +450,14 @@ MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::u
 [[nodiscard]]
 MIRBlockMatcher parse_block_matcher(std::span<char> contents, lcc::usz& offset) {
     auto ConsumeFourSpaces = [&]() {
-        if (offset + 3 < contents.size() and contents[offset + 3] != ' ')
+        if (offset + 3 >= contents.size())
             return false;
-        if (offset + 2 < contents.size() and contents[offset + 2] != ' ')
-            return false;
-        if (offset + 1 < contents.size() and contents[offset + 1] != ' ')
-            return false;
-        if (offset < contents.size() and contents[offset] != ' ')
+        if (
+            contents[offset + 3] != ' '
+            or contents[offset + 2] != ' '
+            or contents[offset + 1] != ' '
+            or contents[offset] != ' '
+        )
             return false;
         offset += 4;
         return true;
@@ -439,8 +510,6 @@ MIRBlockMatcher parse_block_matcher(std::span<char> contents, lcc::usz& offset) 
         out.instructions.emplace_back(m);
     }
 
-    fmt::print("Parsed block name={}\n", block_name);
-
     // Block definition complete.
     return out;
 }
@@ -448,9 +517,9 @@ MIRBlockMatcher parse_block_matcher(std::span<char> contents, lcc::usz& offset) 
 [[nodiscard]]
 MIRFunctionMatcher parse_function_matcher(std::span<char> contents, lcc::usz& offset) {
     auto ConsumeTwoSpaces = [&]() {
-        if (offset + 1 < contents.size() and contents[offset + 1] != ' ')
+        if (offset + 1 >= contents.size())
             return false;
-        if (offset < contents.size() and contents[offset] != ' ')
+        if (contents[offset + 1] != ' ' or contents[offset] != ' ')
             return false;
         offset += 2;
         return true;
@@ -506,8 +575,6 @@ MIRFunctionMatcher parse_function_matcher(std::span<char> contents, lcc::usz& of
         out.blocks.emplace_back(m);
     }
 
-    fmt::print("Parsed function name={}\n", function_name);
-
     return out;
 }
 
@@ -519,8 +586,6 @@ MIRMatcher parse_matcher(std::span<char> contents, lcc::usz& offset) {
         auto m = parse_function_matcher(contents, offset);
         out.functions.emplace_back(m);
     }
-
-    fmt::print("Parsed matcher...\n");
 
     return out;
 }
@@ -536,7 +601,6 @@ int main(int argc, char** argv) {
             "    return i64 %0\n";
 
         // TODO: Parse matcher from file
-        // TODO: Parse matcher from something like the following
         std::string test_result =
             "func:\n"
             "  bb0:\n"
@@ -547,28 +611,7 @@ int main(int argc, char** argv) {
         lcc::usz i{0};
         auto parsed_matcher = parse_matcher(test_result, i);
 
-        MIRMatcher matcher{
-            .functions = {
-                {.blocks = {
-                     {.instructions = {
-                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Move),
-                           .operands = {
-                               {lcc::MOperandRegister(
-                                   {.value = lcc::operator+(lcc::cconv::sysv::arg_regs.at(0)), .size = 64}
-                               )},
-                               {lcc::MOperandRegister(
-                                   {.value = lcc::operator+(lcc::cconv::sysv::return_register), .size = 64}
-                               )}
-                           },
-                           .operand_clobbers = {1}},
-                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Return)}
-                      }}
-                 }},
-                {} // inserted memcpy
-            }
-        };
-
-        if (run_test(matcher, test_source, 0, ""))
+        if (run_test(parsed_matcher, test_source, 0, ""))
             fmt::print("PASSED: ");
         else fmt::print("FAILED: ");
         fmt::print("{}\n", test_name);
@@ -583,52 +626,19 @@ int main(int argc, char** argv) {
             "    %2 = add i64 %0, %1\n"
             "    return i64 %2\n";
 
-        // TODO: Parse matcher from something like the following
         std::string test_result =
             "func:\n"
             "  bb0:\n"
             "    add rdi.64 rsi.64\n"
-            "    mov rsi.64 rax.64 {CLOBBERS: OP1}\n"
-            "    mov rax.64 rax.64 {CLOBBERS: OP1}\n"
+            "    mov rsi.64 rax.64 {CLOBBERS: op.1}\n"
+            "    mov rax.64 rax.64 {CLOBBERS: op.1}\n"
             "    ret\n"
             "memcpy:\n";
 
-        // TODO: Parse matcher from file
-        MIRMatcher matcher{
-            .functions = {
-                {.blocks = {
-                     {.instructions = {
-                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Add),
-                           .operands = {
-                               {lcc::MOperandRegister(
-                                   {.value = lcc::operator+(lcc::cconv::sysv::arg_regs.at(0)), .size = 64}
-                               )},
-                               {lcc::MOperandRegister(
-                                   {.value = lcc::operator+(lcc::cconv::sysv::arg_regs.at(1)), .size = 64}
-                               )}
-                           },
-                           .operand_clobbers = {},
-                           .register_clobbers = {}},
+        lcc::usz i{0};
+        auto parsed_matcher = parse_matcher(test_result, i);
 
-                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Move),                                                           //
-                           .operands = {{lcc::MOperandRegister({.value = lcc::operator+(lcc::cconv::sysv::arg_regs.at(1)), .size = 64})}, //
-                                        {lcc::MOperandRegister({.value = lcc::operator+(lcc::cconv::sysv::return_register), .size = 64})}},
-                           .operand_clobbers = {1}},
-
-                          // Compiler generates an extra move from rax to rax...
-                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Move),                                                            //
-                           .operands = {{lcc::MOperandRegister({.value = lcc::operator+(lcc::cconv::sysv::return_register), .size = 64})}, //
-                                        {lcc::MOperandRegister({.value = lcc::operator+(lcc::cconv::sysv::return_register), .size = 64})}},
-                           .operand_clobbers = {1}},
-
-                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Return)}
-                      }}
-                 }},
-                {} // inserted memcpy
-            }
-        };
-
-        if (run_test(matcher, test_source, 0, ""))
+        if (run_test(parsed_matcher, test_source, 0, ""))
             fmt::print("PASSED: ");
         else fmt::print("FAILED: ");
         fmt::print("{}\n", test_name);
