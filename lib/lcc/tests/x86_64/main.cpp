@@ -27,8 +27,8 @@ struct MIRInstructionMatcher {
     bool match(lcc::MInst input) {
         if (input.opcode() != lcc::usz(opcode)) {
             fmt::print(
-                "Instruction opcode does not match expected\n"
-                "GOT 0x{:x}, EXPECTED 0x{:x}\n",
+                "  Instruction opcode does not match expected...\n"
+                "    GOT 0x{:x}, EXPECTED 0x{:x}\n",
                 input.opcode(),
                 opcode
             );
@@ -37,8 +37,8 @@ struct MIRInstructionMatcher {
 
         if (input.all_operands().size() != operands.size()) {
             fmt::print(
-                "Operand count does not match\n"
-                "GOT {}, EXPECTED {}\n",
+                "  Operand count does not match expected...\n"
+                "    GOT {}, EXPECTED {}\n",
                 input.all_operands().size(),
                 operands.size()
             );
@@ -47,8 +47,8 @@ struct MIRInstructionMatcher {
         for (auto [expected, got] : lcc::vws::zip(operands, input.all_operands())) {
             if (expected.index() != got.index()) {
                 fmt::print(
-                    "Operand variant type does not match\n"
-                    "GOT {}, EXPECTED {}\n",
+                    "  Operand variant type does not match expected...\n"
+                    "    GOT {}, EXPECTED {}\n",
                     got.index(),
                     expected.index()
                 );
@@ -59,23 +59,43 @@ struct MIRInstructionMatcher {
         }
 
         if (input.operand_clobbers().size() != operand_clobbers.size()) {
-            fmt::print("Operand clobber count does not match\n");
+            fmt::print(
+                "  Operand clobber count does not match expected...\n"
+                "    GOT {}, EXPECTED {}\n",
+                input.operand_clobbers().size(),
+                operand_clobbers.size()
+            );
             return false;
         }
         for (auto [expected, got] : lcc::vws::zip(operand_clobbers, input.operand_clobbers())) {
             if (expected != got) {
-                fmt::print("Operand clobber values do not match\n");
+                fmt::print(
+                    "  Operand clobber values do not match expected...\n"
+                    "    GOT {}, EXPECTED {}\n",
+                    got,
+                    expected
+                );
                 return false;
             }
         }
 
         if (input.register_clobbers().size() != register_clobbers.size()) {
-            fmt::print("Register clobber count does not match\n");
+            fmt::print(
+                "  Register clobber count does not match expected...\n"
+                "    GOT {}, EXPECTED {}\n",
+                input.register_clobbers().size(),
+                register_clobbers.size()
+            );
             return false;
         }
         for (auto [expected, got] : lcc::vws::zip(register_clobbers, input.register_clobbers())) {
             if (expected != got) {
-                fmt::print("Register clobber values do not match\n");
+                fmt::print(
+                    "  Register clobber values do not match expected...\n"
+                    "    GOT {}, EXPECTED {}",
+                    got,
+                    expected
+                );
                 return false;
             }
         }
@@ -90,13 +110,13 @@ struct MIRBlockMatcher {
     [[nodiscard]]
     bool match(std::vector<lcc::MInst> input) {
         if (input.size() != instructions.size()) {
-            fmt::print("Instruction count did not match expected...\n");
+            fmt::print("  Instruction count did not match expected...\n");
             return false;
         }
 
         for (auto [expected, got] : lcc::vws::zip(instructions, input)) {
             if (not expected.match(got)) {
-                fmt::print("Instruction did not match expected");
+                fmt::print("  Instruction did not match expected...\n");
                 return false;
             }
         }
@@ -149,7 +169,7 @@ struct MIRMatcher {
 };
 
 [[nodiscard]]
-bool run_test(std::string_view test_source, int optimise_level, std::string_view optimisation_passes) {
+bool run_test(MIRMatcher& matcher, std::string_view test_source, int optimise_level, std::string_view optimisation_passes) {
     auto ctx = lcc::Context{
         lcc::Target::x86_64_linux,
         lcc::Format::gnu_as_att_assembly,
@@ -173,7 +193,7 @@ bool run_test(std::string_view test_source, int optimise_level, std::string_view
     auto mod = lcc::Module::Parse(&ctx, f);
     if (not mod) return false;
 
-    fmt::print("PARSED:\n{}\n", mod->as_lcc_ir(true));
+    // fmt::print("PARSED:\n{}\n", mod->as_lcc_ir(true));
 
     // Optimisation
     // IR -> IR
@@ -225,64 +245,102 @@ bool run_test(std::string_view test_source, int optimise_level, std::string_view
             allocate_registers(desc, mfunc);
     }
 
-    // TODO: Match MIR to expected MIR output
-    // This means having some sort of parser that makes MIR instructions...
-    for (auto& mir_f : machine_ir) {
-        fmt::print(
-            "{}",
-            PrintMFunctionImpl(mir_f, lcc::x86_64::opcode_to_string)
-        );
-    }
+    // for (auto& mir_f : machine_ir) {
+    //     fmt::print(
+    //         "{}",
+    //         PrintMFunctionImpl(mir_f, lcc::x86_64::opcode_to_string)
+    //     );
+    // }
 
-    MIRMatcher matcher{
-        .functions = {
-            {.blocks = {
-                 {.instructions = {
-                      {.opcode = lcc::operator+(lcc::x86_64::Opcode::Move),
-                       .operands = {
-                           {lcc::MOperandRegister(
-                               lcc::Register{
-                                   .value = lcc::operator+(lcc::cconv::sysv::arg_regs.at(0)),
-                                   .size = 64
-                               }
-                           )},
-                           {lcc::MOperandRegister(
-                               lcc::Register{
-                                   .value = lcc::operator+(lcc::cconv::sysv::return_register),
-                                   .size = 64
-                               }
-                           )}
-                       },
-                       .operand_clobbers = {1}},
-                      {.opcode = lcc::operator+(lcc::x86_64::Opcode::Return)}
-                  }}
-             }},
-            {} // inserted memcpy
-        }
-    };
     return matcher.match(machine_ir);
 }
 
 int main(int argc, char** argv) {
-    // TODO: Get source(s) from file(s).
+    // TODO: Get test source(s) from file(s).
     {
-        std::string test_name = "x86_64 SysV Parameter Lowering: Single i64";
+        std::string test_name = "x86_64 SysV Parameter Lowering: One i64";
         std::string test_source =
             "; LCC Module 'Test Module'\n"
             "func (exported): ccc i64(i64 %0):\n"
             "  bb0:\n"
             "    return i64 %0\n";
 
-        if (not run_test(test_source, 0, "")) {
-            fmt::print("FAILED: {}\n", test_name);
-        }
+        // TODO: Parse matcher from file
+        MIRMatcher matcher{
+            .functions = {
+                {.blocks = {
+                     {.instructions = {
+                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Move),
+                           .operands = {
+                               {lcc::MOperandRegister(
+                                   {.value = lcc::operator+(lcc::cconv::sysv::arg_regs.at(0)), .size = 64}
+                               )},
+                               {lcc::MOperandRegister(
+                                   {.value = lcc::operator+(lcc::cconv::sysv::return_register), .size = 64}
+                               )}
+                           },
+                           .operand_clobbers = {1}},
+                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Return)}
+                      }}
+                 }},
+                {} // inserted memcpy
+            }
+        };
 
-        /* TODO: Assert test output matches this
-          func:
-            bb0:
-              mov rARG0.64 rRET.64
-              ret
-         */
+        if (run_test(matcher, test_source, 0, ""))
+            fmt::print("PASSED: ");
+        else fmt::print("FAILED: ");
+        fmt::print("{}\n", test_name);
+    }
+
+    {
+        std::string test_name = "x86_64 SysV Parameter Lowering: Two i64";
+        std::string test_source =
+            "; LCC Module 'Test Module'\n"
+            "func (exported): ccc i64(i64 %0, i64 %1):\n"
+            "  bb0:\n"
+            "    %2 = add i64 %0, %1\n"
+            "    return i64 %2\n";
+
+        // TODO: Parse matcher from file
+        MIRMatcher matcher{
+            .functions = {
+                {.blocks = {
+                     {.instructions = {
+                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Add),
+                           .operands = {
+                               {lcc::MOperandRegister(
+                                   {.value = lcc::operator+(lcc::cconv::sysv::arg_regs.at(0)), .size = 64}
+                               )},
+                               {lcc::MOperandRegister(
+                                   {.value = lcc::operator+(lcc::cconv::sysv::arg_regs.at(1)), .size = 64}
+                               )}
+                           },
+                           .operand_clobbers = {},
+                           .register_clobbers = {}},
+
+                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Move),                                                           //
+                           .operands = {{lcc::MOperandRegister({.value = lcc::operator+(lcc::cconv::sysv::arg_regs.at(1)), .size = 64})}, //
+                                        {lcc::MOperandRegister({.value = lcc::operator+(lcc::cconv::sysv::return_register), .size = 64})}},
+                           .operand_clobbers = {1}},
+
+                          // Compiler generates an extra move from rax to rax...
+                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Move),                                                            //
+                           .operands = {{lcc::MOperandRegister({.value = lcc::operator+(lcc::cconv::sysv::return_register), .size = 64})}, //
+                                        {lcc::MOperandRegister({.value = lcc::operator+(lcc::cconv::sysv::return_register), .size = 64})}},
+                           .operand_clobbers = {1}},
+
+                          {.opcode = lcc::operator+(lcc::x86_64::Opcode::Return)}
+                      }}
+                 }},
+                {} // inserted memcpy
+            }
+        };
+
+        if (run_test(matcher, test_source, 0, ""))
+            fmt::print("PASSED: ");
+        else fmt::print("FAILED: ");
+        fmt::print("{}\n", test_name);
     }
 
     return 0;
