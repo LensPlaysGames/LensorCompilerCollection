@@ -2115,8 +2115,6 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     b->set_sema_errored();
                     break;
                 }
-                // TODO: Either replace with append code in AST or leave it and let IRGen
-                // deal with that mess.
                 // Generate following pseudo-code:
                 //   if b->lhs().size >= b->lhs().capacity - 1, {
                 //       // Allocate memory, capacity * 2
@@ -2281,6 +2279,14 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 b->set_sema_errored();
                 break;
             }
+
+            // Ensure rhs is convertible to lhs element type
+            if (not Convert(&b->rhs(), lhs_t->elem())) {
+                Error(b->location(), "Cannot prepend to {} with value of type {}", lhs_t, rhs_t);
+                b->set_sema_errored();
+                break;
+            }
+
             LCC_TODO("GlintSema: Handle dynamic array prepend with {}", ToString(b->op()));
         } break;
 
