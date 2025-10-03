@@ -8,7 +8,7 @@ Now written in C++, LCC started as a compiler written in C for just one hobby la
 
 For convenience purposes, there is a single executable, ~lcc~, that can delegate between all of the different compilers in the collection. This is called the /compiler driver/, often shortened to just /driver/.
 
-Running the driver executable with no arguments will display a usage message that contains compiler flags and options as well as command layout.
+Running the driver executable with the =--help= argument will display a usage message that contains compiler flags and options as well as command layout.
 
 The driver, by default, uses file extension to determine which language to treat the source as. ~lcc examples/glint/SimpleFile.g~ will treat the contents as ~Glint~ source, while ~lcc tst/ir/roundtrip.lcc~ will treat the contents as LCC's Intermediate Representation, for example . You can use ~-x LANG~ to treat source files as a particular language, regardless of extension.
 
