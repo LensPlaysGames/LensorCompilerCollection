@@ -14,6 +14,12 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 
+#include <span>
+#include <string>
+#include <string_view>
+#include <variant>
+#include <vector>
+
 struct MIRInstructionMatcher {
     // Could be lcc::MInst::Kind or lcc::x86_64::Opcode
     lcc::usz opcode{};
@@ -55,7 +61,74 @@ struct MIRInstructionMatcher {
                 return false;
             }
 
-            // TODO: Compare MOperand value?
+            static_assert(
+                std::variant_size_v<lcc::MOperand> == 6,
+                "Exhaustive handling of MOperand kinds in CodeTest"
+            );
+            if (std::holds_alternative<lcc::MOperandRegister>(got)) {
+                auto r_got = std::get<lcc::MOperandRegister>(got);
+                auto r_expected = std::get<lcc::MOperandRegister>(expected);
+                if (r_got.value != r_expected.value) {
+                    fmt::print(
+                        "  Register operand value does not match expected...\n"
+                        "    GOT {}, EXPECTED {}\n",
+                        r_got.value,
+                        r_expected.value
+                    );
+                    return false;
+                }
+                if (r_got.size != r_expected.size) {
+                    fmt::print(
+                        "  Register operand size does not match expected...\n"
+                        "    GOT {}, EXPECTED {}\n",
+                        r_got.size,
+                        r_expected.size
+                    );
+                    return false;
+                }
+            } else if (std::holds_alternative<lcc::MOperandImmediate>(got)) {
+                auto imm_got = std::get<lcc::MOperandImmediate>(got);
+                auto imm_expected = std::get<lcc::MOperandImmediate>(expected);
+                if (imm_got.value != imm_expected.value) {
+                    fmt::print(
+                        "  Immediate operand value does not match expected...\n"
+                        "    GOT {}, EXPECTED {}\n",
+                        imm_got.value,
+                        imm_expected.value
+                    );
+                    return false;
+                }
+                if (imm_got.size != imm_expected.size) {
+                    fmt::print(
+                        "  Immediate operand size does not match expected...\n"
+                        "    GOT {}, EXPECTED {}\n",
+                        imm_got.size,
+                        imm_expected.size
+                    );
+                    return false;
+                }
+            } else if (std::holds_alternative<lcc::MOperandLocal>(got)) {
+                auto local_got = std::get<lcc::MOperandLocal>(got);
+                auto local_expected = std::get<lcc::MOperandLocal>(expected);
+                if (local_got.index != local_expected.index) {
+                    fmt::print(
+                        "  Local index does not match expected...\n"
+                        "    GOT {}, EXPECTED {}\n",
+                        local_got.index,
+                        local_expected.index
+                    );
+                    return false;
+                }
+                if (local_got.offset != local_expected.offset) {
+                    fmt::print(
+                        "  Local offset does not match expected...\n"
+                        "    GOT {}, EXPECTED {}\n",
+                        local_got.offset,
+                        local_expected.offset
+                    );
+                    return false;
+                }
+            } else LCC_TODO("Implement matcher for MOperand type index {}...", got.index());
         }
 
         if (input.operand_clobbers().size() != operand_clobbers.size()) {
@@ -116,7 +189,10 @@ struct MIRBlockMatcher {
 
         for (auto [expected, got] : lcc::vws::zip(instructions, input)) {
             if (not expected.match(got)) {
-                fmt::print("  Instruction did not match expected...\n");
+                fmt::print(
+                    "  Instruction did not match expected...\n    {}\n",
+                    lcc::PrintMInstImpl(got, lcc::x86_64::opcode_to_string)
+                );
                 return false;
             }
         }
@@ -169,10 +245,10 @@ struct MIRMatcher {
 };
 
 [[nodiscard]]
-bool run_test(MIRMatcher& matcher, std::string_view test_source, int optimise_level, std::string_view optimisation_passes) {
+bool run_test(MIRMatcher& matcher, std::string_view test_source, const lcc::Target* target, const lcc::Format* format, int optimise_level, std::string_view optimisation_passes) {
     auto ctx = lcc::Context{
-        lcc::Target::x86_64_linux,
-        lcc::Format::gnu_as_att_assembly,
+        target,
+        format,
         {
             lcc::Context::UseColour,
             lcc::Context::DoNotPrintAST,
@@ -245,12 +321,12 @@ bool run_test(MIRMatcher& matcher, std::string_view test_source, int optimise_le
             allocate_registers(desc, mfunc);
     }
 
-    for (auto& mir_f : machine_ir) {
-        fmt::print(
-            "{}",
-            PrintMFunctionImpl(mir_f, lcc::x86_64::opcode_to_string)
-        );
-    }
+    // for (auto& mir_f : machine_ir) {
+    //     fmt::print(
+    //         "{}",
+    //         PrintMFunctionImpl(mir_f, lcc::x86_64::opcode_to_string)
+    //     );
+    // }
 
     return matcher.match(machine_ir);
 }
@@ -351,10 +427,74 @@ MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::u
     // Translate parsed instruction opcodes into x86_64 opcode values.
     if (instruction_opcode == "ret")
         out.opcode = lcc::operator+(lcc::x86_64::Opcode::Return);
+    else if (instruction_opcode == "push")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Push);
+    else if (instruction_opcode == "pop")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Pop);
+    else if (instruction_opcode == "jmp")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Jump);
+    else if (instruction_opcode == "call")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Call);
     else if (instruction_opcode == "mov")
         out.opcode = lcc::operator+(lcc::x86_64::Opcode::Move);
+    else if (instruction_opcode == "movsx")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::MoveSignExtended);
+    else if (instruction_opcode == "movzx")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::MoveZeroExtended);
+    else if (instruction_opcode == "mov.dereflhs")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::MoveDereferenceLHS);
+    else if (instruction_opcode == "mov.derefrhs")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::MoveDereferenceRHS);
+    else if (instruction_opcode == "lea")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::LoadEffectiveAddress);
+    else if (instruction_opcode == "not")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Not);
+    else if (instruction_opcode == "and")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::And);
+    else if (instruction_opcode == "or")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Or);
+    else if (instruction_opcode == "xor")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Xor);
+    else if (instruction_opcode == "sar")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::ShiftRightArithmetic);
+    else if (instruction_opcode == "shr")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::ShiftRightLogical);
+    else if (instruction_opcode == "shl")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::ShiftLeft);
     else if (instruction_opcode == "add")
         out.opcode = lcc::operator+(lcc::x86_64::Opcode::Add);
+    else if (instruction_opcode == "mul")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Multiply);
+    else if (instruction_opcode == "sub")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Sub);
+    else if (instruction_opcode == "idiv")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SignedDivide);
+    else if (instruction_opcode == "cmp")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Compare);
+    else if (instruction_opcode == "test")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::Test);
+    else if (instruction_opcode == "jz")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::JumpIfZeroFlag);
+    else if (instruction_opcode == "sete")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfEqual);
+    else if (instruction_opcode == "setne")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfNotEqual);
+    else if (instruction_opcode == "setbe")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfEqualOrLessUnsigned);
+    else if (instruction_opcode == "setle")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfEqualOrLessSigned);
+    else if (instruction_opcode == "setae")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfEqualOrGreaterUnsigned);
+    else if (instruction_opcode == "setge")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfEqualOrGreaterSigned);
+    else if (instruction_opcode == "setb")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfLessUnsigned);
+    else if (instruction_opcode == "setl")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfLessSigned);
+    else if (instruction_opcode == "seta")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfGreaterUnsigned);
+    else if (instruction_opcode == "setg")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfGreaterSigned);
     else {
         fmt::print(
             "ERROR! Parsed invalid instruction opcode {}",
@@ -383,11 +523,7 @@ MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::u
                 std::exit(1);
             }
 
-            while (
-                offset < contents.size()
-                and contents[offset] != '}'
-                and contents[offset] != '\n'
-            ) {
+            while (offset < contents.size() and contents[offset] != '}' and contents[offset] != '\n') {
                 SkipWhitespaceWithinLine();
                 auto clobber_begin = offset;
                 ToWhitespaceOr("}");
@@ -415,8 +551,10 @@ MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::u
                 }
             }
 
-            if (contents[offset] != '}') {
+            if (offset >= contents.size() or contents[offset] != '}') {
                 // ERROR! Expected '}'
+                fmt::print("ERROR! Expected '}}' to close clobber list\n");
+                std::exit(1);
             }
             // Eat '}'
             ++offset;
@@ -437,6 +575,19 @@ MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::u
             r.size = (unsigned int) register_operand_size(operand);
 
             out.operands.emplace_back(lcc::MOperandRegister(r));
+        } else if (operand.starts_with("local(")) {
+            // Looks like "local(3)+0"
+            lcc::MOperandLocal local{};
+            // Parse number after "local("
+            auto i = std::stoi(operand.substr(6));
+            local.index = lcc::u32(i);
+
+            // Parse numberf after '+'
+            auto plus_location = operand.find('+');
+            auto offset_value = std::stoi(operand.substr(plus_location));
+            local.offset = offset_value;
+
+            out.operands.emplace_back(local);
         }
     }
 
@@ -590,58 +741,101 @@ MIRMatcher parse_matcher(std::span<char> contents, lcc::usz& offset) {
     return out;
 }
 
-int main(int argc, char** argv) {
-    // TODO: Get test source(s) from file(s).
-    {
-        std::string test_name = "x86_64 SysV Parameter Lowering: One i64";
-        std::string test_source =
-            "; LCC Module 'Test Module'\n"
-            "func (exported): ccc i64(i64 %0):\n"
-            "  bb0:\n"
-            "    return i64 %0\n";
+[[nodiscard]]
+MIRMatcher parse_matcher(std::span<char> contents) {
+    lcc::usz offset{};
+    return parse_matcher(contents, offset);
+}
 
-        // TODO: Parse matcher from file
-        std::string test_result =
-            "func:\n"
-            "  bb0:\n"
-            "    mov rdi.64 rax.64 {CLOBBERS: op.1}\n"
-            "    ret\n"
-            "memcpy:\n";
+struct Test {
+    MIRMatcher matcher{};
+    std::string source{};
 
-        lcc::usz i{0};
-        auto parsed_matcher = parse_matcher(test_result, i);
+    std::string name{};
+};
 
-        if (run_test(parsed_matcher, test_source, 0, ""))
-            fmt::print("PASSED: ");
-        else fmt::print("FAILED: ");
-        fmt::print("{}\n", test_name);
+Test parse_test(std::vector<char>& inputs, lcc::usz& i) {
+    auto ToNewline = [&]() {
+        while (i < inputs.size() and inputs.at(i) != '\n')
+            ++i;
+    };
+    auto SkipNewlines = [&]() {
+        while (i < inputs.size() and inputs.at(i) == '\n')
+            ++i;
+    };
+    auto ToNextLine = [&]() {
+        ToNewline();
+        SkipNewlines();
+    };
+    // Parse test name segment
+    if (inputs.at(i) != '=') {
+        fmt::print("Could not parse tests... (didn't find opening '=' line)\n");
+        std::exit(1);
     }
+    // Eat opening '=' line
+    ToNextLine();
 
-    {
-        std::string test_name = "x86_64 SysV Parameter Lowering: Two i64";
-        std::string test_source =
-            "; LCC Module 'Test Module'\n"
-            "func (exported): ccc i64(i64 %0, i64 %1):\n"
-            "  bb0:\n"
-            "    %2 = add i64 %0, %1\n"
-            "    return i64 %2\n";
+    auto test_name_begin = i;
+    ToNewline();
+    std::string test_name{
+        inputs.begin() + lcc::isz(test_name_begin),
+        inputs.begin() + lcc::isz(i)
+    };
+    SkipNewlines();
 
-        std::string test_result =
-            "func:\n"
-            "  bb0:\n"
-            "    add rdi.64 rsi.64\n"
-            "    mov rsi.64 rax.64 {CLOBBERS: op.1}\n"
-            "    mov rax.64 rax.64 {CLOBBERS: op.1}\n"
-            "    ret\n"
-            "memcpy:\n";
+    // Eat closing '=' line
+    if (i >= inputs.size() or inputs.at(i) != '=') {
+        fmt::print("Invalid closing name line ('=') for test {}\n", test_name);
+        std::exit(1);
+    }
+    ToNextLine();
 
-        lcc::usz i{0};
-        auto parsed_matcher = parse_matcher(test_result, i);
+    // Parse test source segment
+    auto test_source_begin = i;
+    //   Skip lines until end of segment.
+    while (i < inputs.size() and inputs.at(i) != '-')
+        ToNextLine();
 
-        if (run_test(parsed_matcher, test_source, 0, ""))
+    std::string test_source{
+        inputs.begin() + lcc::isz(test_source_begin),
+        inputs.begin() + lcc::isz(i)
+    };
+
+    // Eat source closing '-' line
+    ToNextLine();
+
+    // Parse test matcher segment
+    auto test_result_begin = i;
+    //   Skip lines until end of segment.
+    while (i < inputs.size() and inputs.at(i) != '=')
+        ToNextLine();
+
+    std::string test_result{
+        inputs.begin() + lcc::isz(test_result_begin),
+        inputs.begin() + lcc::isz(i)
+    };
+
+    auto matcher = parse_matcher(test_result);
+
+    return {matcher, test_source, test_name};
+}
+
+int main(int argc, char** argv) {
+    auto run_sysv_test = [](MIRMatcher& matcher, std::string_view test_source, std::string_view test_name) {
+        if (run_test(matcher, test_source, lcc::Target::x86_64_linux, lcc::Format::gnu_as_att_assembly, 0, ""))
             fmt::print("PASSED: ");
         else fmt::print("FAILED: ");
         fmt::print("{}\n", test_name);
+    };
+
+    {
+        // TODO: Read all files recursively in corpus/
+        auto inputs = lcc::File::Read("corpus/parameters.txt");
+        lcc::usz i{0};
+        while (i < inputs.size()) {
+            auto t = parse_test(inputs, i);
+            run_sysv_test(t.matcher, t.source, t.name);
+        }
     }
 
     return 0;
