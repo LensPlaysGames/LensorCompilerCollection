@@ -29,6 +29,7 @@ struct Options {
     std::string color{"auto"};
     std::string language{"default"};
     std::string format{"default"};
+    std::string target{"default"};
 };
 
 auto parse(int argc, const char** argv) -> Options;

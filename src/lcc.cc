@@ -132,8 +132,18 @@ auto main(int argc, const char** argv) -> int {
 
     /// Compile the file.
 
+    // Get target from "-t" or "--target" command line option, falling back to
+    // default.
+    auto* target = default_target;
+    if (options.target == "default") {
+        ;
+    } else if (options.target == "x86_64_linux") {
+        target = lcc::Target::x86_64_linux;
+    } else if (options.target == "x86_64_windows") {
+        target = lcc::Target::x86_64_windows;
+    } else LCC_ASSERT(false, "Unhandled target");
+
     // Get format from command line option, falling back to default.
-    // TODO: Get target from "-t" or "--target" command line option.
     auto* format = default_format;
     if (options.format == "default") {
         ;
@@ -156,7 +166,7 @@ auto main(int argc, const char** argv) -> int {
     } else LCC_ASSERT(false, "Unhandled format");
 
     lcc::Context context{
-        default_target,
+        target,
         format,
         lcc::Context::Options{
             (lcc::Context::OptionColour) use_colour,
