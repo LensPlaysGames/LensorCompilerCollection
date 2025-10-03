@@ -1,5 +1,5 @@
 ================
-x86_64 SysV Parameter Lowering: One i64
+Parameter Lowering: One i64
 ================
 
 func (exported): ccc void(i64 %0):
@@ -7,7 +7,7 @@ func (exported): ccc void(i64 %0):
     %1 = copy i64 %0
     return
 
----
+--sysv--
 
 func:
   bb0:
@@ -15,9 +15,17 @@ func:
     ret
 memcpy:
 
+--ms--
+
+func:
+  bb0:
+    mov rcx.64 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
 
 ================
-x86_64 SysV Parameter Lowering: Two i64
+Parameter Lowering: Two i64
 ================
 
 func (exported): ccc void(i64 %0, i64 %1):
@@ -26,7 +34,7 @@ func (exported): ccc void(i64 %0, i64 %1):
     %3 = copy i64 %1
     return
 
----
+--sysv--
 
 func:
   bb0:
@@ -35,9 +43,18 @@ func:
     ret
 memcpy:
 
+--ms--
+
+func:
+  bb0:
+    mov rcx.64 rax.64 {CLOBBERS: op.1}
+    mov rdx.64 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
 
 ================
-x86_64 SysV Parameter Lowering: Three i64
+Parameter Lowering: Three i64
 ================
 
 func (exported): ccc void(i64 %0, i64 %1, i64 %2):
@@ -47,7 +64,7 @@ func (exported): ccc void(i64 %0, i64 %1, i64 %2):
     %5 = copy i64 %2
     return
 
----
+--sysv--
 
 func:
   bb0:
@@ -57,8 +74,18 @@ func:
     ret
 memcpy:
 
+--ms--
+
+func:
+  bb0:
+    mov rcx.64 rax.64 {CLOBBERS: op.1}
+    mov rdx.64 rax.64 {CLOBBERS: op.1}
+    mov r8.64 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
 ================
-x86_64 SysV Parameter Lowering: Four i64
+Parameter Lowering: Four i64
 ================
 
 func (exported): ccc void(i64 %0, i64 %1, i64 %2, i64 %3):
@@ -69,7 +96,7 @@ func (exported): ccc void(i64 %0, i64 %1, i64 %2, i64 %3):
     %7 = copy i64 %3
     return
 
----
+--sysv--
 
 func:
   bb0:
@@ -80,8 +107,20 @@ func:
     ret
 memcpy:
 
+--ms--
+
+func:
+  bb0:
+    mov rcx.64 rax.64 {CLOBBERS: op.1}
+    mov rdx.64 rax.64 {CLOBBERS: op.1}
+    mov r8.64 rax.64 {CLOBBERS: op.1}
+    mov r9.64 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+
 ================
-x86_64 SysV Parameter Lowering: Five i64
+Parameter Lowering: Five i64
 ================
 
 func (exported): ccc void(i64 %0, i64 %1, i64 %2, i64 %3, i64 %4):
@@ -93,7 +132,7 @@ func (exported): ccc void(i64 %0, i64 %1, i64 %2, i64 %3, i64 %4):
     %9 = copy i64 %4
     return
 
----
+--sysv--
 
 func:
   bb0:
@@ -107,7 +146,7 @@ memcpy:
 
 
 ================
-x86_64 SysV Parameter Lowering: Six i64
+Parameter Lowering: Six i64
 ================
 
 func (exported): ccc void(i64 %0, i64 %1, i64 %2, i64 %3, i64 %4, i64 %5):
@@ -120,7 +159,7 @@ func (exported): ccc void(i64 %0, i64 %1, i64 %2, i64 %3, i64 %4, i64 %5):
     %11 = copy i64 %5
     return
 
----
+--sysv--
 
 func:
   bb0:
@@ -132,3 +171,285 @@ func:
     mov r9.64 rax.64 {CLOBBERS: op.1}
     ret
 memcpy:
+
+================
+Parameter Lowering: Seven i64
+================
+
+func (exported): ccc void(i64 %0, i64 %1, i64 %2, i64 %3, i64 %4, i64 %5, i64 %6):
+  bb0:
+    %7 = copy i64 %0
+    %8 = copy i64 %1
+    %9 = copy i64 %2
+    %10 = copy i64 %3
+    %11 = copy i64 %4
+    %12 = copy i64 %5
+    %13 = alloca i64
+    store i64 %6 into %13
+    %14 = load i64 from %13
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov rdi.64 rax.64 {CLOBBERS: op.1}
+    mov rsi.64 rax.64 {CLOBBERS: op.1}
+    mov rdx.64 rax.64 {CLOBBERS: op.1}
+    mov rcx.64 rax.64 {CLOBBERS: op.1}
+    mov r8.64 rax.64 {CLOBBERS: op.1}
+    mov r9.64 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+16 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+================
+Parameter Lowering: Eight i64
+================
+
+func (exported): ccc void(i64 %0, i64 %1, i64 %2, i64 %3, i64 %4, i64 %5, i64 %6, i64 %7):
+  bb0:
+    %8 = copy i64 %0
+    %9 = copy i64 %1
+    %10 = copy i64 %2
+    %11 = copy i64 %3
+    %12 = copy i64 %4
+    %13 = copy i64 %5
+    %14 = alloca i64
+    store i64 %6 into %14
+    %15 = load i64 from %14
+    %16 = alloca i64
+    store i64 %7 into %16
+    %17 = load i64 from %16
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov rdi.64 rax.64 {CLOBBERS: op.1}
+    mov rsi.64 rax.64 {CLOBBERS: op.1}
+    mov rdx.64 rax.64 {CLOBBERS: op.1}
+    mov rcx.64 rax.64 {CLOBBERS: op.1}
+    mov r8.64 rax.64 {CLOBBERS: op.1}
+    mov r9.64 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+16 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+24 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+================
+Memory Parameter Lowering: One i64
+================
+
+func (internal): glintcc void(i64 %0):
+  bb0:
+    %1 = alloca i64
+    store i64 %0 into %1
+    %2 = load i64 from %1
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov.derefrhs rdi.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov.derefrhs rcx.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+================
+Memory Parameter Lowering: Two i64
+================
+
+func (internal): glintcc void(i64 %0, i64 %1):
+  bb0:
+    %100 = alloca i64
+    store i64 %0 into %100
+    %101 = load i64 from %100
+    %102 = alloca i64
+    store i64 %1 into %102
+    %103 = load i64 from %102
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov.derefrhs rdi.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rsi.64 local(1)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(1)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov.derefrhs rcx.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rdx.64 local(1)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(1)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+================
+Memory Parameter Lowering: Three i64
+================
+
+func (internal): glintcc void(i64 %0, i64 %1, i64 %2):
+  bb0:
+    %100 = alloca i64
+    store i64 %0 into %100
+    %101 = load i64 from %100
+    %102 = alloca i64
+    store i64 %1 into %102
+    %103 = load i64 from %102
+    %104 = alloca i64
+    store i64 %2 into %104
+    %105 = load i64 from %104
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov.derefrhs rdi.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rsi.64 local(1)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(1)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rdx.64 local(2)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(2)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov.derefrhs rcx.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rdx.64 local(1)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(1)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs r8.64 local(2)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(2)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+================
+Memory Parameter Lowering: Four i64
+================
+
+func (internal): glintcc void(i64 %0, i64 %1, i64 %2, i64 %3):
+  bb0:
+    %100 = alloca i64
+    store i64 %0 into %100
+    %101 = load i64 from %100
+    %102 = alloca i64
+    store i64 %1 into %102
+    %103 = load i64 from %102
+    %104 = alloca i64
+    store i64 %2 into %104
+    %105 = load i64 from %104
+    %106 = alloca i64
+    store i64 %3 into %106
+    %107 = load i64 from %106
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov.derefrhs rdi.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rsi.64 local(1)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(1)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rdx.64 local(2)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(2)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rcx.64 local(3)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(3)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov.derefrhs rcx.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rdx.64 local(1)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(1)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs r8.64 local(2)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(2)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs r9.64 local(3)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(3)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+================
+Memory Parameter Lowering: Five i64
+:skip
+================
+
+func (internal): glintcc void(i64 %0, i64 %1, i64 %2, i64 %3, i64 %4):
+  bb0:
+    %100 = alloca i64
+    store i64 %0 into %100
+    %101 = load i64 from %100
+    %102 = alloca i64
+    store i64 %1 into %102
+    %103 = load i64 from %102
+    %104 = alloca i64
+    store i64 %2 into %104
+    %105 = load i64 from %104
+    %106 = alloca i64
+    store i64 %3 into %106
+    %107 = load i64 from %106
+    %108 = alloca i64
+    store i64 %4 into %108
+    %109 = load i64 from %108
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov.derefrhs rdi.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rsi.64 local(1)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(1)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rdx.64 local(2)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(2)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rcx.64 local(3)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(3)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs r8.64 local(4)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(4)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov.derefrhs rcx.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rdx.64 local(1)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(1)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs r8.64 local(2)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(2)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs r9.64 local(3)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(3)+0 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+16 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+

@@ -7,6 +7,7 @@
 #include <lcc/codegen/register_allocation.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/context.hh>
+#include <lcc/core.hh>
 #include <lcc/format.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
@@ -321,6 +322,7 @@ bool run_test(MIRMatcher& matcher, std::string_view test_source, const lcc::Targ
             allocate_registers(desc, mfunc);
     }
 
+    // Print Source MIR
     // for (auto& mir_f : machine_ir) {
     //     fmt::print(
     //         "{}",
@@ -579,12 +581,18 @@ MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::u
             // Looks like "local(3)+0"
             lcc::MOperandLocal local{};
             // Parse number after "local("
-            auto i = std::stoi(operand.substr(6));
+            auto index_string = operand.substr(6);
+            lcc::u32 i = lcc::MOperandLocal::bad_index;
+            if (index_string.starts_with("abs"))
+                i = lcc::MOperandLocal::absolute_index;
+            else i = (decltype(i)) std::stoi(index_string);
+
             local.index = lcc::u32(i);
 
             // Parse numberf after '+'
             auto plus_location = operand.find('+');
             auto offset_value = std::stoi(operand.substr(plus_location));
+
             local.offset = offset_value;
 
             out.operands.emplace_back(local);
@@ -747,14 +755,23 @@ MIRMatcher parse_matcher(std::span<char> contents) {
     return parse_matcher(contents, offset);
 }
 
-struct Test {
+struct CCMatcher {
+    const lcc::Target* target{};
     MIRMatcher matcher{};
+};
+
+struct Test {
+    std::vector<CCMatcher> matchers{};
     std::string source{};
 
     std::string name{};
+
+    bool should_skip{false};
 };
 
 Test parse_test(std::vector<char>& inputs, lcc::usz& i) {
+    bool should_skip{false};
+
     auto ToNewline = [&]() {
         while (i < inputs.size() and inputs.at(i) != '\n')
             ++i;
@@ -783,9 +800,26 @@ Test parse_test(std::vector<char>& inputs, lcc::usz& i) {
     };
     SkipNewlines();
 
+    // Parse test specifier
+    while (i < inputs.size() and inputs.at(i) == ':') {
+        auto specifier_begin = i;
+        ToNextLine();
+        std::string specifier{
+            inputs.begin() + lcc::isz(specifier_begin),
+            inputs.begin() + lcc::isz(i)
+        };
+
+        if (specifier.starts_with(":skip")) {
+            should_skip = true;
+        } else {
+            fmt::print("ERROR! Invalid test specifier \"{}\"\n", specifier);
+            std::exit(1);
+        }
+    }
+
     // Eat closing '=' line
     if (i >= inputs.size() or inputs.at(i) != '=') {
-        fmt::print("Invalid closing name line ('=') for test {}\n", test_name);
+        fmt::print("ERROR! Invalid closing name line ('=') for test {}\n", test_name);
         std::exit(1);
     }
     ToNextLine();
@@ -802,39 +836,81 @@ Test parse_test(std::vector<char>& inputs, lcc::usz& i) {
     };
 
     // Eat source closing '-' line
-    ToNextLine();
-
-    // Parse test matcher segment
-    auto test_result_begin = i;
-    //   Skip lines until end of segment.
-    while (i < inputs.size() and inputs.at(i) != '=')
+    std::vector<CCMatcher> matchers{};
+    while (i < inputs.size() and inputs.at(i) != '=') {
+        auto calling_convention_begin = i;
         ToNextLine();
+        std::string calling_convention{
+            inputs.begin() + lcc::isz(calling_convention_begin),
+            inputs.begin() + lcc::isz(i)
+        };
 
-    std::string test_result{
-        inputs.begin() + lcc::isz(test_result_begin),
-        inputs.begin() + lcc::isz(i)
-    };
+        const lcc::Target* target{};
+        if (calling_convention.contains("sysv")) {
+            target = lcc::Target::x86_64_linux;
+        } else if (calling_convention.contains("ms")) {
+            target = lcc::Target::x86_64_windows;
+        } else {
+            fmt::print(
+                "ERROR! Expected calling convention in first line of test segment (containing '-'). Expected ccs: sysv, ms\n"
+            );
+            std::exit(1);
+        }
 
-    auto matcher = parse_matcher(test_result);
+        // Parse test matcher segment
+        auto test_result_begin = i;
+        //   Skip lines until end of segment.
+        while (i < inputs.size() and inputs.at(i) != '=' and inputs.at(i) != '-')
+            ToNextLine();
 
-    return {matcher, test_source, test_name};
+        std::string test_result{
+            inputs.begin() + lcc::isz(test_result_begin),
+            inputs.begin() + lcc::isz(i)
+        };
+
+        matchers.emplace_back(target, parse_matcher(test_result));
+    }
+
+    return {matchers, test_source, test_name, should_skip};
+}
+
+std::string_view ToString(const lcc::Target* t) {
+    if (t == lcc::Target::x86_64_linux) return "x86_64_linux";
+    if (t == lcc::Target::x86_64_windows) return "x86_64_windows";
+    LCC_UNREACHABLE();
 }
 
 int main(int argc, char** argv) {
-    auto run_sysv_test = [](MIRMatcher& matcher, std::string_view test_source, std::string_view test_name) {
-        if (run_test(matcher, test_source, lcc::Target::x86_64_linux, lcc::Format::gnu_as_att_assembly, 0, ""))
-            fmt::print("PASSED: ");
-        else fmt::print("FAILED: ");
-        fmt::print("{}\n", test_name);
-    };
-
+    lcc::utils::Colours C{true};
     {
         // TODO: Read all files recursively in corpus/
         auto inputs = lcc::File::Read("corpus/parameters.txt");
         lcc::usz i{0};
         while (i < inputs.size()) {
             auto t = parse_test(inputs, i);
-            run_sysv_test(t.matcher, t.source, t.name);
+            if (t.should_skip) continue;
+            for (auto m : t.matchers) {
+                fmt::print("{}: ", ToString(m.target));
+                if (run_test(
+                        m.matcher,
+                        t.source,
+                        m.target,
+                        lcc::Format::gnu_as_att_assembly,
+                        0,
+                        ""
+                    )) {
+                    fmt::print(
+                        "{}PASSED{}: ",
+                        C(lcc::utils::Colour::BoldGreen),
+                        C(lcc::utils::Colour::Reset)
+                    );
+                } else fmt::print(
+                    "{}FAILED{}: ",
+                    C(lcc::utils::Colour::BoldRed),
+                    C(lcc::utils::Colour::Reset)
+                );
+                fmt::print("{}\n", t.name);
+            }
         }
     }
 
