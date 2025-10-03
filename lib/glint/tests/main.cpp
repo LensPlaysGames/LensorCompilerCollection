@@ -93,7 +93,9 @@ struct GlintTest : langtest::Test {
             if (not ir.empty()) {
                 // Parse expected IRGen IR
                 // fmt::print("EXPECTED IR SPAN:\n{}\n", ir);
-                auto expected_ir = lcc::Module::Parse(&context, ir);
+                std::vector<char> ir_v = {ir.begin(), ir.end()};
+                auto& ir_f = context.create_file("ir_source.lcc", ir_v);
+                auto expected_ir = lcc::Module::Parse(&context, ir_f);
                 if (expected_ir) {
                     auto* got_ir = lcc::glint::IRGen::Generate(&context, *mod);
 
@@ -350,7 +352,7 @@ void visit_directory(langtest::TestContext& out, std::filesystem::path directory
     for (const auto& entry : std::filesystem::directory_iterator(directory_path)) {
         if (entry.is_regular_file()) {
             if (option_print or option_count)
-                fmt::print("{}:\n", entry.path().lexically_normal().filename().string());
+                fmt::print("{}:\n", entry.path().lexically_normal().string());
 
             auto count = langtest::process_ast_test_file<GlintTest>(entry.path());
 
