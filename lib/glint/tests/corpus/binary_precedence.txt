@@ -57,7 +57,7 @@ Addition before Equality
 
 ---
 
-main : i64(i32 %0, ptr %1, ptr %2):
+main (exported) : i64(i32 %0, ptr %1, ptr %2):
   bb0:
     %3 = alloca i32
     store i32 %0 into %3
