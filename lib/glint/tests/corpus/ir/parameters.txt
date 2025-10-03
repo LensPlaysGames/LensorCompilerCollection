@@ -1,0 +1,138 @@
+================
+Single Parameter
+================
+foo : void(x :int) {};
+
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (return (integer_literal)))
+
+---
+
+; empty main
+main (exported): ccc i64(i32 %0, ptr %1, ptr %2):
+  bb0:
+    %3 = alloca i32
+    store i32 %0 into %3
+    %4 = alloca ptr
+    store ptr %1 into %4
+    %5 = alloca ptr
+    store ptr %2 into %5
+    return i64 0
+
+; actual test result
+_XGlintfooF1_B5_B3 (internal): glintcc void(i64 %0):
+  bb0:
+    %1 = alloca i64
+    store i64 %0 into %1
+    return
+
+================
+Two Parameters
+================
+foo : void(x,y :int) {};
+
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (return (integer_literal)))
+
+---
+
+; empty main
+main (exported): ccc i64(i32 %0, ptr %1, ptr %2):
+  bb0:
+    %3 = alloca i32
+    store i32 %0 into %3
+    %4 = alloca ptr
+    store ptr %1 into %4
+    %5 = alloca ptr
+    store ptr %2 into %5
+    return i64 0
+
+; actual test result
+_XGlintfooF2_B5_B3_B3 (internal): glintcc void(i64 %0, i64 %1):
+  bb0:
+    %2 = alloca i64
+    store i64 %0 into %2
+    %3 = alloca i64
+    store i64 %1 into %3
+    return
+
+================
+Three Parameters
+================
+foo : void(x,y,z :int) {};
+
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (return (integer_literal)))
+
+---
+
+; empty main
+main (exported): ccc i64(i32 %0, ptr %1, ptr %2):
+  bb0:
+    %3 = alloca i32
+    store i32 %0 into %3
+    %4 = alloca ptr
+    store ptr %1 into %4
+    %5 = alloca ptr
+    store ptr %2 into %5
+    return i64 0
+
+; actual test result
+_XGlintfooF3_B5_B3_B3_B3 (internal): glintcc void(i64 %0, i64 %1, i64 %2):
+  bb0:
+    %3 = alloca i64
+    store i64 %0 into %3
+    %4 = alloca i64
+    store i64 %1 into %4
+    %5 = alloca i64
+    store i64 %2 into %5
+    return
+
+================
+Four Parameters
+================
+foo : void(x,y,z,w :int) {};
+
+---
+
+(block
+ (function_declaration (block (return)))
+ (return (integer_literal)))
+
+---
+
+; empty main
+main (exported): ccc i64(i32 %0, ptr %1, ptr %2):
+  bb0:
+    %3 = alloca i32
+    store i32 %0 into %3
+    %4 = alloca ptr
+    store ptr %1 into %4
+    %5 = alloca ptr
+    store ptr %2 into %5
+    return i64 0
+
+; actual test result
+_XGlintfooF4_B5_B3_B3_B3_B3 (internal): glintcc void(i64 %0, i64 %1, i64 %2, i64 %3):
+  bb0:
+    %4 = alloca i64
+    store i64 %0 into %4
+    %5 = alloca i64
+    store i64 %1 into %5
+    %6 = alloca i64
+    store i64 %2 into %6
+    %7 = alloca i64
+    store i64 %3 into %7
+    return
