@@ -372,11 +372,11 @@ auto parse_test(
             size_t lcc_ir_end = i;
             // keep end in-bounds and strip trailing whitespace.
             if (lcc_ir_end >= fsize) lcc_ir_end = fsize - 1;
-            while (isspace(contents[lcc_ir_end])) --lcc_ir_end;
+            while (lcc_ir_end and isspace(contents[lcc_ir_end - 1])) --lcc_ir_end;
 
             test.ir = {
                 contents.begin() + lcc::isz(lcc_ir_begin),
-                contents.begin() + lcc::isz(lcc_ir_end) + 1
+                contents.begin() + lcc::isz(lcc_ir_end)
             };
         }
     }
