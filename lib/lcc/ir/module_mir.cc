@@ -285,6 +285,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         switch (param_info.kind()) {
                             case cconv::msx64::ParameterDescription::Parameter::Kinds::SingleRegister:
                             // FIXME: Is this how PointerInRegister parameter is handled (here)?
+                            // This may be the perfect spot to insert a dereference, if possible.
                             case cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister: {
                                 return MOperandRegister(
                                     +cconv::msx64::arg_regs.at(param->index()),
@@ -292,8 +293,31 @@ auto Module::mir() -> std::vector<MFunction> {
                                 );
                             }
 
-                            case cconv::msx64::ParameterDescription::Parameter::Kinds::Stack:
-                                LCC_ASSERT(false, "TODO: Handle accessing x64cc memory parameter");
+                            case cconv::msx64::ParameterDescription::Parameter::Kinds::Stack: {
+                                // Return Local with positive offset into parent stack frame.
+                                // To get the actual offset, we need to know how many memory parameters
+                                // come before this parameter, as well as their size (and alignment, I'd
+                                // think).
+
+                                // FIXME: Magic number. Why 2 registers wide? I believe this is to get
+                                // past the stack frame, if present (i.e. saved base pointer), but I don't
+                                // remember exactly.
+                                i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
+
+                                // x64 calling convention requires caller to designate 32 bytes on the
+                                // stack to save parameter registers into.
+                                i32 shadow_stack_size = 32;
+                                offset += shadow_stack_size;
+
+                                // FIXME: I'm not sure if this should be stack_byte_offset (including size
+                                // of current parameter), or if it should be stack_byte_offset_used
+                                // (before the current parameter's size has been added).
+                                offset += i32(param_info.stack_byte_offset_used);
+                                return MOperandLocal(
+                                    MOperandLocal::absolute_index,
+                                    offset
+                                );
+                            }
                         }
                     } else if (_ctx->target()->is_cconv_sysv()) {
                         auto params_desc = cconv::sysv::parameter_description(f_ir);
