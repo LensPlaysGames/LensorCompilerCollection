@@ -124,8 +124,7 @@ struct ParameterDescription {
             if (arg_regs == 1) {
                 if (is_overlarge)
                     return Kinds::PointerInRegister;
-                if (arg_regs == 1)
-                    return Kinds::SingleRegister;
+                return Kinds::SingleRegister;
             }
             return Kinds::Stack;
         }

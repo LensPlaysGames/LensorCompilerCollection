@@ -1,4 +1,5 @@
 #include <lcc/calling_conventions/ms_x64.hh>
+#include <lcc/codegen/x86_64/x86_64.hh>
 
 namespace lcc::cconv::msx64 {
 
@@ -14,6 +15,7 @@ auto parameter_description(std::vector<Type*> parameter_types)
     for (auto [param_i, arg] : vws::enumerate(parameter_types)) {
         working_param.arg_regs_used += working_param.arg_regs;
         working_param.arg_regs = 0;
+        working_param.is_overlarge = arg->bits() > x86_64::GeneralPurposeBitwidth;
 
         // TODO: First four registers are passed in arguments, but, for types
         // larger than the register size, a pointer is passed in that register.
@@ -32,18 +34,26 @@ auto parameter_description(std::vector<Type*> parameter_types)
         } else {
             working_param.location = ParameterClass::MEMORY;
             working_param.stack_slot_index = next_stack_slot_index;
+            working_param.stack_byte_offset_used = working_param.stack_byte_offset;
+            working_param.stack_byte_offset += arg->bytes();
         }
 
         param_desc.info.emplace_back(working_param);
     }
-    return {};
+    return param_desc;
 }
 
 // Given an LCC IR function, return a description of how the parameters
 // would be passed in the SysV convention.
 auto parameter_description(Function* function)
     -> ParameterDescription {
-    return {};
+    std::vector<Type*> parameter_types{};
+    rgs::transform(
+        function->params(),
+        std::back_inserter(parameter_types),
+        [](auto p) { return p->type(); }
+    );
+    return parameter_description(parameter_types);
 }
 
 } // namespace lcc::cconv::msx64
