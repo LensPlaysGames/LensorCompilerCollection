@@ -287,9 +287,15 @@ auto Module::mir() -> std::vector<MFunction> {
                             // FIXME: Is this how PointerInRegister parameter is handled (here)?
                             // This may be the perfect spot to insert a dereference, if possible.
                             case cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister: {
-                                return MOperandRegister(
-                                    +cconv::msx64::arg_regs.at(param->index()),
-                                    uint(param->type()->bits())
+                                // FIXME: Magic number. Why 2 registers wide? I believe this is to get
+                                // past the stack frame, if present (i.e. saved base pointer), but I don't
+                                // remember exactly.
+                                i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
+
+                                // Return Local with positive offset into parent stack frame.
+                                return MOperandLocal(
+                                    MOperandLocal::absolute_index,
+                                    offset + (8 * lcc::i32(param->index()))
                                 );
                             }
 
@@ -477,6 +483,36 @@ auto Module::mir() -> std::vector<MFunction> {
         for (auto [block_index, block] : vws::enumerate(function->blocks())) {
             auto& bb = f.blocks().at(usz(block_index));
             block->machine_block(&bb);
+        }
+    }
+
+    if (context()->target()->is_cconv_ms()) {
+        constexpr lcc::i32 stack_frame_size = 16;
+        for (auto [f_index, function] : vws::enumerate(code())) {
+            auto& f = funcs.at(usz(f_index));
+            if (f.blocks().empty()) continue;
+
+            auto param_desc = cconv::msx64::parameter_description(function);
+            auto& params = as<FunctionType>(function->type())->params();
+            for (size_t param_i{0}; param_i < params.size(); ++param_i) {
+                auto param_info = param_desc.info.at(param_i);
+                if (param_info.arg_regs == 1) {
+                    auto move = MInst(+x86_64::Opcode::MoveDereferenceRHS, {});
+                    move.add_operand(
+                        MOperandRegister(
+                            +cconv::msx64::arg_regs.at(param_i),
+                            x86_64::GeneralPurposeBitwidth
+                        )
+                    );
+                    move.add_operand(
+                        MOperandLocal(
+                            MOperandLocal::absolute_index,
+                            stack_frame_size + (8 * lcc::i32(param_i))
+                        )
+                    );
+                    f.blocks().at(0).add_instruction(move);
+                }
+            }
         }
     }
 

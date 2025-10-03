@@ -727,7 +727,8 @@ MIRFunctionMatcher parse_function_matcher(std::span<char> contents, lcc::usz& of
     ++offset;
 
     // TODO: Optionally parse locals list, if present.
-    // TODO: Parse two spaces, then basic block name followed by ':' on next line
+
+    // Parse two spaces, then basic block name followed by ':' on next line
     ToBeginningOfNextLine();
     while (ConsumeTwoSpaces()) {
         auto m = parse_block_matcher(contents, offset);

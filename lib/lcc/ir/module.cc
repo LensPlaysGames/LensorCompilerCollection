@@ -31,48 +31,9 @@ void Module::lower() {
         for (auto function : code()) {
             FunctionType* function_type = as<FunctionType>(function->type());
 
-            // Memory parameters need their type changed to pointer type.
-            //
-            // Also cache pointer to local for later use in storing from this
-            // pointer into local that represents "actual parameter".
-            //
-            // foo : internal glintcc void(@__struct_0 %0):
-            //   bb0:
-            //     %1 = alloca @__struct_0
-            //     store @__struct_0 %0 into %1
-            //     %2 = gmp @__struct_0 from %1 at i64 0
-            //     return
-            //
-            // SHOULD TURN INTO
-            //
-            // foo : internal glintcc void(ptr %0):
-            //   bb0:
-            //     %1 = alloca ptr
-            //     store ptr %0 into %1
-            //     %2 = load ptr from %1
-            //     %3 = gmp @__struct_0 from %2 at i64 0
-            //     return
-            //
-            // Basically, we need to change type of alloca and store->val() to ptr,
-            // and add `load ptr from alloca` before every use, and replace the use
-            // with that load...
-            //
-            // In C syntax:
-            // int foo(big_struct _x) {
-            //     big_struct x = _x;
-            //     return x.a + x.b;
-            // }
-            //
-            // SHOULD TURN INTO
-            //
-            // int foo(big_struct* _x) {
-            //     big_struct* xptr = _x;
-            //     return (*xptr).a + (*xptr).b;
-            // }
-            //
-
             // TODO: Static assert for handling all calling conventions
             if (_ctx->target()->is_cconv_sysv()) {
+                // SysV x86_64 Calling Convention
                 auto param_desc = cconv::sysv::parameter_description(function);
                 for (size_t param_i{0}; param_i < function_type->params().size(); ++param_i) {
                     auto* parameter = function->param(param_i);
@@ -125,47 +86,91 @@ void Module::lower() {
                     auto* parameter = function->param(param_i);
                     auto*& param_t = function_type->params().at(param_i);
                     auto param_info = param_desc.info.at(param_i);
-                    // Basically, a memory parameter that goes in a register needs to have "
-                    // dereferences" added.
+
+                    // Basically, a memory parameter that goes in a register needs to have
+                    // "dereferences" added.
+                    if (param_info.kind() == cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister) {
+                        LCC_ASSERT(false, "TODO: MSx64 calling convention memory parameter (change alloca to ptr type, insert load before uses of alloca)");
+                    }
+                    for (auto* user : parameter->users()) {
+                        if (auto store = cast<StoreInst>(user)) {
+                            LCC_ASSERT(
+                                is<Parameter>(store->val()),
+                                "Use of parameter in destination pointer of store instruction: we don't yet support this, sorry"
+                            );
+                            LCC_ASSERT(
+                                is<AllocaInst>(store->ptr()),
+                                "We only support storing parameter into pointer returned by AllocaInst, sorry"
+                            );
+
+                            // Replace uses of store->ptr() with (a copy of) store->val()
+                            auto alloca = as<AllocaInst>(store->ptr());
+                            for (auto pointer_user : alloca->users()) {
+                                // Alloca fetched with store->val() is (obviously) used by the store, but
+                                // we don't want to replace the alloca in the store because we are going
+                                // to be removing the store anyway..
+                                if (pointer_user == store) continue;
+
+                                // Replace use of Alloca.
+                                auto copy = new (*this) Parameter(parameter->type(), parameter->index());
+                                pointer_user->replace_children([&](Value* v) -> Value* {
+                                    if (v == alloca) return copy;
+                                    return nullptr;
+                                });
+                            }
+                            // Erase store
+                            store->erase();
+                            alloca->erase();
+
+                        } else LCC_ASSERT(false, "Unhandled instruction type in replacement of users of memory parameter");
+                    }
+
+                    // x64 calling convention requires the caller to allocate space on the
+                    // stack for the callee to save parameter registers to, if need be.
+                    // Because that creates two sources of truth (is the parameter in the
+                    // already allocated memory or is it in the register?), we just always
+                    // move the parameter into the memory at the beginning of the function. It
+                    // appears GCC does something similar to this, as well. This means
+                    // register parameters are treated the same as memory parameters in this
+                    // scenario (alloca and store removed, furutre references to alloca
+                    // replaced with reference to (a copy of) parameter).
+
                     // A memory parameter that is only ever on the stack may be treated like a
                     // sysv memory parameter, in that the store and alloca may be removed, and
                     // uses of the alloca replaced with uses of (a copy of) the parameter.
-                    if (param_info.kind() == cconv::msx64::ParameterDescription::Parameter::Kinds::Stack) {
-                        param_t = Type::PtrTy;
-                        for (auto* user : parameter->users()) {
-                            if (auto store = cast<StoreInst>(user)) {
-                                LCC_ASSERT(
-                                    is<Parameter>(store->val()),
-                                    "Use of memory parameter in destination pointer of store instruction: we don't yet support this, sorry"
-                                );
-                                LCC_ASSERT(
-                                    is<AllocaInst>(store->ptr()),
-                                    "We only support storing memory parameter into pointer returned by AllocaInst, sorry"
-                                );
 
-                                // Replace uses of store->ptr() with (a copy of) store->val()
-                                auto alloca = as<AllocaInst>(store->ptr());
-                                for (auto pointer_user : alloca->users()) {
-                                    // Alloca fetched with store->val() is (obviously) used by the store, but
-                                    // we don't want to replace the alloca in the store because we are going
-                                    // to be removing the store anyway..
-                                    if (pointer_user == store) continue;
+                    param_t = Type::PtrTy;
+                    for (auto* user : parameter->users()) {
+                        if (auto store = cast<StoreInst>(user)) {
+                            LCC_ASSERT(
+                                is<Parameter>(store->val()),
+                                "Use of parameter in destination pointer of store instruction: we don't yet support this, sorry"
+                            );
+                            LCC_ASSERT(
+                                is<AllocaInst>(store->ptr()),
+                                "We only support storing parameter into pointer returned by AllocaInst, sorry"
+                            );
 
-                                    // Replace use of Alloca.
-                                    auto copy = new (*this) Parameter(parameter->type(), parameter->index());
-                                    pointer_user->replace_children([&](Value* v) -> Value* {
-                                        if (v == alloca) return copy;
-                                        return nullptr;
-                                    });
-                                }
-                                // Erase store
-                                store->erase();
-                                alloca->erase();
+                            // Replace uses of store->ptr() with (a copy of) store->val()
+                            auto alloca = as<AllocaInst>(store->ptr());
+                            for (auto pointer_user : alloca->users()) {
+                                // Alloca fetched with store->val() is (obviously) used by the store, but
+                                // we don't want to replace the alloca in the store because we are going
+                                // to be removing the store anyway..
+                                if (pointer_user == store) continue;
 
-                            } else LCC_ASSERT(false, "Unhandled instruction type in replacement of users of memory parameter");
-                        }
-                    } else if (param_info.kind() == cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister) {
-                        LCC_ASSERT(false, "TODO: MSx64 calling convention memory parameter (change alloca to ptr type, insert load before uses of alloca)");
+                                // Replace use of Alloca.
+                                auto copy = new (*this) Parameter(parameter->type(), parameter->index());
+                                pointer_user->replace_children([&](Value* v) -> Value* {
+                                    if (v == alloca) return copy;
+                                    return nullptr;
+                                });
+                            }
+                            // Erase store
+                            store->erase();
+                            alloca->erase();
+
+                        } else LCC_ASSERT(false, "Unhandled instruction type in replacement of users of memory parameter");
                     }
                 }
             }
