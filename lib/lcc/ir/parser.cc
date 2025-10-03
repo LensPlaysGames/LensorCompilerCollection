@@ -543,7 +543,7 @@ auto lcc::parser::Parser::ParseCallConv() -> CallConv {
         };
 
         if (tok.text == "ccc") SetCC(CallConv::C);
-        else if (tok.text == "intcc") SetCC(CallConv::Intercept);
+        else if (tok.text == "glintcc") SetCC(CallConv::Glint);
     }
     return cc;
 }
