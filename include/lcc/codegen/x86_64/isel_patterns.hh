@@ -59,6 +59,15 @@ using store_some_op_local = Pattern<
 using store_reg_local = store_some_op_local<Register<>>;
 using store_imm_local = store_some_op_local<Immediate<>>;
 
+// store local 'lhs' into local 'rhs':
+//   mov (%lhs), %tmp
+//   mov %tmp, (%rhs)
+using store_local_local = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Store), Local<>, Local<>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::MoveDereferenceLHS), o<0>, v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), v<0, 1>, o<1>>>>;
+
 // store immediate 'imm' into register 'r':
 //   mov $imm, %tmp
 //   mov %tmp, (%r)
@@ -422,6 +431,7 @@ using AllPatterns = PatternList<
     load_reg,
     store_reg_local,
     store_imm_local,
+    store_local_local,
     store_imm_reg,
     store_reg_reg,
     copy_reg,
