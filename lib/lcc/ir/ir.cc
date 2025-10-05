@@ -7,6 +7,7 @@
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/generator.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/utils/rtti.hh>
 
