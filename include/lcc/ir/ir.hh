@@ -129,6 +129,11 @@ public:
     [[nodiscard]]
     auto type() const -> Type* { return value_type; }
 
+    /// Get a reference to the type of this value.
+    /// Sometimes, when lowering, we need to change the type of a value.
+    [[nodiscard]]
+    Type*& type_reference() { return value_type; }
+
     /// Print this value for debugging.
     void print() const;
 
@@ -299,8 +304,11 @@ protected:
 
     /// Remove a use by an instruction.
     static void RemoveUse(Value* of_value, Inst* by) {
+        LCC_ASSERT(of_value, "Expected non-null ptr");
         if (not is<UseTrackingValue>(of_value)) return;
         auto* of = as<UseTrackingValue>(of_value);
+
+        LCC_ASSERT(by, "Expected non-null ptr");
         auto it = rgs::find(of->user_list, by);
         if (it == of->user_list.end()) return;
         of->user_list.erase(it);
@@ -376,7 +384,8 @@ public:
         for (auto** child : Children()) {
             auto c = cast<InstType>(*child);
             if (not c) continue;
-            if (auto replacement = std::invoke(cb, c)) UpdateOperand(*child, replacement);
+            if (auto replacement = std::invoke(cb, c))
+                UpdateOperand(*child, replacement);
         }
     }
 

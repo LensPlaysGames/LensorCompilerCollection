@@ -90,6 +90,22 @@ public:
         _extra_sections.push_back(section);
     }
 
+    /// Helper for lowering a store to a memcpy in x86_64
+    /// \see Module::lower()
+    void _x86_64_lower_store(StoreInst*, Function*);
+    /// NOTE: May miss out on key architecture-common lowering if used alone.
+    /// \see Module::lower()
+    void _x86_64_sysv_lower_parameters();
+    /// NOTE: May miss out on key architecture-common lowering if used alone.
+    /// \see Module::lower()
+    void _x86_64_sysv_lower_overlarge();
+    /// NOTE: May miss out on key architecture-common lowering if used alone.
+    /// \see Module::lower()
+    void _x86_64_msx64_lower_parameters();
+    /// NOTE: May miss out on key architecture-common lowering if used alone.
+    /// \see Module::lower()
+    void _x86_64_msx64_lower_overlarge();
+
     void lower();
     void emit(std::filesystem::path output_file_path);
 

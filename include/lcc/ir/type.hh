@@ -123,6 +123,9 @@ public:
     /// Get the return type of this function.
     Type* ret() const { return return_type; }
 
+    /// Get the return type of this function.
+    Type*& ret_reference() { return return_type; }
+
     /// Get the parameter types of this function.
     auto params() const -> const std::vector<Type*>& { return param_types; }
 

@@ -374,6 +374,8 @@ auto Module::mir() -> std::vector<MFunction> {
                     as<AllocaInst>(v)
                 );
                 if (found == f.locals().end()) {
+                    v->print();
+                    fmt::print("\n");
                     Diag::ICE("MIR Generation: encountered reference to local before it has been declared");
                 }
                 return MOperandLocal{u32(found - f.locals().begin())};
