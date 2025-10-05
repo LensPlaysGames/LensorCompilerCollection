@@ -244,7 +244,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return +v->kind() >= +Kind::GlobalVariable; }
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::GlobalVariable; }
 
     [[nodiscard]]
     static auto CreateStringPtr(Module* mod, std::string name, std::string_view string_value) -> GlobalVariable*;
