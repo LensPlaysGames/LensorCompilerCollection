@@ -384,14 +384,31 @@ struct Inst {
                 }
 
                 // FIXME: Which pattern? Possible to include it in error message somehow?
-                LCC_ASSERT(found, "Pattern has ill-formed o<{}> operand: index greater than amount of operands in input.", needle);
+                LCC_ASSERT(
+                    found,
+                    "Pattern has ill-formed v<{}> operand: index greater than amount of operands in input.",
+                    needle
+                );
 
                 usz size = 0;
                 if (std::holds_alternative<MOperandRegister>(op))
                     size = std::get<MOperandRegister>(op).size;
                 else if (std::holds_alternative<MOperandImmediate>(op))
                     size = std::get<MOperandImmediate>(op).size;
-                else LCC_ASSERT(false, "Sorry, moperand type not handled in NewVirtual handling...");
+                else if (std::holds_alternative<MOperandLocal>(op)) {
+                    auto local_index = std::get<MOperandLocal>(op).index;
+                    LCC_ASSERT(
+                        local_index != MOperandLocal::bad_index,
+                        "Local operand referenced by NewVirtual in isel pattern has bad index (uh oh!)"
+                    );
+                    LCC_ASSERT(
+                        local_index != MOperandLocal::absolute_index,
+                        "Local operand referenced by NewVirtual in isel pattern has absolute index (no way to get type or size info)"
+                    );
+
+                    size = function.locals().at(local_index)->allocated_type()->bytes();
+
+                } else LCC_ASSERT(false, "Sorry, moperand type not handled in NewVirtual handling...");
 
                 return MOperandRegister(new_virtuals[operand::index], uint(size));
             }
