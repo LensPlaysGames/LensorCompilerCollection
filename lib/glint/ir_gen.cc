@@ -1452,6 +1452,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 update_block(then);
                 const auto then_copy = generated_ir;
                 generate_expression(if_expr->then());
+                insert(new (*module) BranchInst(exit, expr->location()));
 
                 // If anything outside of the then branch references an AST node that was
                 // used in this then branch, it needs to re-generate the IR for that
