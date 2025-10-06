@@ -90,9 +90,12 @@ public:
         _extra_sections.push_back(section);
     }
 
-    /// Helper for lowering a store to a memcpy in x86_64
+    /// Helper for lowering a store to a memcpy for x86_64
     /// \see Module::lower()
     void _x86_64_lower_store(StoreInst*, Function*);
+    /// Helper for lowering an overlarge load for x86_64
+    /// \see Module::lower()
+    void _x86_64_lower_load(LoadInst*, Function*);
     /// NOTE: May miss out on key architecture-common lowering if used alone.
     /// \see Module::lower()
     void _x86_64_sysv_lower_parameters();

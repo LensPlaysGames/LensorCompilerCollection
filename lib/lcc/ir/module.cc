@@ -78,6 +78,72 @@ void Module::_x86_64_lower_store(StoreInst* store, Function* function) {
     store->replace_with(memcpy_inst);
 }
 
+void Module::_x86_64_lower_load(LoadInst* load, Function* function) {
+    // Less than or equal to size of general purpose register; no change.
+    if (load->type()->bits() <= x86_64::GeneralPurposeBitwidth) return;
+
+    // If this is an over-large load but it is used by a call, assume the
+    // calling convention allows for it and it will be handled in MIR.
+    // NOTE: Taken advantage of by SysV (see both parameter handling above as
+    // well as argument handling in MIR generation).
+    if (
+        not load->users().empty()
+        and is<CallInst>(load->users().at(0))
+    ) return;
+
+    auto& users = load->users();
+    if (users.size() == 1 and is<StoreInst>(users.at(0))) {
+        auto* store = as<StoreInst>(users[0]);
+
+        auto* source_ptr = load->ptr();
+        auto* dest_ptr = store->ptr();
+
+        LCC_ASSERT(load->type()->bytes() == store->val()->type()->bytes());
+        auto byte_count = load->type()->bytes();
+
+        std::vector<Value*> memcpy_operands{
+            dest_ptr,
+            source_ptr,
+            new (*this) IntegerConstant(
+                IntegerType::Get(
+                    context(),
+                    x86_64::GeneralPurposeBitwidth
+                ),
+                byte_count
+            )
+        };
+        auto memcpy_inst = new (*this) IntrinsicInst(
+            IntrinsicKind::MemCopy,
+            memcpy_operands,
+            load->location()
+        );
+
+        store->replace_with(memcpy_inst);
+        load->erase();
+    } else {
+        // Possiblities:
+        // - generate builtin memcpy for backend to handle
+        // - unroll into 8 byte loads, temporary pointer stored into then
+        //   incremented
+        // - just copy the ptr instead, and everywhere that uses a load should
+        //   handle the fact that over-sized loads will be pointers instead.
+
+        auto* copy = new (*this) CopyInst(load->ptr());
+        load->replace_with(copy);
+
+        // Copy to prevent iterator invalidation
+        // auto load_users = load->users();
+        // for (auto u : load_users) {
+        //     u->replace_children<LoadInst>([&](Value* v) -> Value* {
+        //         if (v == load) return load->ptr();
+        //         return nullptr;
+        //     });
+        // }
+
+        // load->erase();
+    }
+}
+
 void Module::_x86_64_sysv_lower_overlarge() {
     // SysV x86_64 Calling Convention Overlarge Type Lowering
     // Basically, things larger than 8 bytes fit in LCC IR virtual registers,
@@ -201,58 +267,7 @@ void Module::_x86_64_sysv_lower_overlarge() {
 
                     case Value::Kind::Load: {
                         auto* load = as<LoadInst>(instruction);
-
-                        // Less than or equal to size of general purpose register; no change.
-                        if (load->type()->bits() <= x86_64::GeneralPurposeBitwidth) continue;
-
-                        // If this is an over-large load but it is used by a call, assume the
-                        // calling convention allows for it and it will be handled in MIR.
-                        // NOTE: Taken advantage of by SysV (see both parameter handling above as
-                        // well as argument handling in MIR generation).
-                        if (
-                            not load->users().empty()
-                            and is<CallInst>(load->users().at(0))
-                        ) continue;
-
-                        auto& users = load->users();
-                        if (users.size() == 1 and is<StoreInst>(users.at(0))) {
-                            auto* store = as<StoreInst>(users[0]);
-
-                            auto* source_ptr = load->ptr();
-                            auto* dest_ptr = store->ptr();
-
-                            LCC_ASSERT(load->type()->bytes() == store->val()->type()->bytes());
-                            auto byte_count = load->type()->bytes();
-
-                            std::vector<Value*> memcpy_operands{
-                                dest_ptr,
-                                source_ptr,
-                                new (*this) IntegerConstant(
-                                    IntegerType::Get(
-                                        context(),
-                                        x86_64::GeneralPurposeBitwidth
-                                    ),
-                                    byte_count
-                                )
-                            };
-                            auto memcpy_inst = new (*this) IntrinsicInst(
-                                IntrinsicKind::MemCopy,
-                                memcpy_operands,
-                                load->location()
-                            );
-
-                            store->replace_with(memcpy_inst);
-                            load->erase();
-                        } else {
-                            // Possiblities:
-                            // - generate builtin memcpy for backend to handle
-                            // - unroll into 8 byte loads, temporary pointer stored into then
-                            //   incremented
-                            // - just copy the ptr instead, and everywhere that uses a load should
-                            //   handle the fact that over-sized loads will be pointers instead.
-                            auto* copy = new (*this) CopyInst(load->ptr());
-                            load->replace_with(copy);
-                        }
+                        _x86_64_lower_load(load, function);
                     } break;
 
                     case Value::Kind::Store: {
@@ -468,58 +483,7 @@ void Module::_x86_64_msx64_lower_overlarge() {
 
                     case Value::Kind::Load: {
                         auto* load = as<LoadInst>(instruction);
-
-                        // Less than or equal to size of general purpose register; no change.
-                        if (load->type()->bits() <= x86_64::GeneralPurposeBitwidth) continue;
-
-                        // If this is an over-large load but it is used by a call, assume the
-                        // calling convention allows for it and it will be handled in MIR.
-                        // NOTE: Taken advantage of by SysV (see both parameter handling above as
-                        // well as argument handling in MIR generation).
-                        if (
-                            not load->users().empty()
-                            and is<CallInst>(load->users().at(0))
-                        ) continue;
-
-                        auto& users = load->users();
-                        if (users.size() == 1 and is<StoreInst>(users.at(0))) {
-                            auto* store = as<StoreInst>(users[0]);
-
-                            auto* source_ptr = load->ptr();
-                            auto* dest_ptr = store->ptr();
-
-                            LCC_ASSERT(load->type()->bytes() == store->val()->type()->bytes());
-                            auto byte_count = load->type()->bytes();
-
-                            std::vector<Value*> memcpy_operands{
-                                dest_ptr,
-                                source_ptr,
-                                new (*this) IntegerConstant(
-                                    IntegerType::Get(
-                                        context(),
-                                        x86_64::GeneralPurposeBitwidth
-                                    ),
-                                    byte_count
-                                )
-                            };
-                            auto memcpy_inst = new (*this) IntrinsicInst(
-                                IntrinsicKind::MemCopy,
-                                memcpy_operands,
-                                load->location()
-                            );
-
-                            store->replace_with(memcpy_inst);
-                            load->erase();
-                        } else {
-                            // Possiblities:
-                            // - generate builtin memcpy for backend to handle
-                            // - unroll into 8 byte loads, temporary pointer stored into then
-                            //   incremented
-                            // - just copy the ptr instead, and everywhere that uses a load should
-                            //   handle the fact that over-sized loads will be pointers instead.
-                            auto* copy = new (*this) CopyInst(load->ptr());
-                            load->replace_with(copy);
-                        }
+                        _x86_64_lower_load(load, function);
                     } break;
 
                     case Value::Kind::Store: {
