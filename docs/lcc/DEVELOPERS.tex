@@ -304,7 +304,7 @@ Next, the register allocator creates an \emph{adjacency matrix}. An adjacency ma
 {\small Take note that we now use index into the flat list of instructions to refer to each instruction, and that these are different from the IDs we were using before. This is why there is no percentage next to the label numbers.}
 \end{center}
 
-While it may be confusing at first, it actually makes a lot of sense. As \emph{\%0} and \emph{\%1} are both live at the same time, they must be stored in separate temporary registers, and therefore interfere. However, as they both are dropped to ground by \emph{\%3}, it isn't necessary that all three are stored in separate registers; that is, \emph{\%3} could be stored in the same hardware register as \emph{\%0} or \emph{\%1}. This is why they are said to not interfere, and the adjacency matrix contains a zero (shown as blank space).
+While it may be confusing at first, it actually makes a lot of sense. As \emph{\%0} and \emph{\%1} are both live at the same time, they must be stored in separate temporary registers, and therefore interfere. However, as they both are dropped to the ground, dead as can be, by \emph{\%3}, it isn't necessary that all three are stored in separate registers; that is, \emph{\%3} could be stored in the same hardware register as \emph{\%0} or \emph{\%1}. This is why they are said to not interfere, and the adjacency matrix contains a zero (shown as blank space).
 
 \filbreak
 

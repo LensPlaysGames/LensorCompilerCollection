@@ -1,0 +1,46 @@
+* Register Allocation
+
+NOTE: Also see Register Allocation section of [[file:DEVELOPERS.pdf][DEVELOPERS]] document.
+
+** Introduction
+
+LCC IR is wonderful. It means that, for =M= frontend implementations (languages), and =N= backend implementations (architectures and formats), only =M + N= "compilers" are needed (instead of =M * N=). It also means that optimisations may be applied to code for a lot of languages, and also not have to worry about language semantics when optimising, simplifying the already complicated code.
+
+LCC IR, however, is a very idealistic scenario. It is an instruction set architecture for a virtual machine that operates on (mostly) three-address code, has infinite memory, etc. Real life, well, it's not like that. Hardware machines, specifically the most popular in modern day, x86_64, has limited registers, limited and variable memory, and mostly two-address code.
+
+Register allocation refers to the solution to the problem of mapping the infinite virtual registers present in the LCC IR virtual machine to the finite "physical" registers present in the x86_64 CPU.
+
+** Formalising the Problem
+
+The problem of register allocation may be framed in a more formal sense. That is, rather than asking the question, "How do I assign registers to each of the instructions that needs them?", we should be asking, "How do I color a graph with less than k colors?". Yes, *register allocation is just graph theory*.
+
+Each register that appears in the code refers to a vertex, or a node, in the graph. The edges of the graph are made by interferences between instructions. An interference occurs when two instructions' results are in use at the same point in the program. It's reasonable that if both are being used at once, then you can't store them in the same place without getting in the way of each other.
+
+
+** Spilling and Unspilling
+Alright, so I didn't understand this AT ALL for a long time, and there's a chance I still don't. I've still gotten away with not implementing spilling in my register allocator... but, I recently had a breakthrough, and I want to write it down.
+
+"Spilling" is a term that, in this context, refers to saving a virtual register into a newly constructed local (somewhere on the stack).
+
+"Unspilling" refers to loading a virtual register from a local (somewhere on the stack).
+
+Assembly Pseudo-code:
+#+begin_example
+mov $8 r0
+mov $61 r1
+add r0 r1
+mov r1 rArg0
+call foo
+mov $61 r1
+add r0 r1
+#+end_example
+
+As you can see, the register =r0= is used quite a bit throughout all of the code. That means that, throughout the entire code, that register has to be that one value. What if it is a caller-saved register and every function call requires pushing the register and popping it after... Even worse, what if it /interferes/ (is used at the same time as) more virtual registers than we have hardware registers... That means there's no way for us to allocate enough registers such that every value is in one and doesn't overwrite each other...
+
+This is where spilling comes in.
+
+When =degree n > k=, the defining use of the virtual register has a spill instruction inserted directly after with that virtual register as an operand. This "spills" the virtual register in the final code, AKA saves it as you would a local variable (on the stack).
+
+However, every use of this virtual register still loads directly from the register; this is why you have to replace uses of the virtual register with unspill instructions having an operand of the previously spilled virtual register.
+
+Basically, with spilling and unspilling, register allocation gains the ability to modify the code, such that it is able to reduce =degree n= of a node in the graph, and ensure that, /eventually/, a solution that fits the =degree n < k= "rule" may be produced.
