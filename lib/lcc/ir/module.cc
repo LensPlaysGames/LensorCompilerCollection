@@ -648,13 +648,19 @@ void Module::_x86_64_msx64_lower_parameters() {
 }
 
 void Module::lower() {
+    // Lowering not needed for LCC SSA IR or LLVM textual IR...
+    if (
+        context()->format() == Format::lcc_ssa_ir
+        or context()->format() == Format::llvm_textual_ir
+    ) return;
+
     // TODO: Static assert for handling all architectures, calling
     // conventions, etc.
-    if (_ctx->target()->is_arch_x86_64()) {
-        if (_ctx->target()->is_cconv_sysv()) {
+    if (context()->target()->is_arch_x86_64()) {
+        if (context()->target()->is_cconv_sysv()) {
             _x86_64_sysv_lower_parameters();
             _x86_64_sysv_lower_overlarge();
-        } else if (_ctx->target()->is_cconv_ms()) {
+        } else if (context()->target()->is_cconv_ms()) {
             _x86_64_msx64_lower_parameters();
             _x86_64_msx64_lower_overlarge();
         } else LCC_ASSERT(false, "Unhandled calling convention in x86_64 IR lowering");
@@ -665,10 +671,11 @@ void Module::lower() {
 
 void Module::emit(std::filesystem::path output_file_path) {
     bool to_stdout = output_file_path.empty() or output_file_path == "-";
-    switch (_ctx->format()->format()) {
+    switch (context()->format()->format()) {
         case Format::INVALID: LCC_UNREACHABLE();
 
-        case Format::LCC_IR: {
+        case Format::LCC_IR:
+        case Format::LCC_SSA_IR: {
             if (to_stdout)
                 fmt::print("{}", as_lcc_ir(context()->option_use_colour()));
             else {

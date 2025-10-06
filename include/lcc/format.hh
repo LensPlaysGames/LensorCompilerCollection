@@ -16,9 +16,14 @@ public:
     enum _Format {
         INVALID = 0,
 
-        // Lensor Compiler Collection Intermediate Representation.
+        // Lensor Compiler Collection Intermediate Representation lowered for
+        // target architecture.
         // Emits `.lcc` files.
         LCC_IR,
+
+        // Lensor Compiler Collection Intermediate Representation in SSA form.
+        // Emits `.lcc` files.
+        LCC_SSA_IR,
 
         // NOTE: No longer maintained.
         // LLVM's Textual IR (as of LLVM 16.0.4)
@@ -44,6 +49,7 @@ public:
     enum _Format format() const { return _format; }
 
     static const Format* const lcc_ir;
+    static const Format* const lcc_ssa_ir;
     static const Format* const llvm_textual_ir;
     static const Format* const gnu_as_att_assembly;
     static const Format* const elf_object;
@@ -55,6 +61,12 @@ struct Formats {
     static constexpr Format lcc_ir = [] {
         auto f = Format();
         f._format = Format::LCC_IR;
+        return f;
+    }();
+
+    static constexpr Format lcc_ssa_ir = [] {
+        auto f = Format();
+        f._format = Format::LCC_SSA_IR;
         return f;
     }();
 
@@ -85,6 +97,7 @@ struct Formats {
 } // namespace detail
 
 constexpr inline const Format* const Format::lcc_ir = &detail::Formats::lcc_ir;
+constexpr inline const Format* const Format::lcc_ssa_ir = &detail::Formats::lcc_ssa_ir;
 constexpr inline const Format* const Format::llvm_textual_ir = &detail::Formats::llvm_textual_ir;
 constinit inline const Format* const Format::gnu_as_att_assembly = &detail::Formats::gnu_as_att_assembly;
 constinit inline const Format* const Format::elf_object = &detail::Formats::elf_object;

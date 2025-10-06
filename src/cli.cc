@@ -46,7 +46,10 @@ void help() {
         // compiled for.
         {"", "    asm: gnu-as-att,\n"},
         {"", "    obj: elf, coff,\n"},
-        {"", "    IR: ir, llvm\n"},
+        {"", "    IR: ir, ssa_ir, llvm\n"},
+        {"", "        ir:     LCC's own IR, lowered for target architecture\n"},
+        {"", "        ssa_ir: LCC's own IR in SSA form\n"},
+        {"", "        llvm:   Textual IR for the Low Level Virtual Machine\n"},
     }}.get());
     // clang-format on
     std::exit(0);
@@ -152,7 +155,8 @@ auto parse(int argc, const char** argv) -> Options {
             if (
                 format != "asm" and format != "gnu-as-att"
                 and format != "obj" and format != "elf" and format != "coff"
-                and format != "IR" and format != "ir" and format != "llvm"
+                and format != "IR"
+                and format != "ir" and format != "ssa_ir" and format != "llvm"
             ) {
                 fmt::print("CLI ERROR: Invalid format {}\n", format);
                 std::exit(1);

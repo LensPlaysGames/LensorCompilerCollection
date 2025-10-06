@@ -149,6 +149,8 @@ auto main(int argc, const char** argv) -> int {
         ;
     } else if (options.format == "ir" or options.format == "IR") {
         format = lcc::Format::lcc_ir;
+    } else if (options.format == "ssa_ir") {
+        format = lcc::Format::lcc_ssa_ir;
     } else if (options.format == "asm" || options.format == "gnu-as-att") {
         format = lcc::Format::gnu_as_att_assembly;
     } else if (options.format == "obj") {
@@ -192,6 +194,7 @@ auto main(int argc, const char** argv) -> int {
                 LCC_UNREACHABLE();
 
             case lcc::Format::LCC_IR:
+            case lcc::Format::LCC_SSA_IR:
                 replacement = ".lcc";
                 break;
 
