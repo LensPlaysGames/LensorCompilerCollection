@@ -1,0 +1,11 @@
+* Calling Convention Handling in LCC
+
+Calling conventions suck. I can't lie. I know, I know, super necessary, super awesome because it allows interop. However, I also would like to add: they are terribly convoluted, use very generic terms to mean very specific things (like, SysV, WTH is =EIGHTBYTE=??), and are hard to implement.
+
+Currently, as of [2025-10-05], calling convention handling happens in IR lowering and during MIR generation (and also somewhat in backends with saving caller-saved registers and such).
+
+Given SSA IR, x86_64 IR lowering already requires overlarge stores to be lowered into =memcpy='s and overlarge loads to either create a temporary or pass the lvalue along. We sneak in along this process and also alter function signatures and returns to properly handle memory parameters and return values. It would be /great/ if we could just do all the parameter handling here. The problem arises that LCC IR has no concept of a register. Virtual registers are only ever allowed to be referenced in the form of referencing an existing instruction's result. So, because LCC IR has no concept of "hardware" or "registers", we cannot properly represent returning values across two registers, like in SysV. In that same vein, for msx64, we aren't able to save register parameters into the shadow stack, as there is no concept of a stack, and there is no concept of registers.
+
+This is why the second stage of calling convention handling occurs within MIR generation. When we are converting IR to MIR, we finally have ways to represent registers (through register operands). So, while we are creating MIR from the lowered IR, we insert the MIR instructions to save msx64 register parameters into their corresponding space on the shadow stack, or to lower the overlarge return value by moving it into the corresponding registers.
+
+While we could technically do all of this during MIR generation, it is already one of the largest functions within the compiler itself, and a very critical step. We want the least amount of complexity in each step, so we split as much as we can off into operations on the IR itself, and not the way MIR is generated.
