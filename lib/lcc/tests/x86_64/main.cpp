@@ -890,8 +890,9 @@ int main(int argc, char** argv) {
         while (i < inputs.size()) {
             auto t = parse_test(inputs, i);
             if (t.should_skip) continue;
+            fmt::print("{}\n", t.name);
             for (auto m : t.matchers) {
-                fmt::print("{}: ", ToString(m.target));
+                fmt::print("  {}: ", ToString(m.target));
                 if (run_test(
                         m.matcher,
                         t.source,
@@ -901,16 +902,15 @@ int main(int argc, char** argv) {
                         ""
                     )) {
                     fmt::print(
-                        "{}PASSED{}: ",
+                        "{}PASSED{}\n",
                         C(lcc::utils::Colour::BoldGreen),
                         C(lcc::utils::Colour::Reset)
                     );
                 } else fmt::print(
-                    "{}FAILED{}: ",
+                    "{}FAILED{}\n",
                     C(lcc::utils::Colour::BoldRed),
                     C(lcc::utils::Colour::Reset)
                 );
-                fmt::print("{}\n", t.name);
             }
         }
     }
