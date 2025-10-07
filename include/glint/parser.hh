@@ -1,7 +1,6 @@
 #ifndef GLINT_PARSER_HH
 #define GLINT_PARSER_HH
 
-#include <functional>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/syntax/lexer.hh>
@@ -11,6 +10,7 @@
 #include <glint/ast.hh>
 #include <glint/lexer.hh>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -203,6 +203,7 @@ private:
     auto ParseExpr(isz current_precedence = 0, bool single_expression = false) -> ExprResult;
     auto ParseExprInNewScope() -> ExprResult;
     auto ParseForExpr() -> Result<ForExpr*>;
+    auto ParseRangedForExpr() -> Result<ForExpr*>;
     auto ParseFuncAttrs() -> Result<FuncType::Attributes>;
     auto ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scope*>>;
     auto ParseFuncDecl(std::string name, FuncType* type, bool is_extern) -> Result<FuncDecl*>;

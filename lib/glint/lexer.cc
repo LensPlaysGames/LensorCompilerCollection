@@ -34,6 +34,7 @@ lcc::StringMap<Tk> keywords{
     {"uint", Tk::UInt},
     {"has", Tk::Has},
     {"cfor", Tk::For},
+    {"for", Tk::RangedFor},
     {"return", Tk::Return},
     {"struct", Tk::Struct},
     {"enum", Tk::Enum},
@@ -973,6 +974,7 @@ auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
         case TokenKind::Int:
         case TokenKind::UInt:
         case TokenKind::For:
+        case TokenKind::RangedFor:
         case TokenKind::Return:
         case TokenKind::Export:
         case TokenKind::Struct:
@@ -1037,6 +1039,7 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
         case Tk::ArbitraryInt: return "sized integer";
         case Tk::Has: return "has";
         case Tk::For: return "for";
+        case Tk::RangedFor: return "for";
         case Tk::Return: return "return";
         case Tk::LParen: return "(";
         case Tk::RParen: return ")";
@@ -1200,6 +1203,7 @@ auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::s
         case Tk::Alignof: return {"alignof"};
         case Tk::Has: return {"has"};
         case Tk::For: return {"cfor"};
+        case Tk::RangedFor: return {"for"};
         case Tk::Return: return {"return"};
         case Tk::Export: return {"export"};
         case Tk::Struct: return {"struct"};
@@ -1227,12 +1231,12 @@ auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::s
         // macro...).
         // If we were to try to turn it back into source, might we need the
         // originating macro and it's list of defines?
-        case lcc::glint::TokenKind::Gensym:
+        case Tk::Gensym:
             return lcc::Diag::Error(
                 "Cannot convert gensym token into source, seeing as the user should never be able to create these themselves."
             );
 
-        case lcc::glint::TokenKind::Expression:
+        case Tk::Expression:
             return lcc::Diag::Error(
                 "Cannot convert expression token into source, seeing as we can't (yet) turn AST node's back to source code."
             );

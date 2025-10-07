@@ -113,6 +113,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Alignof:
         case Tk::Has:
         case Tk::For:
+        case Tk::RangedFor:
         case Tk::Return:
         case Tk::Export:
         case Tk::Struct:
@@ -202,6 +203,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::While:
         case Tk::External:
         case Tk::For:
+        case Tk::RangedFor:
         case Tk::Return:
         case Tk::Export:
         case Tk::Lambda:
@@ -640,12 +642,12 @@ auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
 }
 
 auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expression) -> ExprResult {
+    if (+ConsumeExpressionSeparator())
+        return Error(tok.location, "Empty expression probably has unintended consequences.");
+
     // NOTE: Using Null result is dangerous because if we return lhs without
     // first assigning /something/ to it, then it completely breaks.
     auto lhs = ExprResult::Null();
-
-    if (+ConsumeExpressionSeparator())
-        return Error(tok.location, "Empty expression probably has unintended consequences.");
 
     /// TODO: Stop if there are no more expressions before the end of the file.
     // TODO: Return empty expression or something
@@ -850,6 +852,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         /// Control expressions.
         case Tk::If: lhs = ParseIfExpr(); break;
         case Tk::For: lhs = ParseForExpr(); break;
+        case Tk::RangedFor: lhs = ParseRangedForExpr(); break;
         case Tk::While: lhs = ParseWhileExpr(); break;
 
         /// Return expression.
@@ -1260,6 +1263,122 @@ auto lcc::glint::Parser::ParseForExpr() -> Result<ForExpr*> {
 
     /// Check for errors and create the expression.
     return new (*mod) ForExpr(*init, *cond, *increment, *body, loc);
+}
+
+auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
+    auto loc = tok.location;
+    LCC_ASSERT(Consume(Tk::RangedFor), "ParseRangedForExpr called while not at 'for'");
+
+    /// Parse loop variable identifier, container expression, and body.
+    ScopeRAII sc{this};
+    auto scope = sc.scope;
+
+    if (not At(Tk::Ident))
+        return Error("Expected identifier (name of loop variable) following 'for'");
+
+    auto loop_var = tok.text;
+    // Eat loop variable identifier.
+    NextToken();
+
+    // Expect "in" contextual keyword.
+    if (not At(Tk::Ident) or tok.text != "in")
+        return Error("Expected contextual keyword 'in' following loop variable name in ranged 'for'");
+    // Eat "in"
+    NextToken();
+
+    auto container = ParseExpr();
+    if (not container) return container.diag();
+
+    // NOTE: If the user forgets to separate the container and the body, the
+    // container expression will end up being a call with the block body as an
+    // argument.
+
+    auto body = ParseExpr();
+    if (not body) return body.diag();
+
+    // TODO: We may want to create a RangedForExpr AST node and do this
+    // transformation in Sema. Currently sema has a hard time inserting
+    // declarations at the proper scope, however, so... yeah.
+
+    // Create init, condition, and increment expressions from loop variable
+    // identifier and container expression.
+
+    // Calculate end pointer (subscript of member access .data on container by
+    // member access .size on container)
+    auto member_access_data = new (*mod) MemberAccessExpr(*container, "data", loc);
+    auto member_access_size = new (*mod) MemberAccessExpr(*container, "size", loc);
+    auto end_pointer = new (*mod) BinaryExpr(Tk::LBrack, member_access_data, member_access_size, loc);
+    auto end_name = mod->unique_name("rangedforend_");
+    auto end = new (*mod) VarDecl(
+        end_name,
+        Type::Unknown,
+        end_pointer,
+        mod.get(),
+        Linkage::LocalVar,
+        loc
+    );
+    auto end_decl
+        = scope->declare(context, std::move(end_name), end);
+    LCC_ASSERT(end_decl);
+
+    // init: declaration of generated symbol assigned to member access ".data" on container
+    auto iter_name = mod->unique_name("rangedforiter_");
+    auto init = new (*mod) VarDecl(
+        iter_name,
+        Type::Unknown,
+        new (*mod) MemberAccessExpr(*container, "data", loc),
+        mod.get(),
+        Linkage::LocalVar,
+        loc
+    );
+    auto init_decl
+        = scope->declare(context, std::move(iter_name), init);
+    LCC_ASSERT(init_decl);
+
+    // namerefexpr to init declaration != calculated end pointer
+    auto cond = new (*mod) BinaryExpr(
+        Tk::Ne,
+        new (*mod) NameRefExpr(init_decl->name(), scope, loc),
+        new (*mod) NameRefExpr(end_decl->name(), scope, loc),
+        loc
+    );
+
+    // increment: assign init to subscript 1 of namerefexpr to init declaration.
+    auto increment = new (*mod) BinaryExpr(
+        Tk::LBrackEq,
+        new (*mod) NameRefExpr(init_decl->name(), scope, loc),
+        new (*mod) IntegerLiteral(1, loc),
+        loc
+    );
+
+    // body: block expression containing loop_var declaration followed by
+    // parsed body expression.
+    auto deref_iter = new (*mod) UnaryExpr(
+        Tk::At,
+        new (*mod) NameRefExpr(init_decl->name(), scope, loc),
+        false,
+        loc
+    );
+    auto loop_var_vardecl
+        = new (*mod) VarDecl(
+            loop_var,
+            Type::Unknown,
+            deref_iter,
+            mod.get(),
+            Linkage::LocalVar,
+            loc
+        );
+    auto loop_var_decl
+        = DeclScope(loop_var_vardecl->linkage() == Linkage::LocalVar)
+              ->declare(context, std::move(loop_var), loop_var_vardecl);
+    LCC_ASSERT(loop_var_decl);
+
+    auto block_body = new (*mod) BlockExpr(
+        {*loop_var_decl, *body},
+        loc
+    );
+
+    return new (*mod) ForExpr(init, cond, increment, block_body, loc);
 }
 
 auto lcc::glint::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {

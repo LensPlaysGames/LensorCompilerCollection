@@ -2291,6 +2291,25 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 break;
             }
 
+            // Generate following pseudo-code:
+            //   if b->lhs().size >= b->lhs().capacity - 1, {
+            //       // Allocate memory, capacity * 2
+            //       newmem :: malloc 2 b->lhs().capacity;
+            //       // Copy <size> elements into newly-allocated memory
+            //       memcpy newmem[1], b->lhs().data[0], b->lhs().size;
+            //       // De-allocate old memory
+            //       free b->lhs().data;
+            //       // Assign b->lhs().data to newly-allocated memory
+            //       b->lhs().data := newmem;
+            //       // Assign b->lhs().capacity to b->lhs().capacity * 2
+            //       b->lhs().capacity *= 2;
+            //   } else {
+            //       // Copy <size> elements at offset of 1 (move current elements by 1)
+            //       memmove b->lhs().data[1], b->lhs().data[0], b->lhs().size;
+            //   };
+            //   @b->lhs().data := b->rhs();
+            //   b->lhs().size += 1;
+
             LCC_TODO("GlintSema: Handle dynamic array prepend with {}", ToString(b->op()));
         } break;
 
@@ -2565,6 +2584,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Alignof:
         case TokenKind::Has:
         case TokenKind::For:
+        case TokenKind::RangedFor:
         case TokenKind::Return:
         case TokenKind::Export:
         case TokenKind::Struct:
@@ -4102,6 +4122,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::Sizeof:
         case TokenKind::Alignof:
         case TokenKind::For:
+        case TokenKind::RangedFor:
         case TokenKind::Return:
         case TokenKind::Export:
         case TokenKind::Struct:

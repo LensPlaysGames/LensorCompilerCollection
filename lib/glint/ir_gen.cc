@@ -569,6 +569,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Match:
                 case TokenKind::Print:
                 case TokenKind::For:
+                case TokenKind::RangedFor:
                 case TokenKind::Return:
                 case TokenKind::Export:
                 case TokenKind::Struct:
@@ -837,6 +838,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Expression:
                 case TokenKind::Has:
                 case TokenKind::For:
+                case TokenKind::RangedFor:
                 case TokenKind::Gensym:
                 case TokenKind::Hash:
                 case TokenKind::Ident:

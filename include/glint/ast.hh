@@ -148,10 +148,11 @@ enum struct TokenKind {
     Int,      // int
     UInt,     // uint
     ArbitraryInt,
-    Sizeof,  // sizeof
-    Alignof, // alignof
+    Sizeof,
+    Alignof,
     Has,
-    For,
+    For,       // cfor
+    RangedFor, // for
     Return,
     Export,
     Struct,

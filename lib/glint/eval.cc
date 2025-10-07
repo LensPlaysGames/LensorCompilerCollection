@@ -171,6 +171,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::External:
                 case TokenKind::False:
                 case TokenKind::For:
+                case TokenKind::RangedFor:
                 case TokenKind::Ge:
                 case TokenKind::Gensym:
                 case TokenKind::Gt:
@@ -388,6 +389,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::Alignof:
                 case TokenKind::Has:
                 case TokenKind::For:
+                case TokenKind::RangedFor:
                 case TokenKind::Return:
                 case TokenKind::Export:
                 case TokenKind::Struct:
