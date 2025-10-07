@@ -11,6 +11,7 @@ This form of the =for= loop mimics C++'s ranged for loops. It's purpose is to ea
 In effect, it binds =<identifier>= to a reference to each element within =<container>=.
 
 Emits code in the form of:
+NOTE: Should we cache =<container>= expression, or evaluate it multiple times?
 #+begin_example
 cfor
   {
@@ -22,7 +23,7 @@ cfor
   {
     <identifier> :: @iter;
     <body>;
-  }
+  };
 #+end_example
 
 ** C For
@@ -39,5 +40,5 @@ Emits code in the form of:
     <body>;
     <increment>;
   };
-}
+};
 #+end_example
