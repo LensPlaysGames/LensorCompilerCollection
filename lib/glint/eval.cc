@@ -36,7 +36,6 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
         /// expressions but rather because evaluating them has not yet
         /// been implemented.
         case Kind::Template:
-        case Kind::Alignof:
         case Kind::Call:
         case Kind::CompoundLiteral:
         case Kind::For:
@@ -44,7 +43,6 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
         case Kind::MemberAccess:
         case Kind::NameRef:
         case Kind::Return:
-        case Kind::Sizeof:
         case Kind::While:
         case Kind::Match:
             return unhandled_constant_expr();
@@ -60,6 +58,26 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
         case Kind::EvaluatedConstant:
             out = as<ConstantExpr>(this)->value();
             return true;
+
+        case Kind::Sizeof: {
+            auto s = as<SizeofExpr>(this);
+
+            if ((not s->expr()) or (not s->expr()->type()))
+                return false;
+
+            out = s->expr()->type()->size_in_bytes(ctx);
+            return true;
+        }
+
+        case Kind::Alignof: {
+            auto a = as<AlignofExpr>(this);
+
+            if ((not a->expr()) or (not a->expr()->type()))
+                return false;
+
+            out = a->expr()->type()->align(ctx);
+            return true;
+        }
 
         case Kind::If: {
             auto* i = as<IfExpr>(this);
