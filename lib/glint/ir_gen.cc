@@ -597,6 +597,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::PipeEq:
                 case TokenKind::CaretEq:
                 case TokenKind::TildeEq:
+                case TokenKind::LBrackEq:
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
                     LCC_ASSERT(false, "Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
@@ -898,6 +899,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::PipeEq:
                 case TokenKind::CaretEq:
                 case TokenKind::TildeEq:
+                case TokenKind::LBrackEq:
                     LCC_TODO(
                         "Binary operator {} in IRGen should have been lowered by semantic analysis",
                         ToString(binary_expr->op())

@@ -216,6 +216,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::Print:
                 case TokenKind::Sum:
                 case TokenKind::TildeEq:
+                case TokenKind::LBrackEq:
                 case TokenKind::True:
                 case TokenKind::UInt:
                 case TokenKind::Union:
@@ -340,6 +341,7 @@ auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool requir
                 case TokenKind::PipeEq:
                 case TokenKind::CaretEq:
                 case TokenKind::TildeEq:
+                case TokenKind::LBrackEq:
                 case TokenKind::ColonEq:
                 case TokenKind::ColonColon:
                 case TokenKind::RightArrow:

@@ -124,6 +124,7 @@ enum struct TokenKind {
     PipeEq,      // |=
     CaretEq,     // ^=
     TildeEq,     // ~=
+    LBrackEq,    // [=
     ColonEq,     // :=
     ColonColon,  // ::
     RightArrow,  // ->

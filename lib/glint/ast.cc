@@ -783,6 +783,20 @@ std::string lcc::glint::Expr::name() const {
                 case TokenKind::ColonEq: return "binary_assignment";
                 case TokenKind::ColonColon: return "declaration_type_inferred";
 
+                case TokenKind::Tilde: return "binary_bitnot";
+                case TokenKind::RightArrow: return "binary_rightarrow";
+
+                case TokenKind::PlusEq: return "binary_plus_assign";
+                case TokenKind::MinusEq: return "binary_subtract_assign";
+                case TokenKind::StarEq: return "binary_multiply_assign";
+                case TokenKind::SlashEq: return "binary_divide_assign";
+                case TokenKind::PercentEq: return "binary_modulo_assign";
+                case TokenKind::AmpersandEq: return "binary_bitand_assign";
+                case TokenKind::PipeEq: return "binary_bitor_assign";
+                case TokenKind::CaretEq: return "binary_bitxor_assign";
+                case TokenKind::TildeEq: return "binary_bitnot_assign";
+                case TokenKind::LBrackEq: return "binary_subscript_assign";
+
                 default: LCC_ASSERT(
                     false,
                     "Unhandled binary expression operator {}",

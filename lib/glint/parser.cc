@@ -71,6 +71,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::PipeEq:
         case Tk::CaretEq:
         case Tk::TildeEq:
+        case Tk::LBrackEq:
             return 100;
 
         // Not binary or postfix unary operators
@@ -174,6 +175,7 @@ constexpr bool IsRightAssociative(lcc::glint::TokenKind t) {
         case Tk::PipeEq:
         case Tk::CaretEq:
         case Tk::TildeEq:
+        case Tk::LBrackEq:
             return true;
 
         /// Not an operator.
@@ -282,6 +284,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::PipeEq:
         case Tk::CaretEq:
         case Tk::TildeEq:
+        case Tk::LBrackEq:
             return false;
     }
 
@@ -1037,6 +1040,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         case TokenKind::PipeEq:
         case TokenKind::CaretEq:
         case TokenKind::TildeEq:
+        case TokenKind::LBrackEq:
         case TokenKind::RightArrow:
         case TokenKind::And:
         case TokenKind::Or:

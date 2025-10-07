@@ -2268,6 +2268,10 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Caret, b);
             break;
 
+        case TokenKind::LBrackEq:
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::LBrack, b);
+            break;
+
         case TokenKind::TildeEq: {
             if (not lhs_t->is_dynamic_array()) {
                 Error(
@@ -4074,6 +4078,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::PipeEq:
         case TokenKind::CaretEq:
         case TokenKind::TildeEq:
+        case TokenKind::LBrackEq:
         case TokenKind::ColonEq:
         case TokenKind::ColonColon:
         case TokenKind::RightArrow:

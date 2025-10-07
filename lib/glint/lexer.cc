@@ -1010,6 +1010,7 @@ auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
         case TokenKind::PipeEq:
         case TokenKind::CaretEq:
         case TokenKind::TildeEq:
+        case TokenKind::LBrackEq:
         case TokenKind::Template:
             return true;
     }
@@ -1109,6 +1110,7 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
         case Tk::PipeEq: return "|=";
         case Tk::CaretEq: return "^=";
         case Tk::TildeEq: return "~=";
+        case Tk::LBrackEq: return "[=";
         case Tk::ByteLiteral: return "byte literal";
         case Tk::Template: return "template";
     }
@@ -1119,104 +1121,105 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
 /// Convert a token back to the source it may have been lexed from.
 auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::string> {
     switch (t.kind) {
-        case lcc::glint::TokenKind::Invalid:
+        case Tk::Invalid:
             return lcc::Diag::Error(
                 "Cannot create source from invalid token {}",
                 lcc::glint::ToString(t.kind)
             );
 
-        case lcc::glint::TokenKind::Eof: return {""};
-        case lcc::glint::TokenKind::LParen: return {"("};
-        case lcc::glint::TokenKind::RParen: return {")"};
-        case lcc::glint::TokenKind::LBrack: return {"["};
-        case lcc::glint::TokenKind::RBrack: return {"]"};
-        case lcc::glint::TokenKind::LBrace: return {"{"};
-        case lcc::glint::TokenKind::RBrace: return {"}"};
-        case lcc::glint::TokenKind::BangLBrace: return {"!{"};
-        case lcc::glint::TokenKind::Comma: return {","};
-        case lcc::glint::TokenKind::Colon: return {":"};
-        case lcc::glint::TokenKind::Semicolon: return {";"};
-        case lcc::glint::TokenKind::Dot: return {"."};
-        case lcc::glint::TokenKind::Plus: return {"+"};
-        case lcc::glint::TokenKind::Minus: return {"-"};
-        case lcc::glint::TokenKind::Star: return {"*"};
-        case lcc::glint::TokenKind::Slash: return {"/"};
-        case lcc::glint::TokenKind::Percent: return {"%"};
-        case lcc::glint::TokenKind::Ampersand: return {"&"};
-        case lcc::glint::TokenKind::Pipe: return {"|"};
-        case lcc::glint::TokenKind::Caret: return {"^"};
-        case lcc::glint::TokenKind::Tilde: return {"~"};
-        case lcc::glint::TokenKind::Exclam: return {"!"};
-        case lcc::glint::TokenKind::At: return {"@"};
-        case lcc::glint::TokenKind::Hash: return {"#"};
-        case lcc::glint::TokenKind::Shl: return {"<<"};
-        case lcc::glint::TokenKind::Shr: return {">>"};
-        case lcc::glint::TokenKind::Eq: return {"="};
-        case lcc::glint::TokenKind::Ne: return {"!="};
-        case lcc::glint::TokenKind::Lt: return {"<"};
-        case lcc::glint::TokenKind::Gt: return {">"};
-        case lcc::glint::TokenKind::Le: return {"<="};
-        case lcc::glint::TokenKind::Ge: return {">="};
-        case lcc::glint::TokenKind::PlusPlus: return {"++"};
-        case lcc::glint::TokenKind::MinusMinus: return {"--"};
-        case lcc::glint::TokenKind::StarStar: return {"**"};
-        case lcc::glint::TokenKind::PlusEq: return {"+="};
-        case lcc::glint::TokenKind::MinusEq: return {"-="};
-        case lcc::glint::TokenKind::StarEq: return {"*="};
-        case lcc::glint::TokenKind::SlashEq: return {"/="};
-        case lcc::glint::TokenKind::PercentEq: return {"%="};
-        case lcc::glint::TokenKind::AmpersandEq: return {"&="};
-        case lcc::glint::TokenKind::PipeEq: return {"|="};
-        case lcc::glint::TokenKind::CaretEq: return {"^="};
-        case lcc::glint::TokenKind::TildeEq: return {"~="};
-        case lcc::glint::TokenKind::ColonEq: return {":="};
-        case lcc::glint::TokenKind::ColonColon: return {"::"};
-        case lcc::glint::TokenKind::RightArrow: return {"->"};
-        case lcc::glint::TokenKind::Ident: return t.text;
-        case lcc::glint::TokenKind::Number: return std::to_string(t.integer_value);
-        case lcc::glint::TokenKind::ByteLiteral: return fmt::format("`{}`", (char) t.integer_value);
-        case lcc::glint::TokenKind::String: return fmt::format("\"{}\"", t.text);
-        case lcc::glint::TokenKind::If: return {"if"};
-        case lcc::glint::TokenKind::Else: return {"else"};
-        case lcc::glint::TokenKind::While: return {"while"};
-        case lcc::glint::TokenKind::Void: return {"void"};
-        case lcc::glint::TokenKind::Byte: return {"byte"};
-        case lcc::glint::TokenKind::Bool: return {"bool"};
-        case lcc::glint::TokenKind::External: return {"external"};
-        case lcc::glint::TokenKind::True: return {"true"};
-        case lcc::glint::TokenKind::False: return {"false"};
-        case lcc::glint::TokenKind::And: return {"and"};
-        case lcc::glint::TokenKind::Or: return {"or"};
-        case lcc::glint::TokenKind::Int: return {"int"};
-        case lcc::glint::TokenKind::UInt: return {"uint"};
-        case lcc::glint::TokenKind::ArbitraryInt: {
+        case Tk::Eof: return {""};
+        case Tk::LParen: return {"("};
+        case Tk::RParen: return {")"};
+        case Tk::LBrack: return {"["};
+        case Tk::RBrack: return {"]"};
+        case Tk::LBrace: return {"{"};
+        case Tk::RBrace: return {"}"};
+        case Tk::BangLBrace: return {"!{"};
+        case Tk::Comma: return {","};
+        case Tk::Colon: return {":"};
+        case Tk::Semicolon: return {";"};
+        case Tk::Dot: return {"."};
+        case Tk::Plus: return {"+"};
+        case Tk::Minus: return {"-"};
+        case Tk::Star: return {"*"};
+        case Tk::Slash: return {"/"};
+        case Tk::Percent: return {"%"};
+        case Tk::Ampersand: return {"&"};
+        case Tk::Pipe: return {"|"};
+        case Tk::Caret: return {"^"};
+        case Tk::Tilde: return {"~"};
+        case Tk::Exclam: return {"!"};
+        case Tk::At: return {"@"};
+        case Tk::Hash: return {"#"};
+        case Tk::Shl: return {"<<"};
+        case Tk::Shr: return {">>"};
+        case Tk::Eq: return {"="};
+        case Tk::Ne: return {"!="};
+        case Tk::Lt: return {"<"};
+        case Tk::Gt: return {">"};
+        case Tk::Le: return {"<="};
+        case Tk::Ge: return {">="};
+        case Tk::PlusPlus: return {"++"};
+        case Tk::MinusMinus: return {"--"};
+        case Tk::StarStar: return {"**"};
+        case Tk::PlusEq: return {"+="};
+        case Tk::MinusEq: return {"-="};
+        case Tk::StarEq: return {"*="};
+        case Tk::SlashEq: return {"/="};
+        case Tk::PercentEq: return {"%="};
+        case Tk::AmpersandEq: return {"&="};
+        case Tk::PipeEq: return {"|="};
+        case Tk::CaretEq: return {"^="};
+        case Tk::TildeEq: return {"~="};
+        case Tk::LBrackEq: return {"[="};
+        case Tk::ColonEq: return {":="};
+        case Tk::ColonColon: return {"::"};
+        case Tk::RightArrow: return {"->"};
+        case Tk::Ident: return t.text;
+        case Tk::Number: return std::to_string(t.integer_value);
+        case Tk::ByteLiteral: return fmt::format("`{}`", (char) t.integer_value);
+        case Tk::String: return fmt::format("\"{}\"", t.text);
+        case Tk::If: return {"if"};
+        case Tk::Else: return {"else"};
+        case Tk::While: return {"while"};
+        case Tk::Void: return {"void"};
+        case Tk::Byte: return {"byte"};
+        case Tk::Bool: return {"bool"};
+        case Tk::External: return {"external"};
+        case Tk::True: return {"true"};
+        case Tk::False: return {"false"};
+        case Tk::And: return {"and"};
+        case Tk::Or: return {"or"};
+        case Tk::Int: return {"int"};
+        case Tk::UInt: return {"uint"};
+        case Tk::ArbitraryInt: {
             auto c = t.text[0] == 'u' ? 'u' : 's';
             return fmt::format("{}{}", c, t.integer_value);
         }
-        case lcc::glint::TokenKind::Sizeof: return {"sizeof"};
-        case lcc::glint::TokenKind::Alignof: return {"alignof"};
-        case lcc::glint::TokenKind::Has: return {"has"};
-        case lcc::glint::TokenKind::For: return {"for"};
-        case lcc::glint::TokenKind::Return: return {"return"};
-        case lcc::glint::TokenKind::Export: return {"export"};
-        case lcc::glint::TokenKind::Struct: return {"struct"};
-        case lcc::glint::TokenKind::Enum: return {"enum"};
-        case lcc::glint::TokenKind::Union: return {"union"};
-        case lcc::glint::TokenKind::Sum: return {"sum"};
-        case lcc::glint::TokenKind::Lambda: return {"lambda"};
-        case lcc::glint::TokenKind::Supplant: return {"supplant"};
-        case lcc::glint::TokenKind::Match: return {"match"};
-        case lcc::glint::TokenKind::Print: return {"print"};
-        case lcc::glint::TokenKind::Template: return {"template"};
-        case lcc::glint::TokenKind::CShort: return {"cshort"};
-        case lcc::glint::TokenKind::CUShort: return {"cushort"};
-        case lcc::glint::TokenKind::CInt: return {"cint"};
-        case lcc::glint::TokenKind::CUInt: return {"cuint"};
-        case lcc::glint::TokenKind::CLong: return {"clong"};
-        case lcc::glint::TokenKind::CULong: return {"culong"};
-        case lcc::glint::TokenKind::CLongLong: return {"clonglong"};
-        case lcc::glint::TokenKind::CULongLong: return {"culonglong"};
-        case lcc::glint::TokenKind::MacroArg: return fmt::format("${}", t.text);
+        case Tk::Sizeof: return {"sizeof"};
+        case Tk::Alignof: return {"alignof"};
+        case Tk::Has: return {"has"};
+        case Tk::For: return {"cfor"};
+        case Tk::Return: return {"return"};
+        case Tk::Export: return {"export"};
+        case Tk::Struct: return {"struct"};
+        case Tk::Enum: return {"enum"};
+        case Tk::Union: return {"union"};
+        case Tk::Sum: return {"sum"};
+        case Tk::Lambda: return {"lambda"};
+        case Tk::Supplant: return {"supplant"};
+        case Tk::Match: return {"match"};
+        case Tk::Print: return {"print"};
+        case Tk::Template: return {"template"};
+        case Tk::CShort: return {"cshort"};
+        case Tk::CUShort: return {"cushort"};
+        case Tk::CInt: return {"cint"};
+        case Tk::CUInt: return {"cuint"};
+        case Tk::CLong: return {"clong"};
+        case Tk::CULong: return {"culong"};
+        case Tk::CLongLong: return {"clonglong"};
+        case Tk::CULongLong: return {"culonglong"};
+        case Tk::MacroArg: return fmt::format("${}", t.text);
 
         // Er, I'm not sure you can have a gensym token in the input, as they are
         // only ever created by the lexer itself (by parsing an identifier in
