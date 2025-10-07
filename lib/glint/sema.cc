@@ -3172,7 +3172,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     return;
                 }
 
-                // Just call puts on byte pointerss
+                // Just call puts on byte pointers
                 // print x:byte.ptr -> puts x
                 bool arg_is_pointer_to_byte = arg->type()->is_pointer() and Type::Equal(arg->type()->elem(), Type::Byte);
                 if (arg_is_pointer_to_byte) {
@@ -3204,7 +3204,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     continue;
                 }
 
-                // Don't format fixed byte arrays
+                // Don't format fixed byte arrays (like string literals)
                 // print x:[byte 4] -> puts x[0]
                 bool arg_is_fixed_array_of_byte
                     = arg->type()->strip_references()->is_array() and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);

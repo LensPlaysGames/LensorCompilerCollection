@@ -124,7 +124,7 @@ void collect_interferences_from_block(
     // Basically, walk over the instructions of the block backwards, keeping
     // track of all virtual registers that have been encountered but not
     // their defining use, as these are our "live values".
-    for (auto& inst : block->instructions() | vws::reverse) {
+    for (auto& inst : vws::reverse(block->instructions())) {
         // fmt::print("{}\n", PrintMInstImpl(inst, x86_64::opcode_to_string));
         // fmt::print("live after: {}\n", fmt::join(live_values, ", "));
 
@@ -219,7 +219,7 @@ void collect_interferences_from_block(
             }
         }
 
-        // Make all reg operands interfere with all currently live values
+        // Make all virtual register operands interfere with all currently live values
         // Live Values: v3, v7
         // x86_64 GNU ASM
         //     mov 40(%v0), %v1
@@ -412,6 +412,7 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
     std::vector<usz> coloring_stack{};
 
     const auto should_skip_list = [&](AdjacencyList& list) {
+        // Skip hardware registers, and registers already allocated a value.
         return list.value < +MInst::Kind::ArchStart or list.allocated;
     };
 

@@ -753,8 +753,8 @@ std::string lcc::glint::Expr::name() const {
                 case TokenKind::Dot:
                     return "binary_dot";
 
-                    /// Call and subscript have higher precedence than unary operators.
-                    /// Note: Unary operator precedence is 10'000.
+                /// Call and subscript have higher precedence than unary operators.
+                /// Note: Unary operator precedence is 10'000.
                 case TokenKind::LBrack: return "binary_subscript";
 
                 case TokenKind::Plus: return "binary_add";
@@ -1872,7 +1872,10 @@ auto lcc::glint::Type::representation() const -> std::string {
         case Kind::DynamicArray:
             return fmt::format("DY{}", elem()->representation());
         case Kind::Array:
-            LCC_ASSERT(is<ConstantExpr>(as<ArrayType>(this)->size()), "Array type size is not a constant expression");
+            LCC_ASSERT(
+                is<ConstantExpr>(as<ArrayType>(this)->size()),
+                "Array type size is not a constant expression"
+            );
             return fmt::format("ARR{}_{}", as<ConstantExpr>(as<ArrayType>(this)->size())->value().as_int(), elem()->representation());
         case Kind::ArrayView:
             return fmt::format("VW{}", elem()->representation());
