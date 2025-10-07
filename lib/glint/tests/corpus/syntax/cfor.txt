@@ -21,7 +21,9 @@ for x in y, {};
 
 (block
  (for
-  (variable_declaration (member_access (name)))
+  (block
+   (variable_declaration (binary_subscript (member_access (name)) (member_access (name))))
+   (variable_declaration (member_access (name))))
   (binary_notequal (name) (name))
   (binary_subscript_assign (name) (integer_literal))
   (block
