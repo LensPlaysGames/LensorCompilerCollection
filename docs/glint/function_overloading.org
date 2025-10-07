@@ -1,0 +1,27 @@
+* Function Overloading in Glint
+
+Function overloading is the ability to define multiple functions /with the same name/. Now, you might be wondering, how is this useful? Well, the functions that share the same name differ in an alternate way: their type signature. The compiler delegates to the different versions of the function based on the types of the passed arguments at the call-site.
+
+** Basic Example
+
+#+begin_src glint-ts
+  foo : bool(a : int) a < 1000;
+  foo : bool(a : byte) a < 100;
+#+end_src
+
+As you can see, the main ability function overloading allows for is executing different functionality for different parameter types.
+
+** Basic Example X
+
+#+begin_src glint-ts
+  blah : struct { x : int; };
+
+  foo : bool(a : int) a < 10;
+  foo : bool(a : blah) foo blah.x;
+#+end_src
+
+You can also use function overloading to perform type conversions, that way you don't have to repeatedly type them at each call-site.
+
+** Name Mangling
+
+In the final emitted code, the name of an overloaded function has to be alterred. This is because object files are not allowed to have duplicate symbols, and because the linker needs to know /which/ overload of the function it needs to call. So, to differentiate the functions in lieu of a type system, we alter the name of the function to include the type signature of the function itself. To do this, we have to textually encode types into an identifier-valid format, and append it to the function name. However, if the user chooses a very weird identifier in their program, that means they may accidentally use the one we generate for overloading. Because of this, we then prepend =_XGlint= to the name, in order to prevent symbols from clashing.
