@@ -1,0 +1,43 @@
+* Glint's =for= Loops
+
+Let's get loopy!
+
+** Ranged For
+
+=for <identifier> in <container> <body>;=
+
+This form of the =for= loop mimics C++'s ranged for loops. It's purpose is to easily loop over built-in containers like dynamic arrays and views.
+
+In effect, it binds =<identifier>= to a reference to each element within =<container>=.
+
+Emits code in the form of:
+#+begin_example
+cfor
+  {
+    iter :: <container>.data;
+    end :: <container>.data[<container>.size];
+  };
+  iter != end;
+  iter [= 1;
+  {
+    <identifier> :: @iter;
+    <body>;
+  }
+#+end_example
+
+** C For
+
+=for <initialiser>; <condition>; <increment>; <body>;=
+
+This form of the =for= loop mimics a C for loop exactly.
+
+Emits code in the form of:
+#+begin_example
+{
+  <initialiser>;
+  while <condition> {
+    <body>;
+    <increment>;
+  };
+}
+#+end_example

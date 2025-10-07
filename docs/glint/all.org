@@ -8,6 +8,7 @@ The Glint programming language is a high level programming language with low-lev
 
 #+INCLUDE: "./literals.org"
 #+INCLUDE: "./dynamic_array.org"
+#+INCLUDE: "./for.org"
 #+INCLUDE: "./sumtype.org"
 #+INCLUDE: "./print.org"
 #+INCLUDE: "./identifier_escape.org"

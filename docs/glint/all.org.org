@@ -1,4 +1,4 @@
-# Created 2025-09-29 Mon 02:54
+# Created 2025-10-07 Tue 12:47
 #+title: 
 #+author: Rylan Kellogg
 * Preface
@@ -46,6 +46,8 @@ Sometimes, it's convenient to get a number representation of a byte in the sourc
 
   ;; `` ;; ERROR! Empty byte literal
 #+end_src
+
+Byte literals accept basic escaped values like =\n= for newline, =\0= for NUL, and =\\= for =\=.
 *** Boolean Literals
 
 There are two of them.
@@ -102,6 +104,47 @@ So, uh, when does it get freed?
 The programmer is responsible for freeing the allocated memory using the unary minus operator =-=. It is an error in a Glint program for a dynamic array to be created and never be freed. This means, for the most part, that Glint programs are statically checked to be memory safe regarding use-after-free errors.
 
 The only time the programmer is not responsible for freeing the allocated memory of a dynamic array is when that dynamic array is automatically inserted by the compiler. In that case, the compiler is also required to insert it's de-allocation.
+** Glint's =for= Loops
+
+Let's get loopy!
+*** Ranged For
+
+=for <identifier> in <container> <body>;=
+
+This form of the =for= loop mimics C++'s ranged for loops. It's purpose is to easily loop over built-in containers like dynamic arrays and views.
+
+In effect, it binds =<identifier>= to a reference to each element within =<container>=.
+
+Emits code in the form of:
+#+begin_example
+  cfor
+    {
+      iter :: <container>.data;
+      end :: <container>.data[<container>.size];
+    };
+    iter != end;
+    iter [= 1;
+    {
+      <identifier> :: @iter;
+      <body>;
+    }
+#+end_example
+*** C For
+
+=for <initialiser>; <condition>; <increment>; <body>;=
+
+This form of the =for= loop mimics a C for loop exactly.
+
+Emits code in the form of:
+#+begin_example
+  {
+    <initialiser>;
+    while <condition> {
+      <body>;
+      <increment>;
+    };
+  }
+#+end_example
 ** Glint's Sum Type
 
 It's a sum type.

@@ -41,6 +41,8 @@ Sometimes, it's convenient to get a number representation of a byte in the sourc
   ;; `` ;; ERROR! Empty byte literal
 #+end_src
 
+Byte literals accept basic escaped values like =\n= for newline, =\0= for NUL, and =\\= for =\=.
+
 ** Boolean Literals
 
 There are two of them.
