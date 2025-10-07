@@ -141,7 +141,34 @@ void lcc::glint::Lexer::NextToken() {
             if (lastc > 0xff)
                 Error("Byte literal contains a character with a value greater than a byte may contain");
 
-            tok.integer_value = lastc;
+            // Handle Escapes
+            if (lastc == '\\') {
+                // Yeet escape character
+                NextChar();
+                switch (lastc) {
+                    default: LCC_ASSERT(false, "Unhandled escaped character in byte literal: '{}' (U+{:x})\n", lastc, (unsigned int) lastc);
+                    case '`':
+                        Error(
+                            "Expected character following escape character '{}'. For byte literal '{}', use two in a row (i.e. '`{}{}`')",
+                            '\\',
+                            '\\',
+                            '\\',
+                            '\\'
+                        );
+                        break;
+                    case '\\':
+                        tok.integer_value = '\\';
+                        break;
+                    // Newline
+                    case 'n':
+                        tok.integer_value = '\n';
+                        break;
+                    // NUL byte
+                    case '0':
+                        tok.integer_value = '\0';
+                        break;
+                }
+            } else tok.integer_value = lastc;
 
             // Yeet character used for byte literal value.
             NextChar();
