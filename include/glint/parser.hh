@@ -91,6 +91,12 @@ private:
 
     /// Like At(), but consume the token if it matches.
     auto Consume(auto... tks) -> bool {
+        static_assert(
+            sizeof...(tks),
+            "\n\n"
+            "    Consume() does nothing when called with no arguments.\n"
+            "    You probably meant to call NextToken().\n"
+        );
         if (At(tks...)) {
             NextToken();
             return true;
