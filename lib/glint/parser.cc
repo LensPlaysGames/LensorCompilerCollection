@@ -1335,6 +1335,8 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
         = scope->declare(context, std::move(iter_name), init);
     LCC_ASSERT(init_decl);
 
+    auto init_block = new (*mod) BlockExpr({end, init}, loc);
+
     // namerefexpr to init declaration != calculated end pointer
     auto cond = new (*mod) BinaryExpr(
         Tk::Ne,
@@ -1359,6 +1361,9 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
         false,
         loc
     );
+    // TODO: type of loop variable should be reference to container element
+    // type. Because we are doing this all syntactically, however, we don't
+    // yet have that information.
     auto loop_var_vardecl
         = new (*mod) VarDecl(
             loop_var,
@@ -1378,7 +1383,7 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
         loc
     );
 
-    return new (*mod) ForExpr(init, cond, increment, block_body, loc);
+    return new (*mod) ForExpr(init_block, cond, increment, block_body, loc);
 }
 
 auto lcc::glint::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
