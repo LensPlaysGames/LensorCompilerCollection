@@ -35,8 +35,10 @@ struct MIRInstructionMatcher {
         if (input.opcode() != lcc::usz(opcode)) {
             fmt::print(
                 "  Instruction opcode does not match expected...\n"
-                "    GOT 0x{:x}, EXPECTED 0x{:x}\n",
+                "    GOT {} (0x{:x}), EXPECTED {} (0x{:x})\n",
+                lcc::x86_64::opcode_to_string(input.opcode()),
                 input.opcode(),
+                lcc::x86_64::opcode_to_string(opcode),
                 opcode
             );
             return false;
