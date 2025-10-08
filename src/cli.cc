@@ -17,9 +17,9 @@ void help() {
     fmt::print("FLAGS:\n");
     fmt::print("{}", TwoColumnLayoutHelper{{
         {"  -v", "Enable verbose output\n"},
-        {"  --ast", "Emit AST in human-readable format\n"},
-        {"  --ir", "Emit LCC intermediate representation\n"},
-        {"  --mir", "Emit LCC machine instruction representation at various stages\n"},
+        {"  --ast", "Print AST in human-readable format\n"},
+        {"  --ir", "Print LCC intermediate representation at various stages\n"},
+        {"  --mir", "Print LCC machine instruction representation at various stages\n"},
         {"  --stopat-lex", "Request language does not process input further than lexical analysis\n"},
         {"  --stopat-syntax", "Request language does not process input further than syntactic analysis\n"},
         {"  --stopat-sema", "Request language does not process input further than semantic analysis\n"},
