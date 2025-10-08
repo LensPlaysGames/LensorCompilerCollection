@@ -544,7 +544,7 @@ void Module::_x86_64_msx64_lower_parameters() {
             // move the parameter into the memory at the beginning of the function. It
             // appears GCC does something similar to this, as well. This means
             // register parameters are treated the same as memory parameters in this
-            // scenario (alloca and store removed, furutre references to alloca
+            // scenario (alloca and store removed, future references to alloca
             // replaced with reference to (a copy of) parameter).
 
             for (auto* user : parameter->users()) {
