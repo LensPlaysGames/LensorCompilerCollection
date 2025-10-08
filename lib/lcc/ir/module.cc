@@ -157,9 +157,6 @@ void Module::_x86_64_sysv_lower_overlarge() {
     for (auto function : code()) {
         FunctionType* function_type = as<FunctionType>(function->type());
 
-        // No return type lowering for void return type.
-        if (function_type->ret()->is_void()) continue;
-
         // Alter Function Signature, if need be
         // Add parameter for over-large return types (in-memory ones that alter
         // function signature).
@@ -218,17 +215,17 @@ void Module::_x86_64_sysv_lower_overlarge() {
                 switch (instruction->kind()) {
                     default: break;
 
+                    // For large return types, we memcpy the returned value into the pointer
+                    // passed as the automatically inserted first arugument.
                     case Value::Kind::Return: {
-                        auto* ret = as<ReturnInst>(instruction);
-
                         if (not ret_t_is_large) continue;
-                        // For large return types, we memcpy the returned value into the pointer
-                        // passed as the automatically inserted first arugument.
 
+                        auto* ret = as<ReturnInst>(instruction);
                         // NOTE: ret_v_large assigned above.
                         auto* dest_ptr = ret_v_large;
                         // Copy from whatever the return is returning.
                         auto* source_ptr = ret->val();
+
                         // Assert that whatever the return is returning is of pointer type.
                         // Ideally, this has been handled by previous store/load lowering.
                         LCC_ASSERT(
@@ -521,21 +518,9 @@ void Module::_x86_64_msx64_lower_parameters() {
             auto [parameter, param_info, param_t] :
             vws::zip(function->params(), param_desc.info, function_type->params())
         ) {
-            // Basically, a memory parameter that goes in a register needs to have
-            // "dereferences" added. It will already be saved in the shadow stack
-            // space, so we can remove the alloca and store, as well (instructions to
-            // save to shadow stack added during MIR generation), and just reference a
-            // copy of the parameter (since that will reference the local where it is
-            // saved).
-            if (param_info.kind() == cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister) {
-                LCC_ASSERT(
-                    false,
-                    "TODO: MSx64 calling convention memory parameter (change alloca to ptr type, insert load before uses of alloca)"
-                );
-            }
-            // Otherwise, there is always a point in memory where we can find a
-            // parameter in msx64 calling convention, so we can remove allocas and
-            // stores and things like that for /all/ parameters.
+            // There is always a point in memory where we can find a parameter in
+            // msx64 calling convention, so we can remove allocas and stores and
+            // things like that for /all/ parameters.
 
             // x64 calling convention requires the caller to allocate space on the
             // stack for the callee to save parameter registers to, if need be.
@@ -576,13 +561,43 @@ void Module::_x86_64_msx64_lower_parameters() {
                     if (pointer_user == store) continue;
 
                     // Replace use of Alloca.
-                    auto copy = new (*this) Parameter(
-                        parameter->type(),
-                        parameter->index()
-                    );
+                    // TODO: Does PointerInRegister need LoadInst instead of just copying the
+                    // parameter directly? Because technically the parameter is a pointer to a
+                    // pointer to the parameter (pptr), and we may be expecting just a ptr to
+                    // the parameter from the users of the alloca.
+                    Value* replacement{nullptr};
+                    if (param_info.kind() == cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister) {
+                        // For pointer-in-register parameters, replace the alloca with a *load* of
+                        // a copy of the parameter. The alloca was a ptr to the parameter, and the
+                        // parameter is a /ptr to/ a ptr to the parameter. This is because it
+                        // /starts/ as a ptr to the parameter /in a register/. That register's
+                        // value gets saved to the shadow stack space where that register's value
+                        // is meant to be saved, and the parameter gets lowered into an inlined
+                        // local operand referencing that space on the stack within the parent
+                        // stack frame. So, it becomes a ptr to a ptr to the parameter.
+                        auto load = new (*this) LoadInst(
+                            Type::PtrTy,
+                            new (*this) Parameter(
+                                Type::PtrTy,
+                                parameter->index()
+                            )
+                        );
+                        pointer_user->insert_before(load);
+                        replacement = load;
+                    } else {
+                        // For register parameters and memory parameters, just replace the alloca
+                        // with a copy of the parameter. The alloca was a ptr to the parameter,
+                        // and so is the parameter itself in this calling convention.
+                        replacement = new (*this) Parameter(
+                            parameter->type(),
+                            parameter->index()
+                        );
+                    }
+                    LCC_ASSERT(replacement);
+
                     pointer_user->replace_children<AllocaInst>(
                         [&](Value* v) -> Value* {
-                            if (v == alloca) return copy;
+                            if (v == alloca) return replacement;
                             return nullptr;
                         }
                     );
