@@ -1,5 +1,6 @@
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
+#include <lcc/ir/type.hh>
 #include <lcc/syntax/lexer.hh>
 #include <lcc/syntax/token.hh>
 #include <lcc/utils/macros.hh>
@@ -33,6 +34,8 @@ enum struct TokenKind {
     RParen,
     LBrack,
     RBrack,
+    LBrace,
+    RBrace,
     Equals,
     Newline,
     Arrow,
@@ -55,6 +58,8 @@ constexpr auto StringifyEnum(TokenKind t) -> std::string_view {
         case TokenKind::RParen: return ")";
         case TokenKind::LBrack: return "[";
         case TokenKind::RBrack: return "]";
+        case TokenKind::LBrace: return "{";
+        case TokenKind::RBrace: return "}";
         case TokenKind::Equals: return "=";
         case TokenKind::Arrow: return "->";
     }
@@ -88,6 +93,7 @@ class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
     bool last_token_was_newline = false;
     StringMap<Value*> temporaries{};
     StringMap<Value*> globals{};
+    StringMap<Type*> named_types{};
 
     /// Unresolved values.
     StringMap<std::vector<std::pair<Inst*, Block**>>> block_fixups{};
@@ -252,6 +258,7 @@ void lcc::parser::Parser::NextNumber() {
 void lcc::parser::Parser::NextToken() {
     defer { last_token_was_newline = At(Tk::Newline); };
     tok.kind = TokenKind::Invalid;
+    tok.text.clear();
 
     if (not looking_ahead and not lookahead_tokens.empty()) {
         tok = std::move(lookahead_tokens.front());
@@ -302,6 +309,16 @@ void lcc::parser::Parser::NextToken() {
             NextChar();
             break;
 
+        case '{':
+            tok.kind = TokenKind::LBrace;
+            NextChar();
+            break;
+
+        case '}':
+            tok.kind = TokenKind::RBrace;
+            NextChar();
+            break;
+
         case ':':
             tok.kind = TokenKind::Colon;
             NextChar();
@@ -319,7 +336,7 @@ void lcc::parser::Parser::NextToken() {
 
         case '@':
             NextChar();
-            tok.text = '@';
+            // tok.text = '@';
             NextIdentifier();
             tok.kind = TokenKind::Global;
             break;
@@ -351,7 +368,7 @@ void lcc::parser::Parser::NextToken() {
             }
 
             NextNumber();
-            tok.integer_value = tok.integer_value;
+            tok.integer_value = -tok.integer_value;
             break;
 
         default:
@@ -594,16 +611,20 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
 
     /// Parse signature.
     auto ret = ParseType();
-    std::vector<Type*> args;
-    std::vector<std::string> names;
     if (not ret) return ret.diag();
-    if (not Consume(Tk::LParen)) return Error("Expected '('");
-    while (not At(Tk::RParen, Tk::Eof)) {
+
+    if (not Consume(Tk::LParen))
+        return Error("Expected '('");
+
+    std::vector<Type*> args{};
+    std::vector<std::string> names{};
+    while (not At(Tk::RParen, Tk::Eof, Tk::Newline, Tk::Indent)) {
         auto ty = ParseType();
         if (not ty) return ty.diag();
         args.push_back(*ty);
-        if (not At(Tk::Temporary)) names.emplace_back();
-        else {
+        if (not At(Tk::Temporary)) {
+            names.emplace_back();
+        } else {
             names.push_back(tok.text);
             NextToken();
         }
@@ -630,7 +651,7 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     /// Check for duplicates.
     for (auto n : f->names()) {
         if (globals.contains(n.name)) Error("Duplicate global symbol '{}'", n.name);
-        globals["@" + n.name] = f;
+        globals[n.name] = f;
     }
 
     /// Colon means we have a body.
@@ -915,6 +936,21 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
 auto lcc::parser::Parser::ParseModule() -> Result<void> {
     while (not At(Tk::Eof)) {
         if (Consume(Tk::Newline)) continue;
+
+        if (Kw("struct")) {
+            auto t = ParseType();
+            if (not t) return t.diag();
+            // Ensure named type exists
+            auto found = rgs::find_if(named_types, [&](const auto& n) {
+                return n.second == *t;
+            });
+            LCC_ASSERT(
+                found != named_types.end(),
+                "Parsed lonely type, but it is not a named type."
+            );
+            continue;
+        }
+
         if (auto err = ParseFunction(); err.is_diag())
             return err.diag();
     }
@@ -933,12 +969,63 @@ auto lcc::parser::Parser::ParseModule() -> Result<void> {
 }
 
 auto lcc::parser::Parser::ParseType() -> Result<Type*> {
-    /// TODO: Parse struct types once we’ve decided how those should be printed.
-    Type* base;
-    if (Kw("ptr")) base = Type::PtrTy;
-    else if (Kw("void")) base = Type::VoidTy;
-    else if (At(Tk::IntegerType)) base = IntegerType::Get(mod->context(), tok.integer_value);
-    else return Error("Expected type");
+    Type* base{};
+    std::string name{};
+    if (Kw("ptr"))
+        base = Type::PtrTy;
+    else if (Kw("void"))
+        base = Type::VoidTy;
+    else if (At(Tk::IntegerType))
+        base = IntegerType::Get(mod->context(), tok.integer_value);
+    else if (Kw("struct")) {
+        // Eat struct keyword
+        NextToken();
+
+        if (not At(Tk::Keyword))
+            return Error("Expected name of struct following 'struct' keyword");
+        name = tok.text;
+        // Eat struct name
+        NextToken();
+
+        // Register struct name as named type, but it refers to nullptr.
+        // This means we will be able to check if a type recursively mentions
+        // itself (by seeing if the name is registered but still attributed to
+        // nullptr, we know we are still in the middle of parsing that type).
+        named_types[name] = nullptr;
+
+        if (auto r = ConsumeOrError(Tk::LBrace); not r)
+            return r.diag();
+
+        std::vector<Type*> members{};
+        while (not At(Tk::RBrace, Tk::Eof, Tk::Newline, Tk::Indent)) {
+            auto member_t = ParseType();
+            if (not member_t) return member_t;
+            members.emplace_back(*member_t);
+            // Optionally eat comma following each struct member.
+            Consume(Tk::Comma);
+        }
+
+        if (auto r = ConsumeOrError(Tk::RBrace); not r)
+            return r.diag();
+
+        base = StructType::Get(mod->context(), members, name);
+    } else if (At(Tk::Global, Tk::Keyword)) {
+        auto n = tok.text;
+        // Eat name of named type.
+        NextToken();
+
+        // Find name in list of registered named types.
+        auto found = named_types.find(n);
+        if (found == named_types.end())
+            return Error("Got name when parsing type, but '{}' doesn't refer to an existing named type!", n);
+
+        // If a named type is registered to nullptr, we are still parsing the type
+        // and it is incomplete, and therefore cannot show up in it's own
+        // definition (as it is an incomplete type).
+        LCC_ASSERT(found->second, "A named type must not reference itself in it's own definition.");
+
+        return found->second;
+    } else return Error("Expected type");
     NextToken();
 
     /// Parse qualifiers.
@@ -949,12 +1036,20 @@ auto lcc::parser::Parser::ParseType() -> Result<Type*> {
     /// to parse function types here.
     while (At(Tk::LBrack)) {
         NextToken();
-        if (not At(Tk::Integer)) return Error("Expected integer");
+
+        if (not At(Tk::Integer))
+            return Error("Expected integer");
         auto size = tok.integer_value;
         NextToken();
-        if (not Consume(Tk::RBrack)) return Error("Expected ']'");
+
+        if (not Consume(Tk::RBrack))
+            return Error("Expected ']'");
+
         base = ArrayType::Get(mod->context(), size, base);
     }
+
+    if (not name.empty())
+        named_types[name] = base;
 
     return base;
 }
