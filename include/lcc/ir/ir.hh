@@ -349,6 +349,8 @@ public:
     /// instruction. Be careful when using this.
     void erase_cascade();
 
+    void insert_before(Inst* to_insert);
+
     /// Iterate over all instructions before (and not including) this one.
     auto instructions_before_this() -> std::span<Inst*>;
 

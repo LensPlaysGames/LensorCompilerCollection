@@ -566,6 +566,11 @@ auto lcc::Block::successor_count() const -> usz {
     }
 }
 
+void lcc::Inst::insert_before(Inst* to_insert) {
+    LCC_ASSERT(block(), "Cannot insert before instruction that has no block reference");
+    block()->insert_before(to_insert, this);
+}
+
 namespace {
 struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     using IRPrinter::IRPrinter;
