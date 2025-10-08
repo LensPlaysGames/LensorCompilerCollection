@@ -71,7 +71,16 @@ constexpr auto as_bytes(u64 value) -> std::vector<u8> {
     const u8 lower_c = u8((value >> 16) & 0xff);
     const u8 upper_d = u8((value >> 8) & 0xff);
     const u8 lower_d = u8((value >> 0) & 0xff);
-    return {lower_d, upper_d, lower_c, upper_c, lower_b, upper_b, lower_a, upper_a};
+    return {
+        lower_d,
+        upper_d,
+        lower_c,
+        upper_c,
+        lower_b,
+        upper_b,
+        lower_a,
+        upper_a
+    };
 }
 constexpr auto as_bytes(i64 value) -> std::vector<u8> {
     return as_bytes(static_cast<u64>(value));
@@ -365,7 +374,10 @@ static void opcode_slash_r(
         if (src.size == 64 or reg_topbit(src) or reg_topbit(dst))
             text += rex_byte(src.size == 64, reg_topbit(src), false, reg_topbit(dst));
         text += {op, modrm};
-    }
+    } else Diag::ICE(
+        "Sorry, unhandled form\n    {}\n",
+        PrintMInstImpl(inst, opcode_to_string)
+    );
 }
 
 static void assemble_inst(
@@ -1071,7 +1083,6 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
     assemble_inst(gobj, func, push_rbp, text);
     assemble_inst(gobj, func, mov_rsp_into_rbp, text);
 
-    // TODO: Different stack frame kinds
     usz stack_frame_size = rgs::fold_left(
         vws::transform(func.locals(), [](AllocaInst* l) {
             return l->allocated_type()->bytes();
@@ -1107,6 +1118,8 @@ auto emit_mcode_gobj(
     std::vector<MFunction>& mir
 ) -> GenericObject {
     GenericObject out{};
+    // .text, .data, .bss, .note.GNU-stack + extra sections
+    out.sections.reserve(4 + module->extra_sections().size());
 
     Section text_{".text"};
     Section data_{".data"};
@@ -1117,9 +1130,9 @@ auto emit_mcode_gobj(
     data_.attribute(Section::Attribute::WRITABLE, true);
     bss_.attribute(Section::Attribute::LOAD, true);
     bss_.attribute(Section::Attribute::WRITABLE, true);
-    out.sections.push_back(text_);
-    out.sections.push_back(data_);
-    out.sections.push_back(bss_);
+    out.sections.emplace_back(text_);
+    out.sections.emplace_back(data_);
+    out.sections.emplace_back(bss_);
 
     // Extra sections (frontend metadata and the like).
     out.sections.insert(
@@ -1148,14 +1161,14 @@ auto emit_mcode_gobj(
                 Symbol sym{};
                 sym.kind = Symbol::Kind::EXTERNAL;
                 sym.name = n.name;
-                out.symbols.push_back(sym);
+                out.symbols.emplace_back(sym);
             } else {
                 Symbol sym{};
                 sym.kind = Symbol::Kind::FUNCTION;
                 sym.name = n.name;
                 sym.section_name = text.name;
                 sym.byte_offset = text.contents().size();
-                out.symbols.push_back(sym);
+                out.symbols.emplace_back(sym);
             }
         }
 
