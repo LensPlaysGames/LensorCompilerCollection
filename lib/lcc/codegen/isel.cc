@@ -93,10 +93,14 @@ void select_instructions(Module* mod, MFunction& function) {
 
         // In-code instruction selection. Ideally, we wouldn't have to do this at
         // all.
+        // TODO: Rewrite  lea {}, rX; mov (rX), {}
+        // Into: mov ({}), {}
         for (auto& block : function.blocks()) {
             for (usz index = 0; index < block.instructions().size(); ++index) {
                 MInst& inst = block.instructions().at(index);
                 switch (inst.kind()) {
+                    default: break;
+
                     // Rewrite truncates into bitwise ands.
                     //
                     // r3.1 | M.Trunc r1.64
@@ -165,8 +169,6 @@ void select_instructions(Module* mod, MFunction& function) {
                         // ++index to skip newly inserted instruction.
                         block.instructions().insert(block.instructions().begin() + isz(++index), and_inst);
                     } break;
-
-                    default: break;
                 }
 
                 LCC_ASSERT(
