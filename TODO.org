@@ -1,123 +1,13 @@
 #+title: LCC TODO
 #+author: Lens_r
 
-* Testing Facilities
-
-While =LangTest= is honestly very great at providing testing capabilities for language front-ends, and the data transformations they apply, we currently don't have any really good way to test the compiler itself. And, in my opinion, there is plenty of code in the compiler codebase that would benefit from (rigorous) testing, like argument register calculation.
-
-Here's the steps of data in LCC:
-#+begin_example
-0: Source <=> 1: Tokens <=> 2: AST <=> 3: CheckedAST <=> 4: IR <=> 5: lIR <=> 6: gMIR <=> 7: lMIR <=> 8: Target in Format
-#+end_example
-
-- 0 :: Source
-- 1 :: Tokens
-- 2 :: AST
-- 3 :: CheckedAST
-- 4 :: IR
-- 5 :: lIR
-- 6 :: gMIR
-- 7 :: lMIR
-- 8 :: Target in Format
-
-We want test coverage of all of these steps, and we want to meaningfully delineate groups of steps to test together, in order to properly and thoroughly test the code that transforms between them.
-
-Current:
-#+begin_example
-0 1 2 3 4 5 6 7 8
-=====              LangTest :syntax tests
-=======            LangTest tests (no IR)
-=========          LangTest tests
-#+end_example
-
-As you can see, LangTest lets us test from source up to step 4, involving 3 different data transformations being performed. By having the ability to stagger how far you go, it means that you can discretely test each data transformation, if you so wish.
-
-The problem is the entire right side of that matrix is empty. There is currently /nothing/ testing the backend code, pretty much at all. That's scary! We need better test coverage. The reason we don't, is, well, it's kind of a lot complicated stuff to test, and it's not clear how exactly to test it.
-
-#+begin_example
-0 1 2 3 4 5 6 7 8
-=====              LangTest :syntax tests
-=======            LangTest tests (no IR)
-=========          LangTest tests
-        =========  Compilable Testing
-        =-=-=      Argument Register Calculation Tests
-              ===  x86_64 Binary Assembler Tests
-#+end_example
-
-** TODO Compilable Testing
-
-#+begin_example
-0 1 2 3 4 5 6 7 8
-        =========  Compilable Testing
-#+end_example
-
-Given <input> (LCC IR in memory, or any frontend language), ensure that the compiler's output compiles and the resulting program runs with the expected return value and contents of stdout and stderr.
-
-Basically, something like this:
-#+begin_src
-================
-Return 69
-================
-
-main (exported): ccc i64(i32 %0, ptr %1, ptr %2):
-  bb0:
-    return i64 69
-
----
-
-status: 69
-stdout: ""
-stderr: ""
-#+end_src
-
-And then the test runner will parse the IR and expected output, run =lcc ./tmp.lcc=, then =gcc ./tmp.s=, then =./a.out= (assuming no errors occur).
-
-** TODO Test Argument Register Calculation
-
-#+begin_example
-0 1 2 3 4 5 6 7 8
-        =-=-=      Argument Register Calculation Tests
-#+end_example
-Only covers a portion of these steps.
-
-MS x64 and SysV x86_64 have complex means to calculate how a parameter is passed in the ABI. It would be nice to know that, given a function declared in LCC IR, the proper argument registers are assigned (especially in cases such as memory parameters, multiple register parameters, or memory parameters before register parameters).
-
-** POSSIBLE Test gMIR Creation from LCC IR
-
-So, this is basically a 1:1 transformation. I'm not sure if the code that does this necessarily needs to be tested... But, if we were going through the philosophy of "each stage of the compiler should be tested", this is technically a place where data transformation occurs (it's just not complex at all due to 1:1 mapping existing).
-
-** POSSIBLE ISel
-
-So, I'm not sure how exactly this would be tested? Beyond the fact that it's basic functionality works (i.e. matching input properly and replacing it with the proper output), since it's declarative. That is, if you declare a match pattern for instruction selection, it /is/ the code that declares what sort of data transformation happens at this stage.
-
-** TODO Binary x86_64 Assembler
-
-#+begin_example
-0 1 2 3 4 5 6 7 8
-              ===  x86_64 Binary Assembler Tests
-#+end_example
-
-Basically just give it MInst input(s) and assert the binary output is what you'd expect.
-
-** POSSIBLE Textual x86_64 Assembler
-
-Er, probably not super necessary, due to the fact that the assembler you end up using on the textual assembly will throw errors in your face...
-
-* ~lcc~, Driver
-
-** TODO [Feature Request] Build System Integration
-[2024-07-05 Fri 14:43]
-
-While the half-baked support we have with the basic compiler templates defined in ~./cmake/~ is fine and dandy, it'd be cool if the compiler could generate CMake for a given executable file, imports, etc. i.e. invoke the compiler once to figure out how to invoke the compiler to build everything required and in what order. Maybe even generate the CMake and optionally invoke it to generate a build tree, lol. Kind of weirdly mutually recursive but I think it would ease use of the language when creating a new project. i.e. start writing, ask the compiler to generate a basic CMake build system that you can then handle yourself.
-
 * ~lcc~, Codegen
 
-** TODO Cleanup and Consolidate Calling Convention Code
-[2024-07-19 Fri 21:18]
+** IR Parameters and Register Allocation
 
-We are calculating register classes, making argument register lists, etc. all over the place when we should probably just have a sysv header and a msx64 header that we have everything in. This should also clean up the call sites quite a bit (hopefully). Example =arg_regs= within =lib/lcc/ir/module_mir.cc=.
+Basically, the current issue is this: when we lower to MIR, we also lower out all IR Parameter instructions to instead reference the location where the parameter may be found per calling convention. That isn't an issue in-and-of-itself, but it creates an issue where hardware registers may be accessed directly, and register allocation has no idea if/when those hardware registers became live in the first place (defining use). Plus, even if we were to look for a "defining use" of, say, register RDI, what if there is an unrelated use of RDI that defines it, and we find that defining use instead of the parameter's...
 
-[2025-09-30 Tue 02:19] Working on it...
+It's almost like we need to keep a virtual register around that is already pre-mapped to a hardware register, that way it can have it's defining use and liveness and everything like that tracked properly while still having the value of a hardware register...
 
 ** ~opt~
 

@@ -1,0 +1,66 @@
+* LCC Testing Framework
+
+It's all fine and dandy that LangTest allows languages to validate and verify they are producing the correct AST, IR, etc. But, what if what LCC does to that IR is horribly misshapen? Enter /CodeTest/.
+
+The idea of CodeTest is to ensure that the compiler doesn't just do the fucky-wucky to the incoming IR, but that it does the /correct amount/ of fucky-wucky, just enough to make it work.
+
+** Writing Tests
+
+Tests are written in text files.
+
+First, we name the test.
+#+begin_example
+================
+Named Example Test
+================
+#+end_example
+
+As you can see, the name is a single, non-empty line that goes between two lines with === /in the first column/.
+
+Optionally, test specifiers may be declared on a newline after the name, but before the closing name line beginning with ===.
+
+*** Test Input
+
+After the closing line of the name of a test, write the input IR you would like to test.
+
+#+begin_example
+================
+Named Example Test
+================
+func (internal): ccc void():
+  bb0:
+    return
+#+end_example
+
+*** Test Output
+
+After the test input comes the test output.
+
+For the =x86_64= architecture, the compiler does quite different things to the incoming IR based on calling convention of the target platform. For our test output, we specify what calling convention the expected input is compiled for.
+
+We begin parsing MIR instructions of test output after the line containing =-= in the first column. That line is also where we write our calling convention: either =sysv= or =ms= for =x86_64=.
+
+#+begin_example
+================
+Named Example Test
+================
+func (internal): ccc void():
+  bb0:
+    return
+
+--sysv--
+
+func:
+  bb0:
+    ret
+
+--ms--
+
+func:
+  bb0:
+    ret
+#+end_example
+
+* Conclusion
+
+This testing framework should allow the compiler to have basic verification that it is generating the expected code at the expected time.
