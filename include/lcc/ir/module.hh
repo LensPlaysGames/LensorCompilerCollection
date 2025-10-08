@@ -27,6 +27,21 @@ class Module {
 
     usz _virtual_register{0x420};
 
+    /// Helper for lowering a store to a memcpy for x86_64
+    /// \see Module::lower()
+    void _x86_64_lower_store(StoreInst*, Function*);
+    /// Helper for lowering an overlarge load for x86_64
+    /// \see Module::lower()
+    void _x86_64_lower_load(LoadInst*, Function*);
+    /// \see Module::lower()
+    void _x86_64_sysv_lower_parameters();
+    /// \see Module::lower()
+    void _x86_64_sysv_lower_overlarge();
+    /// \see Module::lower()
+    void _x86_64_msx64_lower_parameters();
+    /// \see Module::lower()
+    void _x86_64_msx64_lower_overlarge();
+
 public:
     Module(Module&) = delete;
     Module(Module&&) = delete;
@@ -89,25 +104,6 @@ public:
     void add_extra_section(const Section& section) {
         _extra_sections.push_back(section);
     }
-
-    /// Helper for lowering a store to a memcpy for x86_64
-    /// \see Module::lower()
-    void _x86_64_lower_store(StoreInst*, Function*);
-    /// Helper for lowering an overlarge load for x86_64
-    /// \see Module::lower()
-    void _x86_64_lower_load(LoadInst*, Function*);
-    /// NOTE: May miss out on key architecture-common lowering if used alone.
-    /// \see Module::lower()
-    void _x86_64_sysv_lower_parameters();
-    /// NOTE: May miss out on key architecture-common lowering if used alone.
-    /// \see Module::lower()
-    void _x86_64_sysv_lower_overlarge();
-    /// NOTE: May miss out on key architecture-common lowering if used alone.
-    /// \see Module::lower()
-    void _x86_64_msx64_lower_parameters();
-    /// NOTE: May miss out on key architecture-common lowering if used alone.
-    /// \see Module::lower()
-    void _x86_64_msx64_lower_overlarge();
 
     void lower();
     void emit(std::filesystem::path output_file_path);
