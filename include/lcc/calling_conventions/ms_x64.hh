@@ -51,6 +51,8 @@ namespace lcc::cconv::msx64 {
 // doubles, and vector types such as __m128, __m128i, __m128d are returned
 // in XMM0. The state of unused bits in the value returned in RAX or XMM0
 // is undefined.
+// Structs and unions of size 8, 16, 32, or 64 bits, and __m64 types, are
+// passed as if they were integers of the same size (in RAX).
 constexpr x86_64::RegisterId return_register = x86_64::RegisterId::RAX;
 
 constexpr const std::array<x86_64::RegisterId, 4> arg_regs{

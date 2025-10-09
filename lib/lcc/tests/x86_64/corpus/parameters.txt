@@ -342,8 +342,86 @@ func:
 memcpy:
 
 ================
-Memory Parameter Lowering: One 16 Byte Struct w/ Two 8 Byte members
+Memory Parameter Lowering: Eight i64
 ================
+
+func (internal): glintcc void(i64 %0, i64 %1, i64 %2, i64 %3, i64 %4, i64 %5, i64 %6, i64 %7):
+  bb0:
+    %100 = alloca i64
+    store i64 %0 into %100
+    %101 = load i64 from %100
+    %102 = alloca i64
+    store i64 %1 into %102
+    %103 = load i64 from %102
+    %104 = alloca i64
+    store i64 %2 into %104
+    %105 = load i64 from %104
+    %106 = alloca i64
+    store i64 %3 into %106
+    %107 = load i64 from %106
+    %108 = alloca i64
+    store i64 %4 into %108
+    %109 = load i64 from %108
+    %110 = alloca i64
+    store i64 %5 into %110
+    %111 = load i64 from %110
+    %112 = alloca i64
+    store i64 %6 into %112
+    %113 = load i64 from %112
+    %114 = alloca i64
+    store i64 %7 into %114
+    %115 = load i64 from %114
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov.derefrhs rdi.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rsi.64 local(1)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(1)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rdx.64 local(2)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(2)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rcx.64 local(3)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(3)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs r8.64 local(4)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(4)+0 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs r9.64 local(5)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(5)+0 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+16 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+24 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov.derefrhs rcx.64 local(abs)+16
+    mov.derefrhs rdx.64 local(abs)+24
+    mov.derefrhs r8.64 local(abs)+32
+    mov.derefrhs r9.64 local(abs)+40
+    mov.dereflhs local(abs)+16 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+24 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+32 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+40 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+48 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+56 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+64 rax.64 {CLOBBERS: op.1}
+    mov.dereflhs local(abs)+72 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+================
+Aggregate Parameter Lowering: One 16 Byte Struct w/ Two 8 Byte members
+================
+; For SysV, becomes spread across two registers. The alloca and store
+; should be erased and turned into two moves from the registers it is
+; passed in.
+; For MSx64, becomes a "pointer in register" parameter. So, a pointer to
+; the parameter is passed in a register... (which is saved into the
+; shadow stack space).
 
 struct __struct_0 { i64, i64 }
 
@@ -372,5 +450,112 @@ func:
     mov.derefrhs rcx.64 local(abs)+16
     mov.dereflhs local(abs)+16 rax.64 {CLOBBERS: op.1}
     mov rax.64 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+================
+Aggregate Parameter Lowering: One 16 Byte Struct w/ Four 4 Byte members
+================
+; For SysV, becomes spread across two registers. The alloca and store
+; should be erased and turned into two moves from the registers it is
+; passed in.
+; For MSx64, becomes a "pointer in register" parameter. So, a pointer to
+; the parameter is passed in a register... (which is saved into the
+; shadow stack space).
+
+struct __struct_0 { i32, i32, i32, i32 }
+
+func (internal): glintcc void(@__struct_0 %0):
+  bb0:
+    %1 = alloca @__struct_0
+    store @__struct_0 %0 into %1
+    %2 = load @__struct_0 from %1
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov.derefrhs rdi.64 local(0)+0 {CLOBBERS: op.1}
+    lea local(0)+8 rax.64 {CLOBBERS: op.1}
+    mov.derefrhs rsi.64 rax.64 {CLOBBERS: op.1}
+    lea local(0)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov.derefrhs rcx.64 local(abs)+16
+    mov.dereflhs local(abs)+16 rax.64 {CLOBBERS: op.1}
+    mov rax.64 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+================
+Aggregate Parameter Lowering: One 8 Byte Struct w/ One 8 Byte member
+================
+; For both SysV and MSx64, aggregates that fit in a register go in a
+; register.
+
+struct __struct_0 { i64 }
+
+func (internal): glintcc void(@__struct_0 %0):
+  bb0:
+    %1 = alloca @__struct_0
+    store @__struct_0 %0 into %1
+    %2 = load @__struct_0 from %1
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov.derefrhs rdi.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov.derefrhs rcx.64 local(abs)+16
+    mov.dereflhs local(abs)+16 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+
+================
+Aggregate Parameter Lowering: One 8 Byte Struct w/ Two 4 Byte member
+================
+; For both SysV and MSx64, aggregates that fit in a register go in a
+; register.
+
+struct __struct_0 { i32, i32 }
+
+func (internal): glintcc void(@__struct_0 %0):
+  bb0:
+    %1 = alloca @__struct_0
+    store @__struct_0 %0 into %1
+    %2 = load @__struct_0 from %1
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov.derefrhs rdi.64 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov.derefrhs rcx.64 local(abs)+16
+    mov.dereflhs local(abs)+16 rax.64 {CLOBBERS: op.1}
     ret
 memcpy:
