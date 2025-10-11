@@ -20,3 +20,15 @@ Invoking Integers Multiplies
  (binary_multiply
   (integer_literal)
   (integer_literal))))
+
+================
+Cast any value to void.ptr
+================
+
+void.ptr 42;
+
+---
+
+(block
+ (cast (integer_literal))
+ (return (integer_literal)))
