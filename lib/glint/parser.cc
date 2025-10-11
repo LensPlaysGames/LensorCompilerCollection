@@ -1087,7 +1087,8 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
     // but not a function and it's arguments). Hope that makes sense.
 
     // Eat soft expression separator
-    if (+ConsumeExpressionSeparator(ExpressionSeparator::Soft)) return lhs;
+    if (+ConsumeExpressionSeparator(ExpressionSeparator::Soft))
+        return lhs;
 
     /// The rules for operator precedence parsing are as follows:
     ///   - unary prefix operators are unambiguously handled up above;
@@ -1156,12 +1157,13 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         NextToken();
     }
 
-    if (+ConsumeExpressionSeparator(ExpressionSeparator::Soft)) return lhs;
+    if (+ConsumeExpressionSeparator(ExpressionSeparator::Soft))
+        return lhs;
 
     /// While we’re at the start of an expression, if we’re not parsing
     /// a single-expression, parse call arguments.
     // Exception: parsed expression (would-be callee) must be an identifier or
-    // a lambda or a number.
+    // a lambda or a number or a template.
     else if (
         not single_expression
         and (is<NameRefExpr>(*lhs) or is<TypeExpr>(*lhs) or is<IntegerLiteral>(*lhs) or is<TemplateExpr>(*lhs) or (is<FuncDecl>(*lhs) and as<FuncDecl>(*lhs)->name().empty()))

@@ -870,7 +870,10 @@ void lcc::glint::Sema::AnalyseModule() {
     DeclareImportedGlobalFunction(
         "memcpy",
         Type::Void,
-        {{"dest", Type::VoidPtr, {}}, {"src", Type::VoidPtr, {}}, {"size", FFIType::CInt(mod), {}}}
+        {{"dest", Type::VoidPtr, {}},
+         {"src", Type::VoidPtr, {}},
+         {"size", FFIType::CInt(mod), {}}
+        }
     );
 
     /// Analyse the signatures of all functions. This must be done

@@ -732,6 +732,11 @@ std::string lcc::glint::Expr::name() const {
 
         case Kind::Unary: {
             switch (as<UnaryExpr>(this)->op()) {
+                default: LCC_ASSERT(
+                    false,
+                    "Unhandled unary expression operator {}",
+                    ToString(as<UnaryExpr>(this)->op())
+                );
                 case TokenKind::Ampersand: return "unary_addressof";
                 case TokenKind::At: return "unary_dereference";
                 case TokenKind::Minus: return "unary_negation";
@@ -740,16 +745,17 @@ std::string lcc::glint::Expr::name() const {
                 case TokenKind::Has: return "unary_has";
                 case TokenKind::PlusPlus: return "unary_plusplus";
                 case TokenKind::MinusMinus: return "unary_minusminus";
-                default: LCC_ASSERT(
-                    false,
-                    "Unhandled unary expression operator {}",
-                    ToString(as<UnaryExpr>(this)->op())
-                );
             }
         } break;
 
         case Kind::Binary: {
             switch (as<BinaryExpr>(this)->op()) {
+                default: LCC_ASSERT(
+                    false,
+                    "Unhandled binary expression operator {}",
+                    ToString(as<UnaryExpr>(this)->op())
+                );
+
                 case TokenKind::Dot:
                     return "binary_dot";
 
@@ -796,12 +802,6 @@ std::string lcc::glint::Expr::name() const {
                 case TokenKind::CaretEq: return "binary_bitxor_assign";
                 case TokenKind::TildeEq: return "binary_bitnot_assign";
                 case TokenKind::LBrackEq: return "binary_subscript_assign";
-
-                default: LCC_ASSERT(
-                    false,
-                    "Unhandled binary expression operator {}",
-                    ToString(as<UnaryExpr>(this)->op())
-                );
             }
         }
         case Kind::Type: {

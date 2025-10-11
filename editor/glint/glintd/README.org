@@ -17,7 +17,7 @@ I only know of one editor, and that's Emacs. Here's a drag-and-drop eglot config
 #+begin_src emacs-lisp
   (add-to-list
    'eglot-server-programs
-   '(glint-ts-mode . ("python3" "/home/lens_r/Programming/play/LensorCompilerCollection/editor/glint/glintd.py")))
+   '(glint-ts-mode . ("python3" "/home/lens_r/Programming/play/LensorCompilerCollection/editor/glint/glintd/glintd.py")))
 #+end_src
 
 Obviously, fixup the path to wherever it is on your system.
