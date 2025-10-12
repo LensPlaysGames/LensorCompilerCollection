@@ -109,7 +109,7 @@ private:
     // Declare an external function (imported) at the global scope with the
     // given name. Useful for registering C library functions that may be
     // called by expressions inserted by semantic analysis.
-    void DeclareImportedGlobalFunction(std::string name, Type* return_ty, std::vector<FuncType::Param> param_ty);
+    void DeclareImportedGlobalFunction(std::string name, Type* return_ty, std::vector<FuncType::Param> param_ty, bool no_return = false);
 
     /// Analyse an expression and discard it.
     /// \see Discard.

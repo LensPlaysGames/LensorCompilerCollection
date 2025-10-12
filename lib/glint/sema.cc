@@ -829,14 +829,14 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_assembly(
     return false;
 }
 
-void lcc::glint::Sema::DeclareImportedGlobalFunction(std::string name, Type* return_ty, std::vector<FuncType::Param> param_ty) {
+void lcc::glint::Sema::DeclareImportedGlobalFunction(std::string name, Type* return_ty, std::vector<FuncType::Param> param_ty, bool no_return) {
     LCC_ASSERT(return_ty);
     (void) mod.global_scope()->declare(
         context,
         std::move(name),
         new (mod) FuncDecl(
             name,
-            new (mod) FuncType(param_ty, return_ty, {{FuncAttr::NoMangle, true}}, {}),
+            new (mod) FuncType(param_ty, return_ty, {{FuncAttr::NoMangle, true}, {FuncAttr::NoReturn, no_return}}, {}),
             nullptr,
             mod.global_scope(),
             &mod,
@@ -898,6 +898,12 @@ void lcc::glint::Sema::AnalyseModule() {
         "free",
         Type::Void,
         {{"ptr", Type::VoidPtr, {}}}
+    );
+    DeclareImportedGlobalFunction(
+        "exit",
+        Type::Void,
+        {{"status", Type::Int, {}}},
+        true
     );
     DeclareImportedGlobalFunction(
         "memcpy",
@@ -2403,6 +2409,29 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::LBrack: {
             (void) ImplicitDe_Reference(&b->lhs());
             auto* ty = b->lhs()->type();
+
+            if (is<DynamicArrayType>(ty)) {
+                // rewrite lhs[rhs] as lhs.data[rhs]
+
+                auto member_access = new (mod) MemberAccessExpr(b->lhs(), "data", {});
+                auto subscript = new (mod) BinaryExpr(TokenKind::LBrack, member_access, b->rhs(), {});
+
+                // TODO: if (bounds_check)...
+                // insert: if rhs >= size, exit 1;
+                auto size_member_access = new (mod) MemberAccessExpr(b->lhs(), "size", {});
+                auto condition = new (mod) BinaryExpr(TokenKind::Ge, b->rhs(), size_member_access, {});
+                auto exit_ref = new (mod) NameRefExpr("exit", mod.global_scope(), {});
+                auto status_literal = new (mod) IntegerLiteral(1, {});
+                auto then = new (mod) CallExpr(exit_ref, {status_literal}, {});
+                auto if_ = new (mod) IfExpr(condition, then, nullptr, {});
+
+                auto block = new (mod) BlockExpr({if_, subscript}, {});
+
+                *expr_ptr = block;
+                (void) Analyse(expr_ptr);
+                return;
+            }
+
             if (not is<PointerType, ArrayType>(ty)) {
                 // TODO: if (function-exists "_GlintOpOverloadLBracket") -> do that
                 // auto functions = mod.function(fmt::format("_XGlintOpOverload{}", b->op()));

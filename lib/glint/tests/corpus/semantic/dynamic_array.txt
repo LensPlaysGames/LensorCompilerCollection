@@ -1,0 +1,28 @@
+================
+Sugar for Data Member Access
+================
+
+foo:[byte];
+
+;; relevant
+foo[27]
+
+; -foo;
+
+---
+
+(block
+ (variable_declaration)
+
+ (block
+  (if
+   (binary_greaterthan_orequal
+    (evaluated_constant)
+    (cast (member_access (name))))
+   (call (name) (integer_literal)))
+  (binary_subscript
+   (cast (member_access (name)))
+   (integer_literal)))
+
+ (unary_negation (name))
+ (return (integer_literal)))

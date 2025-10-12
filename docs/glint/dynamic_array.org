@@ -12,7 +12,30 @@ In C++, =std::vector=.
 
 In Rust, =Vec=.
 
+** Operations
+
+- Binary =+== :: append rhs to dynamic array on lhs (i.e. =foo:[byte]; foo+=`0`;=).
+- Binary =~== :: prepend rhs to dynamic array on lhs (i.e. =foo:[byte]; foo~=`0`;=).
+- Binary =[= (Subscript) :: Rewritten to subscript of data member of dynamic array.
+- Trinary ~[=~ :: insert rhs at index given at mhs into dynamic array on lhs (i.e. =foo:[byte]; foo[=0, `0`;=)
+  NOTE: If index is not within the inclusive range of 0 to size, the program will crash.
+  If it didn't, iteration may expose values that have not been initialized properly.
+
 ** Accessing Elements
+
+*** Sugar
+
+Subscript of the dynamic array itself acts as a bounds-checked subscript of the data member of the dynamic array.
+
+#+begin_src glint-ts
+  out : [byte];
+  out += 69;
+
+  out[0] ;; out.data[0]
+  @out[0]; ;; 69
+#+end_src
+
+*** Basic
 
 Dereference the data pointer, basically.
 
@@ -20,7 +43,7 @@ Dereference the data pointer, basically.
   out : [byte];
   out += 69;
 
-  @out.data[0];
+  @out.data[0]; ;; 69
 #+end_src
 
 ** Range-based Loops
