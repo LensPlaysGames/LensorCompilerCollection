@@ -35,6 +35,7 @@ Function::Function(
     _location(location),
     mod(module),
     cc(calling_convention) {
+    LCC_ASSERT(mod and ty);
     add_name(std::move(mangled_name), linkage);
 
     /// Create parameter instructions.
@@ -50,12 +51,15 @@ GlobalVariable::GlobalVariable(Module* mod, Type* t, std::string name, Linkage l
     : UseTrackingValue(Value::Kind::GlobalVariable, Type::PtrTy),
       _init(init),
       _allocated_type(t) {
+    LCC_ASSERT(mod and t);
     _names.push_back({std::move(name), linkage});
     mod->add_var(this);
 }
 
 GlobalVariable* GlobalVariable::CreateStringPtr(Module* mod, std::string name, std::string_view str) {
+    LCC_ASSERT(mod);
     auto context = mod->context();
+    LCC_ASSERT(context);
     auto ty = lcc::ArrayType::Get(context, str.length() + 1, lcc::IntegerType::Get(context, 8));
 
     std::vector<char> data{str.begin(), str.end()};
@@ -187,6 +191,8 @@ auto Type::string(bool use_colour) const -> std::string {
 
 /// Get or create a function type.
 FunctionType* FunctionType::Get(Context* ctx, Type* ret, std::vector<Type*> params, bool is_variadic) {
+    LCC_ASSERT(ctx and ret);
+
     // Look in ctx type cache.
     const auto& found = rgs::find_if(ctx->function_types, [&](const Type* t) {
         const FunctionType* f = as<FunctionType>(t);
@@ -201,6 +207,8 @@ FunctionType* FunctionType::Get(Context* ctx, Type* ret, std::vector<Type*> para
 }
 
 IntegerType* IntegerType::Get(Context* ctx, usz bitwidth) {
+    LCC_ASSERT(ctx);
+
     // Look in ctx type cache.
     const auto& found = std::find_if(ctx->integer_types.begin(), ctx->integer_types.end(), [&](const std::pair<usz, Type*>& pair) {
         return pair.first == bitwidth;
@@ -215,6 +223,8 @@ IntegerType* IntegerType::Get(Context* ctx, usz bitwidth) {
 }
 
 ArrayType* ArrayType::Get(Context* ctx, usz length, Type* element_type) {
+    LCC_ASSERT(ctx and element_type);
+
     // Look in ctx type cache.
     const auto& found = rgs::find_if(ctx->array_types, [&](const Type* t) {
         const ArrayType* a = as<ArrayType>(t);
@@ -229,6 +239,8 @@ ArrayType* ArrayType::Get(Context* ctx, usz length, Type* element_type) {
 }
 
 StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, std::string name) {
+    LCC_ASSERT(ctx);
+
     // Look in ctx type cache.
     const auto& found = rgs::find_if(ctx->struct_types, [&](const Type* t) {
         const StructType* s = as<StructType>(t);
@@ -248,18 +260,21 @@ StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, std::
 }
 
 void Block::insert_before(Inst* to_insert, Inst* before) {
+    LCC_ASSERT(to_insert and before);
     auto before_it = rgs::find(inst_list, before);
     inst_list.insert(before_it, to_insert);
     to_insert->parent = this;
 }
 
 void Block::insert_after(Inst* to_insert, Inst* after) {
+    LCC_ASSERT(to_insert and after);
     auto after_it = rgs::find(inst_list, after);
     inst_list.insert(after_it + 1, to_insert);
     to_insert->parent = this;
 }
 
 Inst* Block::insert(Inst* i, bool force) {
+    LCC_ASSERT(i);
     if (not force and closed())
         Diag::ICE("Insertion into block that has already been closed.");
 
@@ -270,6 +285,7 @@ Inst* Block::insert(Inst* i, bool force) {
 }
 
 bool Block::has_predecessor(Block* block) const {
+    LCC_ASSERT(block);
     auto* term = block->terminator();
     if (not term) return false;
     switch (term->kind()) {
@@ -438,6 +454,7 @@ auto Inst::instructions_before_this() -> std::span<Inst*> {
 }
 
 void Inst::replace_with(Value* v) {
+    LCC_ASSERT(v, "Cannot replace instruction with null Value");
     while (not users().empty()) {
         auto* u = users().front();
 
@@ -464,6 +481,7 @@ void Inst::replace_with(Value* v) {
 }
 
 auto Block::create_phi(Type* type, Location loc) -> PhiInst* {
+    LCC_ASSERT(type);
     auto phi = new (*parent->module()) PhiInst(type, loc);
     auto it = rgs::find_if(inst_list, [](Inst* i) { return not is<PhiInst>(i); });
     inst_list.insert(it, phi);
@@ -481,6 +499,7 @@ void Block::erase() {
 }
 
 void Block::merge(lcc::Block* b) {
+    LCC_ASSERT(b);
     LCC_ASSERT(not closed() or as<BranchInst>(terminator())->target() == b);
     LCC_ASSERT(not parent or not b->parent or parent == b->parent);
 
@@ -567,6 +586,7 @@ auto lcc::Block::successor_count() const -> usz {
 }
 
 void lcc::Inst::insert_before(Inst* to_insert) {
+    LCC_ASSERT(to_insert);
     LCC_ASSERT(block(), "Cannot insert before instruction that has no block reference");
     block()->insert_before(to_insert, this);
 }
@@ -580,6 +600,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     }
 
     std::string Ty(Type* ty) {
+        LCC_ASSERT(ty, "Cannot stringify null Type");
         if (auto struct_type = cast<StructType>(ty)) {
             return fmt::format(
                 "{}@{}{}",
@@ -616,6 +637,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     }
 
     void PrintStructType(Type* t) {
+        LCC_ASSERT(t);
         auto struct_type = as<StructType>(t);
         std::string struct_name = struct_type->string(false);
 
@@ -641,6 +663,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     /// Print the function signature.
     void PrintFunctionHeader(Function* f) {
+        LCC_ASSERT(f);
         auto ftype = as<FunctionType>(f->type());
         for (auto n : f->names()) {
             if (n.name != f->names().at(0).name)
@@ -679,11 +702,19 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     /// Print the start of a temporary.
     void PrintTemp(Inst* i) {
-        Print("    {}%{} {}= {}", C(P::Temp), Index(i), C(P::Filler), C(P::Opcode));
+        LCC_ASSERT(i);
+        Print(
+            "    {}%{} {}= {}",
+            C(P::Temp),
+            Index(i),
+            C(P::Filler),
+            C(P::Opcode)
+        );
     };
 
     /// Print a cast instruction.
     void PrintCast(Inst* i, std::string_view mnemonic) {
+        LCC_ASSERT(i);
         auto* c = as<UnaryInstBase>(i);
         PrintTemp(i);
         Print(
@@ -697,6 +728,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     /// Print a binary instruction.
     void PrintBinary(Inst* i, std::string_view mnemonic) {
+        LCC_ASSERT(i);
         auto* b = as<BinaryInst>(i);
         PrintTemp(i);
         Print(
@@ -710,6 +742,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     /// Print an instruction.
     void PrintInst(Inst* i) {
+        LCC_ASSERT(i);
         switch (i->kind()) {
             /// Not an instruction.
             case Value::Kind::Block:
@@ -954,6 +987,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     /// Print a global variable.
     void PrintGlobal(GlobalVariable* v) {
+        LCC_ASSERT(v);
         bool imported{false};
         for (const auto& n : v->names()) {
             if (n.name != v->names().front().name)
@@ -989,6 +1023,8 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     /// to include it in the printout. The type is omitted if \c false
     /// is passed for \c include_type.
     auto Val(Value* v, bool include_type = true) -> std::string {
+        LCC_ASSERT(v);
+
         const auto Format =
             [&]<typename... Args>(
                 fmt::format_string<Args...> fmt,
@@ -1227,6 +1263,8 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     /// the IR! This is the entry point for printing a single
     /// value only.
     static void PrintValue(const Value* const_value, bool use_colour) {
+        LCC_ASSERT(const_value);
+
         /// Ok because we’re not going to mutate this, but we should
         /// probably refactor the IR printer to use const Value*’s
         /// instead...
