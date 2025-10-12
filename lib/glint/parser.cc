@@ -445,7 +445,7 @@ auto lcc::glint::Parser::ParseBlock(
 
     /// Yeet "}".
     if (not Consume(Tk::RBrace))
-        return Error("Expected }}");
+        Error("Expected }}");
 
     loc = {loc, tok.location};
 
@@ -1108,40 +1108,46 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
     };
 
     /// Binary operator parse loop.
-    while (ShouldKeepParsingOperators()) {
-        /// Handle ‘operators’ that require special parsing.
-        switch (tok.kind) {
-            default: break;
+    const auto ParseBinaryOps = [&]() -> Result<void> {
+        while (ShouldKeepParsingOperators()) {
+            /// Handle ‘operators’ that require special parsing.
+            switch (tok.kind) {
+                default: break;
 
-            /// Subscript expression.
-            case Tk::LBrack: {
-                NextToken();
-                auto index = ParseExpr();
-                if (not index) return index.diag();
-                lhs = new (*mod) BinaryExpr(Tk::LBrack, *lhs, *index, {lhs->location(), tok.location});
-                if (not Consume(Tk::RBrack)) return Error("Expected ]");
-                continue;
+                /// Subscript expression.
+                case Tk::LBrack: {
+                    NextToken();
+                    auto index = ParseExpr();
+                    if (not index) return index.diag();
+                    lhs = new (*mod) BinaryExpr(Tk::LBrack, *lhs, *index, {lhs->location(), tok.location});
+                    if (not Consume(Tk::RBrack)) return Error("Expected ]");
+                    continue;
+                }
+
+                /// The member access operator must be followed by an identifier.
+                case Tk::Dot: {
+                    NextToken();
+                    if (not At(Tk::Ident)) return Error("Expected identifier after .");
+                    auto member = tok.text;
+                    auto loc = tok.location;
+                    NextToken();
+                    lhs = new (*mod) MemberAccessExpr(*lhs, std::move(member), {lhs->location(), loc});
+                    continue;
+                }
             }
 
-            /// The member access operator must be followed by an identifier.
-            case Tk::Dot: {
-                NextToken();
-                if (not At(Tk::Ident)) return Error("Expected identifier after .");
-                auto member = tok.text;
-                auto loc = tok.location;
-                NextToken();
-                lhs = new (*mod) MemberAccessExpr(*lhs, std::move(member), {lhs->location(), loc});
-                continue;
-            }
+            /// Regular binary expression.
+            auto op = tok.kind;
+            NextToken();
+            auto rhs = ParseExpr(BinaryOrPostfixPrecedence(op));
+            if (not rhs) return rhs.diag();
+            lhs = new (*mod) BinaryExpr(op, *lhs, *rhs, {lhs->location(), rhs->location()});
         }
+        return {};
+    };
 
-        /// Regular binary expression.
-        auto op = tok.kind;
-        NextToken();
-        auto rhs = ParseExpr(BinaryOrPostfixPrecedence(op));
-        if (not rhs) return rhs.diag();
-        lhs = new (*mod) BinaryExpr(op, *lhs, *rhs, {lhs->location(), rhs->location()});
-    }
+    if (auto r = ParseBinaryOps(); r.is_diag())
+        return r.diag();
 
     // "()" after an expression is always a call with no arguments to the
     // preceding expression.
@@ -1187,42 +1193,9 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         }
     }
 
-    /// Binary operator parse loop.
-    // NOTE: Same as above
-    while (ShouldKeepParsingOperators()) {
-        /// Handle ‘operators’ that require special parsing.
-        switch (tok.kind) {
-            default: break;
-
-            /// Subscript expression.
-            case Tk::LBrack: {
-                NextToken();
-                auto index = ParseExpr();
-                if (not index) return index.diag();
-                lhs = new (*mod) BinaryExpr(Tk::LBrack, *lhs, *index, {lhs->location(), tok.location});
-                if (not Consume(Tk::RBrack)) return Error("Expected ]");
-                continue;
-            }
-
-            /// The member access operator must be followed by an identifier.
-            case Tk::Dot: {
-                NextToken();
-                if (not At(Tk::Ident)) return Error("Expected identifier after .");
-                auto member = tok.text;
-                auto loc = tok.location;
-                NextToken();
-                lhs = new (*mod) MemberAccessExpr(*lhs, std::move(member), {lhs->location(), loc});
-                continue;
-            }
-        }
-
-        /// Regular binary expression.
-        auto op = tok.kind;
-        NextToken();
-        auto rhs = ParseExpr(BinaryOrPostfixPrecedence(op));
-        if (not rhs) return rhs.diag();
-        lhs = new (*mod) BinaryExpr(op, *lhs, *rhs, {lhs->location(), rhs->location()});
-    }
+    // Once again try to parse binary operators...
+    if (auto r = ParseBinaryOps(); r.is_diag())
+        return r.diag();
 
     // Eat any amount of commas following an expression
     while (+ConsumeExpressionSeparator(ExpressionSeparator::Soft));
