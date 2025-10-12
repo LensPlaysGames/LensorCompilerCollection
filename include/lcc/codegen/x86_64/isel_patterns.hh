@@ -343,13 +343,14 @@ using cond_branch_imm = Pattern<
         Inst<Clobbers<>, usz(Opcode::JumpIfZeroFlag), o<2>>,
         Inst<Clobbers<>, usz(Opcode::Jump), o<1>>>>;
 
+// Optional: Inst<Clobbers<c<1>>, usz(Opcode::Xor), i<0>, i<0>> instead of Move Immediate<0> i<0>
 template <MKind kind, Opcode set_opcode>
 using cmp_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(kind), Register<>, Register<>>>,
     InstList<
         // NOTE: GNU ordering of operands
         Inst<Clobbers<>, usz(Opcode::Compare), o<1>, o<0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), Immediate<>, i<0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
         Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
 using u_lt_reg_reg = cmp_reg_reg<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
@@ -369,7 +370,7 @@ using cmp_reg_imm = Pattern<
     InstList<
         // NOTE: GNU ordering of operands
         Inst<Clobbers<>, usz(Opcode::Compare), o<1>, o<0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), Immediate<>, i<0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
         Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
 using u_lt_reg_imm = cmp_reg_imm<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
@@ -384,13 +385,34 @@ using eq_reg_imm = cmp_reg_imm<MKind::Eq, Opcode::SetByteIfEqual>;
 using ne_reg_imm = cmp_reg_imm<MKind::Ne, Opcode::SetByteIfNotEqual>;
 
 template <MKind kind, Opcode set_opcode>
+using cmp_imm_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(kind), Immediate<>, Register<>>>,
+    InstList<
+        // NOTE: GNU ordering of operands
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::Compare), o<1>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
+        Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
+
+using u_lt_imm_reg = cmp_imm_reg<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
+using s_lt_imm_reg = cmp_imm_reg<MKind::SLt, Opcode::SetByteIfLessSigned>;
+using u_lt_eq_imm_reg = cmp_imm_reg<MKind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
+using s_lt_eq_imm_reg = cmp_imm_reg<MKind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
+using u_gt_imm_reg = cmp_imm_reg<MKind::UGt, Opcode::SetByteIfGreaterUnsigned>;
+using s_gt_imm_reg = cmp_imm_reg<MKind::SGt, Opcode::SetByteIfGreaterSigned>;
+using u_gt_eq_imm_reg = cmp_imm_reg<MKind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
+using s_gt_eq_imm_reg = cmp_imm_reg<MKind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
+using eq_imm_reg = cmp_imm_reg<MKind::Eq, Opcode::SetByteIfEqual>;
+using ne_imm_reg = cmp_imm_reg<MKind::Ne, Opcode::SetByteIfNotEqual>;
+
+template <MKind kind, Opcode set_opcode>
 using cmp_imm_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(kind), Immediate<>, Immediate<>>>,
     InstList<
         // NOTE: GNU ordering of operands
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
         Inst<Clobbers<>, usz(Opcode::Compare), o<1>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), Immediate<>, i<0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
         Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
 using u_lt_imm_imm = cmp_imm_imm<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
@@ -520,6 +542,17 @@ using AllPatterns = PatternList<
     s_gt_eq_reg_imm,
     eq_reg_imm,
     ne_reg_imm,
+
+    u_lt_imm_reg,
+    s_lt_imm_reg,
+    u_lt_eq_imm_reg,
+    s_lt_eq_imm_reg,
+    u_gt_imm_reg,
+    s_gt_imm_reg,
+    u_gt_eq_imm_reg,
+    s_gt_eq_imm_reg,
+    eq_imm_reg,
+    ne_imm_reg,
 
     u_lt_imm_imm,
     s_lt_imm_imm,
