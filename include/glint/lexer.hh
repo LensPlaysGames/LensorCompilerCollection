@@ -81,6 +81,7 @@ protected:
 
     void NextToken();
 
+public:
     [[nodiscard]]
     static auto IsIdentStart(u32 c) -> bool { return IsAlpha(c) or c == '_'; }
     // Search Terms: delimiter

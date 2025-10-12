@@ -12,7 +12,7 @@
 import re
 
 # You have to build this yourself, like, with a C++ compiler
-from glinttools import getCompletions, findDecl
+from glinttools import getScopes, getScopeAtPoint, getValidSymbols, findDecl, tokenize
 
 from itertools import islice
 
@@ -20,6 +20,9 @@ from pygls.server import LanguageServer
 from lsprotocol import types
 
 server = LanguageServer("glint-server", "v0.1")
+
+def log(msg : str):
+    server.show_message_log(msg)
 
 
 _MARKDOWN_CHARACTERS_TO_ESCAPE = set(r"\`*_{}[]<>()#+-.!|")
@@ -39,30 +42,6 @@ def find_many(instring: str, start_position: int, substrings):
         return start_position + m.start()
 
 
-TOKENIZE_DELIMITERS = set(
-    [' ', '.', ';', ',', '(', ')', '\n', ':', '<', '>', '=', '-', '*', '@', '{', '}', '!', '%', '~', '^', '|', '&', '`']
-);
-def tokenize(source: str):
-    results = []
-    current_pos :int = 0
-    while True:
-        next_delimiter_pos :int = find_many(source, current_pos, TOKENIZE_DELIMITERS)
-
-        if next_delimiter_pos == -1:
-            results.append((source[current_pos:], current_pos))
-            break
-
-        if current_pos == next_delimiter_pos:
-            current_pos += 1
-            continue
-
-        token_source :str = source[current_pos:next_delimiter_pos]
-        results.append((token_source, current_pos))
-        current_pos = next_delimiter_pos + 1
-
-    return results
-
-
 @server.feature(types.TEXT_DOCUMENT_HOVER)
 def hover(ls: LanguageServer, params: types.HoverParams):
     pos = params.position
@@ -80,27 +59,34 @@ def hover(ls: LanguageServer, params: types.HoverParams):
     except IndexError:
         return None
 
+    tokens = tokenize(line)
+    # for t in tokens:
+    #     log(f".source '{t.source}', .byte_offset {t.location.byte_offset}, .length {t.location.length}, .line {t.location.line}, .character {t.location.character}")
+
     selected_token = next(
-        (token for token in reversed(tokenize(line))
-         if token[1] <= pos.character and pos.character < token[1] + len(token[0])),
+        (token for token in reversed(tokens)
+         if token.location.byte_offset <= pos.character and pos.character < token.location.byte_offset + token.location.length),
         None
     )
+
     def token_pos_string(token):
-        return f"{pos.line}:{token[1]}"
+        return f"{pos.line}:{token.location.character}"
 
     # If there is nothing we can do to add info about the selected token/
     # context at point, print this.
     # hover_content = f"{pos.line}:{pos.character}"
     hover_content = ""
     if selected_token:
-        context_source = "".join(document.lines[:pos.line])
-        # TODO: if isIdentifier(selected_token)
-        decl_info = findDecl(context_source, selected_token[0])
-        if decl_info.decl_location.byte_offset >= 0:
-            decl_source = context_source[decl_info.location.byte_offset:decl_info.location.byte_offset+decl_info.location.length]
-            hover_content = f"{token_pos_string(selected_token)}: {selected_token[0]} : **{escaped_markdown(decl_info.type_representation)}**"
-        else:
-            hover_content = f"{token_pos_string(selected_token)}: {escaped_markdown(selected_token[0])}"
+        context_source = "".join(document.lines)
+        hover_content = f"{token_pos_string(selected_token)}: {escaped_markdown(selected_token.source)}"
+
+        decl_info = findDecl(context_source, selected_token.source)
+        if decl_info.location.byte_offset != -1:         # confidence check
+            if len(decl_info.type_representation) != 0:  # Glint C++ API fed us type of thing at point
+                hover_content += f" : {decl_info.type_representation}"
+
+    else:
+        hover_content = f"{pos.line}:{pos.character}"
 
     if len(hover_content) != 0:
         return types.Hover(
@@ -138,14 +124,14 @@ def completions(params: types.CompletionParams):
     while not selected_token and i >= 0:
         selected_token = next(
             (token for token in tokens
-             if token[1] <= i and i < token[1] + len(token[0])),
+             if token.location.byte_offset <= i and i < token.location.byte_offset + token.location.length),
             None
         )
         i -= 1
 
+    context_source = "".join(document.lines)
     if selected_token:
-        context_source = "".join(document.lines[:pos.line])
-        completions = getCompletions(context_source, selected_token[0])
+        completions = getValidSymbols(context_source)
         return types.CompletionList(
             is_incomplete=False, # completion list is complete
             items=(types.CompletionItem(
@@ -153,7 +139,13 @@ def completions(params: types.CompletionParams):
             ) for completion in completions)
         )
 
-    return None
+    completions = getValidSymbols(context_source)
+    return types.CompletionList(
+        is_incomplete=False, # completion list is complete
+        items=(types.CompletionItem(
+            label=completion
+        ) for completion in completions)
+    )
 
 if __name__ == "__main__":
     server.start_io()

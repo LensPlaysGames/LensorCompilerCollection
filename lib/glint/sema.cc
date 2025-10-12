@@ -74,7 +74,6 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
             if (m.supplanted and Type::Equal(m.type, to->strip_references())) {
                 if constexpr (PerformConversion) {
                     *expr_ptr = new (mod) MemberAccessExpr(*expr_ptr, m.name, from->location());
-                    // FIXME: Is this correct?
                     (void) Analyse(expr_ptr);
                 }
                 return Score(1);
@@ -301,6 +300,7 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
 }
 
 bool lcc::glint::Sema::ConvertOrError(Expr** expr, Type* to) {
+    LCC_ASSERT(expr and to, "Pointers mustn't be null");
     if (not Convert(expr, to)) {
         Error(
             (*expr)->location(),
@@ -314,6 +314,7 @@ bool lcc::glint::Sema::ConvertOrError(Expr** expr, Type* to) {
 }
 
 auto lcc::glint::Sema::ConvertToCommonType(Expr** a, Expr** b) -> bool {
+    LCC_ASSERT(a and b, "Pointers mustn't be null");
     // An integer literal should always be converted into the type of the
     // other side STRIPPED OF REFERENCES.
     bool a_is_literal = is<IntegerLiteral>(*a);
@@ -333,24 +334,33 @@ auto lcc::glint::Sema::TryConvert(Expr** expr, Type* type) -> int {
 }
 
 auto lcc::glint::Sema::Convert(Expr** expr, Type* type) -> bool {
+    LCC_ASSERT(expr and type);
     if ((*expr)->sema_errored()) return true;
     return ConvertImpl<true>(expr, type) >= 0;
 }
 
 auto lcc::glint::Sema::AnalyseAndDiscard(Expr** expr) -> bool {
+    LCC_ASSERT(expr);
     if (not Analyse(expr)) return false;
     Discard(expr);
     return true;
 }
 
 auto lcc::glint::Sema::DeclTypeDecay(Type* type) -> Type* {
+    LCC_ASSERT(type);
     return type->is_function() ? Ptr(type) : type;
 }
 
 auto lcc::glint::Sema::Deproceduring(Expr** expr_ptr) -> bool {
+    LCC_ASSERT(expr_ptr);
+
     /// This conversion only applies to functions and function pointers.
     auto* expr = *expr_ptr;
+    LCC_ASSERT(expr);
+
     auto* ty = expr->type();
+    LCC_ASSERT(ty);
+
     if (not ty->is_function()
         and (not ty->is_pointer() or not ty->elem()->is_function()))
         return false;
@@ -373,7 +383,10 @@ auto lcc::glint::Sema::Deproceduring(Expr** expr_ptr) -> bool {
 }
 
 void lcc::glint::Sema::Discard(Expr** expr_ptr) {
+    LCC_ASSERT(expr_ptr);
+
     auto* expr = *expr_ptr;
+    LCC_ASSERT(expr);
 
     /// If the expression returns void, or has an error, ignore it.
     if (not expr->ok() or expr->type()->is_void()) return;
@@ -402,6 +415,8 @@ void lcc::glint::Sema::Discard(Expr** expr_ptr) {
 }
 
 auto lcc::glint::Sema::EvaluateAsInt(Expr* expr, Type* int_type, aint& out) -> bool {
+    LCC_ASSERT(expr and int_type);
+
     EvalResult res;
     if (not expr->evaluate(context, res, true)) return false;
 
@@ -437,6 +452,7 @@ auto lcc::glint::Sema::EvaluateAsInt(Expr* expr, Type* int_type, aint& out) -> b
 }
 
 auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
+    LCC_ASSERT(expr);
     switch (expr->kind()) {
         /// These always have side effects.
         case Expr::Kind::Match:
@@ -540,6 +556,8 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
 }
 
 auto lcc::glint::Sema::ImplicitDe_Reference(Expr** expr) -> bool {
+    LCC_ASSERT(expr and *expr);
+
     if (is<ReferenceType>((*expr)->type())) {
         /// Don’t strip reference here since we want an lvalue.
         LValueToRValue(expr, false);
@@ -554,6 +572,8 @@ auto lcc::glint::Sema::ImplicitDe_Reference(Expr** expr) -> bool {
 }
 
 auto lcc::glint::Sema::ImplicitDereference(Expr** expr) -> bool {
+    LCC_ASSERT(expr and *expr);
+
     if (is<ReferenceType>((*expr)->type())) {
         /// Don’t strip reference here since we want an lvalue.
         LValueToRValue(expr, false);
@@ -579,15 +599,19 @@ auto lcc::glint::Sema::ImplicitDereference(Expr** expr) -> bool {
 }
 
 void lcc::glint::Sema::InsertImplicitCast(Expr** expr_ptr, Type* ty) {
+    LCC_ASSERT(expr_ptr and *expr_ptr and ty);
     WrapWithCast(expr_ptr, ty, CastKind::ImplicitCast);
 }
 
 void lcc::glint::Sema::InsertPointerToIntegerCast(Expr** operand) {
+    LCC_ASSERT(operand);
     if ((*operand)->type()->is_pointer())
         InsertImplicitCast(operand, Type::Int);
 }
 
 void lcc::glint::Sema::LValueToRValue(Expr** expr, bool strip_ref) {
+    LCC_ASSERT(expr and *expr);
+
     if ((*expr)->sema_errored()) return;
 
     // This converts the type of a member access of a sum type into the type
@@ -631,6 +655,8 @@ void lcc::glint::Sema::LValueToRValue(Expr** expr, bool strip_ref) {
 }
 
 auto lcc::glint::Sema::Ptr(Type* ty) -> PointerType* {
+    LCC_ASSERT(ty);
+
     Type* ptr = new (mod) PointerType(ty, ty->location());
     // If we fail to analyse the type, it is still valid to return as a
     // pointer type (it just will have it's error flag set and won't be able
@@ -640,6 +666,8 @@ auto lcc::glint::Sema::Ptr(Type* ty) -> PointerType* {
 }
 
 auto lcc::glint::Sema::Ref(Type* ty) -> ReferenceType* {
+    LCC_ASSERT(ty);
+
     Type* ref = new (mod) ReferenceType(ty, ty->location());
     // If we fail to analyse the type, it is still valid to return as a
     // pointer type (it just will have it's error flag set and won't be able
@@ -649,6 +677,8 @@ auto lcc::glint::Sema::Ref(Type* ty) -> ReferenceType* {
 }
 
 void lcc::glint::Sema::WrapWithCast(Expr** expr_ptr, Type* type, CastKind kind) {
+    LCC_ASSERT(expr_ptr and *expr_ptr and type);
+
     Expr* expr = new (mod) CastExpr(
         *expr_ptr,
         type,
@@ -666,6 +696,7 @@ void lcc::glint::Sema::WrapWithCast(Expr** expr_ptr, Type* type, CastKind kind) 
 ///  Core
 /// ===========================================================================
 void lcc::glint::Sema::Analyse(Context* ctx, Module& m, bool use_colours) {
+    LCC_ASSERT(ctx);
     if (ctx->has_error()) return;
     Sema s{ctx, m, use_colours};
     return s.AnalyseModule();
@@ -799,6 +830,7 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_assembly(
 }
 
 void lcc::glint::Sema::DeclareImportedGlobalFunction(std::string name, Type* return_ty, std::vector<FuncType::Param> param_ty) {
+    LCC_ASSERT(return_ty);
     (void) mod.global_scope()->declare(
         context,
         std::move(name),
@@ -888,6 +920,8 @@ void lcc::glint::Sema::AnalyseModule() {
 }
 
 void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
+    LCC_ASSERT(decl);
+
     tempset curr_func = decl;
     auto* ty = as<FuncType>(decl->type());
 
@@ -1062,6 +1096,8 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
 }
 
 void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
+    LCC_ASSERT(decl);
+
     /// Set a name for the decl if it’s empty.
     if (decl->name().empty()) decl->name(mod.unique_name("emptydecl_"));
 
@@ -1101,7 +1137,10 @@ void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
 /// \param expected_type The type used for top-down inference. May be null.
 /// \return (*expr_ptr)->ok().
 auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
+    LCC_ASSERT(expr_ptr);
+
     auto* expr = *expr_ptr;
+    LCC_ASSERT(expr);
 
     /// Don’t analyse the same expression twice.
     if (expr->sema() != SemaNode::State::NotAnalysed)
@@ -2365,6 +2404,12 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             (void) ImplicitDe_Reference(&b->lhs());
             auto* ty = b->lhs()->type();
             if (not is<PointerType, ArrayType>(ty)) {
+                // TODO: if (function-exists "_GlintOpOverloadLBracket") -> do that
+                // auto functions = mod.function(fmt::format("_XGlintOpOverload{}", b->op()));
+                // if (not functions.empty()) {
+                //     // overload of operator exists, just call it.
+                // }
+
                 Error(
                     b->location(),
                     "LHS of subscript must be a pointer or array, but was {}",
@@ -2425,6 +2470,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
             /// Both types must be integers.
             if (not lhs_t->is_integer() or not rhs_t->is_integer()) {
+                // TODO: if (function-exists "_GlintOpOverload<OpString>") -> do that
+
                 Error(
                     b->location(),
                     "Cannot perform arithmetic on {} and {}",
@@ -2488,7 +2535,12 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             }
 
             /// Other comparisons are not allowed.
-            else { Error(b->location(), "Cannot compare {} and {}", lhs_t, rhs_t); }
+            else {
+                // TODO: if (function-exists "_GlintOpOverload<OpString>") -> do that
+                // Also make sure it returns something convertible to bool.
+
+                Error(b->location(), "Cannot compare {} and {}", lhs_t, rhs_t);
+            }
 
             /// Comparisons return bool.
             b->type(Type::Bool);

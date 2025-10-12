@@ -2210,3 +2210,16 @@ auto lcc::glint::ObjectDecl::mangled_name() const -> std::string {
 
     return fmt::format("_XGlint{}{}", name(), type()->representation());
 }
+
+auto lcc::glint::Module::enclosing_scope(Location l) const -> Scope* {
+    Scope* out{scopes.at(0)};
+    for (auto s : scopes) {
+        if (s->location().is_valid()) {
+            if (s->location().pos > l.pos)
+                break;
+            if (s->location().pos > out->location().pos)
+                out = s;
+        }
+    }
+    return out;
+}

@@ -4,6 +4,10 @@ An =interface= expression will be a restriced form of a template expression.
 
 The main restriction regards enforcing the /un/-expanded expression to be a type expression. This allows the compiler to know at least /something/ about the expression the template produces, like the members defined on a composite type. This means for, say, a container sort of template, the compiler knows those members exist (and possibly their type, if not part of a template parameter thing). This would ensure that, as detailed as the =interface= is, is as correct as our type checking can be within the unexpanded template body. This means that more errors in templates are caught /before/ expansion.
 
+* Module Partitions
+
+Basically, partitions will be a way to open up a named scope without any extra semantics.
+
 * =glinttools=
 
 Separate executable for introspection of Glint programs and modules, as

@@ -272,11 +272,15 @@ public:
 
     /// Get the global scope.
     [[nodiscard]]
-    auto global_scope() const -> Scope* { return scopes[0]; }
+    auto global_scope() const -> Scope* { return scopes.at(0); }
 
     /// Get the top-level scope.
     [[nodiscard]]
-    auto top_level_scope() const -> Scope* { return scopes[1]; }
+    auto top_level_scope() const -> Scope* { return scopes.at(1); }
+
+    /// Get the scope that opens the least distance preceding the given location.
+    [[nodiscard]]
+    auto enclosing_scope(Location l) const -> Scope*;
 
     /// Get the top-level function.
     [[nodiscard]]
@@ -361,6 +365,8 @@ class Scope {
     std::unordered_multimap<std::string, Decl*, detail::StringHash, std::equal_to<>> symbols;
     bool is_function_scope = false;
 
+    Location _location;
+
 public:
     Scope(Scope* parent) : _parent(parent) {}
 
@@ -374,6 +380,12 @@ public:
 
     /// Get the parent scope.
     auto parent() const { return _parent; }
+
+    /// Get the location.
+    auto location() const { return _location; }
+
+    /// Get the location.
+    auto location() -> Location& { return _location; }
 
     /// Declare a symbol in this scope.
     ///

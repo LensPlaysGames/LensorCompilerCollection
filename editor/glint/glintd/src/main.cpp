@@ -4,12 +4,19 @@
 
 #include <lcc/context.hh>
 #include <lcc/format.hh>
+#include <lcc/location.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 
 #include <pybind11/complex.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 /// Default target.
 const lcc::Target* default_target =
@@ -67,40 +74,8 @@ bool invalid(const DeclInfo& d) {
     return d.decl == nullptr;
 }
 
-DeclInfo findDeclImpl(lcc::glint::Module& m, lcc::Context* ctx, std::string_view name, lcc::glint::Expr* e) {
-    if (not e) return {};
-
-    if (e->name() == name) {
-        if (e->type()) {
-            return {
-                {py_location(ctx, {e->location(), e->type()->location()}),
-                 py_location(ctx, e->location()),
-                 py_location(ctx, e->type()->location()),
-                 *m.ToSource(*e->type())
-                },
-                e
-            };
-        } else {
-            return {
-                {//
-                 py_location(ctx, e->location()),
-                 py_location(ctx, e->location())
-                },
-                e
-            };
-        }
-    }
-    for (auto* c : e->children()) {
-        if (auto l = findDeclImpl(m, ctx, name, c); not invalid(l))
-            return l;
-    }
-
-    return {};
-}
-
-PythonDeclInfo findDecl(std::string source, std::string name) {
-    // TODO: Parse source. Return location of declaration matching symbol.
-    lcc::Context context{
+constexpr auto default_context() {
+    return lcc::Context{
         default_target,
         default_format,
         lcc::Context::Options{
@@ -113,9 +88,11 @@ PythonDeclInfo findDecl(std::string source, std::string name) {
             lcc::Context::DoNotStopatMIR
         }
     };
+}
 
+constexpr auto get_analysed_module(lcc::Context& context, std::string source) -> std::optional<std::unique_ptr<lcc::glint::Module>> {
     auto& f = context.create_file(
-        "tmp",
+        "glintd.tmp.g",
         std::vector<char>{source.begin(), source.end()}
     );
 
@@ -123,11 +100,106 @@ PythonDeclInfo findDecl(std::string source, std::string name) {
         &context,
         f
     );
+    // If we don't have a module at all, we have parsed no information.
+    if (not m) return {};
+
+    // Replace named types with what they were before, etc
+    lcc::glint::Sema::Analyse(&context, *m);
+
+    // NOTE: Ownership released.
+    return m;
+}
+
+struct PythonToken {
+    std::string source{};
+    PythonLocation location{};
+    // TODO: Bind TokenKind Enum to Python and include that information here.
+};
+
+auto tokenize(std::string source) -> std::vector<PythonToken> {
+    auto context = default_context();
+
+    auto& f = context.create_file(
+        "glintd.tmp.g",
+        std::vector<char>{source.begin(), source.end()}
+    );
+
+    std::vector<PythonToken> out{};
+    for (auto t : lcc::glint::Parser::GetTokens(&context, f)) {
+        auto source = lcc::glint::ToSource(t);
+        if (source) {
+            out.emplace_back(
+                *source,
+                py_location(&context, t.location)
+            );
+        }
+    }
+    return out;
+}
+
+// Walks children of expression until name matches.
+DeclInfo findDeclImpl(lcc::glint::Module& m, lcc::Context* ctx, std::string_view name, lcc::glint::Expr* e) {
+    if (not e) return {};
+
+    if (e->name() == name) {
+        // spans entire declaration and type
+        PythonLocation location = py_location(ctx, e->location());
+        // spans just the declaration
+        const PythonLocation decl_location = py_location(ctx, e->location());
+        // spans just the type
+        PythonLocation type_location{};
+        std::string type_repr{};
+
+        if (e->type()) {
+            location = py_location(ctx, {e->location(), e->type()->location()});
+            type_location = py_location(ctx, e->type()->location());
+
+            auto maybe_type_repr = m.ToSource(*e->type());
+            if (maybe_type_repr) type_repr = *maybe_type_repr;
+        }
+        return {
+            {//
+             location,
+             decl_location,
+             type_location,
+             type_repr
+            },
+            e
+        };
+    }
+
+    // Walk children recursively until we find a name that matches.
+    for (auto* c : e->children()) {
+        LCC_ASSERT(c != e, "Infinite Recursion");
+        if (auto l = findDeclImpl(m, ctx, name, c); not invalid(l))
+            return l;
+    }
+
+    return {};
+}
+
+// Parse source, and return location of first declaration matching name
+// parameter.
+PythonDeclInfo findDecl(std::string source, std::string name) {
+    if (source.empty()) return {};
+    if (name.empty()) return {};
+
+    // If the given name isn't a valid Glint identifier, there is no
+    // declaration.
+    if (not lcc::glint::Lexer::IsIdentStart((lcc::u32) name.at(0)))
+        return {};
+
+    auto context = default_context();
+    auto maybe_m = get_analysed_module(context, source);
+    if (not maybe_m) return {};
+    auto& m = *maybe_m;
+    LCC_ASSERT(m);
 
     return findDeclImpl(*m, &context, name, m->top_level_function()->body()).py_info;
 }
 
 std::vector<std::string> getValidTypeConstituents(lcc::glint::Type* t) {
+    LCC_ASSERT(t);
     switch (t->kind()) {
         case lcc::glint::Type::Kind::Builtin:
         case lcc::glint::Type::Kind::FFIType:
@@ -181,40 +253,80 @@ std::vector<std::string> getValidTypeConstituents(lcc::glint::Type* t) {
     LCC_UNREACHABLE();
 }
 
-std::vector<std::string> getCompletions(std::string source, std::string name) {
-    lcc::Context context{
-        default_target,
-        default_format,
-        lcc::Context::Options{
-            lcc::Context::DoNotUseColour,
-            lcc::Context::DoNotPrintAST,
-            lcc::Context::DoNotStopatLex,
-            lcc::Context::DoNotStopatSyntax,
-            lcc::Context::DoNotStopatSema,
-            lcc::Context::DoNotPrintMIR,
-            lcc::Context::DoNotStopatMIR
-        }
+enum class ScopeFilter {
+    ExcludeGenerated = 0,
+    IncludeAll
+};
+constexpr auto extract_scope_symbols(
+    lcc::glint::Scope* scope,
+    ScopeFilter filter = ScopeFilter::ExcludeGenerated
+) -> std::vector<std::string> {
+    LCC_ASSERT(scope);
+    std::unordered_set<std::string> out{};
+    for (auto d : scope->all_symbols()) {
+        auto n = d->name();
+
+        // Skip mangled names, and temporary names inserted by compiler (like for
+        // ranged for loops).
+        if (filter == ScopeFilter::ExcludeGenerated and n.starts_with("_XGlint")) continue;
+
+        out.emplace(d->name());
+    }
+    return {out.begin(), out.end()};
+}
+
+std::vector<std::string> getValidSymbols(std::string source) {
+    auto context = default_context();
+    auto maybe_m = get_analysed_module(context, source);
+    if (not maybe_m) return {};
+    auto& m = *maybe_m;
+    LCC_ASSERT(m);
+
+    std::unordered_set<std::string> all_valid_symbols{};
+    for (auto s : m->scopes) {
+        auto syms = extract_scope_symbols(s);
+        for (auto sym : syms)
+            all_valid_symbols.emplace(sym);
+    }
+
+    return {all_valid_symbols.cbegin(), all_valid_symbols.cend()};
+}
+
+auto getScopes(std::string source) -> std::vector<std::vector<std::string>> {
+    auto context = default_context();
+    auto maybe_m = get_analysed_module(context, source);
+    if (not maybe_m) return {};
+    auto& m = *maybe_m;
+    LCC_ASSERT(m);
+
+    std::vector<std::vector<std::string>> out{};
+    for (auto s : m->scopes)
+        out.emplace_back(extract_scope_symbols(s));
+
+    return out;
+}
+
+auto getScopeAtPoint(std::string source, PythonLocation location) -> std::vector<std::vector<std::string>> {
+    if (invalid(location)) return {};
+
+    auto context = default_context();
+    auto maybe_m = get_analysed_module(context, source);
+    if (not maybe_m) return {};
+    auto& m = *maybe_m;
+    LCC_ASSERT(m);
+
+    auto l = lcc::Location{
+        (lcc::u32) location.byte_offset,
+        (lcc::u16) location.length,
+        (lcc::u16) context.files().at(0)->file_id()
     };
-
-    auto& f = context.create_file(
-        "tmp",
-        std::vector<char>{source.begin(), source.end()}
-    );
-
-    auto m = lcc::glint::Parser::Parse(
-        &context,
-        f
-    );
-
-    // Replace named types with what they were before, etc
-    lcc::glint::Sema::Analyse(&context, *m);
-
-    auto decl_info = findDeclImpl(*m, &context, name, m->top_level_function()->body());
-
-    if (decl_info.decl and decl_info.decl->type())
-        return getValidTypeConstituents(decl_info.decl->type());
-
-    return {};
+    auto s = m->enclosing_scope(l);
+    std::vector<std::vector<std::string>> out{};
+    while (s) {
+        out.emplace_back(extract_scope_symbols(s));
+        s = s->parent();
+    }
+    return out;
 }
 
 namespace py = pybind11;
@@ -229,8 +341,13 @@ PYBIND11_MODULE(glinttools, m) {
         .def_readwrite("line", &PythonLocation::line)
         .def_readwrite("character", &PythonLocation::character);
 
+    py::class_<PythonToken>(m, "Token")
+        .def(py::init<std::string, PythonLocation>())
+        .def_readwrite("source", &PythonToken::source)
+        .def_readwrite("location", &PythonToken::location);
+
     py::class_<PythonDeclInfo>(m, "DeclInfo")
-        .def(py::init<int, int, int, int>())
+        .def(py::init<PythonLocation, PythonLocation, PythonLocation, std::string>())
         .def_readwrite("location", &PythonDeclInfo::location)
         .def_readwrite("decl_location", &PythonDeclInfo::decl_location)
         .def_readwrite("type_location", &PythonDeclInfo::type_location)
@@ -242,10 +359,27 @@ PYBIND11_MODULE(glinttools, m) {
         "Return the location of the declaration of the given symbol within the given source (if any)."
     );
 
-    // Expose the 'add' function to Python
     m.def(
-        "getCompletions",
-        &getCompletions,
-        "Return a list of valid completions at point. Currently just handles member access at exactly the dot."
+        "getValidSymbols",
+        &getValidSymbols,
+        "Return all valid symbols within a given source (all symbols from all scopes)."
+    );
+
+    m.def(
+        "getScopes",
+        &getScopes,
+        "Return a list of all scopes in a program."
+    );
+
+    m.def(
+        "getScopeAtPoint",
+        &getScopeAtPoint,
+        "Given a valid source location, return a list of scopes containing the closest enclosing scope, and all parent scopes."
+    );
+
+    m.def(
+        "tokenize",
+        &tokenize,
+        "Get a list of token objects."
     );
 }

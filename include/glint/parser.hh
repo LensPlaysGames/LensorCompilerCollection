@@ -48,7 +48,10 @@ private:
 
         explicit ScopeRAII(Parser* parser_, Scope* parent = nullptr)
             : parser(parser_), scope(new (*parser->mod) Scope(parent ? parent : parser->CurrScope())) {
+            LCC_ASSERT(parser);
+            LCC_ASSERT(scope);
             parser->scope_stack.push_back(scope);
+            scope->location() = parser->tok.location;
         }
 
         ScopeRAII(const ScopeRAII&) = delete;
@@ -68,7 +71,11 @@ private:
         }
 
         ~ScopeRAII() {
-            if (scope) parser->scope_stack.pop_back();
+            // The only way scope member is nullptr is if this has been moved from.
+            if (scope) {
+                scope->location() = {scope->location(), parser->tok.location};
+                parser->scope_stack.pop_back();
+            }
         }
     };
 
