@@ -74,6 +74,24 @@ bool invalid(const DeclInfo& d) {
     return d.decl == nullptr;
 }
 
+struct PythonDiagnostic {
+    enum class Severity {
+        None,
+        Note,
+        Warning,
+        Error,
+        Fix,
+        Fatal,
+        ICE,
+    } severity{Severity::None};
+    PythonLocation where{};
+    std::string message{};
+};
+
+bool invalid(const PythonDiagnostic& d) {
+    return invalid(d.where);
+}
+
 constexpr auto default_context() {
     return lcc::Context{
         default_target,
@@ -329,6 +347,41 @@ auto getScopeAtPoint(std::string source, PythonLocation location) -> std::vector
     return out;
 }
 
+auto getDiagnostics(std::string source) -> std::vector<PythonDiagnostic> {
+    std::vector<PythonDiagnostic> out{};
+    auto context = default_context();
+    auto maybe_m = get_analysed_module(context, source);
+
+    for (auto d : context.diagnostics()) {
+        auto kind = PythonDiagnostic::Severity::None;
+        switch (d.kind) {
+            case lcc::Diag::Kind::None: break;
+            case lcc::Diag::Kind::Note:
+                kind = PythonDiagnostic::Severity::Note;
+                break;
+            case lcc::Diag::Kind::Warning:
+                kind = PythonDiagnostic::Severity::Warning;
+                break;
+            case lcc::Diag::Kind::Error:
+                kind = PythonDiagnostic::Severity::Error;
+                break;
+            case lcc::Diag::Kind::FError:
+                kind = PythonDiagnostic::Severity::Fatal;
+                break;
+            case lcc::Diag::Kind::ICError:
+                kind = PythonDiagnostic::Severity::ICE;
+                break;
+        }
+        out.emplace_back(
+            kind,
+            py_location(&context, d.where),
+            d.message
+        );
+    }
+
+    return out;
+}
+
 namespace py = pybind11;
 
 PYBIND11_MODULE(glinttools, m) {
@@ -345,6 +398,21 @@ PYBIND11_MODULE(glinttools, m) {
         .def(py::init<std::string, PythonLocation>())
         .def_readwrite("source", &PythonToken::source)
         .def_readwrite("location", &PythonToken::location);
+
+    py::enum_<PythonDiagnostic::Severity>(m, "DiagnosticSeverity")
+        .value("None", PythonDiagnostic::Severity::None)
+        .value("Note", PythonDiagnostic::Severity::Note)
+        .value("Warning", PythonDiagnostic::Severity::Warning)
+        .value("Error", PythonDiagnostic::Severity::Error)
+        .value("Fix", PythonDiagnostic::Severity::Fix)
+        .value("Fatal", PythonDiagnostic::Severity::Fatal)
+        .value("ICE", PythonDiagnostic::Severity::ICE);
+
+    py::class_<PythonDiagnostic>(m, "Diagnostic")
+        .def(py::init<PythonDiagnostic::Severity, PythonLocation, std::string>())
+        .def_readwrite("severity", &PythonDiagnostic::severity)
+        .def_readwrite("location", &PythonDiagnostic::where)
+        .def_readwrite("message", &PythonDiagnostic::message);
 
     py::class_<PythonDeclInfo>(m, "DeclInfo")
         .def(py::init<PythonLocation, PythonLocation, PythonLocation, std::string>())
@@ -381,5 +449,11 @@ PYBIND11_MODULE(glinttools, m) {
         "tokenize",
         &tokenize,
         "Get a list of token objects."
+    );
+
+    m.def(
+        "getDiagnostics",
+        &getDiagnostics,
+        "Get a list of diagnostics pertaining to the given source."
     );
 }

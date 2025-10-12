@@ -17,6 +17,8 @@ namespace lcc {
 
 /// A diagnostic. The diagnostic is issued when the destructor is called.
 struct Diag {
+    friend Context;
+
     // TODO: "Fix" diagnostic type for suggested overwrites/fixes to the
     // source, and eventually the ability to actually commit the fix to the
     // file.
@@ -86,17 +88,15 @@ public:
     ~Diag();
 
     /// Issue a diagnostic.
-    Diag(const Context* context_, Kind kind_, Location where_, std::string message_)
-        : kind(kind_), context(context_), where(where_), message(std::move(message_)) {}
+    Diag(Context* context_, Kind kind_, Location where_, std::string message_);
 
     /// Issue a diagnostic with no location.
-    Diag(Kind kind_, std::string&& message_)
-        : kind(kind_), message(std::move(message_)) {}
+    Diag(Kind kind_, std::string&& message_) : kind(kind_), message(std::move(message_)) {}
 
     /// Issue a diagnostic with a format string and arguments.
     template <typename... Args>
     Diag(
-        const Context* context_,
+        Context* context_,
         Kind kind_,
         Location where_,
         fmt::format_string<Args...> fmt,
@@ -144,7 +144,7 @@ public:
     /// Emit a note.
     template <typename... Args>
     static auto Note(
-        const Context* ctx,
+        Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args
@@ -161,7 +161,7 @@ public:
     /// Emit a warning.
     template <typename... Args>
     static auto Warning(
-        const Context* ctx,
+        Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args
@@ -178,7 +178,7 @@ public:
     /// Emit an error.
     template <typename... Args>
     static auto Error(
-        const Context* ctx,
+        Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args
@@ -201,7 +201,7 @@ public:
     template <typename... Args>
     [[noreturn]]
     static void ICE(
-        const Context* ctx,
+        Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args

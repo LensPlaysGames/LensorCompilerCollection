@@ -1,6 +1,7 @@
 #ifndef LCC_CONTEXT_HH
 #define LCC_CONTEXT_HH
 
+#include <lcc/diags.hh>
 #include <lcc/file.hh>
 #include <lcc/forward.hh>
 #include <lcc/location.hh>
@@ -58,16 +59,20 @@ public:
         OptionStopatMIR _stopat_mir;
     };
 
+    struct DiagnosticReport {
+        Diag::Kind kind{Diag::Kind::None};
+        Location where{};
+        std::string message{};
+    };
+
 private:
     /// The files owned by the context.
-    std::vector<std::unique_ptr<File>>
-        owned_files;
+    std::vector<std::unique_ptr<File>> owned_files;
+
+    std::vector<DiagnosticReport> _diagnostics;
 
     /// Error flag. This is set-only.
     mutable bool error_flag = false;
-
-    /// Called once the first time a context is created.
-    static void InitialiseLCCData();
 
     Options _options;
 
@@ -75,6 +80,9 @@ private:
     const Format* _format{};
 
     std::vector<std::string> _include_directories{};
+
+    /// Called once the first time a context is created.
+    static void InitialiseLCCData();
 
 public:
     /// IR type caches.
@@ -139,11 +147,19 @@ public:
         return old;
     }
 
+    auto report_diagnostic(Diag& d) {
+        _diagnostics.emplace_back(d.kind, d.where, d.message);
+    }
+
+    auto diagnostics() {
+        return _diagnostics;
+    }
+
     /// Get the target.
     [[nodiscard]]
     auto target() const { return _target; }
 
-    /// Get the target.
+    /// Get the format.
     [[nodiscard]]
     auto format() const { return _format; }
 

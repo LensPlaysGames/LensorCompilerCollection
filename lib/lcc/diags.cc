@@ -88,6 +88,13 @@ auto lcc::Diag::ShouldUseColour() const -> bool {
     return lcc::platform::StderrIsTerminal();
 }
 
+lcc::Diag::Diag(Context* context_, Kind kind_, Location where_, std::string message_)
+    : kind(kind_), context(context_), where(where_), message(std::move(message_)) {
+    LCC_ASSERT(context);
+    // Keep track of diagnostic.
+    context_->report_diagnostic(*this);
+}
+
 lcc::Diag::~Diag() { print(); }
 
 constexpr auto named_link(std::string_view uri, std::string_view name) -> std::string {

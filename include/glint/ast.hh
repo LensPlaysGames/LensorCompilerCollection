@@ -398,7 +398,7 @@ public:
     /// \param decl The declaration to bind to the symbol.
     /// \return The same declaration, or an error.
     auto declare(
-        const Context* ctx,
+        Context* ctx,
         std::string&& name,
         Decl* decl
     ) -> Result<Decl*>;
@@ -1461,7 +1461,7 @@ public:
     /// \param required Whether to error if evaluation fails.
     /// \return Whether evaluation succeeded.
     [[nodiscard]]
-    auto evaluate(const Context* ctx, EvalResult& out, bool required) -> bool;
+    auto evaluate(Context* ctx, EvalResult& out, bool required) -> bool;
 
     // A somewhat human readable name that represents this expression.
     [[nodiscard]]

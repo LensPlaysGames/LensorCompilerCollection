@@ -5,7 +5,7 @@
 #include <lcc/diags.hh>
 #include <lcc/utils.hh>
 
-auto lcc::glint::Expr::evaluate(const Context* ctx, EvalResult& out, bool required) -> bool {
+auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) -> bool {
     LCC_ASSERT(
         not required or ok(),
         "Cannot evaluate ill-formed or unchecked expression"

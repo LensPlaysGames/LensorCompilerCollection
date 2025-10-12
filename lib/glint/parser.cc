@@ -1382,7 +1382,7 @@ auto lcc::glint::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
         if (not At(Tk::Ident)) return attrs;
         auto it = attrs_map.find(tok.text);
         if (it == attrs_map.end()) return attrs;
-        if (attrs[it->second]) Diag::Warning(context, tok.location, "Duplicate attribute ignored");
+        if (attrs[it->second]) Warning(tok.location, "Duplicate attribute ignored");
         attrs[it->second] = true;
         NextToken();
     }
@@ -1505,8 +1505,7 @@ auto lcc::glint::Parser::ParseIdentExpr() -> Result<Expr*> {
         auto found = CurrScope()->find(text);
         if (not found.empty()) {
             auto decl = found.at(0);
-            auto err = Diag::Error(
-                context,
+            auto err = Error(
                 loc,
                 "Refusing to expand unhygienic expansion of macro due to emitted identifier ``{}'' matching that of a previously declared object.\n"
                 "Recommended solution is to add ``defines {}'' to the macro definition, before the emits keyword.",

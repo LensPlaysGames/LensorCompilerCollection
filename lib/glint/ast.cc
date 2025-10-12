@@ -42,7 +42,7 @@ lcc::glint::StringLiteral::StringLiteral(
 
 /// Declare a symbol in this scope.
 auto lcc::glint::Scope::declare(
-    const Context* ctx,
+    Context* ctx,
     std::string&& name,
     Decl* decl
 ) -> Result<Decl*> {

@@ -12,11 +12,12 @@
 import re
 
 # You have to build this yourself, like, with a C++ compiler
-from glinttools import getScopes, getScopeAtPoint, getValidSymbols, findDecl, tokenize
+from glinttools import Diagnostic, DiagnosticSeverity, getDiagnostics, getScopes, getScopeAtPoint, getValidSymbols, findDecl, tokenize
 
 from itertools import islice
 
 from pygls.server import LanguageServer
+from pygls.workspace import TextDocument
 from lsprotocol import types
 
 server = LanguageServer("glint-server", "v0.1")
@@ -42,12 +43,49 @@ def find_many(instring: str, start_position: int, substrings):
         return start_position + m.start()
 
 
+def convert_severity(severity :DiagnosticSeverity):
+    if severity == DiagnosticSeverity.Warning:
+        return types.DiagnosticSeverity.Warning
+    if severity == DiagnosticSeverity.Note:
+        return types.DiagnosticSeverity.Hint
+    return types.DiagnosticSeverity.Error
+
+def publish_diagnostics(doc :TextDocument):
+    lcc_diagnostics: list[Diagnostic] = getDiagnostics(doc.source)
+
+    diagnostics = []
+    for d in lcc_diagnostics:
+        # Convert 1-indexed LCC line information to 0-indexed LSP line
+        # information.
+        start_line = max(d.location.line - 1, 0)
+        end_line = start_line # TODO: Multi-line locations
+
+        start_character = d.location.character
+        end_character = start_character + d.location.length
+
+        start = types.Position(start_line, start_character)
+        end = types.Position(end_line, end_character)
+
+        diagnostics.append(types.Diagnostic(
+            message = d.message,
+            severity = convert_severity(d.severity),
+            range=types.Range(start=start, end=end)
+        ))
+
+    server.publish_diagnostics(
+        uri=doc.uri,
+        version=doc.version,
+        diagnostics=diagnostics
+    )
+
 @server.feature(types.TEXT_DOCUMENT_HOVER)
 def hover(ls: LanguageServer, params: types.HoverParams):
     pos = params.position
 
     document_uri = params.text_document.uri
     document = ls.workspace.get_text_document(document_uri)
+
+    publish_diagnostics(document);
 
     try:
         line = document.lines[pos.line]
@@ -77,10 +115,9 @@ def hover(ls: LanguageServer, params: types.HoverParams):
     # hover_content = f"{pos.line}:{pos.character}"
     hover_content = ""
     if selected_token:
-        context_source = "".join(document.lines)
         hover_content = f"{token_pos_string(selected_token)}: {escaped_markdown(selected_token.source)}"
 
-        decl_info = findDecl(context_source, selected_token.source)
+        decl_info = findDecl(document.source, selected_token.source)
         if decl_info.location.byte_offset != -1:         # confidence check
             if len(decl_info.type_representation) != 0:  # Glint C++ API fed us type of thing at point
                 hover_content += f" : {decl_info.type_representation}"
@@ -129,9 +166,8 @@ def completions(params: types.CompletionParams):
         )
         i -= 1
 
-    context_source = "".join(document.lines)
     if selected_token:
-        completions = getValidSymbols(context_source)
+        completions = getValidSymbols(document.source)
         return types.CompletionList(
             is_incomplete=False, # completion list is complete
             items=(types.CompletionItem(
@@ -139,7 +175,7 @@ def completions(params: types.CompletionParams):
             ) for completion in completions)
         )
 
-    completions = getValidSymbols(context_source)
+    completions = getValidSymbols(document.source)
     return types.CompletionList(
         is_incomplete=False, # completion list is complete
         items=(types.CompletionItem(

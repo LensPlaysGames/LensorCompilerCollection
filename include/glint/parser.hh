@@ -180,6 +180,11 @@ private:
         return Diag::Error(context, where, fmt, std::forward<Args>(args)...);
     }
 
+    template <typename... Args>
+    Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
+
     /// Issue a warning.
     template <typename... Args>
     Diag Warning(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
@@ -187,13 +192,19 @@ private:
     }
 
     template <typename... Args>
+    Diag Warning(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
     Diag Note(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
         return Diag::Note(context, where, fmt, std::forward<Args>(args)...);
     }
 
-    using Lexer::Error;
-    using Lexer::Note;
-    using Lexer::Warning;
+    template <typename... Args>
+    Diag Note(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Note(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
 
     // Use this when you need a bunch of expressions until you get a closing
     // delimiter (like a bunch of expressions before a rbrace, or a rparen).
