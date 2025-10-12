@@ -268,6 +268,12 @@ using mul_imm_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::Multiply), o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
+using mul_imm_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Mul), Immediate<>, Immediate<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
+        Inst<Clobbers<>, usz(Opcode::Multiply), o<1>, i<0>>>>;
+
 using sub_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Sub), Register<>, Register<>>>,
     InstList<
@@ -475,6 +481,7 @@ using AllPatterns = PatternList<
 
     mul_imm_reg,
     mul_reg_imm,
+    mul_imm_imm,
 
     sub_reg_reg,
     sub_reg_imm,
