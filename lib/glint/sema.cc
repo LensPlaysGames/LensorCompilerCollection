@@ -2699,6 +2699,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 //       )
 // )
 void lcc::glint::Sema::AnalyseCall_Integer(Expr** expr_ptr, CallExpr* expr) {
+    LCC_ASSERT(expr_ptr and *expr_ptr and expr);
     LCC_ASSERT(
         expr->callee()->type()->is_integer(),
         "Invalid arguments of call to \"analyse integer call\" function"
@@ -2715,9 +2716,10 @@ void lcc::glint::Sema::AnalyseCall_Integer(Expr** expr_ptr, CallExpr* expr) {
     }
 
     auto* rhs = expr->args().back();
-    // NOTE: Relies on unsigned underflow
-    for (usz i = expr->args().size() - 2; i < expr->args().size(); --i) {
-        auto* lhs = expr->args().at(i);
+    // Basically, I'm trying to get i to equal the index behind the back of
+    // args(), that way we can fold the back two elements into one.
+    for (auto i = (isz) expr->args().size() - 2; i >= 0; --i) {
+        auto* lhs = expr->args().at((usz) i);
         rhs = new (mod) BinaryExpr(
             TokenKind::Star,
             lhs,
