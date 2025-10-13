@@ -1,0 +1,14 @@
+================
+Multi-line Call
+:syntax
+:warn_syntax
+================
+
+1
+
+69;
+
+---
+
+(block
+ (call (integer_literal) (integer_literal)))
