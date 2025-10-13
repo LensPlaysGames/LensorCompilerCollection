@@ -73,6 +73,21 @@ struct GlintTest : langtest::Test {
         auto mod = lcc::glint::Parser::Parse(&context, source);
         failed_parse = context.has_error();
 
+        const auto warning_reported = [](lcc::Context& ctx) {
+            return lcc::rgs::any_of(
+                ctx.diagnostics(),
+                [](const lcc::Context::DiagnosticReport d) {
+                    return d.kind == lcc::Diag::Kind::Warning;
+                }
+            );
+        };
+
+        auto warned_parse = warning_reported(context);
+        // Save diagnostics reported during parsing, and clear the context's
+        // diagnostics so that we can separate parse/sema diagnostics.
+        auto parse_diagnostics = context.diagnostics();
+        context.diagnostics().clear();
+
         auto should_check = (not failed_parse)
                         and (not should_fail_parse)
                         and (not should_only_parse);
@@ -82,6 +97,7 @@ struct GlintTest : langtest::Test {
             lcc::glint::Sema::Analyse(&context, *mod, true);
             failed_check = context.has_error();
         }
+        auto warned_check = warning_reported(context);
 
         if (not context.has_error()) {
             // TODO: Only confirm AST conforms to expected match tree iff test is NOT
@@ -236,7 +252,8 @@ struct GlintTest : langtest::Test {
 
         // Regular test with no `should_` specifiers
         bool passed = ast_matches and ir_matches
-                  and not failed_parse and not failed_check;
+                  and not failed_parse and not failed_check
+                  and not warned_parse and not warned_check;
 
         // Handle test specifiers
         if (should_only_parse)
@@ -247,6 +264,22 @@ struct GlintTest : langtest::Test {
 
             if (should_fail_parse)
                 passed = failed_parse;
+
+            if (should_warn_parse) {
+                passed = passed and warned_parse;
+                if (not warned_parse) {
+                    fmt::print("Expected parser to emit a warning diagnostic, but no warnings were emitted...\n");
+                }
+            } else if (warned_parse)
+                fmt::print("Parser emitted a warning diagnostic, but test did not expect this...\n");
+
+            if (should_warn_check) {
+                passed = passed and warned_check;
+                if (not warned_check) {
+                    fmt::print("Expected sema to emit a warning diagnostic, but no warnings were emitted...\n");
+                }
+            } else if (warned_check)
+                fmt::print("Sema emitted a warning diagnostic, but test did not expect this...\n");
         }
 
         // NOTE: Even if we shouldn't print, the parsing/semantic analysis that

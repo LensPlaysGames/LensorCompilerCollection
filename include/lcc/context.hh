@@ -151,7 +151,11 @@ public:
         _diagnostics.emplace_back(d.kind, d.where, d.message);
     }
 
-    auto diagnostics() {
+    auto diagnostics() const {
+        return _diagnostics;
+    }
+
+    auto diagnostics() -> std::vector<DiagnosticReport>& {
         return _diagnostics;
     }
 

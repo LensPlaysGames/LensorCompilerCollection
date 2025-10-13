@@ -46,8 +46,10 @@ struct Test {
     std::string_view ir;
     MatchTree matcher;
     bool should_only_parse{false};
-    bool should_fail_parse{false};
+    bool should_fail_parse{false}; // implies should_only_parse
     bool should_fail_check{false};
+    bool should_warn_parse{false};
+    bool should_warn_check{false};
 };
 
 class TestContext {
@@ -285,9 +287,25 @@ auto parse_test(
                 // do nothing (test description)
             } else if (specifier == "only_parse" or specifier == "syntax") {
                 test.should_only_parse = true;
-            } else if (specifier == "fail_parse" or specifier == "parse_error") {
+            } else if (
+                specifier == "warn_parse" or specifier == "warn_syntax"
+                or specifier == "parse_warn" or specifier == "syntax_warn"
+            ) {
+                test.should_warn_parse = true;
+            } else if (
+                specifier == "fail_parse"
+                or specifier == "error_parse" or specifier == "parse_error"
+            ) {
                 test.should_fail_parse = true;
-            } else if (specifier == "fail_sema" or specifier == "fail_check" or specifier == "sema_error") {
+            } else if (
+                specifier == "warn_sema" or specifier == "warn_check"
+                or specifier == "sema_warn" or specifier == "check_warn"
+            ) {
+                test.should_warn_parse = true;
+            } else if (
+                specifier == "fail_sema" or specifier == "fail_check"
+                or specifier == "error_sema" or specifier == "sema_error"
+            ) {
                 test.should_fail_check = true;
             } else {
                 fmt::print("ERROR parsing test specifiers for test {}\n", test.name);
