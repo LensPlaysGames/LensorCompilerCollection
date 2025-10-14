@@ -1694,21 +1694,10 @@ auto IRGen::Generate(Context* context, glint::Module& mod) -> lcc::Module* {
         "free does not exist, shouldn't Glint sema have created it?"
     );
 
-    { // exit
-        auto* exit_ty = FunctionType::Get(
-            context,
-            lcc::Type::VoidTy,
-            {lcc::IntegerType::Get(context, context->target()->ffi.size_of_int)}
-        );
-        new (*ir_gen.module) Function(
-            ir_gen.module,
-            "exit",
-            exit_ty,
-            Linkage::Imported,
-            CallConv::C,
-            {}
-        );
-    }
+    LCC_ASSERT(
+        not mod.function("exit").empty(),
+        "exit does not exist, shouldn't Glint sema have created it?"
+    );
 
     // Generate IR for functions defined in the Glint module.
     for (auto* f : mod.functions())
