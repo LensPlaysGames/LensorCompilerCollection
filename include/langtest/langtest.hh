@@ -4,6 +4,7 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 
+#include <algorithm>
 #include <cctype>
 #include <concepts>
 #include <filesystem>
@@ -45,11 +46,42 @@ struct Test {
     std::string_view source;
     std::string_view ir;
     MatchTree matcher;
-    bool should_only_parse{false};
-    bool should_fail_parse{false}; // implies should_only_parse
-    bool should_fail_check{false};
-    bool should_warn_parse{false};
-    bool should_warn_check{false};
+
+    enum class StopPoint {
+        None,
+        Syntax
+    } stop_point{StopPoint::None};
+
+    enum class FailurePoint {
+        None,
+        Syntax,
+        Sema
+    } failure_point{FailurePoint::None};
+
+    enum class WarningPoint {
+        None,
+        Syntax,
+        Sema
+    } warning_point{WarningPoint::None};
+
+    // NOTE: You should also not check if context has an error after parsing.
+    bool should_check() {
+        switch (stop_point) {
+            case StopPoint::Syntax: return false;
+            case StopPoint::None: break;
+        }
+
+        switch (failure_point) {
+            case FailurePoint::Syntax:
+                return false;
+
+            case FailurePoint::None:
+            case FailurePoint::Sema:
+                break;
+        }
+
+        return true;
+    }
 };
 
 class TestContext {
@@ -286,27 +318,27 @@ auto parse_test(
             if (specifier.starts_with("desc")) {
                 // do nothing (test description)
             } else if (specifier == "only_parse" or specifier == "syntax") {
-                test.should_only_parse = true;
+                test.stop_point = Test::StopPoint::Syntax;
             } else if (
                 specifier == "warn_parse" or specifier == "warn_syntax"
                 or specifier == "parse_warn" or specifier == "syntax_warn"
             ) {
-                test.should_warn_parse = true;
+                test.warning_point = Test::WarningPoint::Syntax;
             } else if (
                 specifier == "fail_parse"
                 or specifier == "error_parse" or specifier == "parse_error"
             ) {
-                test.should_fail_parse = true;
+                test.failure_point = Test::FailurePoint::Syntax;
             } else if (
                 specifier == "warn_sema" or specifier == "warn_check"
                 or specifier == "sema_warn" or specifier == "check_warn"
             ) {
-                test.should_warn_parse = true;
+                test.warning_point = Test::WarningPoint::Sema;
             } else if (
                 specifier == "fail_sema" or specifier == "fail_check"
                 or specifier == "error_sema" or specifier == "sema_error"
             ) {
-                test.should_fail_check = true;
+                test.failure_point = Test::FailurePoint::Sema;
             } else {
                 fmt::print("ERROR parsing test specifiers for test {}\n", test.name);
                 return false;
@@ -337,7 +369,7 @@ auto parse_test(
         // Beginning of next test or end of input...
         if (i >= fsize or contents[i] == '=') {
             // Error if the test is not expected to fail (nothing to match if it is specified to fail)
-            if (not (test.should_fail_parse or test.should_fail_check)) {
+            if (test.failure_point == Test::FailurePoint::None) {
                 fmt::print("ERROR test has no matcher declared but it is not specified to fail... {}\n", test.name);
                 return false;
             }
