@@ -115,12 +115,12 @@ def hover(ls: LanguageServer, params: types.HoverParams):
         None
     )
 
-    def token_pos_string(token):
-        return f"{pos.line}:{token.location.character}"
+    def token_pos_string(token :Token):
+        return f"{pos.line+1}:{token.location.character}"
 
     # If there is nothing we can do to add info about the selected token/
     # context at point, print this.
-    hover_content = f"{pos.line}:{pos.character}"
+    hover_content = ""
 
     # TODO: Use this once it's not so buggy...
     # loc = Location(document.offset_at_position(pos), 1, pos.line + 1, pos.character)
@@ -129,7 +129,7 @@ def hover(ls: LanguageServer, params: types.HoverParams):
     #     hover_content += f" :!: {type_at_point.representation}"
 
     if selected_token:
-        hover_content += f": {escaped_markdown(selected_token.source)}"
+        hover_content = f"{token_pos_string(selected_token)}: {escaped_markdown(selected_token.source)}"
 
         # If selected token is known (i.e. a keyword or a built-in type, add doc string)
         if (selected_token.source == "byte"):
@@ -177,19 +177,19 @@ def hover(ls: LanguageServer, params: types.HoverParams):
                 hover_content += f" : {decl_info.type_representation}"
 
 
-    if len(hover_content) != 0:
-        return types.Hover(
-            contents=types.MarkupContent(
-                kind=types.MarkupKind.Markdown,
-                value=hover_content,
-            ),
-            range=types.Range(
-                start=types.Position(line=pos.line, character=0),
-                end=types.Position(line=pos.line + 1, character=0),
-            ),
-        )
-    else:
+    if len(hover_content) == 0:
         return None
+
+    return types.Hover(
+        contents=types.MarkupContent(
+            kind=types.MarkupKind.Markdown,
+            value=hover_content,
+        ),
+        range=types.Range(
+            start=types.Position(line=pos.line, character=0),
+            end=types.Position(line=pos.line + 1, character=0),
+        ),
+    )
 
 @server.feature(
     types.TEXT_DOCUMENT_COMPLETION,
