@@ -463,6 +463,25 @@ auto Module::mir() -> std::vector<MFunction> {
         CallConv::C
     );
 
+    // Give all the blocks unique names...
+    // LCC MIR wants all blocks to have unique names.
+    // It's important to make this change to the IR, since MIR block operands
+    // reference back to the IR block.
+    {
+        usz block_count = 0;
+        std::unordered_set<std::string> encountered_block_names{};
+        for (auto [f_index, function] : vws::enumerate(code())) {
+            for (auto [block_index, block] : vws::enumerate(function->blocks())) {
+                // Only update block name if it is a duplicate.
+                while (encountered_block_names.contains(block->name()))
+                    block->name(block->name() + std::to_string(block_count));
+
+                encountered_block_names.emplace(block->name());
+                ++block_count;
+            }
+        }
+    }
+
     // To avoid iterator invalidation when any of these vectors are resizing,
     // we "pre-construct" functions and blocks.
     for (auto& function : code()) {
@@ -488,6 +507,7 @@ auto Module::mir() -> std::vector<MFunction> {
         }
     }
 
+    // MSx64 ONLY: Store register parameters to reserved space (shadow stack)
     if (context()->target()->is_cconv_ms()) {
         constexpr lcc::i32 stack_frame_size = 16;
         for (auto [f_index, function] : vws::enumerate(code())) {
@@ -518,6 +538,7 @@ auto Module::mir() -> std::vector<MFunction> {
         }
     }
 
+    // The actual generation part
     for (auto [f_index, function] : vws::enumerate(code())) {
         auto& f = funcs.at(usz(f_index));
         for (auto [block_index, block] : vws::enumerate(function->blocks())) {
