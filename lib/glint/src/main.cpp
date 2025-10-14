@@ -27,6 +27,7 @@ struct Options {
     std::vector<std::string> input_paths{};
     std::string output_path{};
     bool optimisation{false};
+    bool evaluate{false};
 };
 
 void help() {
@@ -35,8 +36,9 @@ void help() {
     // clang-format off
     fmt::print("FLAGS:\n");
     fmt::print("{}", TwoColumnLayoutHelper{{
-        {"  -h", "Show this help message\n"},}}
-    .get());
+        {"  -h", "Show this help message\n"},
+        {"  --eval", "Attempt to evaluate the input program(s) and print their result\n"},}
+    } .get());
 
     fmt::print("OPTIONS:\n");
     fmt::print("{}", TwoColumnLayoutHelper{{
@@ -67,6 +69,8 @@ Options parse(int argc, char** argv) {
 
         if (arg.starts_with("-o")) {
             o.output_path = next_arg();
+        } else if (arg.starts_with("--eval")) {
+            o.evaluate = true;
         } else if (arg.starts_with("-")) {
             fmt::print(
                 "CLI ERROR: Unrecognized command line option or flag {}\n"
@@ -152,6 +156,24 @@ int main(int argc, char** argv) {
 
         lcc::glint::Sema::Analyse(&context, *m);
         if (context.has_error()) return 1;
+
+        if (options.evaluate) {
+            lcc::glint::EvalResult out;
+            if (not m->top_level_function()->body()->evaluate(&context, out, false)) {
+                fmt::print("[Evaluation Failed]\n");
+                return 1;
+            }
+
+            if (out.is_int())
+                fmt::print("{}\n", out.as_int());
+            else if (out.is_string())
+                fmt::print("{}\n", m->strings.at(out.as_string()->string_index()));
+            else if (out.is_null())
+                fmt::print("null\n");
+            else LCC_TODO("Implement EvalResult value kind");
+
+            return 0;
+        }
 
         auto* lcc_module = lcc::glint::IRGen::Generate(&context, *m);
 
