@@ -12,7 +12,10 @@
 import re
 
 # You have to build this yourself, like, with a C++ compiler
-from glinttools import Diagnostic, DiagnosticSeverity, getDiagnostics, getScopes, getScopeAtPoint, getValidSymbols, findDecl, tokenize
+from glinttools import (
+    DeclInfo, Diagnostic, DiagnosticSeverity, Location, Token, Type, TypeKind,
+    findDecl, getDiagnostics, getScopeAtPoint, getScopes, getTypeAtPoint, getValidSymbols, tokenize
+)
 
 from itertools import islice
 
@@ -97,6 +100,11 @@ def hover(ls: LanguageServer, params: types.HoverParams):
     except IndexError:
         return None
 
+    # As well as getting the /token/ currently selected, it would also be
+    # useful to have a getTypeAtPoint sort of thing (currently shoddily
+    # implemented with findDecl). Ideally, what we would do is find the
+    # selected /node/ given a source location, and return the type of that.
+
     tokens = tokenize(line)
     # for t in tokens:
     #     log(f".source '{t.source}', .byte_offset {t.location.byte_offset}, .length {t.location.length}, .line {t.location.line}, .character {t.location.character}")
@@ -112,18 +120,62 @@ def hover(ls: LanguageServer, params: types.HoverParams):
 
     # If there is nothing we can do to add info about the selected token/
     # context at point, print this.
-    # hover_content = f"{pos.line}:{pos.character}"
-    hover_content = ""
+    hover_content = f"{pos.line}:{pos.character}"
+
+    # TODO: Use this once it's not so buggy...
+    # loc = Location(document.offset_at_position(pos), 1, pos.line + 1, pos.character)
+    # type_at_point = getTypeAtPoint(document.source, loc)
+    # if (len(type_at_point.representation) != 0):
+    #     hover_content += f" :!: {type_at_point.representation}"
+
     if selected_token:
-        hover_content = f"{token_pos_string(selected_token)}: {escaped_markdown(selected_token.source)}"
+        hover_content += f": {escaped_markdown(selected_token.source)}"
+
+        # If selected token is known (i.e. a keyword or a built-in type, add doc string)
+        if (selected_token.source == "byte"):
+            hover_content += "  | A built-in unsigned integer type of byte width 1"
+        elif (selected_token.source == "void"):
+            hover_content += "  | A built-in incomplete type, representing the absence of semantics"
+        elif (selected_token.source == "int"):
+            hover_content += "  | Signed integer type"
+        elif (selected_token.source == "uint"):
+            hover_content += "  | Unsigned integer type"
+        elif (selected_token.source == "cshort"):
+            hover_content += "  | C's `short` type"
+        elif (selected_token.source == "cushort"):
+            hover_content += "  | C's `unsigned short` type"
+        elif (selected_token.source == "cint"):
+            hover_content += "  | C's `int` type"
+        elif (selected_token.source == "cuint"):
+            hover_content += "  | C's `unsigned int` type"
+        elif (selected_token.source == "clong"):
+            hover_content += "  | C's `long` type"
+        elif (selected_token.source == "culong"):
+            hover_content += "  | C's `unsigned long` type"
+        elif (selected_token.source == "clonglong"):
+            hover_content += "  | C's `long long` type"
+        elif (selected_token.source == "culonglong"):
+            hover_content += "  | C's `unsigned long long` type"
+        elif (selected_token.source == "print"):
+            hover_content += "  | A built-in function-like that formats each argument into a dynamic array of byte, then prints that"
+        elif (selected_token.source == "while"):
+            hover_content += "  | A looping construct that iterates until a condition is false, in the form of `while <condition>, <body>;`"
+        elif (selected_token.source == "for"):
+            hover_content += "  | Range-based looping construct, utilizing .data and .size members"
+        elif (selected_token.source == "cfor"):
+            hover_content += "  | Looping construct mimicking C's `for`"
+        elif (selected_token.source == "match"):
+            hover_content += "  | Different control flow for each member of a sum type"
+        elif (selected_token.source == "return"):
+            hover_content += "  | Return to the caller"
+        elif (selected_token.source.startswith("`") and selected_token.source.endswith("`")):
+            hover_content += "  | Byte literal"
 
         decl_info = findDecl(document.source, selected_token.source)
         if decl_info.location.byte_offset != -1:         # confidence check
             if len(decl_info.type_representation) != 0:  # Glint C++ API fed us type of thing at point
                 hover_content += f" : {decl_info.type_representation}"
 
-    else:
-        hover_content = f"{pos.line}:{pos.character}"
 
     if len(hover_content) != 0:
         return types.Hover(

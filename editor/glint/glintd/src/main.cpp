@@ -92,6 +92,14 @@ bool invalid(const PythonDiagnostic& d) {
     return invalid(d.where);
 }
 
+struct PythonType {
+    lcc::glint::Type::Kind kind{};
+    std::string representation{};
+    int size{};
+    int align{};
+    PythonLocation location;
+};
+
 constexpr auto default_context() {
     return lcc::Context{
         default_target,
@@ -382,6 +390,79 @@ auto getDiagnostics(std::string source) -> std::vector<PythonDiagnostic> {
     return out;
 }
 
+// FIXME BUGGY Recursive AST search implementation
+lcc::glint::Expr* getNodeAtPointImpl(
+    lcc::glint::Module& mod,
+    lcc::glint::Expr* expr,
+    lcc::Location loc,
+    lcc::glint::Expr* last_expr = nullptr
+) {
+    fmt::print(stderr, "getNodeAtPointImpl expr=");
+    auto s = mod.ToSource(*expr);
+    if (s) fmt::print(stderr, "{}\n", *s);
+    else fmt::print(stderr, "FAIL\n");
+
+    // If our search implementation did not change the selected node, return
+    // the selected node.
+    if (expr == last_expr) return expr;
+
+    // Attempt to find closest child that precedes given location.
+    lcc::glint::Expr* at_location = expr;
+    for (auto c : expr->children()) {
+        fmt::print(stderr, "  child pos={}\n", c->location().pos);
+        if (not c->location().is_valid()) continue;
+        // A valid position /past/ the one we are looking for.
+        if (c->location().pos > loc.pos) break;
+        // A valid position not yet past the one we are looking for. This means
+        // 'c' is currently our closest child that precedes the given location, so
+        // we update it.
+        at_location = c;
+    }
+
+    // If the location we found is invalid, we haven't found any node at
+    // point.
+    // Also check that the found location spans far enough to make it to our
+    // given location.
+    if (
+        (not at_location->location().is_valid())
+        or at_location->location().pos > loc.pos
+        or at_location->location().pos + at_location->location().len <= loc.pos
+    ) return nullptr;
+
+    // If the child we found has children that may be closer, search those...
+    return getNodeAtPointImpl(mod, at_location, loc, expr);
+}
+
+lcc::glint::Expr* getNodeAtPoint(lcc::glint::Module& mod, lcc::Location loc) {
+    fmt::print(stderr, "getNodeAtPoint loc.pos={}\n", loc.pos);
+    return getNodeAtPointImpl(mod, mod.top_level_function()->body(), loc);
+}
+
+PythonType getTypeAtPoint(std::string source, PythonLocation location) {
+    auto context = default_context();
+    auto maybe_m = get_analysed_module(context, source);
+    if (not maybe_m) return {};
+    auto& m = *maybe_m;
+    LCC_ASSERT(m);
+
+    auto l = lcc::Location{
+        (lcc::u32) location.byte_offset,
+        (lcc::u16) location.length,
+        (lcc::u16) context.files().at(0)->file_id()
+    };
+
+    auto found = getNodeAtPoint(*m, l);
+    if (not found) return {};
+
+    return PythonType{
+        found->type()->kind(),
+        found->type()->string(),
+        (int) found->type()->size_in_bytes(&context),
+        (int) found->type()->align(&context),
+        py_location(&context, found->type()->location())
+    };
+}
+
 namespace py = pybind11;
 
 PYBIND11_MODULE(glinttools, m) {
@@ -413,6 +494,30 @@ PYBIND11_MODULE(glinttools, m) {
         .def_readwrite("severity", &PythonDiagnostic::severity)
         .def_readwrite("location", &PythonDiagnostic::where)
         .def_readwrite("message", &PythonDiagnostic::message);
+
+    py::enum_<lcc::glint::Type::Kind>(m, "TypeKind")
+        .value("Builtin", lcc::glint::Type::Kind::Builtin)
+        .value("FFIType", lcc::glint::Type::Kind::FFIType)
+        .value("Named", lcc::glint::Type::Kind::Named)
+        .value("Pointer", lcc::glint::Type::Kind::Pointer)
+        .value("Reference", lcc::glint::Type::Kind::Reference)
+        .value("DynamicArray", lcc::glint::Type::Kind::DynamicArray)
+        .value("Array", lcc::glint::Type::Kind::Array)
+        .value("ArrayView", lcc::glint::Type::Kind::ArrayView)
+        .value("Function", lcc::glint::Type::Kind::Function)
+        .value("Sum", lcc::glint::Type::Kind::Sum)
+        .value("Union", lcc::glint::Type::Kind::Union)
+        .value("Enum", lcc::glint::Type::Kind::Enum)
+        .value("Struct", lcc::glint::Type::Kind::Struct)
+        .value("Integer", lcc::glint::Type::Kind::Integer);
+
+    py::class_<PythonType>(m, "Type")
+        .def(py::init<lcc::glint::Type::Kind, std::string, int, int, PythonLocation>())
+        .def_readwrite("kind", &PythonType::kind)
+        .def_readwrite("representation", &PythonType::representation)
+        .def_readwrite("size", &PythonType::size)
+        .def_readwrite("align", &PythonType::align)
+        .def_readwrite("location", &PythonType::location);
 
     py::class_<PythonDeclInfo>(m, "DeclInfo")
         .def(py::init<PythonLocation, PythonLocation, PythonLocation, std::string>())
@@ -455,5 +560,11 @@ PYBIND11_MODULE(glinttools, m) {
         "getDiagnostics",
         &getDiagnostics,
         "Get a list of diagnostics pertaining to the given source."
+    );
+
+    m.def(
+        "getTypeAtPoint",
+        &getTypeAtPoint,
+        "Get the type of the closest preceding AST node to the given location."
     );
 }
