@@ -9,6 +9,7 @@
 
 #include <glint/ast.hh>
 #include <glint/module_description.hh>
+#include <glint/parser.hh>
 #include <glint/sema.hh>
 
 #include <algorithm>
@@ -877,6 +878,46 @@ void lcc::glint::Sema::AnalyseModule() {
             );
             std::exit(1);
         }
+    }
+
+    // Parse templates that sema will use to expand and/or rewrite things
+    // (that way we don't have to create large, branching AST structures in
+    // code).
+    // TODO: Once we use C++26, just use #embed
+    std::string_view templates_source =
+        "identity :: template(x : expr) x;"
+        "dynarray_grow :: template(dynarray : expr) {"
+        "  if dynarray.size >= dynarray.capacity - 1, {"
+        //   Allocate memory, capacity * 2
+        "    newmem :: malloc 2 dynarray.capacity;"
+        //   Copy <size> elements into newly-allocated memory
+        "    memcpy newmem, dynarray.data, dynarray.size;"
+        //   De-allocate old memory
+        "    free dynarray.data;"
+        //   Assign dynarray.data to newly-allocated memory
+        "    dynarray.data := newmem;"
+        //   Assign dynarray.capacity to dynarray.capacity * 2
+        "    dynarray.capacity *= 2;"
+        "  };"
+        "};";
+    auto& f = context->create_file(
+        "sema_templates.g",
+        std::vector<char>{templates_source.begin(), templates_source.end()}
+    );
+
+    auto templates_m = glint::Parser::Parse(context, f);
+    if (not templates_m)
+        Diag::ICE("GlintSema failed to parse semantic templates");
+
+    for (auto c : templates_m->top_level_function()->body()->children()) {
+        LCC_ASSERT(
+            is<VarDecl>(c),
+            "Malformed sema_templates.g: expected named template as top level expression"
+        );
+        auto v = as<VarDecl>(c);
+        LCC_ASSERT(is<TemplateExpr>(v->init()), "Malformed sema_templates.g: expected named template...");
+
+        sema_templates.emplace_back(v->name(), as<TemplateExpr>(v->init()));
     }
 
     // Register functions that may be called by expressions inserted by

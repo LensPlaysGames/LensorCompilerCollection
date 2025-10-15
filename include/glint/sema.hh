@@ -15,6 +15,31 @@ class Sema {
     Context* context;
     Module& mod;
 
+    struct SemaTemplate {
+        std::string name{};
+        TemplateExpr* template_expr{};
+
+        SemaTemplate(std::string _name, TemplateExpr* _template_expr)
+            : name(_name), template_expr(_template_expr) {}
+    };
+    std::vector<SemaTemplate> sema_templates{};
+
+    // Use like:
+    //     auto t_call = new (mod) CallExpr(
+    //         named_template("identity"),
+    //         {new (mod) IntegerLiteral(1, {})},
+    //         {}
+    //     );
+    // AnalyseCall_Template((Expr**) &t_call, t_call);
+    [[nodiscard]]
+    auto named_template(std::string_view name) {
+        for (auto t : sema_templates) {
+            if (t.name == name)
+                return t.template_expr;
+        }
+        Diag::ICE("GlintSema could not find named template {}\n", name);
+    }
+
     /// The function we’re currently analysing.
     FuncDecl* curr_func;
 
