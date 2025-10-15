@@ -28,7 +28,9 @@ struct Location {
     u16 len{};
 
     /// Files are owned by the Context and identified with this number.
-    u16 file_id{};
+    // It is IMPERATIVE that this value is out-of-range when default
+    // initialized.
+    u16 file_id{(u16) -1};
 
     Location() = default;
     Location(u32 position, u16 length, u16 file_id_)
