@@ -181,7 +181,7 @@ void emit_gnu_att_assembly(
         // debugger. We would need real location information to properly do this.
         // Keep in mind that debug lines are 1-indexed.
         //   .loc <file-id> <line-number> [ <column-number> ]
-        if (function.location().is_valid()) {
+        if (function.location().seekable(module->context())) {
             auto l = function.location().seek_line_column(module->context());
             out += fmt::format(
                 "    .loc {} {} {}\n",
@@ -321,7 +321,7 @@ void emit_gnu_att_assembly(
                 // ================================
                 {
                     auto loc = instruction.location();
-                    if (loc.is_valid() and not loc.equal_position(last_location)) {
+                    if (loc.seekable(module->context()) and not loc.equal_position(last_location)) {
                         auto l = loc.seek_line_column(module->context());
                         out += fmt::format(
                             "    .loc {} {} {}\n",
