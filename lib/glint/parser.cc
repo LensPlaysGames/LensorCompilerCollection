@@ -350,39 +350,6 @@ constexpr auto TypeQualifierPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         default: return -1;
     }
 }
-
-auto GetRightmostLocation(lcc::glint::Expr* expr) -> lcc::Location {
-    if (not expr) return {};
-
-    lcc::Location location{expr->location()};
-
-    // Attempt to get the location that is as close to where the semi-colon should be.
-
-    // For variable declarations, choose the initializer. If there is no
-    // initializer present, choose the type.
-    if (expr->kind() == lcc::glint::Expr::Kind::VarDecl) {
-        auto var_decl = lcc::as<lcc::glint::VarDecl>(expr);
-        if (var_decl->init())
-            location = var_decl->init()->location();
-        else location = var_decl->type()->location();
-    }
-
-    // For function declarations, choose the body. If there is no body
-    // present, choose the type.
-    if (expr->kind() == lcc::glint::Expr::Kind::FuncDecl) {
-        if (lcc::as<lcc::glint::FuncDecl>(expr)->body())
-            location = lcc::as<lcc::glint::FuncDecl>(expr)->body()->location();
-        else location = lcc::as<lcc::glint::FuncDecl>(expr)->type()->location();
-    }
-
-    // Limit location to length of one, discarding the beginning (fold right).
-    if (location.len > 1) {
-        location.pos += location.len - 1;
-        location.len = 1;
-    }
-
-    return location;
-}
 } // namespace
 
 auto lcc::glint::Parser::AtStartOfExpression() -> bool {

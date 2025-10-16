@@ -3506,33 +3506,8 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     // expression, and somehow push the argument expressions onto some sort of
                     // stack to fetch from later. Because that is so complicated and bug-prone
                     // to implement, I'll wait until I really feel like it.
-                    // Attempt to get to location one-past end of callee expression.
-
-                    // TODO: Use GetRightmostLocation from parser.cc (probably move it, too)
-
-                    Location rightmost_location = callee_location;
-
-                    if (expr->callee()->kind() == Expr::Kind::VarDecl) {
-                        auto* var_decl = as<VarDecl>(expr->callee());
-                        if (var_decl->init())
-                            rightmost_location = var_decl->init()->location();
-                        else rightmost_location = var_decl->type()->location();
-                    }
-                    if (expr->callee()->kind() == Expr::Kind::FuncDecl) {
-                        auto* func_decl = as<FuncDecl>(expr->callee());
-                        if (func_decl->body())
-                            rightmost_location = as<FuncDecl>(expr->callee())->body()->location();
-                        else rightmost_location = func_decl->type()->location();
-                    }
-
-                    // Limit location to length of one, discarding the beginning (fold right).
-                    if (rightmost_location.len > 1) {
-                        rightmost_location.pos += rightmost_location.len - 1;
-                        rightmost_location.len = 1;
-                    }
-
                     e.attach(Note(
-                        rightmost_location,
+                        GetRightmostLocation(expr->callee()),
                         "You probablly forgot a ';' around here somewhere. "
                         "We thought about inserting it for you but got worried you'd get annoyed."
                     ));

@@ -2398,6 +2398,8 @@ public:
     static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Template; }
 };
 
+auto GetRightmostLocation(lcc::glint::Expr* expr) -> lcc::Location;
+
 } // namespace lcc::glint
 
 /// Formatter for types.
