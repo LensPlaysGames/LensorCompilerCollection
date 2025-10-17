@@ -17,6 +17,15 @@ namespace glint {
 ///
 /// A declaration is encoded as a DeclarationHeader + N amount of bytes
 /// determined by the values in the declaration header.
+///
+/// TODO: Figure out how to serialise a template (oh no).
+///
+/// TODO: Include more information that is not needed for Glint, but would
+/// probably be very useful for both Glint and surrounding tools.
+/// Including but not limited to:
+/// |-- Path to Module Source (could be used by non-existent Glint build system
+/// |   to automagically build resolved import dependencies)
+/// `-- Compiler and Version that generated this metadata/module
 struct ModuleDescription {
     using TypeIndex = u16;
 

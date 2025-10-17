@@ -2675,11 +2675,16 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             }
 
             /// If it is an integer, try to evaluate it for bounds checking.
-            if (auto* arr = cast<ArrayType>(ty); arr and arr->size() and arr->size()->ok() and arr->size()->kind() == Expr::Kind::EvaluatedConstant) {
+            if (
+                auto* arr = cast<ArrayType>(ty);
+                arr and arr->size() and arr->size()->ok() and arr->size()->kind() == Expr::Kind::EvaluatedConstant
+            ) {
                 EvalResult res;
                 if (b->rhs()->evaluate(context, res, false)) {
-                    if (res.as_int().is_negative()
-                        or res.as_int() >= as<ConstantExpr>(arr->size())->value().as_int().value()) {
+                    if (
+                        res.as_int().is_negative()
+                        or res.as_int() >= as<ConstantExpr>(arr->size())->value().as_int().value()
+                    ) {
                         Error(b->location(), "Array subscript out of bounds");
                         b->set_sema_errored();
                         break;
@@ -3047,13 +3052,31 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
         "Invalid arguments of call to \"analyse template call\" function"
     );
 
+    /*
+     * Here's the scoop, snitch.
+     * Basically, here's the current issue (I THINK).
+     * Expr::Clone() clones declarations. But it doesn't do anything to scopes,
+     * or namerefs. So, what ends up happening is, we have an un-type-checked
+     * VarDecl from the template's body, and we type-check the cloned version
+     * of that. But, all of the following name refs still point to a scope
+     * containing the /uncloned/ decl...
+     * - Expr::Clone() /could/ do things to scopes, and update namerefs to their
+     * corresponding scope as it comes across them. This would mean re-
+     * creating scopes like a parser does, sort of.
+     * - Expr::Clone() /could/ update the scope a cloned declaration is declared
+     * in to point to the cloned declaration instead of the uncloned one. This
+     * one MODIFIES the "original" scope, so it's kind of probably really bad.
+     *
+     * Let's try the first one.
+     */
+
     // "Place" expr->args() within CLONE of template body
     auto expand_template_parameter_references =
         [](this auto&& self, const TemplateExpr* t, const std::vector<Expr*> args, Expr** current_expr) -> void {
         // Expand template using call arguments as template arguments.
         // Replace reference to parameter with argument
         if (auto e_name = cast<NameRefExpr>(*current_expr)) {
-            // The body is the argument
+            // The current expression is the argument
             auto found_it = rgs::find_if(
                 t->params(),
                 [&](auto p) { return e_name->name() == p.name; }
@@ -4031,6 +4054,19 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
 
         auto err = Error(expr->location(), "Unknown symbol '{}'", expr->name());
 
+        for (auto s = expr->scope(); s; s = s->parent()) {
+            std::vector<std::string_view> symbol_names{};
+            for (auto sym : s->all_symbols())
+                symbol_names.emplace_back(sym->name());
+            err.attach(Note(
+                s->location(),
+                "Searched this scope... {}",
+                fmt::join(symbol_names, ", ")
+            ));
+        }
+
+        // TODO: What is this note, what does it mean, and why is it here? How
+        // might one trigger it?
         // If there is a declaration of this variable in the top-level scope, tell
         // the user that they may have forgotten to make it static.
         auto top_level = mod.top_level_scope()->find(expr->name());
