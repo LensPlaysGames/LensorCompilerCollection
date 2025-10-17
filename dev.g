@@ -1,16 +1,21 @@
-;; Yes, it's backwards
-format : [byte](x : int) = {
+format : [byte](c : byte) {
   out : [byte];
-
-  while x, {
-    out += byte 48 + x % 10;
-    x /= 10;
-  };
-
-  out += byte 0;
-
-  out;
+  out += c;
+  out += `\0`;
+  return out;
 };
 
-print 96;
-print "wow!!"[0];
+foo : [byte];
+foo += `4`;
+foo += `2`;
+foo += `\0`;
+
+foo[2] += `0`;
+
+for c in foo, {
+  print c;
+};
+
+print foo;
+
+-foo;
