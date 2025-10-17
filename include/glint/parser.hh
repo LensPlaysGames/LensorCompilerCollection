@@ -23,7 +23,7 @@ class Parser : public Lexer {
     using ExprResult = Result<Expr*>;
 
     std::vector<Scope*> scope_stack{};
-    std::unique_ptr<Module> mod{};
+    Module* mod{};
 
     /// The function we’re currently inside of.
     FuncDecl* curr_func{};
@@ -228,7 +228,7 @@ private:
     auto ParseFuncSig(Type* return_type) -> Result<FuncType*>;
     auto ParseIdentExpr() -> Result<Expr*>;
     auto ParseIfExpr() -> Result<IfExpr*>;
-    auto ParsePreamble(File* f) -> Result<void>;
+    auto ParsePreamble(File* f) -> Result<std::unique_ptr<Module>>;
     auto ParseStructType() -> Result<StructType*>;
     auto ParseEnumType() -> Result<EnumType*>;
     auto ParseUnionType() -> Result<UnionType*>;

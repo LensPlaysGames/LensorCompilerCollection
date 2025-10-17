@@ -482,7 +482,7 @@ auto lcc::glint::Parser::ParseDeclRest(
                     context,
                     std::move(decl_name),
                     new (*mod) TypeDecl(
-                        mod.get(),
+                        mod,
                         std::move(ident),
                         as<DeclaredType>(*decl),
                         location
@@ -516,7 +516,7 @@ auto lcc::glint::Parser::ParseDeclRest(
                 ident,
                 *ty,
                 *init,
-                mod.get(),
+                mod,
                 is_external ? Linkage::Imported : Linkage::LocalVar,
                 location
             );
@@ -537,7 +537,7 @@ auto lcc::glint::Parser::ParseDeclRest(
                 ident,
                 Type::Unknown,
                 *expr,
-                mod.get(),
+                mod,
                 Linkage::LocalVar,
                 location
             );
@@ -1262,7 +1262,7 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
         end_name,
         Type::Unknown,
         end_pointer,
-        mod.get(),
+        mod,
         Linkage::LocalVar,
         loc
     );
@@ -1276,7 +1276,7 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
         iter_name,
         Type::Unknown,
         new (*mod) MemberAccessExpr(*container, "data", loc),
-        mod.get(),
+        mod,
         Linkage::LocalVar,
         loc
     );
@@ -1318,7 +1318,7 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
             loop_var,
             Type::Unknown,
             deref_iter,
-            mod.get(),
+            mod,
             Linkage::LocalVar,
             loc
         );
@@ -1533,7 +1533,7 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     return new (*mod) IfExpr(cond.value(), then.value(), else_.value(), loc);
 }
 
-auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<void> {
+auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module>> {
     // Parse module name and create the module.
 
     // TODO: We probably want to implement a compiler directive that a module
@@ -1565,11 +1565,12 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<void> {
         NextToken(); /// Yeet module name.
     }
 
-    mod = std::make_unique<Module>(
+    auto m = std::make_unique<Module>(
         f,
         module_name,
         module_kind
     );
+    mod = m.get();
 
     while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
 
@@ -1586,7 +1587,7 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<void> {
         while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
     }
 
-    return {};
+    return m;
 }
 
 auto lcc::glint::Parser::ParseStructType() -> Result<StructType*> {
@@ -2021,7 +2022,7 @@ auto lcc::glint::Parser::ParseFuncDecl(
         type,
         (*body).first,
         (*body).second,
-        mod.get(),
+        mod,
         is_external ? Linkage::Imported : Linkage::Internal,
         type->location()
     );
@@ -2079,23 +2080,29 @@ auto lcc::glint::Parser::Parse(Context* context, std::string_view source) -> std
     Parser parser(context, source);
 
     /// Parse preamble. This also creates the module.
-    if (not parser.ParsePreamble(nullptr)) return {};
+    auto maybe_m = parser.ParsePreamble(nullptr);
+    if (not maybe_m) return {};
+    auto m = std::move(*maybe_m);
+    if (not m) return {};
 
     /// Parse Glint source.
     parser.ParseTopLevel();
 
     /// Return nullptr on error.
     if (context->has_error())
-        return std::unique_ptr<Module>{};
+        return {};
 
-    return std::move(parser.mod);
+    return m;
 }
 
 auto lcc::glint::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
     Parser parser(context, &file);
 
     /// Parse preamble. This also creates the module.
-    if (not parser.ParsePreamble(&file)) return {};
+    auto maybe_m = parser.ParsePreamble(&file);
+    if (not maybe_m) return {};
+    auto m = std::move(*maybe_m);
+    if (not m) return {};
 
     /// Parse Glint source.
     parser.ParseTopLevel();
@@ -2104,7 +2111,7 @@ auto lcc::glint::Parser::Parse(Context* context, File& file) -> std::unique_ptr<
     if (context->has_error())
         return std::unique_ptr<Module>{};
 
-    return std::move(parser.mod);
+    return m;
 }
 
 auto lcc::glint::Parser::JustGetTokens() -> std::vector<GlintToken> {
