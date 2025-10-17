@@ -4072,10 +4072,18 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
     // be one or more nodes with that name that are functions. In the case of
     // a non-function node, resolve to that node.
     if (not is<FuncDecl>(syms.at(0))) {
+        LCC_ASSERT(
+            syms.size() == 1,
+            "If a symbol resolves to a non-function declaration,"
+            " there must only be one declaration associated with the symbol."
+            " Glint does not support any other kind of overloading."
+        );
+
         // Make a copy of the pointer so we don't accidentally overwrite the
         // declaration's pointer in the following analysation.
         Expr* e = syms.at(0);
         (void) Analyse(&e);
+
         // FIXME: What in the fuck is this for? The assert would mean we wouldn't
         // need the following line and the line following means we wouldn't need
         // the assert. A fucking idiot wrote this, clearly.
