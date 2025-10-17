@@ -2982,7 +2982,7 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
     }
 
     // Clone template body...
-    auto body = Expr::Clone(mod, t->body());
+    auto body = Expr::Clone(mod, context, t->body());
     expand_template_parameter_references(t, expr->args(), &body);
 
     // Now that the body has been expanded, it's location is actually the

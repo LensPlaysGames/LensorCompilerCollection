@@ -1395,6 +1395,13 @@ public:
 
 /// \brief Base class for expression syntax nodes.
 class Expr : public SemaNode {
+    static auto CloneImpl(
+        Module& mod,
+        Context* context,
+        Expr* expr,
+        std::unordered_map<Scope*, Scope*>& scope_fixups
+    ) -> Expr*;
+
 public:
     /// Do NOT reorder these!
     /// Search terms: ExprKind, Expr::Kind, ExpressionKind
@@ -1496,15 +1503,15 @@ public:
 
     /// Deep-copy an expression.
     [[nodiscard]]
-    static auto Clone(Module& mod, Expr* expr) -> Expr*;
+    static auto Clone(Module& mod, Context* context, Expr* expr) -> Expr*;
 
     /// Deep copy a vector of expressions.
     [[nodiscard]]
-    static auto Clone(Module& mod, std::vector<Expr*> exprs) -> std::vector<Expr*> {
+    static auto Clone(Module& mod, Context* context, std::vector<Expr*> exprs) -> std::vector<Expr*> {
         std::vector<Expr*> out{};
         out.reserve(exprs.size());
         for (auto e : exprs)
-            out.emplace_back(Clone(mod, e));
+            out.emplace_back(Clone(mod, context, e));
 
         return out;
     }

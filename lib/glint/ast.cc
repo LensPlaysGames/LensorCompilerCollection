@@ -450,42 +450,69 @@ auto lcc::glint::CallExpr::callee_type() const -> FuncType* {
     return as<FuncType>(ty);
 }
 
-auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
+auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std::unordered_map<Scope*, Scope*>& scope_fixups) -> Expr* {
+    LCC_ASSERT(context);
+
     // Don't pass me nullptr, I won't return it.
     if (not expr) return nullptr;
+
+    const auto Clone = [&](Expr* e) {
+        return Expr::CloneImpl(mod, context, e, scope_fixups);
+    };
+
+    const auto CloneAll = [&](std::vector<Expr*> exprs) -> std::vector<Expr*> {
+        std::vector<Expr*> out{};
+        out.reserve(exprs.size());
+        for (auto e : exprs)
+            out.emplace_back(Clone(e));
+
+        return out;
+    };
+
+    // If we have not yet encountered this scope, create a new scope and add a
+    // mapping to our scope fixups.
+    const auto fixup_scope
+        = [](this auto&& self, Module& m, decltype(scope_fixups) scope_fixes, Scope* scope) -> Scope* {
+        if (not scope) return nullptr;
+        if (not scope_fixes.contains(scope)) {
+            auto cloned_scope = new (m) Scope(scope->parent());
+            scope_fixes.emplace(scope, cloned_scope);
+        }
+        return scope_fixes.at(scope);
+    };
 
     switch (expr->kind()) {
         case Kind::While: {
             auto w = as<WhileExpr>(expr);
             return new (mod) WhileExpr(
-                Expr::Clone(mod, w->condition()),
-                Expr::Clone(mod, w->body()),
+                Clone(w->condition()),
+                Clone(w->body()),
                 w->location()
             );
         }
         case Kind::For: {
             auto f = as<ForExpr>(expr);
             return new (mod) ForExpr(
-                Expr::Clone(mod, f->init()),
-                Expr::Clone(mod, f->condition()),
-                Expr::Clone(mod, f->increment()),
-                Expr::Clone(mod, f->body()),
+                Clone(f->init()),
+                Clone(f->condition()),
+                Clone(f->increment()),
+                Clone(f->body()),
                 f->location()
             );
         }
         case Kind::If: {
             auto i = as<IfExpr>(expr);
             return new (mod) IfExpr(
-                Expr::Clone(mod, i->condition()),
-                Expr::Clone(mod, i->then()),
-                Expr::Clone(mod, i->otherwise()),
+                Clone(i->condition()),
+                Clone(i->then()),
+                Clone(i->otherwise()),
                 i->location()
             );
         }
         case Kind::Return: {
             auto r = as<ReturnExpr>(expr);
             return new (mod) ReturnExpr(
-                Expr::Clone(mod, r->value()),
+                Clone(r->value()),
                 r->location()
             );
         }
@@ -493,7 +520,7 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
             auto u = as<UnaryExpr>(expr);
             return new (mod) UnaryExpr(
                 u->op(),
-                Expr::Clone(mod, u->operand()),
+                Clone(u->operand()),
                 u->is_postfix(),
                 u->location()
             );
@@ -502,8 +529,8 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
             auto b = as<BinaryExpr>(expr);
             return new (mod) BinaryExpr(
                 b->op(),
-                Expr::Clone(mod, b->lhs()),
-                Expr::Clone(mod, b->rhs()),
+                Clone(b->lhs()),
+                Clone(b->rhs()),
                 b->location()
             );
         }
@@ -523,32 +550,37 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
 
         case Kind::NameRef: {
             auto n = as<NameRefExpr>(expr);
+            Scope* s = n->scope();
+            // Only fixup scope if we need to. NOTE: This might cause errors if a
+            // namerefexpr appears before a declaration...
+            if (scope_fixups.contains(s))
+                s = fixup_scope(mod, scope_fixups, n->scope());
             return new (mod) NameRefExpr(
                 n->name(),
-                n->scope(),
+                s,
                 n->location()
             );
         }
 
         case Kind::Sizeof: {
             auto s = as<SizeofExpr>(expr);
-            return new (mod) SizeofExpr(Expr::Clone(mod, s->expr()), s->location());
+            return new (mod) SizeofExpr(Clone(s->expr()), s->location());
         }
         case Kind::Alignof: {
             auto a = as<AlignofExpr>(expr);
-            return new (mod) AlignofExpr(Expr::Clone(mod, a->expr()), a->location());
+            return new (mod) AlignofExpr(Clone(a->expr()), a->location());
         }
 
         case Kind::Block: {
             auto b = as<BlockExpr>(expr);
-            return new (mod) BlockExpr(Expr::Clone(mod, b->children()), b->location());
+            return new (mod) BlockExpr(CloneAll(b->children()), b->location());
         }
 
         case Kind::Call: {
             auto c = as<CallExpr>(expr);
             return new (mod) CallExpr(
-                Expr::Clone(mod, c->callee()),
-                Expr::Clone(mod, c->args()),
+                Clone(c->callee()),
+                CloneAll(c->args()),
                 c->location()
             );
         }
@@ -558,7 +590,7 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
             std::vector<CompoundLiteral::Member> members{};
             members.reserve(c->values().size());
             for (auto m : c->values())
-                members.emplace_back(m.name, Expr::Clone(mod, m.value));
+                members.emplace_back(m.name, Clone(m.value));
 
             return new (mod) CompoundLiteral(members, c->location());
         }
@@ -566,7 +598,7 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
         case Kind::Cast: {
             auto c = as<CastExpr>(expr);
             return new (mod) CastExpr(
-                Expr::Clone(mod, c->operand()),
+                Clone(c->operand()),
                 c->type(),
                 c->cast_kind(),
                 c->location()
@@ -576,7 +608,7 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
         case Kind::MemberAccess: {
             auto m = as<MemberAccessExpr>(expr);
             return new (mod) MemberAccessExpr(
-                Expr::Clone(mod, m->object()),
+                Clone(m->object()),
                 m->name(),
                 m->location()
             );
@@ -585,12 +617,17 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
         case Kind::TypeDecl: {
             auto t = as<TypeDecl>(expr);
             auto t_declared = as<DeclaredType>(t->type());
-            return new (mod) TypeDecl(
+            auto cloned_decl = new (mod) TypeDecl(
                 t->module(),
                 t->name(),
                 t_declared,
                 t->location()
             );
+
+            LCC_ASSERT(t_declared->scope());
+            fixup_scope(mod, scope_fixups, t_declared->scope());
+
+            return cloned_decl;
         }
 
         case Kind::TypeAliasDecl: {
@@ -606,21 +643,50 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
             auto e = as<EnumeratorDecl>(expr);
             return new (mod) EnumeratorDecl(
                 e->name(),
-                Expr::Clone(mod, e->init()),
+                Clone(e->init()),
                 e->location()
             );
         }
 
         case Kind::VarDecl: {
             auto v = as<VarDecl>(expr);
-            return new (mod) VarDecl(
+
+            Scope* scope{nullptr};
+            for (auto s : mod.scopes) {
+                for (auto sym : s->all_symbols()) {
+                    // Found encountered decl in existing scope
+                    if (sym == v) {
+                        scope = s;
+                        break;
+                    }
+                }
+                if (scope)
+                    break;
+            }
+            LCC_ASSERT(
+                scope,
+                "Encountered declaration during cloning that cannot be found in any scope in the given module."
+                " If you just need to clone something and could care less about scopes,"
+                " create a `new (mod) Scope(nullptr)` and declare the declarations in your clonee AST in that."
+            );
+
+            // TODO: Declare declaration in fixed up scope.
+            auto fixed_scope = fixup_scope(mod, scope_fixups, scope);
+            LCC_ASSERT(fixed_scope);
+
+            auto clone = new (mod) VarDecl(
                 v->name(),
                 v->type(),
-                Expr::Clone(mod, v->init()),
+                Clone(v->init()),
                 v->module(),
                 v->linkage(),
                 v->location()
             );
+            auto cloned_decl
+                = fixed_scope->declare(context, std::string{v->name()}, clone);
+            LCC_ASSERT(cloned_decl);
+
+            return clone;
         }
 
         case Kind::FuncDecl: {
@@ -628,7 +694,7 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
             return new (mod) FuncDecl(
                 f->name(),
                 f->function_type(),
-                Expr::Clone(mod, f->body()),
+                Clone(f->body()),
                 f->scope(),
                 f->module(),
                 f->linkage(),
@@ -640,7 +706,7 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
             auto i = as<IntrinsicCallExpr>(expr);
             return new (mod) IntrinsicCallExpr(
                 i->intrinsic_kind(),
-                Expr::Clone(mod, i->args())
+                CloneAll(i->args())
             );
         }
 
@@ -654,9 +720,9 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
 
         case Kind::Match: {
             auto m = as<MatchExpr>(expr);
-            auto m_new = new (mod) MatchExpr(Expr::Clone(mod, m->object()), m->location());
+            auto m_new = new (mod) MatchExpr(Clone(m->object()), m->location());
             m_new->names() = m->names();
-            m_new->bodies() = Expr::Clone(mod, m->bodies());
+            m_new->bodies() = CloneAll(m->bodies());
             return m_new;
         }
 
@@ -668,7 +734,7 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
         case Kind::Template: {
             auto t = as<TemplateExpr>(expr);
             return new (mod) TemplateExpr(
-                Expr::Clone(mod, t->body()),
+                Clone(t->body()),
                 t->params(),
                 t->location()
             );
@@ -680,13 +746,25 @@ auto lcc::glint::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
             overloads.reserve(o->overloads().size());
             for (auto f : o->overloads())
                 overloads.emplace_back(
-                    as<FuncDecl>(Expr::Clone(mod, f))
+                    as<FuncDecl>(Clone(f))
                 );
 
             return new (mod) OverloadSet(overloads, o->location());
         }
     }
     LCC_UNREACHABLE();
+}
+
+auto lcc::glint::Expr::Clone(Module& mod, Context* context, Expr* expr) -> Expr* {
+    LCC_ASSERT(context);
+    // Don't pass me nullptr, I won't return it.
+    if (not expr) return nullptr;
+
+    // If we encounter a declaration, we create a new scope, and map the
+    // scope it was originally declared in into a new scope Clone() creates.
+    std::unordered_map<Scope*, Scope*> scope_fixups{};
+
+    return CloneImpl(mod, context, expr, scope_fixups);
 }
 
 auto lcc::glint::Module::function(std::string_view name) -> std::vector<lcc::glint::FuncDecl*> {

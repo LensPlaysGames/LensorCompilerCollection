@@ -631,7 +631,9 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         /// AST node bound by macro.
         case Tk::Expression:
             LCC_ASSERT(tok.expression);
-            lhs = tok.eval_once ? tok.expression : Expr::Clone(*mod, tok.expression);
+            if (tok.eval_once)
+                lhs = tok.expression;
+            else lhs = Expr::Clone(*mod, context, tok.expression);
             NextToken();
             break;
 
