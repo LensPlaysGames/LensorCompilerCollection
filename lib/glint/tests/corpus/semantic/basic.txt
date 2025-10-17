@@ -22,6 +22,22 @@ Invoking Integers Multiplies
   (integer_literal))))
 
 ================
+Invoking Integers Multiplies, Even As First Function Argument
+================
+
+foo : int(x : int) x;
+
+foo 2 2;
+
+---
+
+(block (return
+ (call (name)
+  (binary_multiply
+   (integer_literal)
+   (integer_literal)))))
+
+================
 Invoking Many Integers Multiplies
 ================
 
