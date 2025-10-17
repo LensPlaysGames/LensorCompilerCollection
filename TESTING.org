@@ -1,0 +1,25 @@
+* LCC's Testing Facilities
+
+** LangTest
+
+See [[file:docs/lcc/LangTest.org][relevant documentation]].
+
+Header located in [[file:include/langtest/][include/langtest/]].
+
+- Glint :: Located in [[file:lib/glint/tests/][lib/glint/tests/]].
+
+  Shortcut to build and run at [[./glinttests.sh][./glinttests.sh]].
+
+** CodeTest
+
+See [[file:docs/lcc/CodeTest.org][relevant documentation]].
+
+- x86_64 :: Located in [[file:lib/lcc/tests/x86_64][lib/lcc/tests/x86_64]].
+
+  Shortcut to build and run at [[file:codetests.sh][./codetests.sh]].
+
+** RunTest
+
+Implemented at [[file:runtest/][runtest/]]
+
+Shortcut to run at [[file:runtest.sh][./runtest.sh]].
