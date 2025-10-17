@@ -3428,17 +3428,17 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         return;
     }
 
-    // If the callee is an integer, multiply all the arguments.
-    if (auto* callee_ty = expr->callee()->type(); callee_ty->is_integer()) {
-        AnalyseCall_Integer(expr_ptr, expr);
-        return;
-    }
-
     for (auto*& arg : expr->args()) (void) Analyse(&arg);
 
     // If any of the arguments errored, we can’t resolve this.
     if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
         expr->set_sema_errored();
+        return;
+    }
+
+    // If the callee is an integer, multiply all the arguments.
+    if (auto* callee_ty = expr->callee()->type(); callee_ty->is_integer()) {
+        AnalyseCall_Integer(expr_ptr, expr);
         return;
     }
 
