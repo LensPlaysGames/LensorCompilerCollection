@@ -310,6 +310,13 @@ void emit_gnu_att_assembly(
                     out += "    .cfi_def_cfa %rsp, 8\n";
 
                 } else if (instruction.opcode() == +x86_64::Opcode::Call) {
+                    // TODO: FIXME We probably shouldn't emit machine instructions that aren't in the MIR...
+                    // Save caller-saved registers, if necessary.
+                    for (auto r : function.registers_used()) {
+                        if (r == desc.return_register) continue;
+                        out += fmt::format("    push %{}\n", ToString(x86_64::RegisterId{r}));
+                    }
+
                     // Save return register, if necessary.
                     // TODO: CFA `.cfi_offset`
                     if (instruction.reg() != desc.return_register)
@@ -445,6 +452,13 @@ void emit_gnu_att_assembly(
                             ToString(x86_64::RegisterId(instruction.reg()), instruction.regsize())
                         );
                         out += fmt::format("    pop %{}\n", ToString(x86_64::RegisterId(desc.return_register)));
+                    }
+
+                    // TODO: FIXME We probably shouldn't emit machine instructions that aren't in the MIR...
+                    // Restore caller-saved registers, if necessary.
+                    for (auto r : vws::reverse(function.registers_used())) {
+                        if (r == desc.return_register) continue;
+                        out += fmt::format("    pop %{}\n", ToString(x86_64::RegisterId{r}));
                     }
                 }
             }
