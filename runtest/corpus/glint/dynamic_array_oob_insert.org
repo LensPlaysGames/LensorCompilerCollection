@@ -1,0 +1,25 @@
+* Dynamic Array Insert Bounds Checking Crash
+
+Glint's dynamic arrays are bounds-checked, even during insertion.
+
+Glint's insert operation requires that the given index is greater than or equal to zero and that the given index is less than or equal to the dynamic array's current size. When these requirements are not met, Glint crashes the program gracefully (rather than segfaulting or trusting the known-bad memory access).
+
+#+NAME: source
+#+begin_src glint-ts
+foo:[byte];
+
+;; 2 is out of bounds, should crash the thing
+foo[2] += `4`;
+
+-foo;
+#+end_src
+
+This is the status Glint exits with when an dynamic array OOB occurs.
+#+NAME: status
+#+begin_example
+1
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

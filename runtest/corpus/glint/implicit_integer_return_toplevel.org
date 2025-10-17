@@ -1,0 +1,15 @@
+* Implicitly Return Integer at Top Level
+
+#+NAME: source
+#+begin_src glint-ts
+69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
