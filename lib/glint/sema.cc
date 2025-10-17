@@ -2252,8 +2252,6 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                         = new (mod) MemberAccessExpr(dynarray_expr, "data", {});
                     auto dyn_size
                         = new (mod) MemberAccessExpr(dynarray_expr, "size", {});
-                    auto dyn_capacity
-                        = new (mod) MemberAccessExpr(dynarray_expr, "capacity", {});
 
                     // index less than 0
                     auto cmp_zero
@@ -2283,92 +2281,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     exprs.emplace_back(if_outofbounds);
 
                     // Grow, if need be.
-                    std::vector<Expr*> block_exprs{};
-                    {
-                        // Local variable declaration init to malloc(capacity * 2).
-                        auto malloc_ref
-                            = new (mod) NameRefExpr("malloc", mod.global_scope(), {});
-                        auto cap_double = new (mod) BinaryExpr(
-                            TokenKind::Star,
-                            dyn_capacity,
-                            new (mod) IntegerLiteral(2, {}),
-                            {}
-                        );
-                        (void) Analyse((Expr**) &malloc_ref);
-                        (void) Analyse((Expr**) &cap_double);
-                        auto malloc_call = new (mod) CallExpr(malloc_ref, {cap_double}, {});
-                        *malloc_call->type_ref() = Ptr(dyn_t->elem());
-                        malloc_call->set_sema_done();
-
-                        // TODO/FIXME: This (scope) is most-certainly wrong. We probably want to
-                        // open a new one for this block expression we are creating.
-                        auto scope = curr_func->scope();
-                        auto newmem_name = mod.unique_name("dynarray_grow_");
-                        auto newmem_decl = scope->declare(
-                            context,
-                            std::move(newmem_name),
-                            new (mod) VarDecl(
-                                newmem_name,
-                                Ptr(dyn_t->elem()),
-                                malloc_call,
-                                &mod,
-                                Linkage::LocalVar,
-                                {}
-                            )
-                        );
-                        // newmem :elem_t.ptr = malloc 2 old.capacity;
-                        block_exprs.emplace_back(*newmem_decl);
-
-                        // memcpy from lhs_data to memory at local variable
-                        auto memcpy_ref = new (mod) NameRefExpr("memcpy", mod.global_scope(), {});
-                        auto memcpy_call = new (mod) CallExpr(
-                            memcpy_ref,
-                            {new (mod) NameRefExpr(newmem_decl->name(), scope, {}), dyn_data, dyn_size},
-                            {}
-                        );
-                        // memcpy newmem, old.data, old.size;
-                        block_exprs.emplace_back(memcpy_call);
-
-                        // free(lhs_data)
-                        auto free_ref = new (mod) NameRefExpr("free", mod.global_scope(), {});
-                        auto free_call = new (mod) CallExpr(free_ref, {dyn_data}, {});
-                        // free old.data;
-                        block_exprs.emplace_back(free_call);
-
-                        // lhs_data := <local variable>
-                        auto update_data = new (mod) BinaryExpr(
-                            TokenKind::ColonEq,
-                            dyn_data,
-                            new (mod) NameRefExpr(newmem_decl->name(), scope, {}),
-                            {}
-                        );
-                        // old.data := newmem;
-                        block_exprs.emplace_back(update_data);
-
-                        // lhs_capacity *= 2
-                        auto update_capacity = new (mod) BinaryExpr(
-                            TokenKind::StarEq,
-                            dyn_capacity,
-                            new (mod) IntegerLiteral(2, {}),
-                            {}
-                        );
-                        // old.capacity *= 2;
-                        block_exprs.emplace_back(update_capacity);
-                    }
-                    auto grow_block = new (mod) BlockExpr(block_exprs, {});
-
-                    // lhs.capacity - 1
-                    auto cap_less_one = new (mod) BinaryExpr(
-                        TokenKind::Minus,
-                        dyn_capacity,
-                        new (mod) IntegerLiteral(1, {}),
-                        {}
-                    );
-                    // lhs.size >= lhs.capacity - 1
-                    auto grow_condition
-                        = new (mod) BinaryExpr(TokenKind::Ge, dyn_size, cap_less_one, {});
-
-                    auto grow_if = new (mod) IfExpr(grow_condition, grow_block, nullptr, {});
+                    auto grow_if = new (mod) CallExpr(named_template("dynarray_grow"), {dynarray_expr}, {});
                     exprs.emplace_back(grow_if);
 
                     auto memmove_ref
