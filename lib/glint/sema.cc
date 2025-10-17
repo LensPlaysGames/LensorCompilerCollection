@@ -889,13 +889,16 @@ void lcc::glint::Sema::AnalyseModule() {
         "dynarray_grow :: template(dynarray : expr) {"
         "  if dynarray.size >= dynarray.capacity - 1, {"
         //   Allocate memory, capacity * 2
-        "    newmem :: malloc 2 dynarray.capacity;"
+        //   NOTE: Shouldn't have to put parens around the arguments, but there is
+        //   currently a bug in the parser where a "single expression" doesn't
+        //   include a binary expression or something like that.
+        "    newmem :: malloc (2 dynarray.capacity);"
         //   Copy <size> elements into newly-allocated memory
         "    memcpy newmem, dynarray.data, dynarray.size;"
         //   De-allocate old memory
         "    free dynarray.data;"
         //   Assign dynarray.data to newly-allocated memory
-        "    dynarray.data := newmem;"
+        "    dynarray.data := byte.ptr newmem;"
         //   Assign dynarray.capacity to dynarray.capacity * 2
         "    dynarray.capacity *= 2;"
         "  };"
@@ -905,11 +908,11 @@ void lcc::glint::Sema::AnalyseModule() {
         std::vector<char>{templates_source.begin(), templates_source.end()}
     );
 
-    auto templates_m = glint::Parser::Parse(context, f);
+    auto templates_m = glint::Parser::ParseFreestanding(mod, context, f, mod.top_level_scope());
     if (not templates_m)
         Diag::ICE("GlintSema failed to parse semantic templates");
 
-    for (auto c : templates_m->top_level_function()->body()->children()) {
+    for (auto c : *templates_m) {
         LCC_ASSERT(
             is<VarDecl>(c),
             "Malformed sema_templates.g: expected named template as top level expression"
@@ -2222,93 +2225,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
                 auto lhs_data = new (mod) MemberAccessExpr(b->lhs(), "data", {});
                 auto lhs_size = new (mod) MemberAccessExpr(b->lhs(), "size", {});
-                auto lhs_capacity = new (mod) MemberAccessExpr(b->lhs(), "capacity", {});
-
-                // lhs.capacity - 1
-                auto cap_less_one = new (mod) BinaryExpr(
-                    TokenKind::Minus,
-                    lhs_capacity,
-                    new (mod) IntegerLiteral(1, {}),
-                    {}
-                );
-                // lhs.size >= lhs.capacity - 1
-                auto condition = new (mod) BinaryExpr(TokenKind::Ge, lhs_size, cap_less_one, {});
-
-                std::vector<Expr*> exprs{};
-
-                {
-                    // Local variable declaration init to malloc(capacity * 2).
-                    auto malloc_ref = new (mod) NameRefExpr("malloc", mod.global_scope(), {});
-                    auto cap_double = new (mod) BinaryExpr(
-                        TokenKind::Star,
-                        lhs_capacity,
-                        new (mod) IntegerLiteral(2, {}),
-                        {}
-                    );
-                    (void) Analyse((Expr**) &malloc_ref);
-                    (void) Analyse((Expr**) &cap_double);
-                    auto malloc_call = new (mod) CallExpr(malloc_ref, {cap_double}, {});
-                    *malloc_call->type_ref() = Ptr(lhs_t->elem());
-                    malloc_call->set_sema_done();
-
-                    // TODO/FIXME: This (scope) is most-certainly wrong. We probably want to
-                    // open a new one for this block expression we are creating.
-                    auto scope = curr_func->scope();
-                    auto newmem_name = mod.unique_name("dynarray_grow_");
-                    auto newmem_decl = scope->declare(
-                        context,
-                        std::move(newmem_name),
-                        new (mod) VarDecl(
-                            newmem_name,
-                            Ptr(lhs_t->elem()),
-                            malloc_call,
-                            &mod,
-                            Linkage::LocalVar,
-                            {}
-                        )
-                    );
-                    // newmem :elem_t.ptr = malloc 2 old.capacity;
-                    exprs.emplace_back(*newmem_decl);
-
-                    // memcpy from lhs_data to memory at local variable
-                    auto memcpy_ref = new (mod) NameRefExpr("memcpy", mod.global_scope(), {});
-                    auto memcpy_call = new (mod) CallExpr(
-                        memcpy_ref,
-                        {new (mod) NameRefExpr(newmem_decl->name(), scope, {}), lhs_data, lhs_size},
-                        {}
-                    );
-                    // memcpy newmem, old.data, old.size;
-                    exprs.emplace_back(memcpy_call);
-
-                    // free(lhs_data)
-                    auto free_ref = new (mod) NameRefExpr("free", mod.global_scope(), {});
-                    auto free_call = new (mod) CallExpr(free_ref, {lhs_data}, {});
-                    // free old.data;
-                    exprs.emplace_back(free_call);
-
-                    // lhs_data := <local variable>
-                    auto update_data = new (mod) BinaryExpr(
-                        TokenKind::ColonEq,
-                        lhs_data,
-                        new (mod) NameRefExpr(newmem_decl->name(), scope, {}),
-                        {}
-                    );
-                    // old.data := newmem;
-                    exprs.emplace_back(update_data);
-
-                    // lhs_capacity *= 2
-                    auto update_capacity = new (mod) BinaryExpr(
-                        TokenKind::StarEq,
-                        lhs_capacity,
-                        new (mod) IntegerLiteral(2, {}),
-                        {}
-                    );
-                    // old.capacity *= 2;
-                    exprs.emplace_back(update_capacity);
-                }
-                auto grow_block = new (mod) BlockExpr(exprs, {});
-
-                auto grow_if = new (mod) IfExpr(condition, grow_block, nullptr, {});
+                auto grow_if = new (mod) CallExpr(named_template("dynarray_grow"), {b->lhs()}, {});
 
                 auto subscript_lhs = new (mod) BinaryExpr(TokenKind::LBrack, lhs_data, lhs_size, {});
                 auto dereference_subscript = new (mod) UnaryExpr(TokenKind::At, subscript_lhs, false, {});
