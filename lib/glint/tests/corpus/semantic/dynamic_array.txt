@@ -26,3 +26,61 @@ foo[27]
 
  (unary_negation (name))
  (return (integer_literal)))
+
+================
+TODO Compound Literal Append
+================
+
+foo:[byte];
+
+;; relevant
+foo += !{ `4`, `2`, `0` }
+
+; -foo;
+
+---
+
+(block
+ (variable_declaration)
+
+ (unary_negation (name))
+ (return (integer_literal)))
+
+================
+Insert
+================
+
+foo:[byte];
+
+;; relevant
+foo[2] += `4`;
+
+; -foo;
+
+---
+
+(block
+ (variable_declaration)
+
+ (block
+  (if (binary_or
+       (binary_lessthan (integer_literal) (integer_literal))
+       (binary_greaterthan (evaluated_constant) (cast (member_access (name)))))
+   (call (name) (integer_literal)))
+  (if (binary_greaterthan_orequal (cast (member_access (name))) (binary_subtract (cast (member_access (name))) (evaluated_constant)))
+   (block
+    (variable_declaration (call (name) (binary_multiply (cast (member_access (name))) (evaluated_constant))))
+    (call (name) (cast (cast (name))) (cast (cast (member_access (name)))) (cast (cast (member_access (name)))))
+    (call (name) (cast (cast (member_access (name)))))
+    (binary_assignment (member_access (name)) (cast (name)))
+    (binary_assignment (member_access (name)) (binary_multiply (cast (member_access (name))) (evaluated_constant)))))
+  (call (name)
+   (cast (binary_subscript (cast (member_access (name))) (binary_add (integer_literal) (integer_literal))))
+   (cast (binary_subscript (cast (member_access (name))) (integer_literal)))
+   (cast (binary_subtract (cast (member_access (name))) (evaluated_constant))))
+  (binary_assignment (unary_dereference (binary_subscript (cast (member_access (name))) (integer_literal))) (integer_literal))
+  (binary_assignment (member_access (name)) (binary_add (cast (member_access (name))) (evaluated_constant))))
+
+ (unary_negation (name))
+ (return (integer_literal)))
+

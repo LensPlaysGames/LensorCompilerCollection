@@ -957,6 +957,14 @@ void lcc::glint::Sema::AnalyseModule() {
          {"size", FFIType::CInt(mod), {}}
         }
     );
+    DeclareImportedGlobalFunction(
+        "memmove",
+        Type::Void,
+        {{"dest", Type::VoidPtr, {}},
+         {"src", Type::VoidPtr, {}},
+         {"size", FFIType::CInt(mod), {}}
+        }
+    );
 
     /// Analyse the signatures of all functions. This must be done
     /// before analysing bodies since, in order to perform overload
@@ -2180,6 +2188,247 @@ void lcc::glint::Sema::RewriteToBinaryOpThenAssign(
 }
 
 void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
+    // Catch dynarray[index] on lhs before it gets rewritten.
+    if (b->op() == TokenKind::PlusEq) {
+        if (
+            auto subscript = cast<BinaryExpr>(b->lhs());
+            subscript and subscript->op() == TokenKind::LBrack
+        ) {
+            if (not Analyse(&subscript->lhs())) {
+                subscript->set_sema_errored();
+                return;
+            }
+            if (not Analyse(&subscript->rhs())) {
+                subscript->set_sema_errored();
+                return;
+            }
+            if (subscript->lhs()->type()->is_dynamic_array()) {
+                // subscript of dynamic array on rhs of += is an insertion operation.
+                auto dynarray_expr = subscript->lhs();
+                auto index_expr = subscript->rhs();
+
+                // Relevant dynamic array type
+                auto dyn_t = as<DynamicArrayType>(subscript->lhs()->type());
+
+                // Ensure rhs is convertible to dynamic array element type
+                if (not Convert(&b->rhs(), dyn_t->elem())) {
+                    Error(b->location(), "Cannot insert to {} with value of type {}", dyn_t, b->rhs()->type());
+                    b->set_sema_errored();
+                    return;
+                }
+
+                // TODO: Use a template for this mess. It would be cool if sema could
+                // parse a custom "file" of named templates, and use those to do
+                // expansions and rewrites, instead of having to do it all in code...
+
+                // template(dynarray : expr, index : expr, value : expr) {
+                //   if index < 0 or index > dynarray.size, {
+                //     exit 1;
+                //   };
+                //   ;; If we need to grow, do that
+                //   if dynarray.size >= dynarray.capacity - 1, {
+                //       ;; Allocate memory, capacity * 2
+                //       newmem :: malloc 2 dynarray.capacity;
+                //       ;; Copy <size> elements into newly-allocated memory
+                //       memcpy newmem, dynarray.data, dynarray.size;
+                //       ;; De-allocate old memory
+                //       free dynarray.data;
+                //       ;; Assign dynarray.data to newly-allocated memory
+                //       dynarray.data := newmem;
+                //       ;; Assign dynarray.capacity to dynarray.capacity * 2
+                //       dynarray.capacity *= 2;
+                //   };
+                //   ;; Copy size - index elements forward one element starting at given index
+                //   memmove dynarray.data[index + 1], dynarray.data[index], dynarray.size - index;
+                //   ;; Insert given element at index, now that everything is moved out of the
+                //   ;; way.
+                //   @dynarray[index] := value;
+                //   dynarray.size += 1;
+                // };
+
+                std::vector<Expr*> exprs{};
+                {
+                    auto dyn_data
+                        = new (mod) MemberAccessExpr(dynarray_expr, "data", {});
+                    auto dyn_size
+                        = new (mod) MemberAccessExpr(dynarray_expr, "size", {});
+                    auto dyn_capacity
+                        = new (mod) MemberAccessExpr(dynarray_expr, "capacity", {});
+
+                    // index less than 0
+                    auto cmp_zero
+                        = new (mod) BinaryExpr(
+                            TokenKind::Lt,
+                            index_expr,
+                            new (mod) IntegerLiteral(0, {}),
+                            {}
+                        );
+                    // index greater than size
+                    auto cmp_size
+                        = new (mod) BinaryExpr(TokenKind::Gt, index_expr, dyn_size, {});
+
+                    auto cmp_or
+                        = new (mod) BinaryExpr(TokenKind::Or, cmp_zero, cmp_size, {});
+
+                    auto exit_ref = new (mod) NameRefExpr("exit", mod.global_scope(), {});
+                    auto status_literal = new (mod) IntegerLiteral(1, {});
+                    auto then_outofbounds = new (mod) CallExpr(exit_ref, {status_literal}, {});
+
+                    auto if_outofbounds = new (mod) IfExpr(
+                        cmp_or,
+                        then_outofbounds,
+                        nullptr,
+                        {}
+                    );
+                    exprs.emplace_back(if_outofbounds);
+
+                    // Grow, if need be.
+                    std::vector<Expr*> block_exprs{};
+                    {
+                        // Local variable declaration init to malloc(capacity * 2).
+                        auto malloc_ref
+                            = new (mod) NameRefExpr("malloc", mod.global_scope(), {});
+                        auto cap_double = new (mod) BinaryExpr(
+                            TokenKind::Star,
+                            dyn_capacity,
+                            new (mod) IntegerLiteral(2, {}),
+                            {}
+                        );
+                        (void) Analyse((Expr**) &malloc_ref);
+                        (void) Analyse((Expr**) &cap_double);
+                        auto malloc_call = new (mod) CallExpr(malloc_ref, {cap_double}, {});
+                        *malloc_call->type_ref() = Ptr(dyn_t->elem());
+                        malloc_call->set_sema_done();
+
+                        // TODO/FIXME: This (scope) is most-certainly wrong. We probably want to
+                        // open a new one for this block expression we are creating.
+                        auto scope = curr_func->scope();
+                        auto newmem_name = mod.unique_name("dynarray_grow_");
+                        auto newmem_decl = scope->declare(
+                            context,
+                            std::move(newmem_name),
+                            new (mod) VarDecl(
+                                newmem_name,
+                                Ptr(dyn_t->elem()),
+                                malloc_call,
+                                &mod,
+                                Linkage::LocalVar,
+                                {}
+                            )
+                        );
+                        // newmem :elem_t.ptr = malloc 2 old.capacity;
+                        block_exprs.emplace_back(*newmem_decl);
+
+                        // memcpy from lhs_data to memory at local variable
+                        auto memcpy_ref = new (mod) NameRefExpr("memcpy", mod.global_scope(), {});
+                        auto memcpy_call = new (mod) CallExpr(
+                            memcpy_ref,
+                            {new (mod) NameRefExpr(newmem_decl->name(), scope, {}), dyn_data, dyn_size},
+                            {}
+                        );
+                        // memcpy newmem, old.data, old.size;
+                        block_exprs.emplace_back(memcpy_call);
+
+                        // free(lhs_data)
+                        auto free_ref = new (mod) NameRefExpr("free", mod.global_scope(), {});
+                        auto free_call = new (mod) CallExpr(free_ref, {dyn_data}, {});
+                        // free old.data;
+                        block_exprs.emplace_back(free_call);
+
+                        // lhs_data := <local variable>
+                        auto update_data = new (mod) BinaryExpr(
+                            TokenKind::ColonEq,
+                            dyn_data,
+                            new (mod) NameRefExpr(newmem_decl->name(), scope, {}),
+                            {}
+                        );
+                        // old.data := newmem;
+                        block_exprs.emplace_back(update_data);
+
+                        // lhs_capacity *= 2
+                        auto update_capacity = new (mod) BinaryExpr(
+                            TokenKind::StarEq,
+                            dyn_capacity,
+                            new (mod) IntegerLiteral(2, {}),
+                            {}
+                        );
+                        // old.capacity *= 2;
+                        block_exprs.emplace_back(update_capacity);
+                    }
+                    auto grow_block = new (mod) BlockExpr(block_exprs, {});
+
+                    // lhs.capacity - 1
+                    auto cap_less_one = new (mod) BinaryExpr(
+                        TokenKind::Minus,
+                        dyn_capacity,
+                        new (mod) IntegerLiteral(1, {}),
+                        {}
+                    );
+                    // lhs.size >= lhs.capacity - 1
+                    auto grow_condition
+                        = new (mod) BinaryExpr(TokenKind::Ge, dyn_size, cap_less_one, {});
+
+                    auto grow_if = new (mod) IfExpr(grow_condition, grow_block, nullptr, {});
+                    exprs.emplace_back(grow_if);
+
+                    auto memmove_ref
+                        = new (mod) NameRefExpr("memmove", mod.global_scope(), {});
+                    // subscript dynarray_expr.data with index_expr + 1 offset
+                    auto index_plusone
+                        = new (mod) BinaryExpr(
+                            TokenKind::Plus,
+                            index_expr,
+                            new (mod) IntegerLiteral(1, {}),
+                            {}
+                        );
+                    auto memmove_dest
+                        = new (mod) BinaryExpr(TokenKind::LBrack, dyn_data, index_plusone, {});
+                    // subscript dynarray_expr.data with index_expr
+                    auto memmove_source
+                        = new (mod) BinaryExpr(TokenKind::LBrack, dyn_data, index_expr, {});
+                    // subtract index_expr from dynarray_expr.size
+                    auto memmove_size
+                        = new (mod) BinaryExpr(TokenKind::Minus, dyn_size, index_expr, {});
+                    auto call_memmove = new (mod) CallExpr(
+                        memmove_ref,
+                        {memmove_dest, memmove_source, memmove_size},
+                        {}
+                    );
+                    exprs.emplace_back(call_memmove);
+
+                    // Subscript dynarray data with index expression
+                    auto assign_lhs_subscript
+                        = new (mod) BinaryExpr(TokenKind::LBrack, dyn_data, index_expr, {});
+                    // Dereference subscript
+                    auto assign_lhs
+                        = new (mod) UnaryExpr(TokenKind::At, assign_lhs_subscript, false, {});
+                    // @dynarray[index] := value;
+                    auto assign = new (mod) BinaryExpr(
+                        TokenKind::ColonEq,
+                        assign_lhs,
+                        b->rhs(),
+                        {}
+                    );
+                    exprs.emplace_back(assign);
+
+                    // dynarray.size += 1;
+                    auto increase_size = new (mod) BinaryExpr(
+                        TokenKind::PlusEq,
+                        dyn_size,
+                        new (mod) IntegerLiteral(1, {}),
+                        {}
+                    );
+                    exprs.emplace_back(increase_size);
+                }
+
+                *expr_ptr = new (mod) BlockExpr(exprs, b->location());
+                (void) Analyse(expr_ptr);
+
+                return;
+            }
+        }
+    }
+
     // Give up if there is an error in either operand.
     if (not Analyse(&b->lhs()) or not Analyse(&b->rhs())) {
         b->set_sema_errored();
@@ -2200,6 +2449,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             break;
 
         case TokenKind::PlusEq:
+            // NOTE: Dynamic array insert handled above
+            // Handle dynamic array append.
             if (lhs_t->is_dynamic_array()) {
                 // Ensure rhs is convertible to lhs element type
                 if (not Convert(&b->rhs(), lhs_t->elem())) {

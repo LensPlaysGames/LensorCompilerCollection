@@ -1,15 +1,6 @@
-foo : sum {
-  x : int;
-  y : int;
-};
+foo:[byte];
 
-bar : foo;
-bar.x := 69;
-;; bar.x := 69;
+;; relevant
+foo[2] += `4`;
 
-out : int;
-match bar {
-  .x : out := bar.x;
-  .y : out := 42;
-};
-out;
+; -foo;
