@@ -2899,17 +2899,6 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
             // Search template body for template parameter references and fix them up
             // into their actual argument.
             for (auto e : (*current_expr)->children_ref()) {
-                if (auto e_n = cast<NameRefExpr>(*e)) {
-                    auto found_it = rgs::find_if(
-                        t->params(),
-                        [&](auto p) { return e_n->name() == p.name; }
-                    );
-                    if (found_it != t->params().end()) {
-                        auto parameter_index = std::distance(t->params().begin(), found_it);
-                        auto argument = args.at(usz(parameter_index));
-                        *e = argument;
-                    }
-                }
                 // C++23 recurse
                 self(t, args, e);
             }
