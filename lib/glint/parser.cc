@@ -2116,6 +2116,46 @@ auto lcc::glint::Parser::Parse(Context* context, File& file) -> std::unique_ptr<
     return m;
 }
 
+auto lcc::glint::Parser::ParseFreestanding(
+    Module& m,
+    Context* context,
+    File& file,
+    Scope* starting_scope
+) -> Result<std::vector<lcc::glint::Expr*>> {
+    Parser parser(context, &file);
+    // Initialize parser
+    parser.mod = &m;
+    parser.curr_func = m.top_level_function();
+    // Construct scope stack
+    for (auto s = starting_scope; s; s = s->parent())
+        parser.scope_stack.emplace(parser.scope_stack.begin(), s);
+
+    /// Parse the file.
+    std::vector<Expr*> exprs{};
+    for (;;) {
+        while (+parser.ConsumeExpressionSeparator());
+
+        /// Stop if we’re at end of file.
+        if (parser.At(Tk::Eof)) break;
+
+        /// Parse a top-level expression.
+        auto expr = parser.ParseExpr();
+        if (not +parser.ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
+            if (parser.At(Tk::Eof)) {
+                parser.Warning("Expected hard expression separator but got end of file");
+            } else if (expr) {
+                parser.Warning(GetRightmostLocation(*expr), "Expected hard expression separator")
+                    .attach(parser.Note("Before this"));
+            }
+        }
+        if (expr)
+            exprs.emplace_back(*expr);
+        else return expr.diag();
+    }
+
+    return exprs;
+}
+
 auto lcc::glint::Parser::JustGetTokens() -> std::vector<GlintToken> {
     std::vector<GlintToken> out{};
     while (not At(Tk::Eof)) {
