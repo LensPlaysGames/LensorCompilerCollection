@@ -2,32 +2,22 @@
 
 #+NAME: source
 #+begin_src glint-ts
-  format : [byte](c : byte) {
-    out : [byte];
-    out += c;
-    out += `\0`;
-    return out;
-  };
-
   foo : [byte];
   ;; append
-  foo += `4`;
   foo += `2`;
   ;; prepend
-  ;; foo ~= `4`;
-  ;; append
-  foo += `\0`;
+  foo ~= `4`;
 
   ;; insert
   foo[2] += `0`;
 
   ;; ranged for
   for c in foo, {
-    print c;
+    print c, `\n`;
   };
 
   ;; print
-  print foo;
+  print foo, `\n`;
 
   -foo;
 #+end_src
@@ -42,6 +32,5 @@
 4
 2
 0
-
 420
 #+end_example

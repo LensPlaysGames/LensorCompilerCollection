@@ -133,7 +133,7 @@
        ;;          (file-relative-name output-filepath))
        (if (= 0 (process-exit-status p))
            (progn
-             (sleep-for 0.1) ;; allow file LCC writes to "appear"
+             (sleep-for 0.02) ;; allow file LCC writes to "appear"
              (run-test--gcc output-filepath test-name expected-status expected-output))
          (error "LCC returned non-zero exit code (%i) %s" (process-exit-status p) lcc-output))))))
 
@@ -148,10 +148,6 @@
   (run-test--lcc language source-filepath test-name expected-status expected-output)
   ;; Wait until the test has been marked as completed...
   (run-test--wait-for-test-completion test-name))
-
-;; (mapc
-;;  (lambda (name) (run-test--file "glint" name 0 ""))
-;;  (directory-files "./runtest/corpus/glint" t directory-files-no-dot-files-regexp))
 
 (defun run-test--parse-test-from-org (org-filepath)
   "Returns a property list containing information about the parsed test, or nil
