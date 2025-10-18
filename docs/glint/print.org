@@ -8,14 +8,34 @@ Use =print= keyword to begin a list of expressions whose results will be printed
 
 ** How it works
 
-=print= is sort of like a fancy macro. It just gets converted into other code. Namely, every argument expression =E= is /placed into/ the following template, and then replaced with the template result.
+=print= is sort of like a fancy macro. It just gets converted into other code. Specifically, it is as if each argument is applied to one of the following templates. What template the argument is applied to depends on the type of the argument.
 
+NOTE: Expansions may not match exactly; see =sema_templates.g= (embedded in Glint's =sema.cc=).
+
+For a =byte= argument:
 #+begin_src prog
-  {tmp :: format(E); puts(tmp.data); -tmp;};
+  putchar <arg>;
 #+end_src
 
-As you can see, the single argument expression is converted into a block expression containing three expressions: a call to =format= (implemented in Glint), a call to =puts= (part of LibC), and a decrement of the dynamic array that format returns, which frees the associated memory.
+For a =[byte]= (dynamic array of byte), =[byte view]= (array view of byte), or =[byte 4]= (fixed array of byte) argument:
+#+begin_src prog
+  cfor
+      i :: 0;
+      i < <arg>.size;
+      i += 1;
+    putchar @<arg>[i];
+#+end_src
 
-However, if the argument is already of "dynamic array of byte" type, the call to =format= and the decrement will not be inserted. The same goes for arguments of =byte.ptr= type, fixed array of byte, view of byte, etc.
+NOTE: Still unsure if fixed array of byte should call =putchar= on each element or just call =puts=...
 
-FUN FACT: If/when Glint ever gets AST-level macros, know that it is inspired by =print= (and thought of during it's implementation, because replacing AST nodes by hand, well, sucks).
+For a =byte.ptr= argument:
+#+begin_src prog
+  puts <arg>;
+#+end_src
+
+For a =void= argument: a =void= argument to print is an error.
+
+For every other type argument, insert a call to format (defined by _user_), print the returned dynamic byte array, and then free the dynamic array.
+#+begin_src prog
+  {tmp :: format(<arg>); print tmp; -tmp;};
+#+end_src
