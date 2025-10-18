@@ -492,8 +492,11 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
         }
         case Kind::For: {
             auto f = as<ForExpr>(expr);
+            // Ensure we clone init before the rest, so that declarations get fixed up
+            // properly...
+            auto clone_init = Clone(f->init());
             return new (mod) ForExpr(
-                Clone(f->init()),
+                clone_init,
                 Clone(f->condition()),
                 Clone(f->increment()),
                 Clone(f->body()),
@@ -555,6 +558,7 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
             // namerefexpr appears before a declaration...
             if (scope_fixups.contains(s))
                 s = fixup_scope(mod, scope_fixups, n->scope());
+
             return new (mod) NameRefExpr(
                 n->name(),
                 s,
@@ -670,7 +674,7 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
                 " create a `new (mod) Scope(nullptr)` and declare the declarations in your clonee AST in that."
             );
 
-            // TODO: Declare declaration in fixed up scope.
+            // Declare declaration in fixed up scope.
             auto fixed_scope = fixup_scope(mod, scope_fixups, scope);
             LCC_ASSERT(fixed_scope);
 
