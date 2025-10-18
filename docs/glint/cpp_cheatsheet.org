@@ -1,0 +1,97 @@
+#+options: H:4 num:3 toc:3
+
+* C++ <-> Glint Cheat Sheet
+
+How to do things in both.
+
+** =std::vector<T>= <-> =[T]=
+
+*** Append
+
+**** C++
+#+begin_src cpp
+  vector.push_back(value);
+#+end_src
+
+**** Glint
+#+begin_src glint-ts
+  dynamic_array += value;
+#+end_src
+
+*** Prepend
+
+**** C++
+#+begin_src cpp
+  std::insert(vector.begin(), value);
+#+end_src
+
+**** Glint
+#+begin_src glint-ts
+  dynamic_array ~= value;
+#+end_src
+
+*** Insert
+
+**** C++
+#+begin_src cpp
+  std::insert(vector.begin() + index, value);
+#+end_src
+
+**** Glint
+#+begin_src glint-ts
+  dynamic_array[index] += value;
+#+end_src
+
+*** Access
+
+**** C++
+#+begin_src cpp
+  vector.at(index);
+#+end_src
+
+**** Glint
+#+begin_src glint-ts
+  @dynamic_array[index];
+#+end_src
+
+*** Range-based For Loop
+
+**** C++
+#+begin_src cpp
+  for (auto elem : vector) {}
+#+end_src
+
+**** Glint
+#+begin_src glint-ts
+  for elem in dynamic_array, {};
+#+end_src
+
+** =std::print()=\slash{} =std::cout= <-> =print=
+
+*** Simple
+
+**** C++
+#+begin_src cpp
+  std::print("{}", value);
+#+end_src
+
+**** Glint
+#+begin_src glint-ts
+  print value;
+#+end_src
+
+*** With Newline
+
+**** C++
+#+begin_src cpp
+  std::print("{}\n", value);
+  std::println("{}", value);
+  std::cout << value << '\n';
+  std::cout << value << std::endl;
+#+end_src
+
+**** Glint
+#+begin_src glint-ts
+  print value, `\n`;
+#+end_src
+
