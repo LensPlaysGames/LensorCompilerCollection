@@ -1,0 +1,13 @@
+* LCC End-to-End Testing Framework
+
+Written in Emacs Lisp, RunTest is a framework for compiling programs using LCC, running them, and asserting their output (status and stdout).
+
+** Writing Tests
+
+Test Declarations are written in Org mode, a markup language native to Emacs (but also supported by many other editors).
+
+Each test is defined in it's own org file within the =runtest/corpus/= directory.
+
+Tests consist of a single headline, the value of which is the human readable name of the test.
+
+Under that headline, there are three blocks expected: one code block, and two example blocks. Each block should be named (using =#+NAME: <name>=), where =<name>= is one of =source= (the test input, passed to LCC), =status= (the expected program exit status), or =output= (the expected program output).
