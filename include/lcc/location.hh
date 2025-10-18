@@ -42,6 +42,7 @@ struct Location {
         if (not a.is_valid() or not b.is_valid()) return;
         pos = std::min<u32>(a.pos, b.pos);
         len = u16(std::max<u32>(a.pos + a.len, b.pos + b.len) - pos);
+        file_id = a.file_id;
     }
 
     // Return true if the given location is valid and points to the same file

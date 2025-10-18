@@ -35,17 +35,17 @@ class CharacterRange {
     } encoding{Encoding::UTF8};
 
 public:
-    CharacterRange(File* f)
+    explicit CharacterRange(File* f)
         : curr(f->data()),
           end(f->data() + f->size()),
           begin(f->data()) {}
 
-    CharacterRange(File* f, usz pos, usz len)
+    explicit CharacterRange(File* f, usz pos, usz len)
         : curr(f->data() + std::min(pos, f->size() - 1)),
           end(f->data() + std::min(pos + len, f->size())),
           begin(f->data()) {}
 
-    CharacterRange(std::string_view s)
+    explicit CharacterRange(std::string_view s)
         : curr(s.data()),
           end(s.data() + s.size()),
           begin(s.data()) {}
@@ -196,6 +196,12 @@ struct Lexer {
     explicit Lexer(detail::CharacterRange chs) : chars(chs) {}
     Lexer(Context* ctx, detail::CharacterRange chs)
         : chars(chs), context(ctx) {}
+    Lexer(Context* ctx, std::string_view source)
+        : chars(detail::CharacterRange(source)), context(ctx) {}
+    Lexer(Context* ctx, File* file)
+        : chars(detail::CharacterRange(file)), context(ctx) {
+        tok.location.file_id = (decltype(tok.location.file_id)) file->file_id();
+    }
 
     [[nodiscard]]
     auto CurrentOffset() const -> u32 { return chars.current_offset(); }
