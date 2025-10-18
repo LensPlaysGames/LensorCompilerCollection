@@ -902,7 +902,14 @@ void lcc::glint::Sema::AnalyseModule() {
         //   Assign dynarray.capacity to dynarray.capacity * 2
         "    dynarray.capacity *= 2;"
         "  };"
-        "};";
+        "};"
+        "print__putchar_each :: template(dynarray : expr)"
+        "  cfor"
+        "      i :: 0;"
+        "      i < dynarray.size;"
+        "      i += 1;"
+        "    putchar @dynarray[i];";
+
     auto& f = context->create_file(
         "sema_templates.g",
         std::vector<char>{templates_source.begin(), templates_source.end()}
@@ -928,11 +935,19 @@ void lcc::glint::Sema::AnalyseModule() {
     // time it's needed is because it may cause iterator invalidation if
     // analysing the functions causes a function to be added to the list.
 
+    // Glint's `print` requires these...
     DeclareImportedGlobalFunction(
         "puts",
         Type::Void,
         {{"ptr", Type::VoidPtr, {}}}
     );
+    DeclareImportedGlobalFunction(
+        "putchar",
+        Type::Void,
+        {{"c", FFIType::CInt(mod), {}}}
+    );
+
+    // Dynamic array operations require these...
     DeclareImportedGlobalFunction(
         "malloc",
         Type::VoidPtr,
@@ -2203,7 +2218,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 return;
             }
             if (subscript->lhs()->type()->is_dynamic_array()) {
-                // subscript of dynamic array on rhs of += is an insertion operation.
+                // subscript of dynamic array on lhs of += is an insertion operation.
                 auto dynarray_expr = subscript->lhs();
                 auto index_expr = subscript->rhs();
 
@@ -2217,27 +2232,12 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     return;
                 }
 
-                // TODO: Use a template for this mess. It would be cool if sema could
-                // parse a custom "file" of named templates, and use those to do
-                // expansions and rewrites, instead of having to do it all in code...
-
                 // template(dynarray : expr, index : expr, value : expr) {
                 //   if index < 0 or index > dynarray.size, {
                 //     exit 1;
                 //   };
                 //   ;; If we need to grow, do that
-                //   if dynarray.size >= dynarray.capacity - 1, {
-                //       ;; Allocate memory, capacity * 2
-                //       newmem :: malloc 2 dynarray.capacity;
-                //       ;; Copy <size> elements into newly-allocated memory
-                //       memcpy newmem, dynarray.data, dynarray.size;
-                //       ;; De-allocate old memory
-                //       free dynarray.data;
-                //       ;; Assign dynarray.data to newly-allocated memory
-                //       dynarray.data := newmem;
-                //       ;; Assign dynarray.capacity to dynarray.capacity * 2
-                //       dynarray.capacity *= 2;
-                //   };
+                //   dynarray_grow dynarray;
                 //   ;; Copy size - index elements forward one element starting at given index
                 //   memmove dynarray.data[index + 1], dynarray.data[index], dynarray.size - index;
                 //   ;; Insert given element at index, now that everything is moved out of the
@@ -2270,6 +2270,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
                     auto exit_ref = new (mod) NameRefExpr("exit", mod.global_scope(), {});
                     auto status_literal = new (mod) IntegerLiteral(1, {});
+                    // TODO: When user defines oob_access handler, make then a block and call
+                    // that handler.
                     auto then_outofbounds = new (mod) CallExpr(exit_ref, {status_literal}, {});
 
                     auto if_outofbounds = new (mod) IfExpr(
@@ -2372,18 +2374,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     break;
                 }
                 // Generate following pseudo-code:
-                //   if b->lhs().size >= b->lhs().capacity - 1, {
-                //       // Allocate memory, capacity * 2
-                //       newmem :: malloc 2 b->lhs().capacity;
-                //       // Copy <size> elements into newly-allocated memory
-                //       memcpy newmem, b->lhs().data, b->lhs().size;
-                //       // De-allocate old memory
-                //       free b->lhs().data;
-                //       // Assign b->lhs().data to newly-allocated memory
-                //       b->lhs().data := newmem;
-                //       // Assign b->lhs().capacity to b->lhs().capacity * 2
-                //       b->lhs().capacity *= 2;
-                //   };
+                //   dynarray_grow b->lhs();
                 //   @b->lhs().data[b->lhs().size] := b->rhs();
                 //   b->lhs().size += 1;
 
@@ -2462,25 +2453,46 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             }
 
             // Generate following pseudo-code:
-            //   if b->lhs().size >= b->lhs().capacity - 1, {
-            //       // Allocate memory, capacity * 2
-            //       newmem :: malloc 2 b->lhs().capacity;
-            //       // Copy <size> elements into newly-allocated memory
-            //       memcpy newmem[1], b->lhs().data[0], b->lhs().size;
-            //       // De-allocate old memory
-            //       free b->lhs().data;
-            //       // Assign b->lhs().data to newly-allocated memory
-            //       b->lhs().data := newmem;
-            //       // Assign b->lhs().capacity to b->lhs().capacity * 2
-            //       b->lhs().capacity *= 2;
-            //   } else {
-            //       // Copy <size> elements at offset of 1 (move current elements by 1)
-            //       memmove b->lhs().data[1], b->lhs().data[0], b->lhs().size;
-            //   };
+            //   dynarray_grow b->lhs();
+            //   memmove b->lhs().data[1], b->lhs().data[0], b->lhs().size;
             //   @b->lhs().data := b->rhs();
             //   b->lhs().size += 1;
 
-            LCC_TODO("GlintSema: Handle dynamic array prepend with {}", ToString(b->op()));
+            auto dyn_data = new (mod) MemberAccessExpr(b->lhs(), "data", {});
+            auto dyn_size = new (mod) MemberAccessExpr(b->lhs(), "size", {});
+
+            // dynarray_grow b->lhs();
+            auto grow_if = new (mod) CallExpr(named_template("dynarray_grow"), {b->lhs()}, {});
+
+            // memmove b->lhs().data[1], b->lhs().data, b->lhs().size();
+            auto memmove_ref
+                = new (mod) NameRefExpr("memmove", mod.global_scope(), {});
+            auto memmove_dest
+                = new (mod) BinaryExpr(TokenKind::LBrack, dyn_data, new (mod) IntegerLiteral(1, {}), {});
+            auto memmove_source
+                = dyn_data;
+            auto memmove_size
+                = dyn_size;
+            auto call_memmove = new (mod) CallExpr(
+                memmove_ref,
+                {memmove_dest, memmove_source, memmove_size},
+                {}
+            );
+
+            // @b->lhs().data := b->rhs();
+            auto dereference_subscript = new (mod) UnaryExpr(TokenKind::At, dyn_data, false, {});
+            auto assign = new (mod) BinaryExpr(TokenKind::ColonEq, dereference_subscript, b->rhs(), {});
+
+            // b->lhs().size += 1;
+            auto update_size = new (mod) BinaryExpr(
+                TokenKind::PlusEq,
+                dyn_size,
+                new (mod) IntegerLiteral(1, {}),
+                {}
+            );
+
+            *expr_ptr = new (mod) BlockExpr({grow_if, call_memmove, assign, update_size}, b->location());
+            (void) Analyse(expr_ptr);
         } break;
 
         case TokenKind::And:
@@ -3371,12 +3383,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             return;
         }
 
-        // TODO: Incorrect and incomplete!
         if (n == "__glintprint") {
-            // __glintprint 42; ;; -> { tmp :: format 42; puts(tmp.data); -tmp; };
-
-            fmt::print("Glint's `print` is still a WIP: !BEWARE BUGS!\n");
-
             std::vector<Expr*> exprs{};
             for (auto& arg : expr->args()) {
                 if (not Analyse(&arg)) {
@@ -3390,6 +3397,18 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     expr->set_sema_errored();
                     Error(arg->location(), "Argument to print has void type; no formatter available");
                     return;
+                }
+
+                // print x:byte -> putchar x
+                bool arg_is_byte = arg->type()->is_byte();
+                if (arg_is_byte) {
+                    auto print_call = new (mod) CallExpr(
+                        new (mod) NameRefExpr("putchar", mod.global_scope(), expr->location()),
+                        {arg},
+                        expr->location()
+                    );
+                    exprs.emplace_back(print_call);
+                    continue;
                 }
 
                 // Just call puts on byte pointers
@@ -3410,17 +3429,12 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 bool arg_is_dynamic_array_of_byte
                     = arg->type()->strip_references()->is_dynamic_array() and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
                 if (arg_is_dynamic_array_of_byte) {
-                    auto member_access = new (mod) MemberAccessExpr(
-                        arg,
-                        "data",
-                        expr->location()
+                    auto print_call = new (mod) CallExpr(
+                        named_template("print__putchar_each"),
+                        {arg},
+                        {}
                     );
-                    auto puts_call = new (mod) CallExpr(
-                        new (mod) NameRefExpr("puts", mod.global_scope(), expr->location()),
-                        {member_access},
-                        expr->location()
-                    );
-                    exprs.emplace_back(puts_call);
+                    exprs.emplace_back(print_call);
                     continue;
                 }
 
@@ -3465,21 +3479,18 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 // formattmp :[byte] = format arg;
                 exprs.emplace_back(*format_decl);
 
-                // member access on dynamic array from format call (to get pointer for puts)
-                // NOTE: Valid members defined in `ast.hh` in DynamicArrayType declaration.
-                auto member_access = new (mod) MemberAccessExpr(
-                    new (mod) NameRefExpr(format_decl->name(), scope, {}),
-                    "data",
-                    expr->location()
+                // template(dynarray : expr)
+                //   cfor
+                //       i :: 0;
+                //       i < dynarray.size;
+                //       i += 1;
+                //     putchar @dynarray[i];
+                auto print_call = new (mod) CallExpr(
+                    named_template("print__putchar_each"),
+                    {*format_decl},
+                    {}
                 );
-                auto puts_call = new (mod) CallExpr(
-                    new (mod) NameRefExpr("puts", mod.global_scope(), expr->location()),
-                    {member_access},
-                    expr->location()
-                );
-
-                // puts formattmp.data;
-                exprs.emplace_back(puts_call);
+                exprs.emplace_back(print_call);
 
                 // -formattmp;
                 auto unary = new (mod) UnaryExpr(
@@ -3511,6 +3522,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         or ( //
             is<NameRefExpr>(expr->callee())
             and is<VarDecl>(as<NameRefExpr>(expr->callee())->target())
+            and as<VarDecl>(as<NameRefExpr>(expr->callee())->target())->init()
             and is<TemplateExpr>(as<VarDecl>(as<NameRefExpr>(expr->callee())->target())->init())
         )
     ) {

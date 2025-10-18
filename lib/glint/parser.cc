@@ -1241,15 +1241,14 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
     if (not container) return container.diag();
 
     // NOTE: If the user forgets to separate the container and the body, the
-    // container expression will end up being a call with the block body as an
+    // container expression will end up being a call with the body as an
     // argument.
 
     auto body = ParseExpr();
     if (not body) return body.diag();
 
     // TODO: We may want to create a RangedForExpr AST node and do this
-    // transformation in Sema. Currently sema has a hard time inserting
-    // declarations at the proper scope, however, so... yeah.
+    // transformation in Sema using sema templates...
 
     // Create init, condition, and increment expressions from loop variable
     // identifier and container expression.
