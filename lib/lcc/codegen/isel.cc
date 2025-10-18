@@ -37,8 +37,8 @@ static void calculate_defining_uses_for_block(
     MFunction& function,
     std::vector<usz> regs_seen,
     MBlock* block,
-    std::vector<MBlock*> visited,
-    std::vector<MBlock*> doubly_visited
+    std::vector<MBlock*>& visited,
+    std::vector<MBlock*>& doubly_visited
 ) {
     LCC_ASSERT(block, "Cannot calculate defining uses for NULL block");
 
@@ -75,13 +75,27 @@ static void calculate_defining_uses_for_block(
     for (auto successor : block->successors()) {
         // Copy registers seen.
         std::vector<usz> regs_seen_copy = {regs_seen};
-        calculate_defining_uses_for_block(function, regs_seen_copy, function.block_by_name(successor), visited, doubly_visited);
+        calculate_defining_uses_for_block(
+            function,
+            regs_seen_copy,
+            function.block_by_name(successor),
+            visited,
+            doubly_visited
+        );
     }
 }
 
 static void calculate_defining_uses(MFunction& function) {
     // Only calculate defining uses for blocks reachable from the entry point (first block).
-    calculate_defining_uses_for_block(function, {}, &function.blocks().front(), {}, {});
+    std::vector<MBlock*> visited{};
+    std::vector<MBlock*> doubly_visited{};
+    calculate_defining_uses_for_block(
+        function,
+        {},
+        &function.blocks().front(),
+        visited,
+        doubly_visited
+    );
 }
 
 void select_instructions(Module* mod, MFunction& function) {
