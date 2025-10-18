@@ -652,8 +652,8 @@ MIRBlockMatcher parse_block_matcher(std::span<char> contents, lcc::usz& offset) 
     auto block_name_begin = offset;
 
     if (not ToColonCurrentLine()) {
-        // ERROR: Expected block name followed by ':'
-        return {};
+        fmt::print("ERROR! Could not parse test matcher... (Expected colon ':' after block name)\n");
+        std::exit(1);
     }
 
     std::string block_name{
@@ -715,9 +715,8 @@ MIRFunctionMatcher parse_function_matcher(std::span<char> contents, lcc::usz& of
     auto function_name_begin = offset;
 
     if (not ToColonCurrentLine()) {
-        // ERROR: Expected function name followed by ':'
-        // TODO: Return meaningful error
-        return {};
+        fmt::print("ERROR! Could not parse test matcher... (Expected colon ':' after function name)\n");
+        std::exit(1);
     }
 
     std::string function_name{
@@ -735,6 +734,14 @@ MIRFunctionMatcher parse_function_matcher(std::span<char> contents, lcc::usz& of
     while (ConsumeTwoSpaces()) {
         auto m = parse_block_matcher(contents, offset);
         out.blocks.emplace_back(m);
+    }
+
+    // If there is not two spaces, then there is only one other possibility:
+    // another function. So, if we are certain there are not two spaces, but
+    // we /are/ at a space, there is an indentation error in the test matcher.
+    if (offset < contents.size() and contents[offset] == ' ') {
+        fmt::print("ERROR! Invalid indentation: Expected block or function name\n");
+        std::exit(1);
     }
 
     return out;
@@ -789,7 +796,7 @@ Test parse_test(std::vector<char>& inputs, lcc::usz& i) {
     };
     // Parse test name segment
     if (inputs.at(i) != '=') {
-        fmt::print("Could not parse tests... (didn't find opening '=' line)\n");
+        fmt::print("ERROR! Could not parse tests... (didn't find opening '=' line)\n");
         std::exit(1);
     }
     // Eat opening '=' line
@@ -886,33 +893,46 @@ std::string_view ToString(const lcc::Target* t) {
 int main(int argc, char** argv) {
     lcc::utils::Colours C{true};
     {
-        // TODO: Read all files recursively in corpus/
-        auto inputs = lcc::File::Read("corpus/parameters.txt");
-        lcc::usz i{0};
-        while (i < inputs.size()) {
-            auto t = parse_test(inputs, i);
-            if (t.should_skip) continue;
-            fmt::print("{}\n", t.name);
-            for (auto m : t.matchers) {
-                fmt::print("  {}: ", ToString(m.target));
-                if (run_test(
-                        m.matcher,
-                        t.source,
-                        m.target,
-                        lcc::Format::gnu_as_att_assembly,
-                        0,
-                        ""
-                    )) {
-                    fmt::print(
-                        "{}PASSED{}\n",
-                        C(lcc::utils::Colour::BoldGreen),
-                        C(lcc::utils::Colour::Reset)
-                    );
-                } else fmt::print(
-                    "{}FAILED{}\n",
-                    C(lcc::utils::Colour::BoldRed),
-                    C(lcc::utils::Colour::Reset)
-                );
+        // Read all files in corpus/
+        // TODO: Recursively
+        for (const auto& entry : std::filesystem::directory_iterator("corpus")) {
+            if (entry.is_regular_file()) {
+                fmt::print("{}:\n", entry.path().lexically_normal().string());
+
+                auto inputs = lcc::File::Read(entry.path());
+                lcc::usz i{0};
+                while (i < inputs.size()) {
+                    auto t = parse_test(inputs, i);
+                    if (t.should_skip) continue;
+                    fmt::print("{}\n", t.name);
+                    for (auto m : t.matchers) {
+                        fmt::print("  {}: ", ToString(m.target));
+                        // Run the test with the given matcher and target,
+                        // and print a useful message.
+                        if (
+                            run_test(
+                                m.matcher,
+                                t.source,
+                                m.target,
+                                lcc::Format::gnu_as_att_assembly,
+                                0,
+                                ""
+                            )
+                        ) {
+                            fmt::print(
+                                "{}PASSED{}\n",
+                                C(lcc::utils::Colour::BoldGreen),
+                                C(lcc::utils::Colour::Reset)
+                            );
+                        } else fmt::print(
+                            "{}FAILED{}\n",
+                            C(lcc::utils::Colour::BoldRed),
+                            C(lcc::utils::Colour::Reset)
+                        );
+                    }
+                }
+            } else if (entry.is_directory()) {
+                // TODO: Recurse...
             }
         }
     }
