@@ -35,6 +35,7 @@ const lcc::Target* default_target =
 const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
 
 bool option_print;
+bool option_suppress{true};
 
 struct GlintTest : langtest::Test {
     static bool warning_reported(lcc::Context& ctx) {
@@ -55,11 +56,11 @@ struct GlintTest : langtest::Test {
         // Parse Glint source code using the Glint parser into a Glint module for Glint fun.
         // NOTE: While we can get "location info" by creating a file here, it
         // isn't really useful as it doesn't point to a real file.
-        //     auto& f = context.create_file(
-        //         name,
-        //         std::vector<char>{source.begin(), source.end()}
-        //     );
-        auto mod = lcc::glint::Parser::Parse(&context, source);
+        auto& f = context.create_file(
+            name,
+            std::vector<char>{source.begin(), source.end()}
+        );
+        auto mod = lcc::glint::Parser::Parse(&context, f);
 
         // Save diagnostics reported during parsing, and clear the context's
         // diagnostics so that we can separate parse/sema diagnostics.
@@ -320,6 +321,8 @@ struct GlintTest : langtest::Test {
                 lcc::Context::DoNotStopatMIR //
             } //
         };
+        if (option_suppress)
+            context.suppress_diagnostics();
 
         auto parse_info = parse(context);
         bool failed_parse = context.has_error();
@@ -452,6 +455,7 @@ void help() {
         "  -h, --help  ::  Show this help\n"
         "  -a, --all   ::  Print messages for every test\n"
         "  -c, --count ::  Print counts at the end and for every test file processed\n"
+        "  -d, --diags ::  Emit LCC Diagnostics (makes output busy)\n"
         "OPTIONS:\n"
         "  -r, --read <filepath> ::  Output the AST parsed from the given\n"
         "          source file, such that it could be used as the matcher\n"
@@ -507,6 +511,10 @@ int main(int argc, const char** argv) {
         }
         if (arg.starts_with("-c") or arg.starts_with("--count")) {
             option_count = true;
+            continue;
+        }
+        if (arg.starts_with("-d") or arg.starts_with("--diag")) {
+            option_suppress = false;
             continue;
         }
         if (arg.starts_with("-r") or arg.starts_with("--read")) {

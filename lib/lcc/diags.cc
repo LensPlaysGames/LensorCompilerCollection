@@ -1,5 +1,6 @@
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
+#include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/platform.hh>
 
@@ -112,7 +113,16 @@ void lcc::Diag::print() {
     using enum utils::Colour;
 
     // If this diagnostic is suppressed, do nothing.
-    if (kind == Kind::None) return;
+    if (kind == Kind::None)
+        return;
+
+    // If the diagnostic is an error, set the error flag.
+    if (context and kind == Kind::Error)
+        context->set_error();
+
+    // If all diagnostics are suppressed, do nothing.
+    if (context and context->diagnostics_are_suppressed())
+        return;
 
     // Don’t print the same diagnostic twice.
     defer { kind = Kind::None; };
@@ -132,17 +142,16 @@ void lcc::Diag::print() {
         attached.clear();
     };
 
-    // If the diagnostic is an error, set the error flag.
-    if (kind == Kind::Error and context) context->set_error();
-
     // If there is no context, then there is also no location info.
     if (not context) {
         PrintDiagWithoutLocation();
         return;
     }
 
+    LCC_ASSERT(context);
+
     // If the location is invalid, either because the specified file does not
-    // exists, its position is out of bounds or 0, or its length is 0, then we
+    // exist, its position is out of bounds or 0, or its length is 0, then we
     // skip printing the location.
     utils::Colours C(ShouldUseColour());
     const auto& fs = context->files();

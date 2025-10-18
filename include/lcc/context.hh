@@ -70,6 +70,7 @@ private:
     std::vector<std::unique_ptr<File>> owned_files;
 
     std::vector<DiagnosticReport> _diagnostics;
+    bool _suppress_diagnostics{false};
 
     /// Error flag. This is set-only.
     mutable bool error_flag = false;
@@ -145,6 +146,17 @@ public:
         auto old = error_flag;
         error_flag = true;
         return old;
+    }
+
+    /// Check if all diagnostics are suppressed.
+    [[nodiscard]]
+    bool diagnostics_are_suppressed() const { return _suppress_diagnostics; }
+
+    /// Supress all diagnostics
+    ///
+    /// \return The previous value of the error flag.
+    void suppress_diagnostics() {
+        _suppress_diagnostics = true;
     }
 
     auto report_diagnostic(Diag& d) {
