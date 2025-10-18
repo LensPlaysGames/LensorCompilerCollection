@@ -1,0 +1,29 @@
+* The History of the Lensor Compiler Collection
+
+Names: FUNCompiler, intc, Lensor Compiler Collection
+
+** The Beginning
+
+Watch it live on YouTube: @lens_r.
+
+For a long time, development did not happen outside of public livestreams. You can see me stumble through creating the project, learning as I go. I didn't know what to call it, but I knew why I was doing it: for fun. So, as original as I am, I named it the fun compiler (stylized FUNCompiler). After many episodes, I decided it would be better to work on the compiler off-camera, and do updates at the beginning of the livestreams; this meant development could move a lot quicker.
+
+For a long time, this compiler was for an unnamed, unspecified, made-up language. After getting tired of reading and writing "the language that FUNCompiler compiles", I decided it needed a proper noun. After hemming and hawing, I settled on Intercept... You may notice that is still not the name of any language included in the compiler today, and that's because, when I specified and set-in-stone the Intercept syntax and semantics, I decided to name the specified language something else entirely, as they differed quite a bit, but just not enough to not be confusing.
+
+** The First Major Rewrite
+
+Originally, development was restricted to the C language.
+
+Eventually, it became a giant mess of macros and C-magic, and, with great pressure from the viewers of the livestreams, the decision was made to switch over to C++. This meant re-writing /everything/ we had done so far in C in C++. This wasn't exactly a pleasant endeavour, nor was it a quick one. With some help, it was accomplished.
+
+** Loss of Sanity
+
+Viewer pressure, Discord drama, losing loved ones, and mental health all contributed to "an extreme bout of self-aggression", let's call it. I broke down, lashed out, and gave up. I came to the conclusion that, since the things I make (programs, videos, etc) will never actually be perfect, or "finished", that they aren't worth doing at all. I disagree with this now, but for a long time (2 years) I felt that way.
+
+** Resurgence
+
+Basically, the moral of the story is... I get knocked down, but, then I get up again.
+
+After feeling at least /somewhat/ back in control of my own life, I started to realize I hadn't been myself for a long time. I liked the person I was, with hobbies, and hope... I disliked the person I had become, with boredom, and cope. Luckily, the first step in solving a problem is acknowledging it.
+
+In Q3 2025, I once again began working on LCC, dedicated not to making it perfect, but to making progress. My language will never be "done". My compiler will never be free of bugs, or never crash, or handle every case perfectly well. Hell, the most popular compilers in the world still have all those issues, and they've had them for decades. I'm not special; the things I make will be broken, and buggy. But, that doesn't mean it's not worth doing in the first place. You have to walk before you can run.
