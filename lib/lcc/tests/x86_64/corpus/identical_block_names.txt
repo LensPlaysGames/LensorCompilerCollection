@@ -1,0 +1,23 @@
+================
+Identical Block Names
+================
+
+func1 (internal): glintcc void(i64 %0):
+  bb0:
+    return
+
+func2 (internal): glintcc void(i64 %0):
+  bb0:
+    return
+
+--sysv--
+
+func1:
+  bb0:
+    ret
+
+func2:
+  bb01:
+    ret
+
+memcpy:
