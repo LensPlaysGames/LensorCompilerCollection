@@ -14,7 +14,7 @@ foo[2] += `4`;
 -foo;
 #+end_src
 
-This is the status Glint exits with when an dynamic array OOB occurs.
+This is the status Glint exits with when a dynamic array OOB occurs.
 #+NAME: status
 #+begin_example
 1

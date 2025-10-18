@@ -4,6 +4,12 @@ An =interface= expression will be a restriced form of a template expression.
 
 The main restriction regards enforcing the /un/-expanded expression to be a type expression. This allows the compiler to know at least /something/ about the expression the template produces, like the members defined on a composite type. This means for, say, a container sort of template, the compiler knows those members exist (and possibly their type, if not part of a template parameter thing). This would ensure that, as detailed as the =interface= is, is as correct as our type checking can be within the unexpanded template body. This means that more errors in templates are caught /before/ expansion.
 
+* (Optional Compiler Feature/Extension) Allow Override of runtime dynamic array oob access handler.
+
+By default, it basically just does =std::exit(1)=, and that's not always useful for a user. We should allow the user to define overrides of these handlers, if they want.
+
+Basically, sema would look for a specific function name (i.e. =__oob_access=), ensure a specific signature, and then insert a call to that function whenever it generates it's oob access handler (but only if the function exists). It would still call =std::exit(1)= after the custom handler is invoked, just in case.
+
 * Module Partitions
 
 Basically, partitions will be a way to open up a named scope without any extra semantics.
