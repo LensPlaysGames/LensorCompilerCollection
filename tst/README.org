@@ -1,1 +1,1 @@
-* Sorry, Tests Have Been Removed Temporarily
+* See TESTING.Org in Base of Repository
