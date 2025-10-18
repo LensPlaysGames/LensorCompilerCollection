@@ -1244,6 +1244,11 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
     // container expression will end up being a call with the body as an
     // argument.
 
+    // Eat optional comma separating container and body.
+    // If we don't do this here, ParseExpr gets confused and thinks we are
+    // parsing an empty expression.
+    ConsumeExpressionSeparator(ExpressionSeparator::Soft);
+
     auto body = ParseExpr();
     if (not body) return body.diag();
 

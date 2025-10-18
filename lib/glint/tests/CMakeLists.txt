@@ -4,12 +4,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 cmake_minimum_required(VERSION 3.14)
 project(glinttests)
 
-add_subdirectory("../../../" "lcc")
-set_target_properties(
-  lcc
-  PROPERTIES
-  EXCLUDE_FROM_ALL ON
-)
+if (NOT TARGET lcc)
+  add_subdirectory("../../../" "lcc" EXCLUDE_FROM_ALL)
+endif()
 
 add_executable(glinttests main.cpp)
 target_link_libraries(glinttests options)

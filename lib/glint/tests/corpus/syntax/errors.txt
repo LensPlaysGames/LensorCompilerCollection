@@ -1,0 +1,13 @@
+================
+Range-based Loop
+:fail_parse
+================
+
+;; User forgets separator between container and body expression, container
+;; expression becomes call of container with body as argument; error
+;; because when we try to parse the body, we get an expression separator,
+;; and that doesn't actually make any sense to get an empty expression
+;; when we actually do expect one.
+for x in y z;
+
+
