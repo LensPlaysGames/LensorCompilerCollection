@@ -36,6 +36,7 @@
   glint-ts-mode-indent-offset 2
   "Amount of spaces to be used as a unit of indentation.")
 
+;; TODO: cfor weirdness, non-block if/cfor/for bodies.
 (defvar glint-ts-mode--indent-rules
   '((glint
 
@@ -86,11 +87,13 @@
      (type_ffi)        @font-lock-type-face
      (type_pointer)    @font-lock-type-face
      (type_primitive)  @font-lock-type-face
-     (type_reference)  @font-lock-type-face)
+     (type_reference)  @font-lock-type-face
+     (type_pointer_to_pointer)    @font-lock-type-face)
 
    :feature 'number
    `((integer_literal) @font-lock-number-face
-     (bool_literal)    @font-lock-number-face)
+     (bool_literal)    @font-lock-number-face
+     (byte_literal)    @font-lock-number-face)
 
    :feature 'string
    `((string_literal) @font-lock-string-face)
@@ -99,12 +102,12 @@
    `([
       "import" "module"
       "if" "else" "while"
+      "cfor" "for" "in"
       "not"
       "and" "or"
       "external" "export"
       "return"
-      "supplant"
-      "match"
+      "supplant" "match" "print"
       ]
      @font-lock-keyword-face)
 
@@ -113,6 +116,7 @@
       "+" "-" "*" "/" "&" "|" "^" "=" "!=" "<" "<=" ">" ">="
       "::" ":" ":="
       "++" "--"
+      "+=" "-=" "*=" "/=" "%=" "~=" "&=" "|=" "^=" "[="
       ]
      @font-lock-operator-face)
 
