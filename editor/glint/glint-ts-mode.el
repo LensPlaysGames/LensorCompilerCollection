@@ -37,9 +37,15 @@
   "Amount of spaces to be used as a unit of indentation.")
 (unless glint-ts-mode-indent-offset (setq glint-ts-mode-indent-offset 2))
 
-;; TODO: cfor weirdness, non-block if/cfor/for bodies.
 (defvar glint-ts-mode--indent-rules
   `((glint
+
+     ( ;; rule-begin
+      ;; CHILDREN OF SOURCE FILE ARE NOT INDENTED
+      (or (parent-is "source_file"))
+      column-0 ;; anchor
+      0 ;; offset
+      ) ;; rule-end
 
      ( ;; rule-begin
       ;; BLOCK CLOSER REMOVES INDENT
@@ -74,6 +80,14 @@
       ;; Presence of not "node-is block" toggles GNU style curly braces (2
       ;; spaces for braces on newline, 2 spaces for stuff inside braces).
       (and (parent-is "rangedfor") (field-is "body") (not (node-is "block")))
+      standalone-parent ;; anchor
+      glint-ts-mode-indent-offset ;; offset
+      ) ;; rule-end
+
+     ( ;; rule-begin
+      ;; UNARY EXPRESSION CAUSES INDENT (if operand on new line)
+      (or (parent-is "addressof") (parent-is "negate") (parent-is "decrement")
+          (parent-is "dereference") (parent-is "increment") (parent-is "logical_negate"))
       standalone-parent ;; anchor
       glint-ts-mode-indent-offset ;; offset
       ) ;; rule-end
