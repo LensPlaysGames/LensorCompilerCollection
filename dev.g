@@ -10,10 +10,8 @@ foo += `\0`;
 foo[2] += `0`;
 
 ;; ranged for
-for c in foo, {
-  print c;
-  print `\n`;
-};
+for c in foo,
+  print c, `\n`;
 
 cfor
     i :: 0;
@@ -22,7 +20,6 @@ cfor
   print @foo[i];
 
 ;; print
-print foo;
-print `\n`;
+print foo, `\n`;
 
 -foo;

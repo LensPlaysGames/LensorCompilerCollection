@@ -35,10 +35,11 @@
 (defcustom
   glint-ts-mode-indent-offset 2
   "Amount of spaces to be used as a unit of indentation.")
+(unless glint-ts-mode-indent-offset (setq glint-ts-mode-indent-offset 2))
 
 ;; TODO: cfor weirdness, non-block if/cfor/for bodies.
 (defvar glint-ts-mode--indent-rules
-  '((glint
+  `((glint
 
      ( ;; rule-begin
       ;; BLOCK CLOSER REMOVES INDENT
@@ -50,6 +51,29 @@
      ( ;; rule-begin
       ;; BLOCK EXPRESSION CAUSES INDENT
       (or (parent-is "block")) ;; matcher
+      standalone-parent ;; anchor
+      glint-ts-mode-indent-offset ;; offset
+      ) ;; rule-end
+
+     ( ;; rule-begin
+      ;; CFOR KEYWORD CAUSES DOUBLE INDENT FOR INIT, CONDITION, INCREMENT
+      (and (parent-is "cfor") (not (field-is "body")))
+      standalone-parent ;; anchor
+      ,(* 2 glint-ts-mode-indent-offset) ;; offset
+      ) ;; rule-end
+
+     ( ;; rule-begin
+      ;; CFOR KEYWORD CAUSES SINGLE INDENT FOR BODY
+      (and (parent-is "cfor") (field-is "body"))
+      standalone-parent ;; anchor
+      glint-ts-mode-indent-offset ;; offset
+      ) ;; rule-end
+
+     ( ;; rule-begin
+      ;; FOR KEYWORD CAUSES SINGLE INDENT FOR BODY
+      ;; Presence of not "node-is block" toggles GNU style curly braces (2
+      ;; spaces for braces on newline, 2 spaces for stuff inside braces).
+      (and (parent-is "rangedfor") (field-is "body") (not (node-is "block")))
       standalone-parent ;; anchor
       glint-ts-mode-indent-offset ;; offset
       ) ;; rule-end
