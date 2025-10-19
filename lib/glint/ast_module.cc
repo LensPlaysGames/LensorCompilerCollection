@@ -108,7 +108,7 @@ auto to_bytes(const T object) -> std::array<lcc::u8, sizeof(T) / sizeof(lcc::u8)
 template <typename T>
 auto from_bytes(std::array<lcc::u8, sizeof(T)> bytes) -> T {
     T out{};
-    std::copy(bytes.begin(), bytes.end(), &out);
+    std::memcpy(&out, bytes.data(), sizeof(T));
     return out;
 }
 
