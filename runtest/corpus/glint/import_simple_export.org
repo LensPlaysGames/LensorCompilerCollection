@@ -1,0 +1,25 @@
+* Import Simple Export
+
+#+NAME: source
+#+begin_src glint-ts
+import foo;
+
+bar;
+#+end_src
+
+#+NAME: source
+#+begin_src glint-ts
+module foo;
+
+export bar : int = 42;
+#+end_src
+
+#+NAME: status
+#+begin_example
+42
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+

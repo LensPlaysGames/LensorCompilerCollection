@@ -1,0 +1,26 @@
+* Import Fixed Array Export
+
+#+NAME: source
+#+begin_src glint-ts
+  import foo;
+
+  bar[0];
+#+end_src
+
+#+NAME: source
+#+begin_src glint-ts
+  module foo;
+
+  export bar : [int 1];
+  @bar[0] := 69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+

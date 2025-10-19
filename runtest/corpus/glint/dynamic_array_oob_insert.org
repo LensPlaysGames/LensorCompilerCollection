@@ -23,3 +23,10 @@ This is the status Glint exits with when a dynamic array OOB occurs.
 #+NAME: output
 #+begin_example
 #+end_example
+
+TODO: When Glint is instructed to print debug information for runtime
+errors, this matcher should be used.
+#+NAME: output-debug
+#+begin_src emacs-lisp
+  (lambda (o) (string-search (downcase "Glint Runtime Error") (downcase o)))
+#+end_src
