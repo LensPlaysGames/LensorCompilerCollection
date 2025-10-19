@@ -66,6 +66,24 @@ How to do things in both.
   for elem in dynamic_array, {};
 #+end_src
 
+*** Manual For Loop
+
+**** C++
+#+begin_src cpp
+  for (auto i = 0; i < vector.size(); ++i) {}
+#+end_src
+
+**** Glint
+#+begin_src glint-ts
+  cfor
+      i :: 0;
+      i < dynamic_array.size();
+      i += 1;
+    {}
+#+end_src
+
+
+
 ** =std::print()=\slash{} =std::cout= <-> =print=
 
 *** Simple
@@ -95,3 +113,38 @@ How to do things in both.
   print value, `\n`;
 #+end_src
 
+** =std::variant<T>= <-> =sum=
+
+**** C++
+#+begin_src cpp
+  std::variant<int, char>;
+
+  std::variant<int, char> foo;
+
+  foo = 420;
+
+  static_assert(std::variant_size_v<decltype(foo)> == 2);
+  if (std::holds_alternative<int>(foo)) {
+      std::println("69");
+  } else if (std::holds_alternative<char>(foo)) {
+      std::println("42");
+  } else std::exit(1);
+#+end_src
+
+**** Glint
+#+begin_src glint-ts
+  ;; Note: Glint's sum type can represent multiple members of the same type,
+  ;; distinguished by name.
+  sum { x : int; y : int; z : byte; };
+
+  foo : sum { x : int; y : int; z : byte; };
+
+  foo.y := 420;
+
+  ;; `match` already staticly asserts all members are handled.
+  match foo, {
+    .x  print 69;
+    .y  print foo.y;
+    .z  print 42;
+  };
+#+end_src
