@@ -1,0 +1,25 @@
+* Import Simple Function Export
+
+#+NAME: source
+#+begin_src glint
+  import foo;
+
+  bar;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo;
+
+  export bar : int() = 69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+
