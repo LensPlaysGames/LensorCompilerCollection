@@ -103,54 +103,22 @@ void emit_gnu_att_assembly(
         );
     }
 
+    // Exported globals need to be visible to external programs; we use the
+    // .globl (global) directive for this.
+    // Imported globals /could/ be declared with .extern, but GNU as ignores
+    // these directives anyway, so we just don't emit them.
     for (auto* var : module->vars()) {
-        // From GNU as manual: `.extern` is accepted in the source program--for
-        // compatibility with other assemblers--but it is ignored. `as` treats all
-        // undefined symbols as external. That's why imported is ignored.
         for (auto n : var->names()) {
             if (IsExportedLinkage(n.linkage))
-                out += fmt::format("    .globl {}\n", n.name);
-        }
-
-        if (var->init()) {
-            for (auto n : var->names())
-                out += fmt::format("{}:\n", safe_name(n.name));
-            switch (var->init()->kind()) {
-                case Value::Kind::ArrayConstant: {
-                    auto* array_constant = as<ArrayConstant>(var->init());
-                    out += fmt::format(
-                        "    .byte {}\n",
-                        fmt::join(
-                            vws::transform(*array_constant, [&](char c) {
-                                return fmt::format("0x{:x}", int(c));
-                            }),
-                            ","
-                        )
-                    );
-                } break;
-
-                case Value::Kind::IntegerConstant: {
-                    auto* integer_constant = as<IntegerConstant>(var->init());
-                    LCC_ASSERT(integer_constant->type()->bytes() <= 8, "Oversized integer constant");
-                    // Represent bytes literally
-                    out += "    .byte ";
-                    u64 value = integer_constant->value().value();
-                    for (usz i = 0; i < integer_constant->type()->bytes(); ++i) {
-                        int byte = (value >> (i * 8)) & 0xff;
-                        out += fmt::format("0x{:x}", byte);
-                        if (i + 1 < integer_constant->type()->bytes())
-                            out += ", ";
-                    }
-                } break;
-
-                default:
-                    LCC_ASSERT(
-                        false,
-                        "Sorry, but global variable initialisation with value kind {} is not supported.",
-                        Value::ToString(var->init()->kind())
-                    );
-            }
-            out += '\n';
+                out += fmt::format(
+                    "    .globl {}\n"
+                    "    .type {},@object\n"
+                    "    .size {},{}\n",
+                    n.name,
+                    n.name,
+                    n.name,
+                    var->allocated_type()->bytes()
+                );
         }
     }
 
@@ -470,6 +438,98 @@ void emit_gnu_att_assembly(
             if (IsExportedLinkage(n.linkage))
                 out += fmt::format("    .size {}, .-{}\n", n.name, n.name);
         }
+    }
+
+    // Emit initialized global variable definitions in .data
+    bool init_vars_present{false};
+    for (auto* var : module->vars()) {
+        if (not var->init()) continue;
+
+        bool defines{false};
+        for (auto n : var->names()) {
+            if (n.linkage == Linkage::Exported) {
+                if (not init_vars_present) {
+                    out += "    .section .data\n";
+                    init_vars_present = true;
+                }
+                out += fmt::format("{}:\n", n.name);
+                defines = true;
+            }
+        }
+        if (not defines) continue;
+
+        LCC_ASSERT(var->init());
+        LCC_ASSERT(defines);
+
+        switch (var->init()->kind()) {
+            case Value::Kind::ArrayConstant: {
+                auto* array_constant = as<ArrayConstant>(var->init());
+                out += fmt::format(
+                    "    .byte {}\n",
+                    fmt::join(
+                        vws::transform(*array_constant, [&](char c) {
+                            return fmt::format("0x{:x}", int(c));
+                        }),
+                        ","
+                    )
+                );
+            } break;
+
+            case Value::Kind::IntegerConstant: {
+                auto* integer_constant = as<IntegerConstant>(var->init());
+                LCC_ASSERT(
+                    integer_constant->type()->bytes() <= x86_64::GeneralPurposeBytewidth,
+                    "Oversized integer constant"
+                );
+                // Represent bytes literally
+                out += "    .byte ";
+                u64 value = integer_constant->value().value();
+                for (usz i = 0; i < integer_constant->type()->bytes(); ++i) {
+                    int byte = (value >> (i * 8)) & 0xff;
+                    out += fmt::format("0x{:x}", byte);
+                    if (i + 1 < integer_constant->type()->bytes())
+                        out += ", ";
+                }
+            } break;
+
+            default:
+                LCC_ASSERT(
+                    false,
+                    "Sorry, but global variable initialisation with value kind {} is not supported.",
+                    Value::ToString(var->init()->kind())
+                );
+        }
+        out += '\n';
+    }
+
+    // Emit uninitialized global variable definitions in .bss
+    bool uninit_vars_present{false};
+    for (auto* var : module->vars()) {
+        if (var->init()) continue;
+
+        bool defines{false};
+        for (auto n : var->names()) {
+            if (n.linkage == Linkage::Exported) {
+                if (not uninit_vars_present) {
+                    out += ".section .bss\n";
+                    uninit_vars_present = true;
+                }
+                // Only emit align directive once, even if there are multiple exported
+                // names.
+                if (not defines)
+                    out += fmt::format(".align {}\n", var->allocated_type()->align_bytes());
+
+                out += fmt::format("{}:\n", n.name);
+                defines = true;
+            }
+        }
+        if (not defines) continue;
+
+        LCC_ASSERT(uninit_vars_present);
+        LCC_ASSERT(not var->init());
+        LCC_ASSERT(defines);
+
+        out += fmt::format(".zero {}\n", var->allocated_type()->bytes());
     }
 
     for (auto& section : module->extra_sections()) {
