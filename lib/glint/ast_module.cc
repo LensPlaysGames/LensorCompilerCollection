@@ -545,6 +545,17 @@ auto lcc::glint::Module::deserialise(
             replacement_type_index(zero_index + replacement_index) {}
     };
 
+    struct ArrayFixup : public BasicFixup {
+        u64 array_size;
+        ArrayFixup(
+            u16 zero_index,
+            ModuleDescription::TypeIndex fixup_index,
+            ModuleDescription::TypeIndex replacement_index,
+            u64 array_size_
+        ) : BasicFixup(zero_index, fixup_index, replacement_index),
+            array_size(array_size_) {}
+    };
+
     auto validate_fixup = [this, types_zero_index](const BasicFixup& fixup) {
         constexpr auto low_msg
             = "You probably forgot to account for the non-zero zero index into the types container.";
@@ -652,6 +663,7 @@ auto lcc::glint::Module::deserialise(
     std::vector<BasicFixup> ref_fixups{};
     std::vector<BasicFixup> dynarray_fixups{};
     std::vector<BasicFixup> view_fixups{};
+    std::vector<ArrayFixup> array_fixups{};
     std::vector<FunctionFixup> function_fixups{};
 
     for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
@@ -768,9 +780,16 @@ auto lcc::glint::Module::deserialise(
                     element_count_array[i] = module_metadata_blob.at(type_offset++);
                 auto element_count = from_bytes<u64>(element_count_array);
 
-                (void) element_type_index;
-                (void) element_count;
-                LCC_TODO("DESERIALISE: Implement ArrayType fixups and make one of those");
+                // Normally done in operator new of Type, but we do it manually here since
+                // we can't new the array type until we have the pointer to the element
+                // type, and we (may) have not deserialised that yet.
+                types.push_back(nullptr);
+                array_fixups.emplace_back(
+                    types_zero_index,
+                    type_index,
+                    element_type_index,
+                    element_count
+                );
             } break;
 
             // FunctionType:
@@ -878,6 +897,7 @@ auto lcc::glint::Module::deserialise(
         types[fixup.fixup_type_index] = new (*this) PointerType(
             types[fixup.replacement_type_index]
         );
+        types[fixup.fixup_type_index]->set_sema_done();
         types.erase(types.begin() + types_size);
     }
 
@@ -888,6 +908,7 @@ auto lcc::glint::Module::deserialise(
             types[fixup.replacement_type_index],
             {}
         );
+        types[fixup.fixup_type_index]->set_sema_done();
         types.erase(types.begin() + types_size);
     }
 
@@ -898,6 +919,7 @@ auto lcc::glint::Module::deserialise(
             types[fixup.replacement_type_index],
             nullptr
         );
+        types[fixup.fixup_type_index]->set_sema_done();
         types.erase(types.begin() + types_size);
     }
 
@@ -907,6 +929,21 @@ auto lcc::glint::Module::deserialise(
         types[fixup.fixup_type_index] = new (*this) ArrayViewType(
             types[fixup.replacement_type_index]
         );
+        types[fixup.fixup_type_index]->set_sema_done();
+        types.erase(types.begin() + types_size);
+    }
+
+    for (auto fixup : array_fixups) {
+        validate_fixup(fixup);
+        int types_size = int(types.size());
+        types[fixup.fixup_type_index] = new (*this) ArrayType(
+            types[fixup.replacement_type_index],
+            new (*this) ConstantExpr(
+                new (*this) IntegerLiteral(fixup.array_size, {}),
+                fixup.array_size
+            )
+        );
+        types[fixup.fixup_type_index]->set_sema_done();
         types.erase(types.begin() + types_size);
     }
 
@@ -954,6 +991,7 @@ auto lcc::glint::Module::deserialise(
         set_attr(FuncAttr::ReturnsTwice);
         set_attr(FuncAttr::Used);
 
+        types[fixup.function_type_index]->set_sema_done();
         types.erase(types.begin() + types_size);
     }
 
