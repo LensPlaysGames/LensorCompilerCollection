@@ -444,7 +444,8 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
         ModuleDescription::TypeIndex type_index = serialise(types_data, type_cache, decl->type());
         ModuleDescription::DeclarationHeader decl_hdr{
             u16(ModuleDescription::DeclarationHeader::get_kind(decl)),
-            type_index};
+            type_index
+        };
         auto decl_hdr_bytes = to_bytes(decl_hdr);
 
         // Prepare length

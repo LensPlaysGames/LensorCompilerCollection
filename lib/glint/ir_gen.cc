@@ -776,25 +776,25 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 } break;
                 case TokenKind::Lt: {
                     // Less Than
-                    if (lhs_expr->type()->is_signed_int(ctx) || rhs_expr->type()->is_signed_int(ctx))
+                    if (lhs_expr->type()->is_signed_int(ctx) or rhs_expr->type()->is_signed_int(ctx))
                         generated_ir[expr] = new (*module) SLtInst(lhs, rhs, expr->location());
                     else generated_ir[expr] = new (*module) ULtInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Gt: {
                     // Greater Than
-                    if (lhs_expr->type()->is_signed_int(ctx) || rhs_expr->type()->is_signed_int(ctx))
+                    if (lhs_expr->type()->is_signed_int(ctx) or rhs_expr->type()->is_signed_int(ctx))
                         generated_ir[expr] = new (*module) SGtInst(lhs, rhs, expr->location());
                     else generated_ir[expr] = new (*module) UGtInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Le: {
                     // Less Than or Equal To
-                    if (lhs_expr->type()->is_signed_int(ctx) || rhs_expr->type()->is_signed_int(ctx))
+                    if (lhs_expr->type()->is_signed_int(ctx) or rhs_expr->type()->is_signed_int(ctx))
                         generated_ir[expr] = new (*module) SLeInst(lhs, rhs, expr->location());
                     else generated_ir[expr] = new (*module) ULeInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Ge: {
                     // Greater Than or Equal To
-                    if (lhs_expr->type()->is_signed_int(ctx) || rhs_expr->type()->is_signed_int(ctx))
+                    if (lhs_expr->type()->is_signed_int(ctx) or rhs_expr->type()->is_signed_int(ctx))
                         generated_ir[expr] = new (*module) SGeInst(lhs, rhs, expr->location());
                     else generated_ir[expr] = new (*module) UGeInst(lhs, rhs, expr->location());
                 } break;
@@ -1632,7 +1632,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         case K::TypeAliasDecl:
         case K::FuncDecl:
         case K::OverloadSet:
-        case Expr::Kind::Template:
+        case K::Template:
             break;
     }
 }

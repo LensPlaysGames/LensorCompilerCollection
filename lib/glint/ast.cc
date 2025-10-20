@@ -1301,7 +1301,8 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
             LCC_UNREACHABLE();
         }
 
-        case lcc::glint::Type::Kind::Named: return lcc::as<lcc::glint::NamedType>(&t)->name();
+        case lcc::glint::Type::Kind::Named:
+            return lcc::as<lcc::glint::NamedType>(&t)->name();
 
         case lcc::glint::Type::Kind::DynamicArray: {
             auto elem_t = ToSource(*t.elem());

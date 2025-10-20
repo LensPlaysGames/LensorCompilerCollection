@@ -94,19 +94,22 @@ auto lcc::File::LoadFileData(const fs::path& path) -> std::vector<char> {
 #ifdef __linux__
     /// Open the file.
     int fd = open(path.c_str(), O_RDONLY);
-    if (fd == -1) Diag::Fatal("Could not open file \"{}\": {}", path.string(), strerror(errno));
+    if (fd == -1)
+        Diag::Fatal("Could not open file \"{}\": {}", path.string(), strerror(errno));
     defer { close(fd); };
 
     /// Determine the file size.
-    struct stat st {};
-    if (fstat(fd, &st) == -1) Diag::Fatal("Could not stat file \"{}\": {}", path.string(), strerror(errno));
+    struct stat st{};
+    if (fstat(fd, &st) == -1)
+        Diag::Fatal("Could not stat file \"{}\": {}", path.string(), strerror(errno));
 
     /// If the file is empty, return an empty string.
     if (st.st_size == 0) return {};
 
     /// Map the file into memory.
     void* ptr = mmap(nullptr, static_cast<usz>(st.st_size), PROT_READ, MAP_PRIVATE, fd, 0);
-    if (ptr == MAP_FAILED) Diag::Fatal("Could not map file \"{}\": {}", path.string(), strerror(errno));
+    if (ptr == MAP_FAILED)
+        Diag::Fatal("Could not map file \"{}\": {}", path.string(), strerror(errno));
 
     /// Copy the file into a vector.
     std::vector<char> ret(static_cast<usz>(st.st_size));

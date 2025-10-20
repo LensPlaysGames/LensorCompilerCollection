@@ -1,6 +1,7 @@
 #include <fmt/format.h>
 
 #include <lcc/context.hh>
+#include <lcc/core.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 
@@ -395,6 +396,8 @@ void lcc::glint::Sema::Discard(Expr** expr_ptr) {
     /// If the expression is a call to a function not marked
     /// as discardable, issue an error.
     if (auto* call = cast<CallExpr>(expr)) {
+        // TODO: If call is a special form (i.e. a template expansion, or a type
+        // instantation), then this does the big bad.
         auto* ftype = call->callee_type();
         if (not ftype->has_attr(FuncAttr::Discardable)) Error(
             call->location(),
@@ -724,12 +727,14 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_object(
             fmt::print("Found IMPORT {} at {}\n", import.name, p);
             // Open file, get contents
             auto object_file = File::Read(p);
+
             LCC_ASSERT(
                 not object_file.empty(),
                 "Found object file for module {} at {}, but the file is empty",
                 import.name,
                 p
             );
+
             // Determine file-type via magic bytes or extension
             std::vector<u8> metadata_blob{};
             if (
@@ -790,6 +795,7 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
 
         std::vector<u8> metadata_blob{};
         metadata_blob.insert(metadata_blob.end(), gmeta_file.begin(), gmeta_file.end());
+
         LCC_ASSERT(
             not metadata_blob.empty(),
             "Found gmeta file for module {} at {}, but the file is empty",
@@ -867,9 +873,11 @@ void lcc::glint::Sema::AnalyseModule() {
             Error(
                 {},
                 "Could not find imported module {} in any include directory.\n"
+                "Working Directory: {}\n"
                 "Paths tried:\n"
                 "{}",
                 import.name,
+                std::filesystem::current_path().lexically_normal().string(),
                 fmt::join(paths_tried, "\n")
             );
             Note(
@@ -1164,7 +1172,10 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     // implicit return, we will falsely get an error that it is never
     // freed (when in reality it's ownership is passed to the call-site).
     for (auto* dynarray : decl->dangling_dynarrays()) {
-        // TODO: Maybe a warning?
+        // Modules that export dynamic arrays should not get this error.
+        if (IsExportedLinkage(decl->linkage()))
+            continue;
+
         Error(
             dynarray->location(),
             "You forgot to free this dynamic array"
@@ -1661,7 +1672,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 }
             }
 
-            if (v->type()->is_dynamic_array())
+            if (v->type()->is_dynamic_array() and not IsExportedLinkage(v->linkage()))
                 curr_func->dangling_dynarrays().push_back(v);
 
             v->set_lvalue();
@@ -2399,6 +2410,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
                 *expr_ptr = new (mod) BlockExpr({grow_if, assign, update_size}, b->location());
                 (void) Analyse(expr_ptr);
+                LCC_ASSERT((*expr_ptr)->ok(), "Dynamic Array Prepend failed sema (oops)");
 
                 break;
             }
@@ -3542,6 +3554,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         is<TypeExpr>(expr->callee())
         or ( //
             is<NameRefExpr>(expr->callee())
+            and as<NameRefExpr>(expr->callee())->target()
             and is<TypeDecl>(as<NameRefExpr>(expr->callee())->target())
         )
     ) {
