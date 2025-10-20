@@ -154,6 +154,112 @@ void glint::IRGen::create_function(glint::FuncDecl* f) {
     );
 }
 
+// TODO: Do all of this in sema using sema templates, you mad man, you.
+void glint::IRGen::insert_dynarray_initialization(VarDecl* decl, Value* struct_pointer) {
+    if (
+        auto t_dynarray = cast<DynamicArrayType>(decl->type());
+        t_dynarray and (not IsImportedLinkage(decl->linkage()))
+    ) {
+        // TODO: It might be cool to have an "initial size heuristic", where
+        // instead of defaulting to a fixed capacity, we default to making the
+        // container a certain number of bytes (or as close as we can given step/
+        // increment of dynamic array element type size). That way, the
+        // default initialization would be "just as efficient" for any size
+        // object, since the malloc call argument wouldn't balloon as the element
+        // type grows in size.
+        constexpr usz default_dynamic_array_capacity = 8;
+
+        Value* capacity_val{};
+        lcc::Type* capacity_val_type = Convert(ctx, t_dynarray->struct_type()->members()[2].type);
+        if (t_dynarray->initial_size()) {
+            LCC_ASSERT(
+                is<NameRefExpr>(t_dynarray->initial_size()),
+                "Dynamic array initial size must be a variable reference"
+            );
+
+            generate_expression(t_dynarray->initial_size());
+
+            auto* initial_size = new (*module) LoadInst(
+                capacity_val_type,
+                generated_ir[t_dynarray->initial_size()]
+            );
+            insert(initial_size);
+
+            capacity_val = initial_size;
+        } else {
+            capacity_val = new (*module) IntegerConstant(
+                capacity_val_type,
+                default_dynamic_array_capacity
+            );
+        }
+        LCC_ASSERT(
+            capacity_val,
+            "One of the if branches above should have set the value, but it is null"
+        );
+
+        // TODO: Don't use hard-coded struct member index.
+        auto* capacity_ptr = new (*module) GetMemberPtrInst(
+            Convert(ctx, t_dynarray->struct_type()),
+            struct_pointer,
+            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 2)
+        );
+        auto* capacity_store = new (*module) StoreInst(capacity_val, capacity_ptr);
+        insert(capacity_ptr);
+        insert(capacity_store);
+
+        auto* size_val = new (*module) IntegerConstant(
+            Convert(ctx, t_dynarray->struct_type()->members()[1].type),
+            0
+        );
+        auto* size_ptr = new (*module) GetMemberPtrInst(
+            Convert(ctx, t_dynarray->struct_type()),
+            struct_pointer,
+            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 1)
+        );
+        auto* size_store = new (*module) StoreInst(size_val, size_ptr);
+        insert(size_ptr);
+        insert(size_store);
+
+        Value* alloc_size_bytes{};
+        if (t_dynarray->initial_size()) {
+            auto* initial_size = new (*module) LoadInst(
+                Convert(ctx, t_dynarray->initial_size()->type()),
+                generated_ir[t_dynarray->initial_size()]
+            );
+            insert(initial_size);
+
+            alloc_size_bytes = initial_size;
+        } else {
+            alloc_size_bytes = new (*module) IntegerConstant(
+                Convert(ctx, Type::UInt),
+                default_dynamic_array_capacity * t_dynarray->element_type()->size_in_bytes(ctx)
+            );
+        }
+        LCC_ASSERT(
+            alloc_size_bytes,
+            "One of the if branches above should have set the value, but it is null"
+        );
+
+        auto malloc_func = module->function_by_name("malloc");
+        LCC_ASSERT(malloc_func, "Glint IRGen couldn't find `malloc'");
+        auto* malloc_call = new (*module) CallInst(
+            *malloc_func,
+            as<FunctionType>(malloc_func->type()),
+            {alloc_size_bytes}
+        );
+        insert(malloc_call);
+
+        auto* data_ptr = new (*module) GetMemberPtrInst(
+            Convert(ctx, t_dynarray->struct_type()),
+            struct_pointer,
+            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0)
+        );
+        auto* data_store = new (*module) StoreInst(malloc_call, data_ptr);
+        insert(data_ptr);
+        insert(data_store);
+    }
+}
+
 /// NOTE: If you `new` an /instruction/ (of, or derived from, type `Inst`), you need to `insert()` it.
 void glint::IRGen::generate_expression(glint::Expr* expr) {
     // Already generated
@@ -190,10 +296,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
         case K::VarDecl: {
             const auto& decl = as<VarDecl>(expr);
+
+            // Named template is a no-op
             if (decl->init() and is<TemplateExpr>(decl->init())) {
-                // named template is a no-op
                 return;
             }
+
             switch (decl->linkage()) {
                 case Linkage::LocalVar: {
                     auto* alloca = new (*module) AllocaInst(
@@ -202,113 +310,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     );
                     insert(alloca);
 
-                    // Initialise dynamic arrays
-                    // code
-                    //     foo: [Byte];
-                    //     ;; roughly equivalent to
-                    //     foo_t : struct {
-                    //         data: Byte.ptr;
-                    //         size: int;
-                    //         capacity: int;
-                    //     };
-                    //     foo: foo_t;
-                    //     foo.capacity := 8;
-                    //     foo.size := 0;
-                    //     foo.data := malloc 8(sizeof Byte);
-                    // endcode
-                    if (auto* dynamic_array_t = cast<DynamicArrayType>(decl->type())) {
-                        constexpr usz default_dynamic_array_capacity = 8;
+                    // If dynamic array is already non-default initialized, no need to default
+                    // initialize it... (I think...)
+                    if (not decl->init())
+                        insert_dynarray_initialization(decl, alloca);
 
-                        Value* capacity_val{};
-                        lcc::Type* capacity_val_type = Convert(ctx, dynamic_array_t->struct_type()->members()[2].type);
-                        if (dynamic_array_t->initial_size()) {
-                            LCC_ASSERT(
-                                is<NameRefExpr>(dynamic_array_t->initial_size()),
-                                "Dynamic array initial size must be a variable reference"
-                            );
-
-                            generate_expression(dynamic_array_t->initial_size());
-
-                            auto* initial_size = new (*module) LoadInst(
-                                capacity_val_type,
-                                generated_ir[dynamic_array_t->initial_size()]
-                            );
-                            insert(initial_size);
-
-                            capacity_val = initial_size;
-                        } else {
-                            capacity_val = new (*module) IntegerConstant(
-                                capacity_val_type,
-                                default_dynamic_array_capacity
-                            );
-                        }
-                        LCC_ASSERT(
-                            capacity_val,
-                            "One of the if branches above should have set the value, but it is null"
-                        );
-
-                        // TODO: Don't use hard-coded struct member index.
-                        auto* capacity_ptr = new (*module) GetMemberPtrInst(
-                            Convert(ctx, dynamic_array_t->struct_type()),
-                            alloca,
-                            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 2)
-                        );
-                        auto* capacity_store = new (*module) StoreInst(capacity_val, capacity_ptr);
-                        insert(capacity_ptr);
-                        insert(capacity_store);
-
-                        auto* size_val = new (*module) IntegerConstant(
-                            Convert(ctx, dynamic_array_t->struct_type()->members()[1].type),
-                            0
-                        );
-                        auto* size_ptr = new (*module) GetMemberPtrInst(
-                            Convert(ctx, dynamic_array_t->struct_type()),
-                            alloca,
-                            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 1)
-                        );
-                        auto* size_store = new (*module) StoreInst(size_val, size_ptr);
-                        insert(size_ptr);
-                        insert(size_store);
-
-                        Value* alloc_size_bytes{};
-                        if (dynamic_array_t->initial_size()) {
-                            auto* initial_size = new (*module) LoadInst(
-                                Convert(ctx, dynamic_array_t->initial_size()->type()),
-                                generated_ir[dynamic_array_t->initial_size()]
-                            );
-                            insert(initial_size);
-
-                            alloc_size_bytes = initial_size;
-                        } else {
-                            alloc_size_bytes = new (*module) IntegerConstant(
-                                Convert(ctx, Type::UInt),
-                                default_dynamic_array_capacity * dynamic_array_t->element_type()->size_in_bytes(ctx)
-                            );
-                        }
-                        LCC_ASSERT(
-                            alloc_size_bytes,
-                            "One of the if branches above should have set the value, but it is null"
-                        );
-
-                        auto malloc_func = module->function_by_name("malloc");
-                        LCC_ASSERT(malloc_func, "Glint IRGen couldn't find `malloc'");
-                        auto* malloc_call = new (*module) CallInst(
-                            *malloc_func,
-                            as<FunctionType>(malloc_func->type()),
-                            {alloc_size_bytes}
-                        );
-                        insert(malloc_call);
-
-                        auto* data_ptr = new (*module) GetMemberPtrInst(
-                            Convert(ctx, dynamic_array_t->struct_type()),
-                            alloca,
-                            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0)
-                        );
-                        auto* data_store = new (*module) StoreInst(malloc_call, data_ptr);
-                        insert(data_ptr);
-                        insert(data_store);
-                    }
-
+                    // If present, store the init expression into above generated lvalue.
                     if (auto* init_expr = decl->init()) {
                         if (auto* c = cast<CompoundLiteral>(init_expr)) {
                             // Compound Literal Initialising Expression of a Struct Type
@@ -384,6 +391,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 } break;
 
                 case Linkage::Reexported: {
+                    // Probably the same or very similar to imported...
                     LCC_TODO();
                 } break;
 
@@ -402,6 +410,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         decl->linkage(),
                         init
                     );
+
+                    // If dynamic array is already non-default initialized, no need to default
+                    // initialize it...
+                    if (not init)
+                        insert_dynarray_initialization(decl, global);
+
                     generated_ir[expr] = global;
                 } break;
 

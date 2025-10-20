@@ -46,6 +46,14 @@ class IRGen {
     void create_function(glint::FuncDecl* f);
     void generate_function(glint::FuncDecl*);
 
+    // If given decl is defined in the Glint module (linkage not imported),
+    // AND the type of the decl is of dynamic array type,
+    // insert initialization code, storing into given pointer.
+    // Basically, generate the instruction that is the lvalue of the
+    // declaration (i.e. GlobalVariable, AllocaInst, etc), then call this
+    // function.
+    void insert_dynarray_initialization(VarDecl*, Value* struct_pointer);
+
 public:
     /// NOTE: I would name this module(), but C++ doesn't have properties.
     auto mod() -> lcc::Module* {
