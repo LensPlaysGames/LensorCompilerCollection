@@ -4,7 +4,7 @@
 #+begin_src glint
   import foo;
 
-  bar[0];
+  @bar[0];
 #+end_src
 
 #+NAME: source

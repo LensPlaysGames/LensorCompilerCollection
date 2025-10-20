@@ -1148,6 +1148,11 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             return;
         }
 
+        // TODO: If the last expression is a pointer to a convertible type, emit
+        // error regarding missing dereference...?
+        // Would catch situations where someone is trying to return bar[0], and
+        // means to return @bar[0]...
+
         // insert "return 0;"
         auto* inserted_return_value = new (mod) IntegerLiteral(0, {});
         auto* inserted_return = new (mod) ReturnExpr(inserted_return_value, {});

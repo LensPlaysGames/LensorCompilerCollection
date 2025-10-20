@@ -235,6 +235,7 @@ std::vector<std::string> getValidTypeConstituents(lcc::glint::Type* t) {
         case lcc::glint::Type::Kind::Function:
         case lcc::glint::Type::Kind::Integer:
         case lcc::glint::Type::Kind::Named:
+        case lcc::glint::Type::Kind::Typeof:
             return {};
 
         case lcc::glint::Type::Kind::ArrayView:

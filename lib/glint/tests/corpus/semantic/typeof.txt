@@ -1,6 +1,6 @@
 ================
 Typeof Type Gets Replaced With Type of Expression
-:warn-sema
+:warn_sema
 ================
 
 typeof 0; ;; emits unused warning
