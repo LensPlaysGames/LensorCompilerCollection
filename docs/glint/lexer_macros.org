@@ -56,13 +56,13 @@ To begin a macro, we use the =macro= keyword.
 To end a macro, we use the =endmacro= keyword.
 
 The following is lexer macros in their simplest form.
-#+begin_src glint-ts
+#+begin_src glint
   macro <name> emits <output> endmacro
 #+end_src
 
 Note that lexer macros do not require expression separators, as expressions have not yet been formed at the time of lexical analysis. There are only tokens. So, it could be said that the macro is "eaten" by the lexer (more accurately, the tokens that make up the macro's definition).
 
-#+begin_src glint-ts
+#+begin_src glint
   macro empty_macro emits endmacro
   macro simple_macro emits 69 endmacro
   ;; macro emits endmacro; ;; invalid! no name :(
@@ -74,7 +74,7 @@ Writing =simple_macro= anywhere in the program following it's definition above w
 
 A macro parameter is a token that is discarded upon expansion of the macro, but also enforced that it is there.
 
-#+begin_src glint-ts
+#+begin_src glint
   ;; empty macro with '!' macro parameter
   macro foo ! emits endmacro;
 
@@ -88,7 +88,7 @@ This doesn't appear that useful in our little example, but it can be very powerf
 
 A macro may be given named parameters such that they may be duplicated in it's output.
 
-#+begin_src glint-ts
+#+begin_src glint
   macro foo $x emits $x $x endmacro;
 
   foo 20 ;; expands to "20 20"
@@ -96,7 +96,7 @@ A macro may be given named parameters such that they may be duplicated in it's o
 
 The idea is that, sometimes, you want to be able to take input into your macro to expand into different code based on what the user passes to it, not just a hard-coded sequence of tokens. This does that.
 
-#+begin_src glint-ts
+#+begin_src glint
   macro foo + $x emits $x endmacro;
 
   foo + 20 ;; expands to "20"
@@ -107,7 +107,7 @@ The idea is that, sometimes, you want to be able to take input into your macro t
 
 Macro arguments may be given a single selector following the name identifier.
 
-#+begin_src glint-ts
+#+begin_src glint
   $<name><selector>
 #+end_src
 
@@ -119,7 +119,7 @@ This becomes very powerful, as macros may operate on parsed expressions rather t
 
 ** Hygienic Expansion and Generating Symbols
 
-#+begin_src glint-ts
+#+begin_src glint
   macro <name> defines <identifiers> emits <output> endmacro
 #+end_src
 
@@ -127,7 +127,7 @@ This becomes very powerful, as macros may operate on parsed expressions rather t
 
 The TL;DR is that =defines= allows you to create a definitely-unused name within a macro's output to avoid redefinition errors, and things like that.
 
-#+begin_src glint-ts
+#+begin_src glint
   macro foo defines x emits x endmacro
 
   foo

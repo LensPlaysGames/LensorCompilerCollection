@@ -1,4 +1,4 @@
-# Created 2025-10-07 Tue 12:59
+# Created 2025-10-20 Mon 04:08
 #+title: 
 #+author: Rylan Kellogg
 * Preface
@@ -30,7 +30,7 @@ A number literal is of integer type.
 
 A string is a contained sequence of bytes in the source code that is converted into data that is embedded in the final program.
 
-#+begin_src glint-ts
+#+begin_src glint
   '' 'i am data?' ;; regular string literals
 
   "" "i\'m data?" ;; escapable string literals
@@ -41,7 +41,7 @@ A string literal is of array of byte type.
 
 Sometimes, it's convenient to get a number representation of a byte in the source code (i.e. =0= or =a=). Mostly for ASCII math stuff, to be honest, but still needed often enough to be necessary.
 
-#+begin_src glint-ts
+#+begin_src glint
   `6` `9` `A` ;; regular byte literals
 
   ;; `` ;; ERROR! Empty byte literal
@@ -52,7 +52,7 @@ Byte literals accept basic escaped values like =\n= for newline, =\0= for NUL, a
 
 There are two of them.
 
-#+begin_src glint-ts
+#+begin_src glint
   true
   false
 #+end_src
@@ -62,7 +62,7 @@ A way to write a literal of more complex types (like structs).
 
 Just a list of expressions separated by soft separators, with the extra ability to name expressions.
 
-#+begin_src glint-ts
+#+begin_src glint
   ;; regular compound literals
   !{}; !{420}; !{420, 69};
 
@@ -82,15 +82,36 @@ A dynamic array is basically a fancy way to make a struct, and a fancy way to op
 In C++, =std::vector=.
 
 In Rust, =Vec=.
+*** Operations
+
+- Binary =+== :: append rhs to dynamic array on lhs (i.e. =foo:[byte]; foo+=`0`;=).
+- Binary =~== :: prepend rhs to dynamic array on lhs (i.e. =foo:[byte]; foo~=`0`;=).
+- Binary =[= (Subscript) :: Rewritten to subscript of data member of dynamic array.
+- Trinary ~[=~ :: insert rhs at index given at mhs into dynamic array on lhs (i.e. =foo:[byte]; foo[=0, `0`;=)
+     NOTE: If index is not within the inclusive range of 0 to size, the program will crash.
+     If it didn't, iteration may expose values that have not been initialized properly.
 *** Accessing Elements
 
-Dereference the data pointer, basically.
+**** Sugar
 
-#+begin_src glint-ts
+Subscript of the dynamic array itself acts as a bounds-checked subscript of the data member of the dynamic array.
+
+#+begin_src glint
   out : [byte];
   out += 69;
 
-  @out.data[0];
+  out[0] ;; out.data[0]
+  @out[0]; ;; 69
+#+end_src
+**** Basic
+
+Dereference the data pointer, basically.
+
+#+begin_src glint
+  out : [byte];
+  out += 69;
+
+  @out.data[0]; ;; 69
 #+end_src
 *** Range-based Loops
 
@@ -116,6 +137,7 @@ This form of the =for= loop mimics C++'s ranged for loops. It's purpose is to ea
 In effect, it binds =<identifier>= to a reference to each element within =<container>=.
 
 Emits code in the form of:
+NOTE: Should we cache =<container>= expression, or evaluate it multiple times?
 #+begin_example
   cfor
     {
@@ -127,7 +149,7 @@ Emits code in the form of:
     {
       <identifier> :: @iter;
       <body>;
-    }
+    };
 #+end_example
 *** C For
 
@@ -143,7 +165,7 @@ Emits code in the form of:
       <body>;
       <increment>;
     };
-  }
+  };
 #+end_example
 ** Glint's Sum Type
 
@@ -152,7 +174,7 @@ It's a sum type.
 You can store multiple variables in the space that a single variable takes up, and keep it type-safe the whole time.
 
 To define a sum type:
-#+begin_src glint-ts
+#+begin_src glint
   sum {
     x : int;
     y : [byte];
@@ -165,7 +187,7 @@ In Rust, =enum=.
 *** =has= and =match=
 
 Let's call this sum type =foo=.
-#+begin_src glint-ts
+#+begin_src glint
   foo : sum {
     x : int;
     y : [byte];
@@ -173,7 +195,7 @@ Let's call this sum type =foo=.
 #+end_src
 
 Now, any instance of this type may have EITHER the =x= member, OR the =y= member. Only one member is valid at one time. To check if a given member is valid, use the unary prefix operator =has=.
-#+begin_src glint-ts
+#+begin_src glint
   foo : sum {
     x : int;
     y : [byte];
@@ -185,7 +207,7 @@ Now, any instance of this type may have EITHER the =x= member, OR the =y= member
 
 As you can imagine, this could get quite cumbersome quite quickly; adding a member to the sum type may mean tracking down long =if has= chains all over the codebase. If you forgot one, it could be catastrophic for your program! This is where =match= comes in. =match= lets you pick a different control flow based on the member held in any given instance of a sum type. =match= requires that all sum type members are handled.
 
-#+begin_src glint-ts
+#+begin_src glint
   foo : sum {
     x : int;
     y : [byte];
@@ -206,7 +228,7 @@ As you can see, sum types allow you to define generic types while still retainin
 Function overloading is the ability to define multiple functions /with the same name/. Now, you might be wondering, how is this useful? Well, the functions that share the same name differ in an alternate way: their type signature. The compiler delegates to the different versions of the function based on the types of the passed arguments at the call-site.
 *** Basic Example
 
-#+begin_src glint-ts
+#+begin_src glint
   foo : bool(a : int) a < 1000;
   foo : bool(a : byte) a < 100;
 #+end_src
@@ -214,7 +236,7 @@ Function overloading is the ability to define multiple functions /with the same 
 As you can see, the main ability function overloading allows for is executing different functionality for different parameter types.
 *** Basic Example X
 
-#+begin_src glint-ts
+#+begin_src glint
   blah : struct { x : int; };
 
   foo : bool(a : int) a < 10;
@@ -234,17 +256,37 @@ Use =print= keyword to begin a list of expressions whose results will be printed
 =print 42;= will print =42= to standard out (or whatever you've defined the int formatter to do).
 *** How it works
 
-=print= is sort of like a fancy macro. It just gets converted into other code. Namely, every argument expression =E= is /placed into/ the following template, and then replaced with the template result.
+=print= is sort of like a fancy macro. It just gets converted into other code. Specifically, it is as if each argument is applied to one of the following templates. What template the argument is applied to depends on the type of the argument.
 
-#+begin_src prog
-  {tmp :: format(E); puts(tmp.data); -tmp;};
+NOTE: Expansions may not match exactly; see =sema_templates.g= (embedded in Glint's =sema.cc=).
+
+For a =byte= argument:
+#+begin_src glint
+  putchar arg;
 #+end_src
 
-As you can see, the single argument expression is converted into a block expression containing three expressions: a call to =format= (implemented in Glint), a call to =puts= (part of LibC), and a decrement of the dynamic array that format returns, which frees the associated memory.
+For a =[byte]= (dynamic array of byte), =[byte view]= (array view of byte), or =[byte 4]= (fixed array of byte) argument:
+#+begin_src glint
+  cfor
+      i :: 0;
+      i < arg.size;
+      i += 1;
+    putchar @arg[i];
+#+end_src
 
-However, if the argument is already of "dynamic array of byte" type, the call to =format= and the decrement will not be inserted. The same goes for arguments of =byte.ptr= type, fixed array of byte, view of byte, etc.
+NOTE: Still unsure if fixed array of byte should call =putchar= on each element or just call =puts=...
 
-FUN FACT: If/when Glint ever gets AST-level macros, know that it is inspired by =print= (and thought of during it's implementation, because replacing AST nodes by hand, well, sucks).
+For a =byte.ptr= argument:
+#+begin_src glint
+  puts arg;
+#+end_src
+
+For a =void= argument: a =void= argument to print is an error.
+
+For every other type argument, insert a call to format (defined by _user_), print the returned dynamic byte array, and then free the dynamic array.
+#+begin_src glint
+  {tmp :: format(arg); print tmp; -tmp;};
+#+end_src
 ** Glint's Identifier Escape
 
 Let's say you want to call a variable =module=. Er, that's sort of tough, because, when you write =module= in the source code, it thinks it's a =ModuleExpr= or something and there are errors when trying to compile.
@@ -259,7 +301,7 @@ In Glint, templates look a lot like functions, BUT THEY ARE NOT FUNCTIONS. If yo
 
 The simplest valid template is the identity template.
 It effectively just applies a type constraint at compile time to whatever argument you pass to it.
-#+begin_src glint-ts
+#+begin_src glint
   template(x : int) x;
 
   ;; ends up as
@@ -272,7 +314,7 @@ Now, the above source code represents a /Template Expression/. It is an expressi
 *** Named Template Expressions
 
 You may also assign a template expression to a name.
-#+begin_src glint-ts
+#+begin_src glint
   my_template :: template(x : int) x;
 
   my_template 69;
@@ -284,7 +326,7 @@ You may also assign a template expression to a name.
 
 It should be known that, since template invocations are expanded at compile-time, the type of a template parameter may be a =type= itself. That is, a template argument may be a type expression.
 
-#+begin_src glint-ts
+#+begin_src glint
   foo :: template(x : type) x;
 
   bar : foo int; ;; expands to 'bar : int'
@@ -292,7 +334,7 @@ It should be known that, since template invocations are expanded at compile-time
 
 This is useful for Glint module authors to export templates instead of concrete types.
 
-#+begin_src glint-ts
+#+begin_src glint
   export vector :: template(elem_t : type)
       struct { data:elem_t.ptr; size:uint; capacity:uint; };
 
@@ -302,7 +344,7 @@ This is useful for Glint module authors to export templates instead of concrete 
 
 In order to actually use a template to "stamp out" code, we must invoke it (by calling it). The arguments we pass to it will be checked against the parameters declared within it.
 
-#+begin_src glint-ts
+#+begin_src glint
   (template(x : int) x) 69;
 
   ;; ends up as
@@ -367,13 +409,13 @@ To begin a macro, we use the =macro= keyword.
 To end a macro, we use the =endmacro= keyword.
 
 The following is lexer macros in their simplest form.
-#+begin_src glint-ts
+#+begin_src glint
   macro <name> emits <output> endmacro
 #+end_src
 
 Note that lexer macros do not require expression separators, as expressions have not yet been formed at the time of lexical analysis. There are only tokens. So, it could be said that the macro is "eaten" by the lexer (more accurately, the tokens that make up the macro's definition).
 
-#+begin_src glint-ts
+#+begin_src glint
   macro empty_macro emits endmacro
   macro simple_macro emits 69 endmacro
   ;; macro emits endmacro; ;; invalid! no name :(
@@ -384,7 +426,7 @@ Writing =simple_macro= anywhere in the program following it's definition above w
 
 A macro parameter is a token that is discarded upon expansion of the macro, but also enforced that it is there.
 
-#+begin_src glint-ts
+#+begin_src glint
   ;; empty macro with '!' macro parameter
   macro foo ! emits endmacro;
 
@@ -397,7 +439,7 @@ This doesn't appear that useful in our little example, but it can be very powerf
 
 A macro may be given named parameters such that they may be duplicated in it's output.
 
-#+begin_src glint-ts
+#+begin_src glint
   macro foo $x emits $x $x endmacro;
 
   foo 20 ;; expands to "20 20"
@@ -405,7 +447,7 @@ A macro may be given named parameters such that they may be duplicated in it's o
 
 The idea is that, sometimes, you want to be able to take input into your macro to expand into different code based on what the user passes to it, not just a hard-coded sequence of tokens. This does that.
 
-#+begin_src glint-ts
+#+begin_src glint
   macro foo + $x emits $x endmacro;
 
   foo + 20 ;; expands to "20"
@@ -415,7 +457,7 @@ The idea is that, sometimes, you want to be able to take input into your macro t
 
 Macro arguments may be given a single selector following the name identifier.
 
-#+begin_src glint-ts
+#+begin_src glint
   $<name><selector>
 #+end_src
 
@@ -426,7 +468,7 @@ Macro arguments may be given a single selector following the name identifier.
 This becomes very powerful, as macros may operate on parsed expressions rather than lexed tokens. This reaches another layer further into the inner workings of the language, interacting with syntactic analysis.
 *** Hygienic Expansion and Generating Symbols
 
-#+begin_src glint-ts
+#+begin_src glint
   macro <name> defines <identifiers> emits <output> endmacro
 #+end_src
 
@@ -434,7 +476,7 @@ This becomes very powerful, as macros may operate on parsed expressions rather t
 
 The TL;DR is that =defines= allows you to create a definitely-unused name within a macro's output to avoid redefinition errors, and things like that.
 
-#+begin_src glint-ts
+#+begin_src glint
   macro foo defines x emits x endmacro
 
   foo

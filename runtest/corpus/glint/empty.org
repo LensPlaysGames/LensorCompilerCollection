@@ -1,7 +1,7 @@
 * Empty File
 
 #+NAME: source
-#+begin_src glint-ts
+#+begin_src glint
 #+end_src
 
 #+NAME: status

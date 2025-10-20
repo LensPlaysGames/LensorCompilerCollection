@@ -6,7 +6,7 @@ In Glint, templates look a lot like functions, BUT THEY ARE NOT FUNCTIONS. If yo
 
 The simplest valid template is the identity template.
 It effectively just applies a type constraint at compile time to whatever argument you pass to it.
-#+begin_src glint-ts
+#+begin_src glint
   template(x : int) x;
 
   ;; ends up as
@@ -20,7 +20,7 @@ Now, the above source code represents a /Template Expression/. It is an expressi
 ** Named Template Expressions
 
 You may also assign a template expression to a name.
-#+begin_src glint-ts
+#+begin_src glint
   my_template :: template(x : int) x;
 
   my_template 69;
@@ -34,7 +34,7 @@ You may also assign a template expression to a name.
 
 It should be known that, since template invocations are expanded at compile-time, the type of a template parameter may be a =type= itself. That is, a template argument may be a type expression.
 
-#+begin_src glint-ts
+#+begin_src glint
   foo :: template(x : type) x;
 
   bar : foo int; ;; expands to 'bar : int'
@@ -42,7 +42,7 @@ It should be known that, since template invocations are expanded at compile-time
 
 This is useful for Glint module authors to export templates instead of concrete types.
 
-#+begin_src glint-ts
+#+begin_src glint
   export vector :: template(elem_t : type)
       struct { data:elem_t.ptr; size:uint; capacity:uint; };
 
@@ -54,7 +54,7 @@ This is useful for Glint module authors to export templates instead of concrete 
 
 In order to actually use a template to "stamp out" code, we must invoke it (by calling it). The arguments we pass to it will be checked against the parameters declared within it.
 
-#+begin_src glint-ts
+#+begin_src glint
   (template(x : int) x) 69;
 
   ;; ends up as

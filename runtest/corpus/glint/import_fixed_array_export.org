@@ -1,14 +1,14 @@
 * Import Fixed Array Export
 
 #+NAME: source
-#+begin_src glint-ts
+#+begin_src glint
   import foo;
 
   bar[0];
 #+end_src
 
 #+NAME: source
-#+begin_src glint-ts
+#+begin_src glint
   module foo;
 
   export bar : [int 1];

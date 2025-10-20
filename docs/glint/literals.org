@@ -23,7 +23,7 @@ A number literal is of integer type.
 
 A string is a contained sequence of bytes in the source code that is converted into data that is embedded in the final program.
 
-#+begin_src glint-ts
+#+begin_src glint
   '' 'i am data?' ;; regular string literals
 
   "" "i\'m data?" ;; escapable string literals
@@ -35,7 +35,7 @@ A string literal is of array of byte type.
 
 Sometimes, it's convenient to get a number representation of a byte in the source code (i.e. =0= or =a=). Mostly for ASCII math stuff, to be honest, but still needed often enough to be necessary.
 
-#+begin_src glint-ts
+#+begin_src glint
   `6` `9` `A` ;; regular byte literals
 
   ;; `` ;; ERROR! Empty byte literal
@@ -47,7 +47,7 @@ Byte literals accept basic escaped values like =\n= for newline, =\0= for NUL, a
 
 There are two of them.
 
-#+begin_src glint-ts
+#+begin_src glint
   true
   false
 #+end_src
@@ -58,7 +58,7 @@ A way to write a literal of more complex types (like structs).
 
 Just a list of expressions separated by soft separators, with the extra ability to name expressions.
 
-#+begin_src glint-ts
+#+begin_src glint
   ;; regular compound literals
   !{}; !{420}; !{420, 69};
 

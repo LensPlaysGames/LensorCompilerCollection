@@ -27,7 +27,7 @@ In Rust, =Vec=.
 
 Subscript of the dynamic array itself acts as a bounds-checked subscript of the data member of the dynamic array.
 
-#+begin_src glint-ts
+#+begin_src glint
   out : [byte];
   out += 69;
 
@@ -39,7 +39,7 @@ Subscript of the dynamic array itself acts as a bounds-checked subscript of the 
 
 Dereference the data pointer, basically.
 
-#+begin_src glint-ts
+#+begin_src glint
   out : [byte];
   out += 69;
 

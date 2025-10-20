@@ -13,29 +13,29 @@ Use =print= keyword to begin a list of expressions whose results will be printed
 NOTE: Expansions may not match exactly; see =sema_templates.g= (embedded in Glint's =sema.cc=).
 
 For a =byte= argument:
-#+begin_src prog
-  putchar <arg>;
+#+begin_src glint
+  putchar arg;
 #+end_src
 
 For a =[byte]= (dynamic array of byte), =[byte view]= (array view of byte), or =[byte 4]= (fixed array of byte) argument:
-#+begin_src prog
+#+begin_src glint
   cfor
       i :: 0;
-      i < <arg>.size;
+      i < arg.size;
       i += 1;
-    putchar @<arg>[i];
+    putchar @arg[i];
 #+end_src
 
 NOTE: Still unsure if fixed array of byte should call =putchar= on each element or just call =puts=...
 
 For a =byte.ptr= argument:
-#+begin_src prog
-  puts <arg>;
+#+begin_src glint
+  puts arg;
 #+end_src
 
 For a =void= argument: a =void= argument to print is an error.
 
 For every other type argument, insert a call to format (defined by _user_), print the returned dynamic byte array, and then free the dynamic array.
-#+begin_src prog
-  {tmp :: format(<arg>); print tmp; -tmp;};
+#+begin_src glint
+  {tmp :: format(arg); print tmp; -tmp;};
 #+end_src

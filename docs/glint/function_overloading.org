@@ -4,7 +4,7 @@ Function overloading is the ability to define multiple functions /with the same 
 
 ** Basic Example
 
-#+begin_src glint-ts
+#+begin_src glint
   foo : bool(a : int) a < 1000;
   foo : bool(a : byte) a < 100;
 #+end_src
@@ -13,7 +13,7 @@ As you can see, the main ability function overloading allows for is executing di
 
 ** Basic Example X
 
-#+begin_src glint-ts
+#+begin_src glint
   blah : struct { x : int; };
 
   foo : bool(a : int) a < 10;

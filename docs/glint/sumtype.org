@@ -5,7 +5,7 @@ It's a sum type.
 You can store multiple variables in the space that a single variable takes up, and keep it type-safe the whole time.
 
 To define a sum type:
-#+begin_src glint-ts
+#+begin_src glint
   sum {
     x : int;
     y : [byte];
@@ -19,7 +19,7 @@ In Rust, =enum=.
 ** =has= and =match=
 
 Let's call this sum type =foo=.
-#+begin_src glint-ts
+#+begin_src glint
   foo : sum {
     x : int;
     y : [byte];
@@ -27,7 +27,7 @@ Let's call this sum type =foo=.
 #+end_src
 
 Now, any instance of this type may have EITHER the =x= member, OR the =y= member. Only one member is valid at one time. To check if a given member is valid, use the unary prefix operator =has=.
-#+begin_src glint-ts
+#+begin_src glint
   foo : sum {
     x : int;
     y : [byte];
@@ -39,7 +39,7 @@ Now, any instance of this type may have EITHER the =x= member, OR the =y= member
 
 As you can imagine, this could get quite cumbersome quite quickly; adding a member to the sum type may mean tracking down long =if has= chains all over the codebase. If you forgot one, it could be catastrophic for your program! This is where =match= comes in. =match= lets you pick a different control flow based on the member held in any given instance of a sum type. =match= requires that all sum type members are handled.
 
-#+begin_src glint-ts
+#+begin_src glint
   foo : sum {
     x : int;
     y : [byte];
