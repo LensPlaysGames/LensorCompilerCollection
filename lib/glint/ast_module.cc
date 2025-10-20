@@ -762,6 +762,7 @@ auto lcc::glint::Module::deserialise(
                 auto element_type_index = from_bytes<ModuleDescription::TypeIndex>(element_type_index_array);
 
                 constexpr auto element_count_size = sizeof(u64);
+                LCC_ASSERT(type_offset + element_count_size <= module_metadata_blob.size());
                 std::array<u8, element_count_size> element_count_array{};
                 for (unsigned i = 0; i < element_count_size; ++i)
                     element_count_array[i] = module_metadata_blob.at(type_offset++);
@@ -1003,6 +1004,7 @@ auto lcc::glint::Module::deserialise(
             case ModuleDescription::DeclarationHeader::Kind::VARIABLE: {
                 // FIXME: Should possibly be reexported.
                 auto* var_decl = new (*this) VarDecl(name, ty, nullptr, this, Linkage::Imported, {});
+                var_decl->set_lvalue();
                 var_decl->set_sema_done();
                 auto decl = scope->declare(context, std::string(name), var_decl);
             } break;
@@ -1015,6 +1017,8 @@ auto lcc::glint::Module::deserialise(
                     *ty
                 );
                 auto* func_decl = new (*this) FuncDecl(name, as<FuncType>(ty), nullptr, scope, this, Linkage::Imported, {});
+                // FIXME: Not sure if imported function declaration is an lvalue? I mean,
+                // we can't assign to it...
                 func_decl->set_sema_done();
                 auto decl = scope->declare(context, std::string(name), func_decl);
             } break;
