@@ -886,6 +886,16 @@ void lcc::glint::Sema::AnalyseModule() {
             );
             std::exit(1);
         }
+
+        // Insert call to init function of imported module.
+        auto call_init = new (mod) CallExpr(
+            new (mod) NameRefExpr(Module::InitFunctionName(import.name), mod.global_scope(), {}),
+            {},
+            {}
+        );
+        as<BlockExpr>(mod.top_level_function()->body())
+            ->children()
+            .insert(as<BlockExpr>(mod.top_level_function()->body())->children().begin(), call_init);
     }
 
     // Parse templates that sema will use to expand and/or rewrite things

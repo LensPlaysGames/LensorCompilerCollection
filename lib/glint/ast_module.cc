@@ -60,7 +60,7 @@ lcc::glint::Module::Module(
     }
     _top_level_function
         = new (*this) FuncDecl{
-            is_logical_module ? fmt::format("_XGlint__init_{}", name()) : "main",
+            is_logical_module ? InitFunctionName(name()) : "main",
             ty,
             new (*this) BlockExpr{{}, {}},
             nullptr,
@@ -1035,6 +1035,25 @@ auto lcc::glint::Module::deserialise(
                 LCC_ASSERT(false, "Invalid declaration kind in declaration header: {}", decl_hdr.kind);
         }
     }
+
+    std::string module_name{};
+    for (auto i = module_metadata_blob.begin() + hdr.name_offset; *i; ++i)
+        module_name += (char) *i;
+
+    auto init_function_decl = global_scope()->declare(
+        context,
+        Module::InitFunctionName(module_name),
+        new (*this) FuncDecl(
+            Module::InitFunctionName(module_name),
+            new (*this) FuncType({}, Type::Void, {{FuncAttr::NoMangle, true}}, {}),
+            nullptr,
+            global_scope(),
+            this,
+            Linkage::Imported,
+            {}
+        )
+    );
+    LCC_ASSERT(init_function_decl);
 
     return true;
 }

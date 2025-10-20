@@ -328,6 +328,11 @@ public:
     [[nodiscard]]
     auto ToSource(const Expr& e) -> Result<std::string>;
 
+    [[nodiscard]]
+    static auto InitFunctionName(std::string_view module_name) -> std::string {
+        return fmt::format("_XGlint__init_{}", module_name);
+    }
+
     std::vector<Expr*> nodes;
     std::vector<Type*> types;
     std::vector<Scope*> scopes;
