@@ -133,6 +133,9 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 
         case Type::Kind::Integer:
             return lcc::IntegerType::Get(ctx, in->size(ctx));
+
+        case Type::Kind::Typeof:
+            LCC_ASSERT(false, "Sema should replace TypeofType with the type of it's containing expression");
     }
     LCC_UNREACHABLE();
 }
@@ -601,6 +604,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::LBrackEq:
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
+                case TokenKind::Typeof:
                     LCC_ASSERT(false, "Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
             }
         } break;
@@ -885,6 +889,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::StarStar:
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
+                case TokenKind::Typeof:
                     Diag::ICE(
                         ctx,
                         expr->location(),

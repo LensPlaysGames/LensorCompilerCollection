@@ -150,6 +150,9 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
         case Kind::Union: return as<UnionType>(this)->alignment() * 8;
         case Kind::Sum: return as<SumType>(this)->alignment() * 8;
         case Kind::Integer: return std::bit_ceil(as<IntegerType>(this)->bit_width());
+
+        case Kind::Typeof:
+            LCC_ASSERT(false, "Cannot get align of TypeofType; sema should replace TypeofType with the type of it's contained expression.");
     }
 
     LCC_UNREACHABLE();
@@ -177,6 +180,7 @@ auto lcc::glint::Type::elem() const -> Type* {
         case Kind::Union:
         case Kind::Sum:
         case Kind::Integer:
+        case Kind::Typeof:
             Diag::ICE("Type has no element type");
     }
     LCC_UNREACHABLE();
@@ -333,6 +337,9 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
         case Kind::Struct: return as<StructType>(this)->byte_size() * 8;
         case Kind::Union: return as<UnionType>(this)->byte_size() * 8;
         case Kind::Integer: return as<IntegerType>(this)->bit_width();
+
+        case Kind::Typeof:
+            LCC_ASSERT(false, "Cannot get size of TypeofType; sema should replace TypeofType with the type of it's contained expression.");
     }
 
     LCC_UNREACHABLE();
@@ -432,6 +439,9 @@ auto lcc::glint::Type::Equal(const Type* a, const Type* b) -> bool {
             auto ib = as<IntegerType>(b);
             return ia->bit_width() == ib->bit_width() and ia->is_signed() == ib->is_signed();
         }
+
+        case Kind::Typeof:
+            LCC_ASSERT(false, "Cannot compare equality of TypeofType; sema should replace TypeofType with the type of it's contained expression.");
     }
 
     LCC_UNREACHABLE();
@@ -715,6 +725,38 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
         }
 
         case Kind::Type:
+            // TODO: Handle structs with initialized members...
+
+            if (auto t_fixedarray = cast<ArrayType>(expr->type()); t_fixedarray) {
+                return new (mod) TypeExpr(
+                    new (mod) ArrayType(
+                        t_fixedarray->elem(),
+                        Clone(t_fixedarray->size()),
+                        {}
+                    ),
+                    {}
+                );
+            }
+            if (auto t_dynarray = cast<ArrayType>(expr->type()); t_dynarray) {
+                return new (mod) TypeExpr(
+                    new (mod) DynamicArrayType(
+                        t_dynarray->elem(),
+                        Clone(t_dynarray->size()),
+                        {}
+                    ),
+                    {}
+                );
+            }
+            if (auto t_typeof = cast<TypeofType>(expr->type()); t_typeof) {
+                return new (mod) TypeExpr(
+                    new (mod) TypeofType(Clone(t_typeof->expression()), {}),
+                    {}
+                );
+            }
+            LCC_ASSERT(
+                expr->children().size() == 0,
+                "If a type has expressions within it, they need to be cloned properly"
+            );
             return new (mod) TypeExpr(expr->type(), expr->location());
 
         case Kind::Module: {
@@ -914,6 +956,7 @@ std::string lcc::glint::Expr::name() const {
                 case Type::Kind::Enum: return "t_enum";
                 case Type::Kind::Struct: return "t_struct";
                 case Type::Kind::Integer: return "t_int";
+                case Type::Kind::Typeof: return "t_typeof";
             }
             LCC_UNREACHABLE();
         } break;
@@ -944,6 +987,8 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
             }
             if (auto* t_fixarray = cast<ArrayType>(type()))
                 return {&t_fixarray->size()};
+            if (auto* t_typeof = cast<TypeofType>(type()))
+                return {&t_typeof->expression()};
             return {};
 
         case Kind::While: {
@@ -1061,6 +1106,10 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
             }
             if (auto* t_fixarray = cast<ArrayType>(type()))
                 return {t_fixarray->size()};
+
+            if (auto* t_typeof = cast<TypeofType>(type()))
+                return {t_typeof->expression()};
+
             return {};
 
         case Kind::While: {
@@ -1353,6 +1402,13 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
                 enumerators_string += ';';
             }
             return fmt::format("enum {{{}}}", enumerators_string);
+        }
+
+        case lcc::glint::Type::Kind::Typeof: {
+            auto typeof_t = lcc::as<lcc::glint::TypeofType>(&t);
+            auto e_typeof = ToSource(*typeof_t->expression());
+            if (not e_typeof) return e_typeof;
+            return fmt::format("typeof {}", *e_typeof);
         }
     }
     LCC_UNREACHABLE();
@@ -2009,6 +2065,9 @@ auto lcc::glint::Type::representation() const -> std::string {
         case Kind::Integer: {
             return fmt::format("INT{}", as<IntegerType>(this)->size({}));
         }
+
+        case Kind::Typeof:
+            LCC_ASSERT(false, "Cannot get representation of TypeofType; sema should replace TypeofType with the type of it's contained expression.");
     }
     LCC_UNREACHABLE();
 }
@@ -2207,6 +2266,11 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
                 case K::CULongLong: return fmt::format("{}__c_ulonglong{}", C(type_colour), C(Reset));
             }
             LCC_UNREACHABLE();
+
+        case Kind::Typeof: {
+            // TODO: String-ize expression, or something...
+            return fmt::format("{}typeof{}", C(type_colour), C(Reset));
+        }
 
         case Kind::Function: {
             const auto* f = as<FuncType>(this);

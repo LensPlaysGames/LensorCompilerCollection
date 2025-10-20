@@ -898,7 +898,11 @@ void lcc::glint::Sema::AnalyseModule() {
         //   De-allocate old memory
         "    free dynarray.data;"
         //   Assign dynarray.data to newly-allocated memory
-        "    dynarray.data := byte.ptr newmem;"
+        // FIXME: byte.ptr cast is incorrect. It needs to be a cast to the dynamic
+        // array's element type. We need typeof, or something similar
+        //   dynarray.data := (typeof dynarray.data) newmem;
+        //   dynarray.data <- newmem;
+        "    dynarray.data := (typeof dynarray.data) newmem;"
         //   Assign dynarray.capacity to dynarray.capacity * 2
         "    dynarray.capacity *= 2;"
         "  };"
@@ -2831,6 +2835,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Expression:
         case TokenKind::ByteLiteral:
         case TokenKind::Template:
+        case TokenKind::Typeof:
             Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
             LCC_UNREACHABLE();
     }
@@ -4374,6 +4379,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::Expression:
         case TokenKind::ByteLiteral:
         case TokenKind::Template:
+        case TokenKind::Typeof:
             Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
             LCC_UNREACHABLE();
     }
@@ -4858,6 +4864,15 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                 auto d = e->scope()->declare(context, std::string(val->name()), val);
                 LCC_ASSERT(d, "Failed to declare enumerator member");
             }
+        } break;
+
+        case Type::Kind::Typeof: {
+            auto* t = as<TypeofType>(type);
+            if (not Analyse(&t->expression())) {
+                t->set_sema_errored();
+                return false;
+            }
+            *type_ptr = t->expression()->type();
         } break;
     }
 

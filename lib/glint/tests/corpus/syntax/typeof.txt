@@ -1,0 +1,23 @@
+================
+Typeof Type Expression
+:syntax
+================
+
+typeof 0;
+
+---
+
+(block
+ (t_typeof (integer_literal)))
+
+================
+Typeof Type
+:syntax
+================
+
+x : typeof 0;
+
+---
+
+(block
+ (variable_declaration))

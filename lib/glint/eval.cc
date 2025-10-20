@@ -243,6 +243,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::While:
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
+                case TokenKind::Typeof:
                     Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
                     LCC_UNREACHABLE();
             }
@@ -431,6 +432,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::Expression:
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
+                case TokenKind::Typeof:
                     Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
                     LCC_UNREACHABLE();
             }

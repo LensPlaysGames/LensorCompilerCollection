@@ -125,6 +125,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Match:
         case Tk::Print:
         case Tk::Template:
+        case Tk::Typeof:
         case Tk::CShort:
         case Tk::CUShort:
         case Tk::CInt:
@@ -225,6 +226,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::Sizeof:
         case Tk::Alignof:
         case Tk::Has:
+        case Tk::Typeof:
         // Types
         case Tk::ArbitraryInt:
         case Tk::Byte:
@@ -788,6 +790,16 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             lhs = ParseExpr();
             if (not lhs) return lhs.diag();
             lhs = new (*mod) UnaryExpr(Tk::Has, *lhs, false, {loc, lhs->location()});
+        } break;
+
+        case Tk::Typeof: {
+            auto loc = tok.location;
+            auto ty = ParseType();
+            if (not ty) return ty.diag();
+            lhs = new (*mod) TypeExpr(
+                *ty,
+                {loc, ty->location()}
+            );
         } break;
 
         // Expressions that start with a type.
@@ -1839,6 +1851,14 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
             else ty = *type;
             if (not Consume(Tk::RParen)) return Error("Expected )");
             break;
+
+        case Tk::Typeof: {
+            auto loc = tok.location;
+            NextToken();
+            auto expr = ParseExpr();
+            if (not expr) return expr.diag();
+            ty = new (*mod) TypeofType(*expr, loc);
+        } break;
 
         /// Integer type.
         case Tk::ArbitraryInt:

@@ -150,6 +150,7 @@ enum struct TokenKind {
     ArbitraryInt,
     Sizeof,
     Alignof,
+    Typeof,
     Has,
     For,       // cfor
     RangedFor, // for
@@ -555,20 +556,39 @@ class Type : public SemaNode {
 
 public:
     enum struct Kind {
+        // Glint's built-in types.
         Builtin,
+        // "foreign function interface" types; types for interacting with other
+        // languages (like C).
         FFIType,
+        // Named types get resolved to the type the name is bound to.
         Named,
+        // A (possibly null) memory address.
         Pointer,
+        // Like a pointer, but non-nullable.
         Reference,
+        // Like a struct with .data, .size, and .capacity members, allocates.
         DynamicArray,
+        // Fixed size array.
         Array,
+        // Like a struct with .data and .size members, no allocations.
         ArrayView,
+        // A callable.
         Function,
+        // SAFE Single memory location shared by multiple types.
         Sum,
+        // Single memory location shared by multiple types.
         Union,
+        // Named constants.
         Enum,
+        // A structure composed of other types.
         Struct,
+        // Regular-old integer type; what you get when you type int.
         Integer,
+        // A type that corresponds to the type of the expression inside; used to
+        // transfer the expression through to sema, where it may be properly
+        // replaced with the type expression of it's expression's type.
+        Typeof,
     };
 
 private:
@@ -763,6 +783,7 @@ static constexpr auto ToString(Type::Kind k) {
         case Type::Kind::Enum: return "enum";
         case Type::Kind::Struct: return "struct";
         case Type::Kind::Integer: return "integer";
+        case Type::Kind::Typeof: return "typeof";
     }
     LCC_UNREACHABLE();
 }
@@ -845,6 +866,25 @@ public:
     [[nodiscard]]
     static auto classof(const Type* type) -> bool {
         return type->kind() == Kind::Integer;
+    }
+};
+
+class TypeofType : public Type {
+    Expr* _expression;
+
+public:
+    constexpr TypeofType(Expr* e, Location location)
+        : Type(Kind::Typeof, location), _expression(e) {}
+
+    [[nodiscard]]
+    auto expression() const { return _expression; }
+
+    [[nodiscard]]
+    auto expression() -> Expr*& { return _expression; }
+
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool {
+        return type->kind() == Kind::Typeof;
     }
 };
 

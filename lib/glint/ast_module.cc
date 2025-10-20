@@ -421,6 +421,9 @@ auto lcc::glint::Module::serialise(
         case Type::Kind::Union: {
             LCC_TODO("Serialise union type (it's easy, just haven't yet)");
         } break;
+
+        case Type::Kind::Typeof:
+            LCC_ASSERT(false, "Sema should have replaced TypeofType with the type of it's contained expression");
     }
 
     return type_index;
@@ -857,6 +860,9 @@ auto lcc::glint::Module::deserialise(
             case Type::Kind::Union:
                 LCC_TODO("Parse type kind {} from binary module metadata", ToString(kind));
                 break;
+
+            case Type::Kind::Typeof:
+                LCC_ASSERT(false, "Sema should have replaced TypeofType with the type of it's contained expression");
         }
     }
 

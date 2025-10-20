@@ -52,6 +52,7 @@ lcc::StringMap<Tk> keywords{
     {"sizeof", Tk::Sizeof},
     {"alignof", Tk::Alignof},
     {"template", Tk::Template},
+    {"typeof", Tk::Typeof},
     // C FFI Types
     {"cshort", Tk::CShort},
     {"cushort", Tk::CUShort},
@@ -1041,6 +1042,7 @@ auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
         case TokenKind::TildeEq:
         case TokenKind::LBrackEq:
         case TokenKind::Template:
+        case TokenKind::Typeof:
             return true;
     }
 
@@ -1143,6 +1145,7 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
         case Tk::LBrackEq: return "[=";
         case Tk::ByteLiteral: return "byte literal";
         case Tk::Template: return "template";
+        case Tk::Typeof: return "typeof";
     }
 
     return "<unknown>";
@@ -1242,6 +1245,7 @@ auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::s
         case Tk::Match: return {"match"};
         case Tk::Print: return {"print"};
         case Tk::Template: return {"template"};
+        case Tk::Typeof: return {"typeof"};
         case Tk::CShort: return {"cshort"};
         case Tk::CUShort: return {"cushort"};
         case Tk::CInt: return {"cint"};

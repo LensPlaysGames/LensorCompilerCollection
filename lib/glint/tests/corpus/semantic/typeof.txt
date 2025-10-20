@@ -1,0 +1,13 @@
+================
+Typeof Type Gets Replaced With Type of Expression
+:warn-sema
+================
+
+typeof 0; ;; emits unused warning
+0;
+
+---
+
+(block
+ (t_int)
+ (return (integer_literal)))
