@@ -94,6 +94,8 @@ in the expected output and what we got."
   (cond
    ((stringp expected-output)
     (unless (string-equal got-output expected-output)
+      ;; TODO: Get amount of characters that match from beginning using compare-strings...
+      ;; Propertize substring after matching characters to be red in GOT output...
       (message "UNEXPECTED OUTPUT: %s\n\tEXPECTED:\n'%s'\n\tGOT:\n'%s'"
                test-name expected-output got-output)))
    ((functionp expected-output)
@@ -374,8 +376,9 @@ Additional properties are included, but not necessary:
                   ;; (message "Test %s: GCC generated final artifact %s" (plist-get test :name) ,glint-gcc-output-filepath)
                   ;; Wait for file to exist
                   (while (not (file-exists-p ,glint-gcc-output-filepath))
-                    (message "Waiting for %s to exist..." ,glint-gcc-output-filepath)
-                    (sit-for 1))
+                    (message "Test %s: Waiting for %s to exist..."
+                             (plist-get test :name) ,glint-gcc-output-filepath)
+                    (sit-for 0.1))
                   (push ,glint-gcc-output-filepath (plist-get test :artifacts)))
               (progn
                 (setq test (plist-put test :failed t))
@@ -426,8 +429,9 @@ Additional properties are included, but not necessary:
                   ;; (message "Test %s: LCC generated intermediate artifact %s" (plist-get test :name) ,glint-lcc-output-filepath)
                   ;; wait for file to exist
                   (while (not (file-exists-p ,glint-lcc-output-filepath))
-                    (message "Test %s: Waiting for %s to exist..." (plist-get test :name) ,glint-lcc-output-filepath)
-                    (sit-for 1))
+                    (message "Test %s: Waiting for %s to exist..."
+                             (plist-get test :name) ,glint-lcc-output-filepath)
+                    (sit-for 0.1))
                   (push ,glint-lcc-output-filepath (plist-get test :intermediate_artifacts))
                   (run-test--glint-gcc test ,glint-lcc-output-filepath))
               (progn
