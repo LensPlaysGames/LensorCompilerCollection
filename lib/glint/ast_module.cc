@@ -8,6 +8,7 @@
 #include <array>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -281,30 +282,47 @@ auto lcc::glint::Module::serialise(
         //     underlying_type_index :TypeIndex
         //     enum_decl_count :u32
         //     enum_decls :u64[enum_decl_count]
+        //     enum_names :(name_length :u16, name :u8[name_length])[enum_decl_count]
         // FIXME: Ideally we should get the size of the value (enum_decls element
         // type) from the underlying type, instead of just assuming it fits in 64
         // bits.
         case Type::Kind::Enum: {
             auto type = as<EnumType>(ty);
 
+            // Write (to be fixed up) underlying type index.
             auto underlying_type_offset = out.size();
             out.insert(out.end(), sizeof(ModuleDescription::TypeIndex), 0);
 
             // TODO: Assert that underlying type can fit in 64 bits. But we don't have
             // context here (yet).
 
+            // Write enumerator count.
             u32 enum_decl_count = u32(type->enumerators().size());
             auto enum_decl_count_bytes = to_bytes(enum_decl_count);
             out.insert(out.end(), enum_decl_count_bytes.begin(), enum_decl_count_bytes.end());
 
+            // Write enumerator values.
             for (auto* enum_decl : type->enumerators()) {
                 u64 value = enum_decl->value().value();
                 auto value_bytes = to_bytes(value);
                 out.insert(out.end(), value_bytes.begin(), value_bytes.end());
             }
 
+            // Write enumerator names.
+            for (auto* enum_decl : type->enumerators()) {
+                LCC_ASSERT(
+                    enum_decl->name().length() <= std::numeric_limits<u16>::max(),
+                    "Enumerator has over-long name, cannot export..."
+                );
+                u16 name_length = (u16) enum_decl->name().length();
+                auto name_length_bytes = to_bytes(name_length);
+                out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
+                out.insert(out.end(), enum_decl->name().begin(), enum_decl->name().end());
+            }
+
             auto underlying_type = serialise(out, cache, type->underlying_type());
 
+            // Overwrite type index with serialised underlying type.
             auto* underlying_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + underlying_type_offset);
             *underlying_type_ptr = underlying_type;
         } break;
@@ -412,12 +430,48 @@ auto lcc::glint::Module::serialise(
                 *member_types_ptr++ = member_type;
         } break;
 
-        // TODO: Will be a lot like a struct
+        // SumType:
+        //     member_count :u16
+        //     member_types :TypeIndex[member_count]
+        //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
         case Type::Kind::Sum: {
-            LCC_TODO("Serialise sum type (just haven't yet)");
+            auto type = as<SumType>(ty);
+
+            auto& members = type->members();
+
+            auto member_count = u16(members.size());
+            auto member_count_bytes = to_bytes(member_count);
+            out.insert(out.end(), member_count_bytes.begin(), member_count_bytes.end());
+
+            // Allocate enough room to represent member types, once we are able to
+            // serialise them, keeping track of where they are so we can fix them up
+            // later.
+            auto member_types_offset = out.size();
+            out.insert(out.end(), member_count * sizeof(ModuleDescription::TypeIndex), 0);
+
+            // Member Data
+            for (const auto& member : members) {
+                auto name_length = member.name.length();
+                auto name_length_bytes = to_bytes(name_length);
+                out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
+                out.insert(out.end(), member.name.begin(), member.name.end());
+            }
+
+            // Serialise member types and fixup member type indices previously
+            // allocated.
+            std::vector<ModuleDescription::TypeIndex> member_types{};
+            for (auto& member : members)
+                member_types.push_back(serialise(out, cache, member.type));
+
+            auto* member_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + member_types_offset);
+            for (auto& member_type : member_types)
+                *member_types_ptr++ = member_type;
         } break;
 
-        // TODO: Will be a lot like a struct
+        // UnionType:
+        //     member_count :u16
+        //     member_types :TypeIndex[member_count]
+        //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
         case Type::Kind::Union: {
             LCC_TODO("Serialise union type (it's easy, just haven't yet)");
         } break;
@@ -533,27 +587,17 @@ auto lcc::glint::Module::deserialise(
     // Type* of any given index /before/ we start parsing any of the types.
     struct BasicFixup {
         // Type index of the type that needs fixing up. This index will be
-        // overwritten with the type at the replacement type index.
+        // overwritten with a type created from the replacement type index.
         ModuleDescription::TypeIndex fixup_type_index;
+        // Type index of the type that has not yet been deserialised; the cause of
+        // the fixup.
         ModuleDescription::TypeIndex replacement_type_index;
-        /// FIXUP is replaced with REPLACEMENT
         BasicFixup(
             u16 zero_index,
             ModuleDescription::TypeIndex fixup_index,
             ModuleDescription::TypeIndex replacement_index
         ) : fixup_type_index(zero_index + fixup_index),
             replacement_type_index(zero_index + replacement_index) {}
-    };
-
-    struct ArrayFixup : public BasicFixup {
-        u64 array_size;
-        ArrayFixup(
-            u16 zero_index,
-            ModuleDescription::TypeIndex fixup_index,
-            ModuleDescription::TypeIndex replacement_index,
-            u64 array_size_
-        ) : BasicFixup(zero_index, fixup_index, replacement_index),
-            array_size(array_size_) {}
     };
 
     auto validate_fixup = [this, types_zero_index](const BasicFixup& fixup) {
@@ -580,6 +624,130 @@ auto lcc::glint::Module::deserialise(
             high_msg,
             fixup.replacement_type_index,
             types.size()
+        );
+    };
+
+    struct ArrayFixup : public BasicFixup {
+        u64 array_size;
+        ArrayFixup(
+            u16 zero_index,
+            ModuleDescription::TypeIndex fixup_index,
+            ModuleDescription::TypeIndex replacement_index,
+            u64 array_size_
+        ) : BasicFixup(zero_index, fixup_index, replacement_index),
+            array_size(array_size_) {}
+    };
+
+    struct EnumFixup {
+        ModuleDescription::TypeIndex enum_type_index;
+        ModuleDescription::TypeIndex underlying_type_index;
+        // TODO: u64 isn't guaranteed to hold an enums value...
+        std::vector<u64> enumerator_values{};
+        std::vector<std::string> enumerator_names{};
+
+        EnumFixup(
+            u16 zero_index,
+            ModuleDescription::TypeIndex enum_index,
+            ModuleDescription::TypeIndex underlying_index,
+            decltype(enumerator_values) enum_values,
+            decltype(enumerator_names) enum_names
+        ) : enum_type_index(zero_index + enum_index),
+            underlying_type_index(zero_index + underlying_index),
+            enumerator_values(enum_values),
+            enumerator_names(enum_names) {}
+    };
+
+    auto validate_enum_fixup = [this, types_zero_index](const EnumFixup fixup) {
+        constexpr auto low_msg
+            = "You probably forgot to account for the non-zero zero index into the types container.";
+        constexpr auto high_msg
+            = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
+
+        // Bounds-check index to be replaced with an enum type.
+        LCC_ASSERT(
+            fixup.enum_type_index >= types_zero_index,
+            low_msg
+        );
+        LCC_ASSERT(
+            fixup.enum_type_index < types.size(),
+            high_msg,
+            fixup.enum_type_index,
+            types.size()
+        );
+
+        // Bounds-check index of the enum's underlying type.
+        LCC_ASSERT(
+            fixup.underlying_type_index >= types_zero_index,
+            low_msg
+        );
+        LCC_ASSERT(
+            fixup.underlying_type_index < types.size(),
+            high_msg,
+            fixup.enum_type_index,
+            types.size()
+        );
+
+        // Enumerator names and values have to map 1:1 (same amount)
+        LCC_ASSERT(
+            fixup.enumerator_names.size() == fixup.enumerator_values.size(),
+            "EnumType fixup: Mismatch in deserialised value and name count"
+        );
+    };
+
+    struct SumFixup {
+        ModuleDescription::TypeIndex sum_type_index;
+        std::vector<ModuleDescription::TypeIndex> member_type_indices;
+        std::vector<std::string> member_names;
+        /// FIXUP is replaced with REPLACEMENT
+        SumFixup(
+            u16 zero_index,
+            ModuleDescription::TypeIndex sum_index,
+            std::vector<ModuleDescription::TypeIndex> member_types,
+            std::vector<std::string> member_names_
+        ) : sum_type_index(sum_index),
+            member_type_indices(member_types),
+            member_names(member_names_) {
+            for (auto& index : member_type_indices)
+                index += zero_index;
+        }
+    };
+
+    auto validate_sum_fixup = [this, types_zero_index](const SumFixup& fixup) {
+        constexpr auto low_msg
+            = "You probably forgot to account for the non-zero zero index into the types container.";
+        constexpr auto high_msg
+            = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
+
+        // Bounds-check index to be replaced with a sum type.
+        LCC_ASSERT(
+            fixup.sum_type_index >= types_zero_index,
+            low_msg
+        );
+        LCC_ASSERT(
+            fixup.sum_type_index < types.size(),
+            high_msg,
+            fixup.sum_type_index,
+            types.size()
+        );
+
+        // Bounds-check all member type indices.
+        for (auto member_i : fixup.member_type_indices) {
+            LCC_ASSERT(
+                member_i >= types_zero_index,
+                low_msg
+            );
+            LCC_ASSERT(
+                member_i < types.size(),
+                high_msg,
+                member_i,
+                types.size()
+            );
+        }
+
+        // Parameter names and type indices have to map 1:1 (same amount)
+        LCC_ASSERT(
+            fixup.member_type_indices.size() == fixup.member_names.size(),
+            "SumType fixup: Mismatch in deserialised type and name count"
         );
     };
 
@@ -659,12 +827,19 @@ auto lcc::glint::Module::deserialise(
         );
     };
 
+    // Fixup element type.
     std::vector<BasicFixup> ptr_fixups{};
     std::vector<BasicFixup> ref_fixups{};
     std::vector<BasicFixup> dynarray_fixups{};
     std::vector<BasicFixup> view_fixups{};
+    // Fixup underlying type, and scope declarations.
+    std::vector<EnumFixup> enum_fixups{};
+    // Fixup element type + size expression.
     std::vector<ArrayFixup> array_fixups{};
+    // Fixup return type and parameter types.
     std::vector<FunctionFixup> function_fixups{};
+    // Fixup member types and scope declarations.
+    std::vector<SumFixup> sum_fixups{};
 
     for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
         auto tag = module_metadata_blob.at(type_offset++);
@@ -860,6 +1035,121 @@ auto lcc::glint::Module::deserialise(
                 );
             } break;
 
+            // SumType:
+            //     member_count :u16
+            //     member_types :TypeIndex[member_count]
+            //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
+            case Type::Kind::Sum: {
+                constexpr auto member_count_size = sizeof(u16);
+                std::array<u8, member_count_size> member_count_array{};
+                for (unsigned i = 0; i < member_count_size; ++i)
+                    member_count_array[i] = module_metadata_blob.at(type_offset++);
+                auto member_count = from_bytes<u16>(member_count_array);
+
+                // Member Type Indices
+                std::vector<ModuleDescription::TypeIndex> member_type_indices{};
+                for (usz member_index = 0; member_index < member_count; ++member_index) {
+                    constexpr auto member_type_index_size = sizeof(ModuleDescription::TypeIndex);
+                    std::array<u8, member_type_index_size> member_type_index_array{};
+                    for (unsigned i = 0; i < member_type_index_size; ++i)
+                        member_type_index_array[i] = module_metadata_blob.at(type_offset++);
+                    auto member_type_index = from_bytes<ModuleDescription::TypeIndex>(member_type_index_array);
+
+                    member_type_indices.emplace_back(member_type_index);
+                }
+
+                // Member Names
+                std::vector<std::string> member_names{};
+                for (usz member_index = 0; member_index < member_count; ++member_index) {
+                    constexpr auto member_name_length_size = sizeof(u16);
+                    std::array<u8, member_name_length_size> member_name_length_array{};
+                    for (unsigned i = 0; i < member_name_length_size; ++i)
+                        member_name_length_array[i] = module_metadata_blob.at(type_offset++);
+                    auto member_name_length = from_bytes<u16>(member_name_length_array);
+
+                    std::string member_name{};
+                    member_name.reserve(member_name_length);
+                    for (unsigned i = 0; i < member_name_length; ++i)
+                        member_name += char(module_metadata_blob.at(type_offset++));
+
+                    member_names.emplace_back(std::move(member_name));
+                }
+
+                // This reserves the saved index in types vector for this type (which will
+                // be created later while handling the fixup).
+                types.emplace_back(nullptr);
+                sum_fixups.emplace_back(
+                    types_zero_index,
+                    type_index,
+                    std::move(member_type_indices),
+                    std::move(member_names)
+                );
+            } break;
+
+            // EnumType:
+            //     underlying_type_index :TypeIndex
+            //     enum_decl_count :u32
+            //     enum_decls :u64[enum_decl_count]
+            //     enum_names :(name_length :u16, name: u8[name_length])[enum_decl_count]
+            // FIXME: Ideally we should get the size of the value (enum_decls element
+            // type) from the underlying type, instead of just assuming it fits in 64
+            // bits... But... yeah.
+            case Type::Kind::Enum: {
+                // Get underlying type index
+                constexpr auto underlying_type_index_size = sizeof(ModuleDescription::TypeIndex);
+                std::array<u8, underlying_type_index_size> underlying_type_index_array{};
+                for (unsigned i = 0; i < underlying_type_index_size; ++i)
+                    underlying_type_index_array[i] = module_metadata_blob.at(type_offset++);
+                auto underlying_type_index = from_bytes<u16>(underlying_type_index_array);
+
+                // Get enum decl count
+                constexpr auto enum_decl_count_size = sizeof(u32);
+                std::array<u8, enum_decl_count_size> enum_decl_count_array{};
+                for (unsigned i = 0; i < enum_decl_count_size; ++i)
+                    enum_decl_count_array[i] = module_metadata_blob.at(type_offset++);
+                auto enum_decl_count = from_bytes<u32>(enum_decl_count_array);
+
+                // Get enum values
+                std::vector<u64> enum_values{};
+                enum_values.reserve(enum_decl_count);
+                for (unsigned value_index = 0; value_index < enum_decl_count; ++value_index) {
+                    // TODO: Get size from underlying type...
+                    constexpr auto enum_value_size = sizeof(u64);
+                    std::array<u8, enum_value_size> enum_value_array{};
+                    for (unsigned i = 0; i < enum_value_size; ++i)
+                        enum_value_array[i] = module_metadata_blob.at(type_offset++);
+                    auto value = from_bytes<u64>(enum_value_array);
+                    enum_values.emplace_back(value);
+                }
+
+                // Get enum names
+                std::vector<std::string> enum_names{};
+                enum_names.reserve(enum_decl_count);
+                for (unsigned name_index = 0; name_index < enum_decl_count; ++name_index) {
+                    constexpr auto name_length_size = sizeof(u16);
+                    std::array<u8, name_length_size> name_length_array{};
+                    for (unsigned i = 0; i < name_length_size; ++i)
+                        name_length_array[i] = module_metadata_blob.at(type_offset++);
+                    auto name_length = from_bytes<u16>(name_length_array);
+
+                    std::string name{};
+                    name.reserve(name_length);
+                    for (auto i = 0; i < name_length; ++i)
+                        name += (char) module_metadata_blob.at(type_offset++);
+
+                    enum_names.emplace_back(name);
+                }
+
+                types.emplace_back(nullptr);
+                enum_fixups.emplace_back(
+                    types_zero_index,
+                    type_index,
+                    underlying_type_index,
+                    enum_values,
+                    enum_names
+                );
+            } break;
+
             // StructType:
             //     size_in_bytes :u16
             //     align_in_bytes :u16
@@ -868,16 +1158,10 @@ auto lcc::glint::Module::deserialise(
             //     member_data :(byte_offset :u16, name_length :u16, member_name :u8[name_length])[member_count]
             case Type::Kind::Struct:
 
-            // EnumType:
-            //     underlying_type_index :TypeIndex
-            //     enum_decl_count :u32
-            //     enum_decls :u64[enum_decl_count]
-            // FIXME: Ideally we should get the size of the value (enum_decls element
-            // type) from the underlying type, instead of just assuming it fits in 64
-            // bits.
-            case Type::Kind::Enum:
-
-            case Type::Kind::Sum:
+            // UnionType:
+            //     member_count :u16
+            //     member_types :TypeIndex[member_count]
+            //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
             case Type::Kind::Union:
                 LCC_TODO("Parse type kind {} from binary module metadata", ToString(kind));
                 break;
@@ -933,6 +1217,43 @@ auto lcc::glint::Module::deserialise(
         types.erase(types.begin() + types_size);
     }
 
+    for (auto fixup : enum_fixups) {
+        validate_enum_fixup(fixup);
+        int types_size = int(types.size());
+
+        // FIXME: What should parent of imported enum scope be?
+        auto scope = new (*this) Scope(nullptr);
+        std::vector<EnumeratorDecl*> enumerator_decls{};
+
+        for (unsigned i = 0; i < fixup.enumerator_names.size(); ++i) {
+            auto enum_decl = new (*this) EnumeratorDecl(
+                std::string(fixup.enumerator_names.at(i)),
+                new (*this) ConstantExpr(
+                    new (*this) IntegerLiteral(fixup.enumerator_values.at(i), {}),
+                    fixup.enumerator_values.at(i)
+                ),
+                {}
+            );
+            auto decl = scope->declare(
+                context,
+                std::string(fixup.enumerator_names.at(i)),
+                enum_decl
+            );
+            LCC_ASSERT(decl);
+
+            enumerator_decls.emplace_back(enum_decl);
+        }
+
+        types[fixup.enum_type_index] = new (*this) EnumType(
+            scope,
+            types[fixup.underlying_type_index],
+            enumerator_decls,
+            {}
+        );
+        types[fixup.enum_type_index]->set_sema_done();
+        types.erase(types.begin() + types_size);
+    }
+
     for (auto fixup : array_fixups) {
         validate_fixup(fixup);
         int types_size = int(types.size());
@@ -944,6 +1265,56 @@ auto lcc::glint::Module::deserialise(
             )
         );
         types[fixup.fixup_type_index]->set_sema_done();
+        types.erase(types.begin() + types_size);
+    }
+
+    for (auto fixup : sum_fixups) {
+        validate_sum_fixup(fixup);
+        int types_size = int(types.size());
+
+        // Member Types
+        std::vector<SumType::Member> members{};
+        members.reserve(fixup.member_type_indices.size());
+        usz member_i{0};
+        for (auto member_type_index : fixup.member_type_indices) {
+            // TODO: Get default expression, somehow (requires (de)serialisation of
+            // Glint Expr*).
+            members.emplace_back(
+                fixup.member_names.at(member_i),
+                types[member_type_index],
+                nullptr,
+                Location{}
+            );
+            ++member_i;
+        }
+
+        // FIXME: What should parent scope of sum type scope be?
+        auto scope = new (*this) Scope(nullptr);
+
+        // Declare members in scope
+        for (auto& m : members) {
+            auto member_decl = new (*this) VarDecl(
+                std::string(m.name),
+                m.type,
+                nullptr,
+                this,
+                Linkage::Internal,
+                {}
+            );
+            auto decl = scope->declare(
+                context,
+                std::string(m.name),
+                member_decl
+            );
+            LCC_ASSERT(decl);
+        }
+
+        auto sum = new (*this) SumType(scope, std::move(members), {});
+        types[fixup.sum_type_index] = sum;
+
+        types[fixup.sum_type_index]->set_sema_done();
+        // This erases the entry added within SumType allocation, since we
+        // overwrote a previous entry with this type.
         types.erase(types.begin() + types_size);
     }
 
@@ -993,6 +1364,14 @@ auto lcc::glint::Module::deserialise(
 
         types[fixup.function_type_index]->set_sema_done();
         types.erase(types.begin() + types_size);
+    }
+
+    // Fixups Confidence Check
+    for (auto t : types) {
+        LCC_ASSERT(
+            t,
+            "Glint Module Deserialisation: fixup not properly applied, and a null type was left in the type cache..."
+        );
     }
 
     // Starting after the header, begin parsing declarations. Stop after

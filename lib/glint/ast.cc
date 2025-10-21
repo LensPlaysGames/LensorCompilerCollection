@@ -2300,6 +2300,7 @@ void lcc::glint::Expr::print(bool use_colour) const {
 }
 
 auto lcc::glint::UnionType::array_type(Module& mod) -> ArrayType* {
+    // FIXME: magic number 8
     if (not _cached_type) {
         _cached_type = new (mod) ArrayType(
             new (mod) IntegerType(8, false, {}),
