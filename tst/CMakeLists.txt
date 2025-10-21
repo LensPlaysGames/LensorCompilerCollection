@@ -47,6 +47,8 @@ add_custom_target(
   --chdir "${CMAKE_CURRENT_LIST_DIR}/../runtest/"
   --eval "(setq lcc-path \"$<TARGET_FILE:lcc>\")"
   --load ./runtest.el
+  DEPENDS
+  lcc
   VERBATIM
   USES_TERMINAL
 )
