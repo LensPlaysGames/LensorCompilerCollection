@@ -60,7 +60,12 @@ GlobalVariable* GlobalVariable::CreateStringPtr(Module* mod, std::string name, s
     LCC_ASSERT(mod);
     auto context = mod->context();
     LCC_ASSERT(context);
-    auto ty = lcc::ArrayType::Get(context, str.length() + 1, lcc::IntegerType::Get(context, 8));
+    // FIXME: magic number 8
+    auto ty = lcc::ArrayType::Get(
+        context,
+        str.length() + 1,
+        lcc::IntegerType::Get(context, 8)
+    );
 
     std::vector<char> data{str.begin(), str.end()};
     data.push_back(0);
