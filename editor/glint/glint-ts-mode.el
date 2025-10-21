@@ -196,7 +196,8 @@
 
 (when (treesit-ready-p 'glint t)
   (add-to-list 'auto-mode-alist '("\\.g\\'" . glint-ts-mode))
-  (add-to-list 'org-src-lang-modes '("glint" . glint-ts)))
+  (with-eval-after-load 'org
+    (add-to-list 'org-src-lang-modes '("glint" . glint-ts))))
 
 (provide 'glint-ts-mode)
 
