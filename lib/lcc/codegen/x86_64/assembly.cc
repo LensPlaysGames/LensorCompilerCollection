@@ -143,7 +143,7 @@ void emit_gnu_att_assembly(
         if (imported) continue;
 
         for (auto n : function.names())
-            out += fmt::format("{}:\n", n.name);
+            out += fmt::format("{}:\n", safe_name(n.name));
 
         // TODO: Total hack just to try and get the source to show up at all in a
         // debugger. We would need real location information to properly do this.
@@ -447,12 +447,12 @@ void emit_gnu_att_assembly(
 
         bool defines{false};
         for (auto n : var->names()) {
-            if (n.linkage == Linkage::Exported) {
+            if (not IsImportedLinkage(n.linkage)) {
                 if (not init_vars_present) {
                     out += "    .section .data\n";
                     init_vars_present = true;
                 }
-                out += fmt::format("{}:\n", n.name);
+                out += fmt::format("{}:\n", safe_name(n.name));
                 defines = true;
             }
         }
@@ -519,7 +519,9 @@ void emit_gnu_att_assembly(
                 if (not defines)
                     out += fmt::format(".align {}\n", var->allocated_type()->align_bytes());
 
-                out += fmt::format("{}:\n", n.name);
+                // If safe_name breaks the identifier, well, there's not much we can do,
+                // since the identifier cannot be represented in the output format...
+                out += fmt::format("{}:\n", safe_name(n.name));
                 defines = true;
             }
         }
