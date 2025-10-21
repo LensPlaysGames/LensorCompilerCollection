@@ -194,8 +194,8 @@ in the expected output and what we got."
                 (run-test--execute ,gcc-output-filepath test-name expected-status expected-output)
               (progn
                 (setq test (plist-put test :failed t))
-                (error "GCC returned non-zero exit code (%i) %s" (process-exit-status p) ,gcc-output)))))))
-))
+                (message "Error: Test %s: GCC returned non-zero exit code (%i)\n%s"
+                         (plist-get test :name) (process-exit-status p) ,gcc-output)))))))))
 
 (defun run-test--gcc (source-filepaths test-name expected-status expected-output)
   "Run GCC"
@@ -379,11 +379,10 @@ Additional properties are included, but not necessary:
                   (push ,glint-gcc-output-filepath (plist-get test :artifacts)))
               (progn
                 (setq test (plist-put test :failed t))
-                (message "Error: GCC returned non-zero exit code (%i)\n%s" (process-exit-status p) ,gcc-output)))))
+                (message "Error: Test %s: GCC returned non-zero exit code (%i)\n%s"
+                         (plist-get test :name) (process-exit-status p) ,gcc-output)))))
         ;; Tell GCC to create an object file
-        '("-c"))
-       )
-    ))
+        '("-c")))))
 
 (defun run-test--glint-gcc (test source-filepath)
   ""
@@ -433,10 +432,9 @@ Additional properties are included, but not necessary:
                   (run-test--glint-gcc test ,glint-lcc-output-filepath))
               (progn
                 (setq test (plist-put test :failed t))
-                (message "Error: LCC returned non-zero exit code (%i) %s" (process-exit-status p) ,glint-lcc-output)))))
-        '("-I" "."))
-       )
-    ))
+                (message "Error: Test %s: LCC returned non-zero exit code (%i)\n%s"
+                         (plist-get test :name) (process-exit-status p) ,glint-lcc-output)))))
+        '("-I" ".")))))
 
 (defun run-test--glint-lcc (test test-source)
   "Compile a Glint test source into an object file using LCC, then GCC."
