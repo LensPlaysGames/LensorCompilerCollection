@@ -1,11 +1,14 @@
 #include <glint/ast.hh>
+#include <glint/ast_eval.hh>
 #include <glint/ir_gen.hh>
 #include <glint/parser.hh>
 #include <glint/sema.hh>
+
 #include <lcc/file.hh>
 #include <lcc/format.hh>
 #include <lcc/opt/opt.hh>
 #include <lcc/target.hh>
+#include <lcc/utils.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
 
 #include <fmt/format.h>
@@ -158,6 +161,17 @@ int main(int argc, char** argv) {
         if (context.has_error()) return 1;
 
         if (options.evaluate) {
+            {
+                auto out = lcc::glint::evaluate(*m, m->top_level_function()->body());
+                if (not out) {
+                    fmt::print("[New Evaluation Failed]\n");
+                } else {
+                    auto result = m->ToSource(*out);
+                    LCC_ASSERT(result, "Failed to get string representing evaluation result...");
+                    fmt::print("{}\n", *result);
+                }
+            }
+
             lcc::glint::EvalResult out;
             if (not m->top_level_function()->body()->evaluate(&context, out, false)) {
                 fmt::print("[Evaluation Failed]\n");
