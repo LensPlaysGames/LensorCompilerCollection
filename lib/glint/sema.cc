@@ -2298,15 +2298,45 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     auto cmp_or
                         = new (mod) BinaryExpr(TokenKind::Or, cmp_zero, cmp_size, {});
 
+                    // TODO: if oob_print or something.
+                    auto puts_ref = new (mod) NameRefExpr("puts", mod.global_scope(), {});
+                    std::string str_value = "Glint Runtime Error: oob dynamic array access";
+                    if (b->location().seekable(context)) {
+                        auto locinfo = b->location().seek_line_column(context);
+                        str_value = fmt::format(
+                            "{}:{}:{}: {}",
+                            locinfo.line,
+                            locinfo.col,
+                            context->files().at(b->location().file_id)->path().lexically_normal().string(),
+                            str_value
+                        );
+                    }
+                    auto str = new (mod) StringLiteral(mod, str_value, {});
+                    auto sub_str = new (mod) BinaryExpr(
+                        TokenKind::LBrack,
+                        str,
+                        new (mod) IntegerLiteral(0, {}),
+                        {}
+                    );
+                    auto then_print = new (mod) CallExpr(
+                        puts_ref,
+                        {sub_str},
+                        {}
+                    );
+
                     auto exit_ref = new (mod) NameRefExpr("exit", mod.global_scope(), {});
                     auto status_literal = new (mod) IntegerLiteral(1, {});
-                    // TODO: When user defines oob_access handler, make then a block and call
-                    // that handler.
+                    // TODO: When user defines oob_access handler, call that handler.
                     auto then_outofbounds = new (mod) CallExpr(exit_ref, {status_literal}, {});
+                    auto then_block = new (mod) BlockExpr(
+                        {then_print,
+                         then_outofbounds},
+                        {}
+                    );
 
                     auto if_outofbounds = new (mod) IfExpr(
                         cmp_or,
-                        then_outofbounds,
+                        then_block,
                         nullptr,
                         {}
                     );
