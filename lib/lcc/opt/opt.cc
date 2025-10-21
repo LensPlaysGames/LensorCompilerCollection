@@ -1,6 +1,7 @@
 #include <lcc/core.hh>
 #include <lcc/ir/domtree.hh>
 #include <lcc/opt/opt.hh>
+#include <lcc/utils.hh>
 
 #include <algorithm>
 #include <concepts>
@@ -61,13 +62,13 @@ protected:
         SetChanged();
     }
 
-    /// Replace an instruction with a an integer constant.
+    /// Replace an instruction with an integer constant.
     auto Replace(Inst* i, aint value) {
         i->replace_with(MakeInt(value));
         SetChanged();
     }
 
-    /// Mark that this pass has changed the ir.
+    /// Mark that this pass has changed the module.
     void SetChanged() { has_changed = true; }
 
 private:
@@ -84,21 +85,24 @@ private:
 ///
 /// OPTIONAL: void atfork(Block* fork);
 ///
-///     Called whenever there is a fork (conditional branch)
-///     in the control flow graph. The `fork` block is the block
-///     that contains the conditional branch.
+///     Called whenever there is a fork (conditional branch) in the control
+///     flow graph. The `fork` block is the block that contains the conditional
+///     branch (AKA where we are branching from).
 ///
 /// OPTIONAL: void run_on_function(Function*);
 ///
-///     Called when we’re done iterating over the control flow graph.
+///     Called when finished iterating over the control flow graph of the given
+///     function.
 ///
 /// OPTIONAL: void enter_block(Block* block);
 ///
 ///     Called whenever we enter a new block.
+///     The `block` is the block we are entering.
 ///
 /// OPTIONAL: void leave_block(Block* block);
 ///
 ///     Called whenever we leave a block.
+///     The `block` is the block we are exiting.
 ///
 struct InstructionRewritePass : OptimisationPass {};
 
@@ -597,7 +601,7 @@ public:
 };
 
 /// Pass that performs simple store forwarding.
-struct StoreFowardingPass : InstructionRewritePass {
+struct StoreForwardingPass : InstructionRewritePass {
     struct Var {
         AllocaInst* alloca;
         StoreInst* store{};
@@ -840,7 +844,7 @@ private:
 };
 
 /// CFG simplification pass.
-struct CFGSimplPass : InstructionRewritePass {
+struct CFGSimplePass : InstructionRewritePass {
     void run_on_function(Function* f) {
         /// We start at 1 because the entry block is always reachable.
         for (usz i = 1; i < f->blocks().size(); /** No increment! **/) {
@@ -889,6 +893,7 @@ struct CFGSimplPass : InstructionRewritePass {
 struct DCEPass : InstructionRewritePass {
     void run_on_instruction(Inst* i) {
         if (not i->users().empty()) return;
+
         switch (i->kind()) {
             default: return;
             case Value::Kind::GetElementPtr:
@@ -931,7 +936,7 @@ struct DCEPass : InstructionRewritePass {
     }
 };
 
-struct GlobalDCEPass : ModuleRewritePass {
+struct FunctionDCEPass : ModuleRewritePass {
     void run() {
         for (usz i = 0; i < mod->code().size(); /** No increment! **/) {
             auto* f = mod->code()[i];
@@ -965,22 +970,81 @@ struct PrintDOMTreePass : InstructionRewritePass {
 };
 
 struct Optimiser {
-    Module* mod;
+    Module* mod{nullptr};
 
-    /// TODO: Actually use this.
-    [[maybe_unused]] int opt_level;
+    enum class OptimisationLevel {
+        Invalid = 0,
+        /// May increase code size at cost of better performance i.e. function
+        /// inlining, loop unrolling.
+        Aggressive,
+        /// Enable possibly time-consuming or extensive optimisations that
+        /// generally do not involve code size vs speed trade-offs.
+        /// That is, this pass should not bloat the code size to increase speed,
+        /// nor use less-than-efficient code to reduce code size.
+        High,
+        /// Do everything possible to reduce the amount of code, including
+        /// functions, blocks, and instructions. Do not attempt speed-ups.
+        /// This is like "High", except no passes that significantly increase code
+        /// size are included.
+        Size,
+        /// Do simple, known-to-be "correct" optimisations.
+        /// Basically, don't risk breaking anything for any reason. The idea is to
+        /// do simple speed-ups, and not spend too long doing them.
+        Basic,
+        None
+    } opt_level{OptimisationLevel::Invalid};
+
+    constexpr static OptimisationLevel level_from_number(int o) {
+        if (o >= 3) return OptimisationLevel::Aggressive;
+        if (o == 2) return OptimisationLevel::High;
+        if (o == 1) return OptimisationLevel::Basic;
+        if (o == 0) return OptimisationLevel::None;
+        if (o <= -1) return OptimisationLevel::Size;
+        LCC_UNREACHABLE();
+    }
+
+    Optimiser() = delete;
+
+    Optimiser(Module* m, OptimisationLevel o) : mod(m), opt_level(o) {
+        LCC_ASSERT(+opt_level);
+    }
+
+    Optimiser(Module* m, int o) : Optimiser(m, level_from_number(o)) {}
 
     /// Entry point.
     void run() { // clang-format off
-        RunPasses<
-            InstCombinePass,
-            SROAPass,
-            StoreFowardingPass,
-            CFGSimplPass,
-            SSAConstructionPass,
-            DCEPass,
-            GlobalDCEPass
-        >();
+        switch (opt_level) {
+        // TODO: Once we get function inlining and loop unrolling passes, use them
+        // under "Aggressive" optimisation level.
+        case OptimisationLevel::Aggressive:
+            [[fallthrough]];
+        case OptimisationLevel::High:
+            [[fallthrough]];
+        case OptimisationLevel::Size:
+            RunPasses<
+                InstCombinePass,
+                SROAPass,
+                StoreForwardingPass,
+                CFGSimplePass,
+                SSAConstructionPass,
+                DCEPass,
+                FunctionDCEPass
+            >();
+            break;
+
+        case OptimisationLevel::Basic:
+            RunPasses<
+                InstCombinePass,
+                FunctionDCEPass
+            >();
+            break;
+
+        case OptimisationLevel::None:
+            break;
+
+        case OptimisationLevel::Invalid:
+            LCC_UNREACHABLE();
+        }
     } // clang-format on
 
     /// Entry point for running select passes.
@@ -988,12 +1052,12 @@ struct Optimiser {
         for (const auto& p : vws::split(passes, ',')) {
             auto s = std::string_view{p};
             if (s == "sroa") (void) RunPass<SROAPass>();
-            else if (s == "sfwd") (void) RunPass<StoreFowardingPass>();
+            else if (s == "sfwd") (void) RunPass<StoreForwardingPass>();
             else if (s == "icmb") (void) RunPass<InstCombinePass>();
             else if (s == "dce") (void) RunPass<DCEPass>();
-            else if (s == "gdce") (void) RunPass<GlobalDCEPass>();
+            else if (s == "gdce") (void) RunPass<FunctionDCEPass>();
             else if (s == "ssa") (void) RunPass<SSAConstructionPass>();
-            else if (s == "cfgs") (void) RunPass<CFGSimplPass>();
+            else if (s == "cfgs") (void) RunPass<CFGSimplePass>();
             else if (s == "print-dom") (void) RunPass<PrintDOMTreePass>();
             else if (s == "*") run();
             else Diag::Fatal("Unknown pass '{}'", s);

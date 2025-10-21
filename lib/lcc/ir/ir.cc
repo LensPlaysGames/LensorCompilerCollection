@@ -184,11 +184,17 @@ auto Type::string(bool use_colour) const -> std::string {
             );
         }
 
-        // TODO: name, if it has one; otherwise, all the member types.
         case Kind::Struct: {
             auto s = as<StructType>(this);
             if (s->named()) return fmt::format("{}{}{}", C(P::Name), s->name(), C(P::Reset));
             return fmt::format("{}__struct_{}{}", C(P::Name), s->index(), C(P::Reset));
+            // return fmt::format(
+            //     "struct {{{}}}",
+            //     fmt::join(
+            //         vws::transform(s->members(), [](auto m) { return *m; }),
+            //         ","
+            //     )
+            // );
         }
     }
     LCC_UNREACHABLE();
