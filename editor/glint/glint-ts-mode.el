@@ -34,66 +34,239 @@
 
 (defcustom
   glint-ts-mode-indent-offset 2
-  "Amount of spaces to be used as a unit of indentation.")
+  "Amount of spaces to be used as a unit of indentation."
+  :type 'integer)
+;; FIXME: why is this here
 (unless glint-ts-mode-indent-offset (setq glint-ts-mode-indent-offset 2))
+
+(defvar glint-ts-mode--unary-node-names
+  '("addressof" "dereference" "increment" "decrement" "negate" "logical_negate"))
+
+(defvar glint-ts-mode--binary-node-names
+  '("add" "subtract" "multiply" "divide" "remainder"
+    "eq" "ne" "gt" "ge" "lt" "le"
+    "and" "or"
+    "bitshl" "bitshr" "bitand" "bitor" "bitxor"
+    "add_eq" "subtract_eq" "multiply_eq" "divide_eq" "remainder_eq"
+    "tilde_eq" "ampersand_eq" "pipe_eq" "caret_eq" "lbrack_eq"))
+
+
+(defmacro glint-ts-mode--parent-is-unary ()
+  "Returns a matcher meant to be used within 'treesit-simple-indent-rules'.
+Basically, instead of writing out each binary node name, this expands it
+from a list automagically using LISP macros...
+See 'treesit-simple-indent-presets' for more info."
+  '`(or ,@(mapcar (lambda (n) `(parent-is ,n)) glint-ts-mode--unary-node-names)))
+
+(defmacro glint-ts-mode--parent-is-binary ()
+  "Returns a matcher meant to be used within 'treesit-simple-indent-rules'.
+Basically, instead of writing out each binary node name, this expands it
+from a list automagically using LISP macros...
+See 'treesit-simple-indent-presets' for more info."
+  '`(or ,@(mapcar (lambda (n) `(parent-is ,n)) glint-ts-mode--binary-node-names)))
+
+(defvar glint-ts-mode--indent-rules-lens
+  `(
+    ( ;; rule-begin
+     ;; BLOCK CLOSER REMOVES INDENT
+     (or (node-is "}"))
+     standalone-parent ;; anchor
+     0 ;; offset
+     ) ;; rule-end
+
+    ( ;; rule-begin
+     ;; BLOCK EXPRESSION CAUSES INDENT
+     (or (parent-is "block")) ;; matcher
+     standalone-parent ;; anchor
+     glint-ts-mode-indent-offset ;; offset
+     ) ;; rule-end
+
+    ( ;; rule-begin
+     ;; CFOR KEYWORD CAUSES DOUBLE INDENT FOR INIT, CONDITION, INCREMENT
+     (and (parent-is "cfor") (not (field-is "body")))
+     standalone-parent ;; anchor
+     ,(* 2 glint-ts-mode-indent-offset) ;; offset
+     ) ;; rule-end
+
+    ( ;; rule-begin
+     ;; CFOR KEYWORD CAUSES SINGLE INDENT FOR BODY
+     (and (parent-is "cfor") (field-is "body"))
+     standalone-parent ;; anchor
+     glint-ts-mode-indent-offset ;; offset
+     ) ;; rule-end
+
+    ( ;; rule-begin
+     ;; FOR KEYWORD CAUSES SINGLE INDENT FOR BODY
+     ;;     : for x in y,
+     ;;     :   print x;
+     ;; Presence of not "node-is block" toggles GNU style curly braces (2
+     ;; spaces for braces on newline, 2 spaces for stuff inside braces).
+     (and (parent-is "rangedfor") (field-is "body") (not (node-is "block")))
+     standalone-parent ;; anchor
+     glint-ts-mode-indent-offset ;; offset
+     ) ;; rule-end
+    ( ;; rule-begin
+     ;; BLOCK EXPRESSION (FOR BODY) ON NEWLINE MATCHES INDENT
+     ;;     : for x in y,
+     ;;     : {
+     ;;     : };
+     (and (parent-is "rangedfor") (field-is "body") (node-is "block"))
+     standalone-parent ;; anchor
+     0 ;; offset
+     ) ;; rule-end
+
+    ( ;; rule-begin
+     ;; DECLARATION INDENTS NON-BLOCK INIT EXPRESSION
+     ;;     : foo : int()
+     ;;     :   69;
+     (and (parent-is "declaration") (field-is "init") (not (node-is "block")))
+     standalone-parent ;; anchor
+     glint-ts-mode-indent-offset ;; offset
+     ) ;; rule-end
+    ( ;; rule-begin
+     ;; BLOCK EXPRESSION (DECLARATION INIT) ON NEWLINE MATCHES INDENT
+     ;;     : foo : int()
+     ;;     : {
+     ;;     :   69;
+     ;;     : }
+     (and (parent-is "declaration") (field-is "init") (node-is "block"))
+     standalone-parent ;; anchor
+     0 ;; offset
+     ) ;; rule-end
+
+    ( ;; rule-begin
+     ;; UNARY EXPRESSION CAUSES INDENT (if operand on new line)
+     ,(glint-ts-mode--parent-is-unary)
+     standalone-parent ;; anchor
+     glint-ts-mode-indent-offset ;; offset
+     ) ;; rule-end
+
+    ( ;; rule-begin
+     ;; BINARY EXPRESSION CAUSES INDENT (if rhs operand on new line)
+     ,(glint-ts-mode--parent-is-binary)
+     first-sibling ;; anchor
+     glint-ts-mode-indent-offset ;; offset
+     ) ;; rule-end
+
+    )
+  "\"Lens_r\" rules
+Egyptian braces with contents indented one additional level from left-
+most expression of brace line.
+
+  while x, {
+    ...
+  };
+
+If you do put a newline in-between a block and it's parent, it will
+match the indentation level of it's parent.
+
+  while x,
+  {
+    ...
+  };
+
+Single statements may or may not use braces, and are indented one
+additional level.
+
+  while x,
+    69;
+")
+
+;; "Allman" rules
+;; All braces begin on newline at same indentation,
+;; with the braces' contents indented one level.
+;; while x,
+;; {
+;;   contents
+;; }
+(defvar glint-ts-mode--indent-rules-allman
+  '(
+
+    (error "TODO")
+
+    ( ;; rule-begin
+     ) ;; rule-end
+
+    )
+  "\"Allman\" rules
+Braces on newline with same indentation.
+Block contents add a level of indentation.
+
+  while x,
+  {
+    ...
+  };
+
+
+Single statements should use braces, otherwise their indentation is
+undefined.
+")
+
+(defvar glint-ts-mode--indent-rules-gnu
+  '(
+
+    (error "TODO")
+
+    ( ;; rule-begin
+     ) ;; rule-end
+
+    )
+  "\"GNU\" rules
+All braces begin on newline at one level of indentation,
+with the braces' contents indented another level.
+
+  while x,
+    {
+      ...
+    };
+")
+
+(defvar glint-ts-mode--indent-rules-whitesmiths
+  '(
+
+    (error "TODO")
+
+    ( ;; rule-begin
+     ) ;; rule-end
+
+    )
+  "\"Whitesmiths\" rules
+All braces begin on newline at one additional level of indentation,
+with the braces' contents having the same indentation.
+
+  while x,
+    {
+    contents
+    }
+")
+
+(defvar glint-ts-mode--indent-rules-common
+  '(
+
+    ( ;; rule-begin
+     ;; CHILDREN OF SOURCE FILE ARE NOT INDENTED
+     (or (parent-is "source_file"))
+     column-0 ;; anchor
+     0 ;; offset
+     ) ;; rule-end
+
+    )
+  "Indent rules shared by all Glint indent styles.")
+
+(defcustom glint-ts-mode--indent-rules-style
+  'glint-ts-mode--indent-rules-lens
+  ""
+  :type '(choice (variable-item glint-ts-mode--indent-rules-lens)
+                 (variable-item glint-ts-mode--indent-rules-allman)
+                 (variable-item glint-ts-mode--indent-rules-gnu)
+                 (variable-item glint-ts-mode--indent-rules-whitesmiths)))
 
 (defvar glint-ts-mode--indent-rules
   `((glint
-
-     ( ;; rule-begin
-      ;; CHILDREN OF SOURCE FILE ARE NOT INDENTED
-      (or (parent-is "source_file"))
-      column-0 ;; anchor
-      0 ;; offset
-      ) ;; rule-end
-
-     ( ;; rule-begin
-      ;; BLOCK CLOSER REMOVES INDENT
-      (or (node-is "}"))
-      standalone-parent ;; anchor
-      0 ;; offset
-      ) ;; rule-end
-
-     ( ;; rule-begin
-      ;; BLOCK EXPRESSION CAUSES INDENT
-      (or (parent-is "block")) ;; matcher
-      standalone-parent ;; anchor
-      glint-ts-mode-indent-offset ;; offset
-      ) ;; rule-end
-
-     ( ;; rule-begin
-      ;; CFOR KEYWORD CAUSES DOUBLE INDENT FOR INIT, CONDITION, INCREMENT
-      (and (parent-is "cfor") (not (field-is "body")))
-      standalone-parent ;; anchor
-      ,(* 2 glint-ts-mode-indent-offset) ;; offset
-      ) ;; rule-end
-
-     ( ;; rule-begin
-      ;; CFOR KEYWORD CAUSES SINGLE INDENT FOR BODY
-      (and (parent-is "cfor") (field-is "body"))
-      standalone-parent ;; anchor
-      glint-ts-mode-indent-offset ;; offset
-      ) ;; rule-end
-
-     ( ;; rule-begin
-      ;; FOR KEYWORD CAUSES SINGLE INDENT FOR BODY
-      ;; Presence of not "node-is block" toggles GNU style curly braces (2
-      ;; spaces for braces on newline, 2 spaces for stuff inside braces).
-      (and (parent-is "rangedfor") (field-is "body") (not (node-is "block")))
-      standalone-parent ;; anchor
-      glint-ts-mode-indent-offset ;; offset
-      ) ;; rule-end
-
-     ( ;; rule-begin
-      ;; UNARY EXPRESSION CAUSES INDENT (if operand on new line)
-      (or (parent-is "addressof") (parent-is "negate") (parent-is "decrement")
-          (parent-is "dereference") (parent-is "increment") (parent-is "logical_negate"))
-      standalone-parent ;; anchor
-      glint-ts-mode-indent-offset ;; offset
-      ) ;; rule-end
-
-     ))
-  "See `treesit-simple-indent-rules' (with `M-x' `describe-variable'), as well as `treesit-simple-indent-presets' (very helpful!).")
+     ,@glint-ts-mode--indent-rules-common
+     ,@(symbol-value glint-ts-mode--indent-rules-style)))
+  "See `treesit-simple-indent-rules' (with `M-x' `describe-variable'),
+ as well as `treesit-simple-indent-presets': very helpful!.")
 
 (defun glint-ts-mode--install ()
   "Use 'treesit-install-language-grammar' to install the Glint language grammar"
