@@ -1,5 +1,11 @@
 * LCC's Testing Facilities
 
+** Testing
+
+Located in [[file:tst/][tst/]].
+
+To run a lot---hopefully all---of the below tests, there is a CMake project with custom targets to run them at CMake build time, ensuring the compiler is up to date (so that you aren't testing an out-of-date version of the compiler after having edited the source code).
+
 ** LangTest
 
 See [[file:docs/lcc/LangTest.org][relevant documentation]].
@@ -20,6 +26,8 @@ See [[file:docs/lcc/CodeTest.org][relevant documentation]].
 
 ** RunTest
 
-Implemented at [[file:runtest/][runtest/]]
+See [[file:docs/lcc/RunTest.org][relevant documentation]].
+
+Implemented in [[file:runtest/][runtest/]].
 
 Shortcut to run at [[file:runtest.sh][./runtest.sh]].
