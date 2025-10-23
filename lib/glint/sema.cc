@@ -1905,7 +1905,18 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                         [&](auto&& en) { return en->name() == m->name(); }
                     );
                     if (it == e->enumerators().end()) {
-                        Error(m->location(), "Type {} has no enumerator named '{}'", e, m->name());
+                        auto err = Error(m->location(), "Type {} has no enumerator named '{}'", e, m->name());
+                        err.attach(Note(
+                            e->location(),
+                            "Available members:\n\t{}",
+                            fmt::join(
+                                vws::transform(
+                                    e->enumerators(),
+                                    [](auto d) { return d->name(); }
+                                ),
+                                "\n\t"
+                            )
+                        ));
                         m->set_sema_errored();
                         break;
                     }
