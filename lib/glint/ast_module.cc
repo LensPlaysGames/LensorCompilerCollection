@@ -377,6 +377,7 @@ auto lcc::glint::Module::serialise(
             *element_type_ptr = element_type;
         } break;
 
+        // serialise()
         // StructType:
         //     size_in_bytes :u16
         //     align_in_bytes :u16
@@ -412,7 +413,7 @@ auto lcc::glint::Module::serialise(
                 auto byte_offset_bytes = to_bytes(byte_offset);
                 out.insert(out.end(), byte_offset_bytes.begin(), byte_offset_bytes.end());
 
-                auto name_length = member.name.length();
+                auto name_length = u16(member.name.length());
                 auto name_length_bytes = to_bytes(name_length);
                 out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
 
@@ -428,6 +429,7 @@ auto lcc::glint::Module::serialise(
             auto* member_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + member_types_offset);
             for (auto& member_type : member_types)
                 *member_types_ptr++ = member_type;
+
         } break;
 
         // SumType:
@@ -548,6 +550,58 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
     return out;
 }
 
+// NOTE: Big issue here is forward references. i.e. a pointer type at
+// index 3 that stores a pointee type index of 4. So, we need to know the
+// Type* of any given index /before/ we start parsing any of the types.
+namespace fixups {
+struct BasicFixup {
+    // Type index of the type that needs fixing up. This index will be
+    // overwritten with a type created from the replacement type index.
+    lcc::glint::ModuleDescription::TypeIndex fixup_type_index;
+    // Type index of the type that has not yet been deserialised; the cause of
+    // the fixup.
+    lcc::glint::ModuleDescription::TypeIndex replacement_type_index;
+    BasicFixup(
+        lcc::glint::ModuleDescription::TypeIndex zero_index,
+        lcc::glint::ModuleDescription::TypeIndex fixup_index,
+        lcc::glint::ModuleDescription::TypeIndex replacement_index
+    ) : fixup_type_index(zero_index + fixup_index),
+        replacement_type_index(zero_index + replacement_index) {}
+};
+
+constexpr auto low_msg
+    = "You probably forgot to account for the non-zero zero index into the types container.";
+constexpr auto high_msg
+    = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
+
+void validate_fixup_type_index(
+    lcc::glint::Module& m,
+    lcc::glint::ModuleDescription::TypeIndex types_zero_index,
+    lcc::glint::ModuleDescription::TypeIndex index_to_check
+) {
+    LCC_ASSERT(
+        index_to_check >= types_zero_index,
+        low_msg
+    );
+    LCC_ASSERT(
+        index_to_check < m.types.size(),
+        high_msg,
+        index_to_check,
+        m.types.size()
+    );
+}
+
+void validate_fixup(
+    lcc::glint::Module& m,
+    lcc::glint::ModuleDescription::TypeIndex types_zero_index,
+    const BasicFixup& fixup
+) {
+    validate_fixup_type_index(m, types_zero_index, fixup.fixup_type_index);
+    validate_fixup_type_index(m, types_zero_index, fixup.replacement_type_index);
+};
+
+} // namespace fixups
+
 auto lcc::glint::Module::deserialise(
     lcc::Context* context,
     std::vector<u8> module_metadata_blob
@@ -579,55 +633,14 @@ auto lcc::glint::Module::deserialise(
     // the amount of types specified in the header.
     auto type_count = hdr.type_count;
     auto type_offset = hdr.type_table_offset;
-    auto types_zero_index = types.size();
+    LCC_ASSERT(
+        types.size() <= std::numeric_limits<ModuleDescription::TypeIndex>::max(),
+        "Too many types, cannot serialise with current integer type of type index"
+    );
+    auto types_zero_index = (ModuleDescription::TypeIndex) types.size();
     types.reserve(types.size() + type_count);
 
-    // NOTE: Big issue here is forward references. i.e. a pointer type at
-    // index 3 that stores a pointee type index of 4. So, we need to know the
-    // Type* of any given index /before/ we start parsing any of the types.
-    struct BasicFixup {
-        // Type index of the type that needs fixing up. This index will be
-        // overwritten with a type created from the replacement type index.
-        ModuleDescription::TypeIndex fixup_type_index;
-        // Type index of the type that has not yet been deserialised; the cause of
-        // the fixup.
-        ModuleDescription::TypeIndex replacement_type_index;
-        BasicFixup(
-            u16 zero_index,
-            ModuleDescription::TypeIndex fixup_index,
-            ModuleDescription::TypeIndex replacement_index
-        ) : fixup_type_index(zero_index + fixup_index),
-            replacement_type_index(zero_index + replacement_index) {}
-    };
-
-    auto validate_fixup = [this, types_zero_index](const BasicFixup& fixup) {
-        constexpr auto low_msg
-            = "You probably forgot to account for the non-zero zero index into the types container.";
-        constexpr auto high_msg
-            = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
-        LCC_ASSERT(
-            fixup.fixup_type_index >= types_zero_index,
-            low_msg
-        );
-        LCC_ASSERT(
-            fixup.replacement_type_index >= types_zero_index,
-            low_msg
-        );
-        LCC_ASSERT(
-            fixup.fixup_type_index < types.size(),
-            high_msg,
-            fixup.fixup_type_index,
-            types.size()
-        );
-        LCC_ASSERT(
-            fixup.replacement_type_index < types.size(),
-            high_msg,
-            fixup.replacement_type_index,
-            types.size()
-        );
-    };
-
-    struct ArrayFixup : public BasicFixup {
+    struct ArrayFixup : public fixups::BasicFixup {
         u64 array_size;
         ArrayFixup(
             u16 zero_index,
@@ -647,50 +660,31 @@ auto lcc::glint::Module::deserialise(
         usz byte_size;
 
         StructFixup(
+            ModuleDescription::TypeIndex zero_index,
             ModuleDescription::TypeIndex struct_index,
             std::vector<ModuleDescription::TypeIndex> member_indices,
             std::vector<std::string> names,
             std::vector<u16> offsets,
             usz align,
             usz size
-        ) : struct_type_index(struct_index),
+        ) : struct_type_index(zero_index + struct_index),
             member_type_indices(member_indices),
             member_names(names),
+            member_byte_offsets(offsets),
             byte_align(align),
-            byte_size(size) {}
+            byte_size(size) {
+            for (auto& index : member_type_indices)
+                index += zero_index;
+        }
     };
 
     const auto validate_struct_fixup = [this, types_zero_index](StructFixup& fixup) {
-        constexpr auto low_msg
-            = "You probably forgot to account for the non-zero zero index into the types container.";
-        constexpr auto high_msg
-            = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
-
         // Bounds-check index to be replaced with a struct type.
-        LCC_ASSERT(
-            fixup.struct_type_index >= types_zero_index,
-            low_msg
-        );
-        LCC_ASSERT(
-            fixup.struct_type_index < types.size(),
-            high_msg,
-            fixup.struct_type_index,
-            types.size()
-        );
+        fixups::validate_fixup_type_index(*this, types_zero_index, fixup.struct_type_index);
 
         // Bounds-check index of the struct's members' types.
-        for (auto m : fixup.member_type_indices) {
-            LCC_ASSERT(
-                m >= types_zero_index,
-                low_msg
-            );
-            LCC_ASSERT(
-                m < types.size(),
-                high_msg,
-                fixup.struct_type_index,
-                types.size()
-            );
-        }
+        for (auto m : fixup.member_type_indices)
+            fixups::validate_fixup_type_index(*this, types_zero_index, m);
 
         // Struct member names and types have to map 1:1 (same amount)
         LCC_ASSERT(
@@ -700,7 +694,9 @@ auto lcc::glint::Module::deserialise(
         // Struct member names and byte offsets have to map 1:1 (same amount)
         LCC_ASSERT(
             fixup.member_names.size() == fixup.member_byte_offsets.size(),
-            "StructType fixup: Mismatch in deserialised member byte offset and name count"
+            "StructType fixup: Mismatch in deserialised member byte offset and name count ({} offsets, {} names)",
+            fixup.member_byte_offsets.size(),
+            fixup.member_names.size()
         );
         // NOTE: Logically, member_type_indices and member_byte_offsets are
         // asserted equal here.
@@ -896,10 +892,10 @@ auto lcc::glint::Module::deserialise(
     };
 
     // Fixup element type.
-    std::vector<BasicFixup> ptr_fixups{};
-    std::vector<BasicFixup> ref_fixups{};
-    std::vector<BasicFixup> dynarray_fixups{};
-    std::vector<BasicFixup> view_fixups{};
+    std::vector<fixups::BasicFixup> ptr_fixups{};
+    std::vector<fixups::BasicFixup> ref_fixups{};
+    std::vector<fixups::BasicFixup> dynarray_fixups{};
+    std::vector<fixups::BasicFixup> view_fixups{};
     // Fixup underlying type, and scope declarations.
     std::vector<EnumFixup> enum_fixups{};
     // Fixup element type + size expression.
@@ -911,18 +907,23 @@ auto lcc::glint::Module::deserialise(
     // Fixup member types and scope declarations.
     std::vector<StructFixup> struct_fixups{};
 
+    const auto read_t = [&]<typename T> [[nodiscard]] (T _) {
+        constexpr auto size = sizeof(T);
+        std::array<u8, size> array{};
+        for (unsigned i = 0; i < size; ++i)
+            array[i] = module_metadata_blob.at(type_offset++);
+        return from_bytes<T>(array);
+    };
+
     for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
         auto tag = module_metadata_blob.at(type_offset++);
         auto kind = Type::Kind(tag);
         switch (kind) {
             // NamedType: length :u32, name :u8[length]
             case Type::Kind::Named: {
-                constexpr auto length_size = sizeof(u32);
-                std::array<u8, length_size> length_array{};
-                for (unsigned i = 0; i < length_size; ++i)
-                    length_array[i] = module_metadata_blob.at(type_offset++);
-                u32 length = from_bytes<u32>(length_array);
+                auto length = read_t(u32());
 
+                // TODO: Wth is this checking???
                 LCC_ASSERT(not name().empty(), "Deserialised named type has zero-length name");
 
                 std::string deserialised_name{};
@@ -944,8 +945,9 @@ auto lcc::glint::Module::deserialise(
                     builtin_kind_value == +BuiltinType::BuiltinKind::Bool
                     or builtin_kind_value == +BuiltinType::BuiltinKind::Byte
                     or builtin_kind_value == +BuiltinType::BuiltinKind::Int
-                    or builtin_kind_value == +BuiltinType::BuiltinKind::Unknown
+                    or builtin_kind_value == +BuiltinType::BuiltinKind::UInt
                     or builtin_kind_value == +BuiltinType::BuiltinKind::Void
+                    or builtin_kind_value == +BuiltinType::BuiltinKind::Unknown
                     or builtin_kind_value == +BuiltinType::BuiltinKind::OverloadSet,
                     "Invalid builtin kind value {}", builtin_kind_value
                 );
@@ -961,11 +963,8 @@ auto lcc::glint::Module::deserialise(
 
             // FFIType: ffi_kind :u16
             case Type::Kind::FFIType: {
-                constexpr auto ffi_kind_size = sizeof(u16);
-                std::array<u8, ffi_kind_size> length_array{};
-                for (unsigned i = 0; i < ffi_kind_size; ++i)
-                    length_array[i] = module_metadata_blob.at(type_offset++);
-                u16 ffi_kind_value = from_bytes<u16>(length_array);
+                auto ffi_kind_value = read_t(u16());
+                // TODO: Verify/validate ffi kind
                 auto ffi_kind = FFIType::FFIKind(ffi_kind_value);
                 // Purely for the side-effect of recording the type in the module.
                 (void) FFIType::Make(*this, ffi_kind, {});
@@ -976,11 +975,7 @@ auto lcc::glint::Module::deserialise(
             case Type::Kind::DynamicArray:
             case Type::Kind::Pointer:
             case Type::Kind::Reference: {
-                constexpr auto ref_type_index_size = sizeof(ModuleDescription::TypeIndex);
-                std::array<u8, ref_type_index_size> ref_type_index_array{};
-                for (unsigned i = 0; i < ref_type_index_size; ++i)
-                    ref_type_index_array.at(i) = module_metadata_blob.at(type_offset++);
-                auto ref_type_index = from_bytes<ModuleDescription::TypeIndex>(ref_type_index_array);
+                auto ref_type_index = read_t(ModuleDescription::TypeIndex());
 
                 // Normally done in operator new of Type, but we do it manually here since
                 // we can't new the pointer type until we have the pointer to the element
@@ -1000,30 +995,25 @@ auto lcc::glint::Module::deserialise(
 
             // IntegerType: bitwidth :u16, is_signed :u8
             case Type::Kind::Integer: {
-                constexpr auto bitwidth_size = sizeof(u16);
-                std::array<u8, bitwidth_size> bitwidth_array{};
-                for (unsigned i = 0; i < bitwidth_size; ++i)
-                    bitwidth_array[i] = module_metadata_blob.at(type_offset++);
-                auto bitwidth = from_bytes<u16>(bitwidth_array);
+                auto bitwidth = read_t(u16());
+                LCC_ASSERT(bitwidth != 0, "IntegerType: Bitwidth of zero is invalid");
 
-                u8 is_signed = bitwidth_array[type_offset++];
+                auto is_signed = module_metadata_blob.at(type_offset++);
+                LCC_ASSERT(
+                    is_signed == 0 or is_signed == 1,
+                    "Expected is_signed to be a boolean value, but got {}\n",
+                    (unsigned) is_signed
+                );
+
                 new (*this) IntegerType(bitwidth, is_signed, {});
             } break;
 
             // ArrayType: element_type_index :TypeIndex, element_count :u64
             case Type::Kind::Array: {
-                constexpr auto element_type_index_size = sizeof(ModuleDescription::TypeIndex);
-                std::array<u8, element_type_index_size> element_type_index_array{};
-                for (unsigned i = 0; i < element_type_index_size; ++i)
-                    element_type_index_array[i] = module_metadata_blob.at(type_offset++);
-                auto element_type_index = from_bytes<ModuleDescription::TypeIndex>(element_type_index_array);
+                auto element_type_index = read_t(ModuleDescription::TypeIndex());
 
-                constexpr auto element_count_size = sizeof(u64);
-                LCC_ASSERT(type_offset + element_count_size <= module_metadata_blob.size());
-                std::array<u8, element_count_size> element_count_array{};
-                for (unsigned i = 0; i < element_count_size; ++i)
-                    element_count_array[i] = module_metadata_blob.at(type_offset++);
-                auto element_count = from_bytes<u64>(element_count_array);
+                auto element_count = read_t(u64());
+                LCC_ASSERT(element_count != 0, "ArrayType with zero elements is invalid");
 
                 // Normally done in operator new of Type, but we do it manually here since
                 // we can't new the array type until we have the pointer to the element
@@ -1045,46 +1035,25 @@ auto lcc::glint::Module::deserialise(
             //     param_names :(param_name_length :u16, param_name :u8[param_name_length])[param_count]
             case Type::Kind::Function: {
                 // Attributes
-                constexpr auto attributes_size = sizeof(u32);
-                std::array<u8, attributes_size> attributes_array{};
-                for (unsigned i = 0; i < attributes_size; ++i)
-                    attributes_array[i] = module_metadata_blob.at(type_offset++);
-                auto attributes = from_bytes<u32>(attributes_array);
+                auto attributes = read_t(u32());
 
                 // Parameter Count
-                constexpr auto param_count_size = sizeof(u16);
-                std::array<u8, param_count_size> param_count_array{};
-                for (unsigned i = 0; i < param_count_size; ++i)
-                    param_count_array[i] = module_metadata_blob.at(type_offset++);
-                auto param_count = from_bytes<u16>(param_count_array);
+                auto param_count = read_t(u16());
 
                 // Parameter Type Indices
                 std::vector<ModuleDescription::TypeIndex> param_type_indices{};
                 for (usz param_index = 0; param_index < param_count; ++param_index) {
-                    constexpr auto param_type_index_size = sizeof(ModuleDescription::TypeIndex);
-                    std::array<u8, param_type_index_size> param_type_index_array{};
-                    for (unsigned i = 0; i < param_type_index_size; ++i)
-                        param_type_index_array[i] = module_metadata_blob.at(type_offset++);
-                    auto param_type_index = from_bytes<ModuleDescription::TypeIndex>(param_type_index_array);
-
+                    auto param_type_index = read_t(ModuleDescription::TypeIndex());
                     param_type_indices.emplace_back(param_type_index);
                 }
 
                 // Return Type Index
-                constexpr auto return_type_index_size = sizeof(ModuleDescription::TypeIndex);
-                std::array<u8, return_type_index_size> return_type_index_array{};
-                for (unsigned i = 0; i < return_type_index_size; ++i)
-                    return_type_index_array[i] = module_metadata_blob.at(type_offset++);
-                auto return_type_index = from_bytes<ModuleDescription::TypeIndex>(return_type_index_array);
+                auto return_type_index = read_t(ModuleDescription::TypeIndex());
 
                 // Parameter Names
                 std::vector<std::string> param_names{};
                 for (usz param_index = 0; param_index < param_count; ++param_index) {
-                    constexpr auto param_name_length_size = sizeof(u16);
-                    std::array<u8, param_name_length_size> param_name_length_array{};
-                    for (unsigned i = 0; i < param_name_length_size; ++i)
-                        param_name_length_array[i] = module_metadata_blob.at(type_offset++);
-                    auto param_name_length = from_bytes<u16>(param_name_length_array);
+                    auto param_name_length = read_t(u16());
 
                     std::string param_name{};
                     param_name.reserve(param_name_length);
@@ -1110,32 +1079,19 @@ auto lcc::glint::Module::deserialise(
             //     member_types :TypeIndex[member_count]
             //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
             case Type::Kind::Sum: {
-                constexpr auto member_count_size = sizeof(u16);
-                std::array<u8, member_count_size> member_count_array{};
-                for (unsigned i = 0; i < member_count_size; ++i)
-                    member_count_array[i] = module_metadata_blob.at(type_offset++);
-                auto member_count = from_bytes<u16>(member_count_array);
+                auto member_count = read_t(u16());
 
                 // Member Type Indices
                 std::vector<ModuleDescription::TypeIndex> member_type_indices{};
                 for (usz member_index = 0; member_index < member_count; ++member_index) {
-                    constexpr auto member_type_index_size = sizeof(ModuleDescription::TypeIndex);
-                    std::array<u8, member_type_index_size> member_type_index_array{};
-                    for (unsigned i = 0; i < member_type_index_size; ++i)
-                        member_type_index_array[i] = module_metadata_blob.at(type_offset++);
-                    auto member_type_index = from_bytes<ModuleDescription::TypeIndex>(member_type_index_array);
-
+                    auto member_type_index = read_t(ModuleDescription::TypeIndex());
                     member_type_indices.emplace_back(member_type_index);
                 }
 
                 // Member Names
                 std::vector<std::string> member_names{};
                 for (usz member_index = 0; member_index < member_count; ++member_index) {
-                    constexpr auto member_name_length_size = sizeof(u16);
-                    std::array<u8, member_name_length_size> member_name_length_array{};
-                    for (unsigned i = 0; i < member_name_length_size; ++i)
-                        member_name_length_array[i] = module_metadata_blob.at(type_offset++);
-                    auto member_name_length = from_bytes<u16>(member_name_length_array);
+                    auto member_name_length = read_t(u16());
 
                     std::string member_name{};
                     member_name.reserve(member_name_length);
@@ -1166,29 +1122,17 @@ auto lcc::glint::Module::deserialise(
             // bits... But... yeah.
             case Type::Kind::Enum: {
                 // Get underlying type index
-                constexpr auto underlying_type_index_size = sizeof(ModuleDescription::TypeIndex);
-                std::array<u8, underlying_type_index_size> underlying_type_index_array{};
-                for (unsigned i = 0; i < underlying_type_index_size; ++i)
-                    underlying_type_index_array[i] = module_metadata_blob.at(type_offset++);
-                auto underlying_type_index = from_bytes<u16>(underlying_type_index_array);
+                auto underlying_type_index = read_t(ModuleDescription::TypeIndex());
 
                 // Get enum decl count
-                constexpr auto enum_decl_count_size = sizeof(u32);
-                std::array<u8, enum_decl_count_size> enum_decl_count_array{};
-                for (unsigned i = 0; i < enum_decl_count_size; ++i)
-                    enum_decl_count_array[i] = module_metadata_blob.at(type_offset++);
-                auto enum_decl_count = from_bytes<u32>(enum_decl_count_array);
+                auto enum_decl_count = read_t(u32());
 
                 // Get enum values
                 std::vector<u64> enum_values{};
                 enum_values.reserve(enum_decl_count);
                 for (unsigned value_index = 0; value_index < enum_decl_count; ++value_index) {
-                    // TODO: Get size from underlying type...
-                    constexpr auto enum_value_size = sizeof(u64);
-                    std::array<u8, enum_value_size> enum_value_array{};
-                    for (unsigned i = 0; i < enum_value_size; ++i)
-                        enum_value_array[i] = module_metadata_blob.at(type_offset++);
-                    auto value = from_bytes<u64>(enum_value_array);
+                    // TODO: Don't just assume it fits in 64 bits.
+                    auto value = read_t(u64());
                     enum_values.emplace_back(value);
                 }
 
@@ -1196,11 +1140,7 @@ auto lcc::glint::Module::deserialise(
                 std::vector<std::string> enum_names{};
                 enum_names.reserve(enum_decl_count);
                 for (unsigned name_index = 0; name_index < enum_decl_count; ++name_index) {
-                    constexpr auto name_length_size = sizeof(u16);
-                    std::array<u8, name_length_size> name_length_array{};
-                    for (unsigned i = 0; i < name_length_size; ++i)
-                        name_length_array[i] = module_metadata_blob.at(type_offset++);
-                    auto name_length = from_bytes<u16>(name_length_array);
+                    auto name_length = read_t(u16());
 
                     std::string name{};
                     name.reserve(name_length);
@@ -1220,6 +1160,7 @@ auto lcc::glint::Module::deserialise(
                 );
             } break;
 
+            // deserialise()
             // StructType:
             //     size_in_bytes :u16
             //     align_in_bytes :u16
@@ -1228,36 +1169,19 @@ auto lcc::glint::Module::deserialise(
             //     member_data :(byte_offset :u16, name_length :u16, member_name :u8[name_length])[member_count]
             case Type::Kind::Struct: {
                 // Get size in bytes
-                constexpr auto struct_byte_size_size = sizeof(u16);
-                std::array<u8, struct_byte_size_size> struct_byte_size_array{};
-                for (unsigned i = 0; i < struct_byte_size_size; ++i)
-                    struct_byte_size_array[i] = module_metadata_blob.at(type_offset++);
-                auto struct_byte_size = from_bytes<u16>(struct_byte_size_array);
+                auto struct_byte_size = read_t(u16());
 
                 // Get align in bytes
-                constexpr auto struct_byte_align_size = alignof(u16);
-                std::array<u8, struct_byte_align_size> struct_byte_align_array{};
-                for (unsigned i = 0; i < struct_byte_align_size; ++i)
-                    struct_byte_align_array[i] = module_metadata_blob.at(type_offset++);
-                auto struct_byte_align = from_bytes<u16>(struct_byte_align_array);
+                auto struct_byte_align = read_t(u16());
 
                 // Get member count
-                constexpr auto struct_member_count_size = alignof(u16);
-                std::array<u8, struct_member_count_size> struct_member_count_array{};
-                for (unsigned i = 0; i < struct_member_count_size; ++i)
-                    struct_member_count_array[i] = module_metadata_blob.at(type_offset++);
-                auto struct_member_count = from_bytes<u16>(struct_member_count_array);
+                auto struct_member_count = read_t(u16());
 
                 // Get member type indices
                 std::vector<ModuleDescription::TypeIndex> member_type_indices{};
                 for (unsigned i = 0; i < struct_member_count; ++i) {
                     // Get member type index
-                    constexpr auto member_type_index_size = alignof(ModuleDescription::TypeIndex);
-                    std::array<u8, member_type_index_size> member_type_index_array{};
-                    for (unsigned j = 0; j < member_type_index_size; ++j)
-                        member_type_index_array[j] = module_metadata_blob.at(type_offset++);
-                    auto member_type_index = from_bytes<ModuleDescription::TypeIndex>(member_type_index_array);
-
+                    auto member_type_index = read_t(ModuleDescription::TypeIndex());
                     member_type_indices.emplace_back(member_type_index);
                 }
 
@@ -1266,20 +1190,11 @@ auto lcc::glint::Module::deserialise(
                 std::vector<std::string> member_names{};
                 for (unsigned i = 0; i < struct_member_count; ++i) {
                     // Get member byte offset
-                    constexpr auto member_byte_offset_size = alignof(u16);
-                    std::array<u8, member_byte_offset_size> member_byte_offset_array{};
-                    for (unsigned j = 0; j < member_byte_offset_size; ++j)
-                        member_byte_offset_array[j] = module_metadata_blob.at(type_offset++);
-                    auto member_byte_offset = from_bytes<u16>(member_byte_offset_array);
-
+                    auto member_byte_offset = read_t(u16());
                     member_byte_offsets.emplace_back(member_byte_offset);
 
                     // Get member name length
-                    constexpr auto member_name_length_size = alignof(u16);
-                    std::array<u8, member_name_length_size> member_name_length_array{};
-                    for (unsigned j = 0; j < member_name_length_size; ++j)
-                        member_name_length_array[j] = module_metadata_blob.at(type_offset++);
-                    auto member_name_length = from_bytes<u16>(member_name_length_array);
+                    auto member_name_length = read_t(u16());
 
                     // Get member name
                     std::string member_name{};
@@ -1293,6 +1208,7 @@ auto lcc::glint::Module::deserialise(
                 types.emplace_back(nullptr);
                 // Record fixup to be handled after all types are parsed.
                 struct_fixups.emplace_back(
+                    types_zero_index,
                     type_index,
                     member_type_indices,
                     member_names,
@@ -1318,8 +1234,10 @@ auto lcc::glint::Module::deserialise(
     // FIXME: Should we iterate fixups in reverse, such that an earlier fixup
     // that relies on a later one doesn't have the fucky-wucky happen to it?
 
+    auto types_size_before_fixups = types.size();
+
     for (auto fixup : ptr_fixups) {
-        validate_fixup(fixup);
+        validate_fixup(*this, types_zero_index, fixup);
         // NOTE: Since new adds the newed type to the types container, we end up
         // with the same type duplicated, so we have to remove the one that gets
         // added automatically... If we just left it, we would try to delete it
@@ -1333,7 +1251,7 @@ auto lcc::glint::Module::deserialise(
     }
 
     for (auto fixup : ref_fixups) {
-        validate_fixup(fixup);
+        validate_fixup(*this, types_zero_index, fixup);
         int types_size = int(types.size());
         types[fixup.fixup_type_index] = new (*this) ReferenceType(
             types[fixup.replacement_type_index],
@@ -1344,7 +1262,7 @@ auto lcc::glint::Module::deserialise(
     }
 
     for (auto fixup : dynarray_fixups) {
-        validate_fixup(fixup);
+        validate_fixup(*this, types_zero_index, fixup);
         int types_size = int(types.size());
         types[fixup.fixup_type_index] = new (*this) DynamicArrayType(
             types[fixup.replacement_type_index],
@@ -1355,7 +1273,7 @@ auto lcc::glint::Module::deserialise(
     }
 
     for (auto fixup : view_fixups) {
-        validate_fixup(fixup);
+        validate_fixup(*this, types_zero_index, fixup);
         int types_size = int(types.size());
         types[fixup.fixup_type_index] = new (*this) ArrayViewType(
             types[fixup.replacement_type_index]
@@ -1404,7 +1322,7 @@ auto lcc::glint::Module::deserialise(
     }
 
     for (auto fixup : array_fixups) {
-        validate_fixup(fixup);
+        validate_fixup(*this, types_zero_index, fixup);
         int types_size = int(types.size());
         types[fixup.fixup_type_index] = new (*this) ArrayType(
             types[fixup.replacement_type_index],
@@ -1469,6 +1387,7 @@ auto lcc::glint::Module::deserialise(
 
     for (auto fixup : struct_fixups) {
         validate_struct_fixup(fixup);
+        int types_size = int(types.size());
 
         std::vector<StructType::Member> members{};
         members.reserve(fixup.member_type_indices.size());
@@ -1511,6 +1430,7 @@ auto lcc::glint::Module::deserialise(
         struct_type->byte_size(fixup.byte_size);
         struct_type->alignment(fixup.byte_align);
         types[fixup.struct_type_index] = struct_type;
+        types.erase(types.begin() + types_size);
     }
 
     for (auto fixup : function_fixups) {
@@ -1562,6 +1482,10 @@ auto lcc::glint::Module::deserialise(
     }
 
     // Fixups Confidence Check
+    LCC_ASSERT(
+        types.size() == types_size_before_fixups,
+        "Glint Module Deserialisation: fixups changed size of types list (it should not have done this)."
+    );
     for (auto t : types) {
         LCC_ASSERT(
             t,
