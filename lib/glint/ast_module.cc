@@ -638,6 +638,74 @@ auto lcc::glint::Module::deserialise(
             array_size(array_size_) {}
     };
 
+    struct StructFixup {
+        ModuleDescription::TypeIndex struct_type_index;
+        std::vector<ModuleDescription::TypeIndex> member_type_indices;
+        std::vector<std::string> member_names;
+        std::vector<u16> member_byte_offsets;
+        usz byte_align;
+        usz byte_size;
+
+        StructFixup(
+            ModuleDescription::TypeIndex struct_index,
+            std::vector<ModuleDescription::TypeIndex> member_indices,
+            std::vector<std::string> names,
+            std::vector<u16> offsets,
+            usz align,
+            usz size
+        ) : struct_type_index(struct_index),
+            member_type_indices(member_indices),
+            member_names(names),
+            byte_align(align),
+            byte_size(size) {}
+    };
+
+    const auto validate_struct_fixup = [this, types_zero_index](StructFixup& fixup) {
+        constexpr auto low_msg
+            = "You probably forgot to account for the non-zero zero index into the types container.";
+        constexpr auto high_msg
+            = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
+
+        // Bounds-check index to be replaced with a struct type.
+        LCC_ASSERT(
+            fixup.struct_type_index >= types_zero_index,
+            low_msg
+        );
+        LCC_ASSERT(
+            fixup.struct_type_index < types.size(),
+            high_msg,
+            fixup.struct_type_index,
+            types.size()
+        );
+
+        // Bounds-check index of the struct's members' types.
+        for (auto m : fixup.member_type_indices) {
+            LCC_ASSERT(
+                m >= types_zero_index,
+                low_msg
+            );
+            LCC_ASSERT(
+                m < types.size(),
+                high_msg,
+                fixup.struct_type_index,
+                types.size()
+            );
+        }
+
+        // Struct member names and types have to map 1:1 (same amount)
+        LCC_ASSERT(
+            fixup.member_names.size() == fixup.member_type_indices.size(),
+            "StructType fixup: Mismatch in deserialised member type and name count"
+        );
+        // Struct member names and byte offsets have to map 1:1 (same amount)
+        LCC_ASSERT(
+            fixup.member_names.size() == fixup.member_byte_offsets.size(),
+            "StructType fixup: Mismatch in deserialised member byte offset and name count"
+        );
+        // NOTE: Logically, member_type_indices and member_byte_offsets are
+        // asserted equal here.
+    };
+
     struct EnumFixup {
         ModuleDescription::TypeIndex enum_type_index;
         ModuleDescription::TypeIndex underlying_type_index;
@@ -840,6 +908,8 @@ auto lcc::glint::Module::deserialise(
     std::vector<FunctionFixup> function_fixups{};
     // Fixup member types and scope declarations.
     std::vector<SumFixup> sum_fixups{};
+    // Fixup member types and scope declarations.
+    std::vector<StructFixup> struct_fixups{};
 
     for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
         auto tag = module_metadata_blob.at(type_offset++);
@@ -1156,7 +1226,81 @@ auto lcc::glint::Module::deserialise(
             //     member_count :u16
             //     member_types :TypeIndex[member_count]
             //     member_data :(byte_offset :u16, name_length :u16, member_name :u8[name_length])[member_count]
-            case Type::Kind::Struct:
+            case Type::Kind::Struct: {
+                // Get size in bytes
+                constexpr auto struct_byte_size_size = sizeof(u16);
+                std::array<u8, struct_byte_size_size> struct_byte_size_array{};
+                for (unsigned i = 0; i < struct_byte_size_size; ++i)
+                    struct_byte_size_array[i] = module_metadata_blob.at(type_offset++);
+                auto struct_byte_size = from_bytes<u16>(struct_byte_size_array);
+
+                // Get align in bytes
+                constexpr auto struct_byte_align_size = alignof(u16);
+                std::array<u8, struct_byte_align_size> struct_byte_align_array{};
+                for (unsigned i = 0; i < struct_byte_align_size; ++i)
+                    struct_byte_align_array[i] = module_metadata_blob.at(type_offset++);
+                auto struct_byte_align = from_bytes<u16>(struct_byte_align_array);
+
+                // Get member count
+                constexpr auto struct_member_count_size = alignof(u16);
+                std::array<u8, struct_member_count_size> struct_member_count_array{};
+                for (unsigned i = 0; i < struct_member_count_size; ++i)
+                    struct_member_count_array[i] = module_metadata_blob.at(type_offset++);
+                auto struct_member_count = from_bytes<u16>(struct_member_count_array);
+
+                // Get member type indices
+                std::vector<ModuleDescription::TypeIndex> member_type_indices{};
+                for (unsigned i = 0; i < struct_member_count; ++i) {
+                    // Get member type index
+                    constexpr auto member_type_index_size = alignof(ModuleDescription::TypeIndex);
+                    std::array<u8, member_type_index_size> member_type_index_array{};
+                    for (unsigned j = 0; j < member_type_index_size; ++j)
+                        member_type_index_array[j] = module_metadata_blob.at(type_offset++);
+                    auto member_type_index = from_bytes<ModuleDescription::TypeIndex>(member_type_index_array);
+
+                    member_type_indices.emplace_back(member_type_index);
+                }
+
+                // Get member data, including byte offsets and names.
+                std::vector<u16> member_byte_offsets{};
+                std::vector<std::string> member_names{};
+                for (unsigned i = 0; i < struct_member_count; ++i) {
+                    // Get member byte offset
+                    constexpr auto member_byte_offset_size = alignof(u16);
+                    std::array<u8, member_byte_offset_size> member_byte_offset_array{};
+                    for (unsigned j = 0; j < member_byte_offset_size; ++j)
+                        member_byte_offset_array[j] = module_metadata_blob.at(type_offset++);
+                    auto member_byte_offset = from_bytes<u16>(member_byte_offset_array);
+
+                    member_byte_offsets.emplace_back(member_byte_offset);
+
+                    // Get member name length
+                    constexpr auto member_name_length_size = alignof(u16);
+                    std::array<u8, member_name_length_size> member_name_length_array{};
+                    for (unsigned j = 0; j < member_name_length_size; ++j)
+                        member_name_length_array[j] = module_metadata_blob.at(type_offset++);
+                    auto member_name_length = from_bytes<u16>(member_name_length_array);
+
+                    // Get member name
+                    std::string member_name{};
+                    for (unsigned j = 0; j < member_name_length; ++j)
+                        member_name += (char) module_metadata_blob.at(type_offset++);
+
+                    member_names.emplace_back(std::move(member_name));
+                }
+
+                // Reserve index for struct type.
+                types.emplace_back(nullptr);
+                // Record fixup to be handled after all types are parsed.
+                struct_fixups.emplace_back(
+                    type_index,
+                    member_type_indices,
+                    member_names,
+                    member_byte_offsets,
+                    struct_byte_size,
+                    struct_byte_align
+                );
+            } break;
 
             // UnionType:
             //     member_count :u16
@@ -1170,6 +1314,9 @@ auto lcc::glint::Module::deserialise(
                 LCC_ASSERT(false, "Sema should have replaced TypeofType with the type of it's contained expression");
         }
     }
+
+    // FIXME: Should we iterate fixups in reverse, such that an earlier fixup
+    // that relies on a later one doesn't have the fucky-wucky happen to it?
 
     for (auto fixup : ptr_fixups) {
         validate_fixup(fixup);
@@ -1234,6 +1381,8 @@ auto lcc::glint::Module::deserialise(
                 ),
                 {}
             );
+            // TODO: Analyse(&enum_decl)?
+            enum_decl->set_sema_done();
             auto decl = scope->declare(
                 context,
                 std::string(fixup.enumerator_names.at(i)),
@@ -1316,6 +1465,52 @@ auto lcc::glint::Module::deserialise(
         // This erases the entry added within SumType allocation, since we
         // overwrote a previous entry with this type.
         types.erase(types.begin() + types_size);
+    }
+
+    for (auto fixup : struct_fixups) {
+        validate_struct_fixup(fixup);
+
+        std::vector<StructType::Member> members{};
+        members.reserve(fixup.member_type_indices.size());
+        usz member_i{0};
+        for (auto member_type_index : fixup.member_type_indices) {
+            // TODO: serialise/deserialise supplanted boolean for each member.
+            members.emplace_back(
+                fixup.member_names.at(member_i),
+                types[member_type_index],
+                Location{},
+                fixup.member_byte_offsets.at(member_i),
+                false
+            );
+            ++member_i;
+        }
+
+        // FIXME: What should parent scope of struct type scope be?
+        auto scope = new (*this) Scope(nullptr);
+
+        // Declare members in scope
+        for (auto& m : members) {
+            // TODO: Maybe parse default init expression from module metadata, once we
+            // can serialise expressions...
+            auto member_decl = new (*this) VarDecl(
+                std::string(m.name),
+                m.type,
+                nullptr,
+                this,
+                Linkage::Internal,
+                {}
+            );
+            auto decl = scope->declare(
+                context,
+                std::string(m.name),
+                member_decl
+            );
+            LCC_ASSERT(decl);
+        }
+        auto struct_type = new (*this) StructType(scope, members, {});
+        struct_type->byte_size(fixup.byte_size);
+        struct_type->alignment(fixup.byte_align);
+        types[fixup.struct_type_index] = struct_type;
     }
 
     for (auto fixup : function_fixups) {

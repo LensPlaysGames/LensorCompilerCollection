@@ -1139,6 +1139,15 @@ public:
 
         Member(std::string name_, Type* type_, Location location_)
             : type(type_), name(std::move(name_)), location(location_) {}
+
+        // For when you already know everything about a member (i.e. when
+        // deserialising a struct from module metadata).
+        Member(std::string name_, Type* type_, Location location_, usz byte_offset_, bool supplanted_)
+            : type(type_),
+              name(std::move(name_)),
+              location(location_),
+              byte_offset(byte_offset_),
+              supplanted(supplanted_) {}
     };
 
 private:
