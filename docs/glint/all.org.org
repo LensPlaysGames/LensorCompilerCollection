@@ -1,4 +1,4 @@
-# Created 2025-10-24 Fri 15:49
+# Created 2025-10-24 Fri 15:51
 #+title: 
 #+author: Rylan Kellogg
 * Preface
@@ -98,8 +98,14 @@ Template declarations let the programmer use a name to refer to a template, allo
 *** Basics
 
 There are two forms of declaration in Glint:
-- Typed :: =name ":" type [ [ "=" ] value ]=
-- Type-inferred :: =name "::" value=
+- Typed :: 
+#+begin_example
+  name ":" type [ [ "=" ] value ]
+#+end_example
+- Type-inferred :: 
+#+begin_example
+  name "::" value
+#+end_example
 
 If you see a typed declaration, you know that referencing =name= gives you a value of type =type=.
 If you see a type-inferred declaration, you know that referencing =name= gives you =value= (or a value of the same type, if assignment occurs).
