@@ -1,0 +1,23 @@
+* Common Errors in Glint
+
+Errors you will often run into, what they mean, why they appear, and possible solutions.
+
+** When Linking Executable Which Imports Modules
+
+=undefined reference to `_XGlint__init_<name>= where =<name>= is a name of a module the program has imported. The issue here is simple: if you made it this far, the Glint compiler was able to find the module, but the linker isn't actually finding the module definition.
+
+Likely solution includes linking with the object file built from the imported module. Often, this error appears because you /have/ built the module (and therefore Glint is able to find the metadata for the imported module, and doesn't complain about the module not being found), but, you haven't fed the built module in with the executable build.
+
+#+begin_example
+lcc ./mod.g
+lcc ./exe.g
+gcc ./exe.s   !ERROR EMITTED HERE!
+#+end_example
+
+Instead:
+#+begin_example
+lcc ./mod.g
+gcc -c ./mod.s        !THE FIX!
+lcc ./exe.g
+gcc ./mod.o ./exe.s   !AND HERE!
+#+end_example
