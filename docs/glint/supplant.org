@@ -3,7 +3,7 @@
 
 * Data & Functionality Composition in Glint Using Supplant
 
-src_glint{supplant <type>;}
+=supplant <type>;=
 
 Supplant is important.
 
