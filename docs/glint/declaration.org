@@ -1,0 +1,60 @@
+* Declarations in Glint
+
+A declaration is a way for the programmer to name /something/; usually in a way that restricts what something is, or how it can be used.
+
+In Glint, declarations let the programmer name locations in memory, known as /variables/, as well as language constructs like types, or templates.
+
+** Variables
+
+A /variable/ is a location in the program's memory, at runtime (when it is being executed). You may assign to a variable, setting the value stored at it's location in memory. A variable is a language construct, but a language construct isn't necessarily a variable.
+#+begin_src glint
+  foo : int;
+  bar : int = 69;
+  baz : int 69;
+#+end_src
+
+How large that location in memory is is determined by the variable's type. A /type/ is a way of separating values into different kinds. Different kinds of values may be treated differently semantically. For example, two number types may be added together. For a number type and a string type, that operation doesn't quite make sense (or, it's up to interpretation what it means; either way, it's unclear). The programmer declares a variable as having a specific type, such that the compiler knows A.) how much memory is at the location this name refers to, and B.) what operations are semantically valid on this location in memory.
+
+** Named Types and Templates
+
+Type declarations let the programmer use a name to refer to a (usually) complex type; this way, they don't have to re-enter the entire type every time they need to use it. (More on type expressions later.)
+#+begin_src glint
+  foo ::: struct { x : int; };
+#+end_src
+
+Template declarations let the programmer use a name to refer to a template, allowing easy and efficient re-use. (More on template expressions later.)
+#+begin_src glint
+  dereference :: template(x : expr) @x;
+#+end_src
+
+** Basics
+
+There are two forms of declaration in Glint:
+- Typed :: =name ":" type [ [ "=" ] value ]=
+- Type-inferred :: =name "::" value=
+
+If you see a typed declaration, you know that referencing =name= gives you a value of type =type=.
+If you see a type-inferred declaration, you know that referencing =name= gives you =value= (or a value of the same type, if assignment occurs).
+
+You may often see =:::=; this is simply a combination of a type-inferred declaration and the =:= prefix for an explicit type expression, resulting in a name with a value of a type expression (a named type).
+
+A typed declaration does not require an initializer. Accessing an uninitialized variable either provides a default-initialized value, or zero.
+A type-inferred declaration requires an initializer.
+
+** Exporting
+
+A module may export a declaration, such that it is made available in any Glint program that imports it.
+
+#+begin_src glint
+  ;; foo_mod.g
+  module foo_mod;
+  export foo : int 69;
+#+end_src
+
+#+begin_src glint
+  ;; foo_exe.g
+  import foo_mod;
+  foo; ;; <- accessed value: 69
+#+end_src
+
+In order for type information to be relayed across module borders, the Glint compiler produces metadata that describes the module, all exports, etc. This metadata is either implanted in the built file (in a separate section of an object or assembly file), or emitted as a standalone file with the =.gmeta= extension. Ensuring the built artifacts or the metadata files of a module are findable within an include directory is required to build a Glint program that imports said module.
