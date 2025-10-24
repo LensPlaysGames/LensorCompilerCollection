@@ -113,6 +113,7 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
 
         if constexpr (PerformConversion)
             InsertImplicitCast(expr_ptr, to);
+
         return Score(1);
     }
 
@@ -1626,8 +1627,73 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 auto* c = cast<CompoundLiteral>(v->init());
                 // Set the type of the compound literal from the type of the declaration,
                 // if the compound literal's type isn't already explicitly declared.
-                if (c and c->type()->is_unknown())
+                if (c and c->type()->is_unknown()) {
                     *c->type_ref() = v->type();
+
+                    // TODO: This should be handled via CompoundType. Since we're still
+                    // waiting on that, this makes sure invalid code isn't produced silently.
+                    if (is<ArrayType, DynamicArrayType, ArrayViewType>(c->type())) {
+                        for (auto& m : c->values()) {
+                            if (not Convert(&m.value, c->type()->elem())) {
+                                Error(
+                                    m.value->location(),
+                                    "Compound Literal member of type {} is not convertible to array element type {}",
+                                    m.value->type(),
+                                    c->type()->elem()
+                                );
+                                v->set_sema_errored();
+                                return false;
+                            }
+                        }
+                    } else if (is<StructType>(c->type())) {
+                        auto s = as<StructType>(c->type());
+                        if (c->values().size() != s->members().size()) {
+                            Error(
+                                c->location(),
+                                "Compound Literal has invalid expression count to be converted to {}",
+                                c->type()
+                            );
+                            v->set_sema_errored();
+                            return false;
+                        }
+                        for (unsigned i = 0; i < c->values().size(); ++i) {
+                            auto& compound_literal_member_expression = c->values().at(i);
+                            if (not Convert(&compound_literal_member_expression.value, s->members().at(i).type)) {
+                                Error(
+                                    compound_literal_member_expression.value->location(),
+                                    "Compound Literal member of type {} is not convertible to struct member {} of type {}",
+                                    compound_literal_member_expression.name,
+                                    compound_literal_member_expression.value->type(),
+                                    s->members().at(i).type
+                                );
+                                v->set_sema_errored();
+                                return false;
+                            }
+                        }
+                    } else {
+                        Error(
+                            c->location(),
+                            "Sorry, but initialisation of values of {} type from compound literals is not yet supported",
+                            c->type()
+                        );
+                        v->set_sema_errored();
+                        return false;
+                    }
+                }
+
+                // TODO: CompoundType
+                // Has members. Each member has a type. The idea is this will be an
+                // "intermediate" type between structs, arrays, compound literals, etc.
+                // So, a StructType foo with byte members x and y is implicitly
+                // convertible to a CompoundType with members byte and byte.
+                // If all types of a compound type are (convertible to) the element type
+                // of an array, then it can be converted to an array of the same size (or
+                // a dynamic array, or array view).
+
+                // TODO: I know the compound literal is *supposed* to be v>type() up
+                // above, and that's why we set it. But, what if it isn't? What if the
+                // compound's literal's expressions do not actually make the type that it
+                // is expected to make?
 
                 // compound literal initialiser for sum type
                 //     foo :sum_t !{ .member expression }
@@ -2449,14 +2515,17 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 //   @b->lhs().data[b->lhs().size] := b->rhs();
                 //   b->lhs().size += 1;
 
-                auto lhs_data = new (mod) MemberAccessExpr(b->lhs(), "data", {});
-                auto lhs_size = new (mod) MemberAccessExpr(b->lhs(), "size", {});
+                // dynarray_grow b->lhs();
                 auto grow_if = new (mod) CallExpr(named_template("dynarray_grow"), {b->lhs()}, {});
 
+                // @b->lhs().data[b->lhs().size] := b->rhs()
+                auto lhs_data = new (mod) MemberAccessExpr(b->lhs(), "data", {});
+                auto lhs_size = new (mod) MemberAccessExpr(b->lhs(), "size", {});
                 auto subscript_lhs = new (mod) BinaryExpr(TokenKind::LBrack, lhs_data, lhs_size, {});
                 auto dereference_subscript = new (mod) UnaryExpr(TokenKind::At, subscript_lhs, false, {});
                 auto assign = new (mod) BinaryExpr(TokenKind::ColonEq, dereference_subscript, b->rhs(), {});
 
+                // b->lhs().size += 1;
                 auto update_size = new (mod) BinaryExpr(
                     TokenKind::PlusEq,
                     lhs_size,
@@ -2616,7 +2685,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             (void) ImplicitDe_Reference(&b->lhs());
             auto* ty = b->lhs()->type();
 
-            if (is<DynamicArrayType>(ty)) {
+            if (is<ArrayViewType, DynamicArrayType>(ty)) {
                 // rewrite lhs[rhs] as lhs.data[rhs]
 
                 auto member_access = new (mod) MemberAccessExpr(b->lhs(), "data", {});
@@ -2788,7 +2857,11 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
         /// Assignment.
         case TokenKind::ColonEq: {
-            LValueToRValue(&b->rhs());
+            // FIXME: I'm not sure if we are able to actually get away with not doing
+            // this. To me, it would be better handled by Convert()...
+            // LValueToRValue(&b->rhs());
+
+            // This removes REFERENCES, _not pointers_. Attempts to produce an lvalue.
             (void) ImplicitDe_Reference(&b->lhs());
             if (not b->lhs()->is_lvalue()) {
                 Error(b->location(), "LHS of assignment must be an lvalue");
@@ -2796,10 +2869,10 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 return;
             }
 
-            /// The type of the assignment is the same lvalue. Note that if
-            /// the lhs is indeed an lvalue, we don’t ever mark this as errored
-            /// because we know what its type is going to be, irrespective of
-            /// whether the assignment is valid or not.
+            /// The type of the assignment is the same as the type of the lvalue. Note
+            /// that if the lhs is indeed an lvalue, we don’t ever mark this as errored
+            /// because we know what its type is going to be, irrespective of whether
+            /// the assignment is valid or not.
             b->type(lhs_t);
 
             // Assignment always yields an lvalue.
@@ -2807,7 +2880,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
             // Disallow assigning to a sum type directly.
             auto* lhs_type = lhs_t;
-            if (auto* sum_type = cast<SumType>(lhs_t)) {
+            if (auto* sum_type = cast<SumType>(lhs_type)) {
                 if (auto* m = cast<MemberAccessExpr>(b->lhs())) {
                     // Use member access to fetch type from sum type
                     lhs_type = sum_type->members().at(m->member()).type;
@@ -3114,6 +3187,9 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
     for (usz i = 0, end = std::min(expr->args().size(), t->params().size()); i < end; i++) {
         auto param_t = t->params().at(i).type;
         // Any expression is valid for "expr" compile-time type.
+        // TODO: Should "expr" type cover type expressions? I can't think of a
+        // time where you could use either a type expression or a different
+        // expression in the same place...
         if (auto n = cast<NamedType>(param_t); n and n->name() == "expr")
             continue;
 
@@ -4065,14 +4141,19 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         }
 
         // TODO: What is this note, what does it mean, and why is it here? How
-        // might one trigger it?
+        // might one trigger it? To me, the top level scope is always, well, at
+        // the top level, above every other scope. So, it should be searched for
+        // every scope within a module. I guess this might make sense if you have
+        // a top level variable in another module and want it to be global, but...
+        // just import the module??? I have no idea what this means or why it is
+        // here.
         // If there is a declaration of this variable in the top-level scope, tell
         // the user that they may have forgotten to make it static.
         auto top_level = mod.top_level_scope()->find(expr->name());
         if (not top_level.empty()) {
             err.attach(Note(
                 top_level.at(0)->location(),
-                "A declaration exists at the top-level. Did you mean to make it 'static'?"
+                "FIXME I HAVE NO IDEA WHAT THIS ERROR MEANS OR WHY ITS HERE SORRY ABOUT THAT!"
             ));
         }
 
