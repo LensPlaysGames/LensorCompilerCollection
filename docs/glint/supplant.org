@@ -3,7 +3,7 @@
 
 * Data & Functionality Composition in Glint Using Supplant
 
-=supplant <type>;=
+src_glint{supplant <type>;}
 
 Supplant is important.
 
@@ -14,26 +14,25 @@ Here's the idea(s):
   1.) A supplanted struct member has it's namespace pulled into the parent struct's namespace. That is, the members of the supplanted struct member are accessible by their names directly, and do not require first accessing the supplanted struct (from a lexical standpoint).
   2.) The parent struct becomes IMPLICITLY convertible to the supplanted struct type. No type-casting needed.
 
-Glint
----
-Entity : struct {
+#+begin_src glint
+  Entity : struct {
     health : int;
     x : int;
     y : int;
     ;; ...
-};
-doDamage : void(e : &Entity) {
+  };
+  doDamage : void(e : &Entity) {
     e.health -= 1;
-};
+  };
 
-Skeleton : struct {
+  Skeleton : struct {
     arrow_amount : int;
     supplant Entity;
-};
+  };
 
-s : Skeleton;
-doDamage s; ;; works!!
----
+  s : Skeleton;
+  doDamage s; ;; works!!
+#+end_src
 
 Syntactically and functionally, this allows the "parent" type (the one that contains the supplanted type) to be treated exactly the same. This would really be revolutionary in the context of writing something like a syntax tree.
 
