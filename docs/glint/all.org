@@ -7,6 +7,7 @@ This document is manually generated and may be a couple commits behind.
 The Glint programming language is a high level programming language with low-level capabilities. Focused on the programmer, the Glint programming language spearheads ease of use while also letting people who know what they are doing, do it better.
 
 #+INCLUDE: "./literals.org"
+#+INCLUDE: "./declaration.org"
 #+INCLUDE: "./dynamic_array.org"
 #+INCLUDE: "./for.org"
 #+INCLUDE: "./sumtype.org"
