@@ -432,6 +432,7 @@ auto lcc::glint::Module::serialise(
 
         } break;
 
+        // serialise()
         // SumType:
         //     member_count :u16
         //     member_types :TypeIndex[member_count]
@@ -453,7 +454,7 @@ auto lcc::glint::Module::serialise(
 
             // Member Data
             for (const auto& member : members) {
-                auto name_length = member.name.length();
+                auto name_length = u16(member.name.length());
                 auto name_length_bytes = to_bytes(name_length);
                 out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
                 out.insert(out.end(), member.name.begin(), member.name.end());
@@ -475,7 +476,39 @@ auto lcc::glint::Module::serialise(
         //     member_types :TypeIndex[member_count]
         //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
         case Type::Kind::Union: {
-            LCC_TODO("Serialise union type (it's easy, just haven't yet)");
+            auto type = as<UnionType>(ty);
+
+            auto& members = type->members();
+
+            auto member_count = u16(members.size());
+            auto member_count_bytes = to_bytes(member_count);
+            out.insert(out.end(), member_count_bytes.begin(), member_count_bytes.end());
+
+            // Allocate enough room to represent member types, once we are able to
+            // serialise them, keeping track of where they are so we can fix them up
+            // later.
+            auto member_types_offset = out.size();
+            out.insert(out.end(), member_count * sizeof(ModuleDescription::TypeIndex), 0);
+
+            // Member Data
+            for (const auto& member : members) {
+                auto name_length = u16(member.name.length());
+                auto name_length_bytes = to_bytes(name_length);
+                out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
+                out.insert(out.end(), member.name.begin(), member.name.end());
+            }
+
+            // Serialise member types and fixup member type indices previously
+            // allocated.
+            std::vector<ModuleDescription::TypeIndex> member_types{};
+            for (auto& member : members)
+                member_types.push_back(serialise(out, cache, member.type));
+
+            auto* member_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(
+                out.data() + member_types_offset
+            );
+            for (auto& member_type : member_types)
+                *member_types_ptr++ = member_type;
         } break;
 
         case Type::Kind::Typeof:
@@ -506,7 +539,7 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
 
         // Prepare length
         LCC_ASSERT(
-            decl->name().length() <= 0xff,
+            decl->name().length() <= std::numeric_limits<u8>::max(),
             "Exported declaration has over-long name and cannot be encoded in binary format"
         );
         u8 length = u8(decl->name().length());
@@ -554,19 +587,37 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
 // index 3 that stores a pointee type index of 4. So, we need to know the
 // Type* of any given index /before/ we start parsing any of the types.
 namespace fixups {
+using TypeIndex = lcc::glint::ModuleDescription::TypeIndex;
 struct BasicFixup {
     // Type index of the type that needs fixing up. This index will be
     // overwritten with a type created from the replacement type index.
-    lcc::glint::ModuleDescription::TypeIndex fixup_type_index;
+    TypeIndex fixup_type_index;
     // Type index of the type that has not yet been deserialised; the cause of
     // the fixup.
-    lcc::glint::ModuleDescription::TypeIndex replacement_type_index;
+    TypeIndex replacement_type_index;
     BasicFixup(
-        lcc::glint::ModuleDescription::TypeIndex zero_index,
-        lcc::glint::ModuleDescription::TypeIndex fixup_index,
-        lcc::glint::ModuleDescription::TypeIndex replacement_index
+        TypeIndex zero_index,
+        TypeIndex fixup_index,
+        TypeIndex replacement_index
     ) : fixup_type_index(zero_index + fixup_index),
         replacement_type_index(zero_index + replacement_index) {}
+};
+
+struct UnionFixup {
+    TypeIndex union_type_index;
+    std::vector<TypeIndex> member_type_indices;
+    std::vector<std::string> member_names;
+    UnionFixup(
+        TypeIndex zero_index,
+        TypeIndex union_index,
+        std::vector<TypeIndex> member_types,
+        std::vector<std::string> names
+    ) : union_type_index(zero_index + union_index),
+        member_type_indices(member_types),
+        member_names(names) {
+        for (auto& index : member_type_indices)
+            index += zero_index;
+    }
 };
 
 constexpr auto low_msg
@@ -576,8 +627,8 @@ constexpr auto high_msg
 
 void validate_fixup_type_index(
     lcc::glint::Module& m,
-    lcc::glint::ModuleDescription::TypeIndex types_zero_index,
-    lcc::glint::ModuleDescription::TypeIndex index_to_check
+    TypeIndex types_zero_index,
+    TypeIndex index_to_check
 ) {
     LCC_ASSERT(
         index_to_check >= types_zero_index,
@@ -593,12 +644,22 @@ void validate_fixup_type_index(
 
 void validate_fixup(
     lcc::glint::Module& m,
-    lcc::glint::ModuleDescription::TypeIndex types_zero_index,
+    TypeIndex types_zero_index,
     const BasicFixup& fixup
 ) {
     validate_fixup_type_index(m, types_zero_index, fixup.fixup_type_index);
     validate_fixup_type_index(m, types_zero_index, fixup.replacement_type_index);
 };
+
+void validate_union_fixup(
+    lcc::glint::Module& m,
+    TypeIndex types_zero_index,
+    const UnionFixup& fixup
+) {
+    validate_fixup_type_index(m, types_zero_index, fixup.union_type_index);
+    for (auto t : fixup.member_type_indices)
+        validate_fixup_type_index(m, types_zero_index, t);
+}
 
 } // namespace fixups
 
@@ -768,7 +829,7 @@ auto lcc::glint::Module::deserialise(
             ModuleDescription::TypeIndex sum_index,
             std::vector<ModuleDescription::TypeIndex> member_types,
             std::vector<std::string> member_names_
-        ) : sum_type_index(sum_index),
+        ) : sum_type_index(zero_index + sum_index),
             member_type_indices(member_types),
             member_names(member_names_) {
             for (auto& index : member_type_indices)
@@ -906,6 +967,7 @@ auto lcc::glint::Module::deserialise(
     std::vector<SumFixup> sum_fixups{};
     // Fixup member types and scope declarations.
     std::vector<StructFixup> struct_fixups{};
+    std::vector<fixups::UnionFixup> union_fixups{};
 
     const auto read_t = [&]<typename T> [[nodiscard]] (T _) {
         constexpr auto size = sizeof(T);
@@ -1074,6 +1136,7 @@ auto lcc::glint::Module::deserialise(
                 );
             } break;
 
+            // deserialise()
             // SumType:
             //     member_count :u16
             //     member_types :TypeIndex[member_count]
@@ -1222,9 +1285,39 @@ auto lcc::glint::Module::deserialise(
             //     member_count :u16
             //     member_types :TypeIndex[member_count]
             //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
-            case Type::Kind::Union:
-                LCC_TODO("Parse type kind {} from binary module metadata", ToString(kind));
-                break;
+            case Type::Kind::Union: {
+                auto member_count = read_t(u16());
+
+                // Member Type Indices
+                std::vector<ModuleDescription::TypeIndex> member_type_indices{};
+                for (usz member_index = 0; member_index < member_count; ++member_index) {
+                    auto member_type_index = read_t(ModuleDescription::TypeIndex());
+                    member_type_indices.emplace_back(member_type_index);
+                }
+
+                // Member Names
+                std::vector<std::string> member_names{};
+                for (usz member_index = 0; member_index < member_count; ++member_index) {
+                    auto member_name_length = read_t(u16());
+
+                    std::string member_name{};
+                    member_name.reserve(member_name_length);
+                    for (unsigned i = 0; i < member_name_length; ++i)
+                        member_name += char(module_metadata_blob.at(type_offset++));
+
+                    member_names.emplace_back(std::move(member_name));
+                }
+
+                // This reserves the saved index in types vector for this type (which will
+                // be created later while handling the fixup).
+                types.emplace_back(nullptr);
+                union_fixups.emplace_back(
+                    types_zero_index,
+                    type_index,
+                    std::move(member_type_indices),
+                    std::move(member_names)
+                );
+            } break;
 
             case Type::Kind::Typeof:
                 LCC_ASSERT(false, "Sema should have replaced TypeofType with the type of it's contained expression");
@@ -1233,8 +1326,6 @@ auto lcc::glint::Module::deserialise(
 
     // FIXME: Should we iterate fixups in reverse, such that an earlier fixup
     // that relies on a later one doesn't have the fucky-wucky happen to it?
-
-    auto types_size_before_fixups = types.size();
 
     for (auto fixup : ptr_fixups) {
         validate_fixup(*this, types_zero_index, fixup);
@@ -1377,12 +1468,16 @@ auto lcc::glint::Module::deserialise(
         }
 
         auto sum = new (*this) SumType(scope, std::move(members), {});
-        types[fixup.sum_type_index] = sum;
-
-        types[fixup.sum_type_index]->set_sema_done();
         // This erases the entry added within SumType allocation, since we
-        // overwrote a previous entry with this type.
+        // will overwrite a previous entry with the created type.
         types.erase(types.begin() + types_size);
+
+        // Set cached struct type.
+        (void) sum->struct_type(*this);
+
+        sum->set_sema_done();
+
+        types[fixup.sum_type_index] = sum;
     }
 
     for (auto fixup : struct_fixups) {
@@ -1431,6 +1526,54 @@ auto lcc::glint::Module::deserialise(
         struct_type->alignment(fixup.byte_align);
         types[fixup.struct_type_index] = struct_type;
         types.erase(types.begin() + types_size);
+    }
+
+    for (auto fixup : union_fixups) {
+        fixups::validate_union_fixup(*this, types_zero_index, fixup);
+        int types_size = int(types.size());
+
+        std::vector<UnionType::Member> members{};
+        members.reserve(fixup.member_type_indices.size());
+        usz member_i{0};
+        for (auto member_type_index : fixup.member_type_indices) {
+            members.emplace_back(
+                fixup.member_names.at(member_i),
+                types[member_type_index],
+                Location{}
+            );
+            ++member_i;
+        }
+
+        // FIXME: What should parent scope of struct type scope be?
+        auto scope = new (*this) Scope(nullptr);
+
+        // Declare members in scope
+        for (auto& m : members) {
+            // TODO: Maybe parse default init expression from module metadata, once we
+            // can serialise expressions...
+            auto member_decl = new (*this) VarDecl(
+                std::string(m.name),
+                m.type,
+                nullptr,
+                this,
+                Linkage::Internal,
+                {}
+            );
+            auto decl = scope->declare(
+                context,
+                std::string(m.name),
+                member_decl
+            );
+            LCC_ASSERT(decl);
+        }
+
+        auto u = new (*this) UnionType(scope, members, {});
+        types.erase(types.begin() + types_size);
+        // Set cached underlying type.
+        (void) u->array_type(*this);
+        u->set_sema_done();
+
+        types[fixup.union_type_index] = u;
     }
 
     for (auto fixup : function_fixups) {
@@ -1482,10 +1625,6 @@ auto lcc::glint::Module::deserialise(
     }
 
     // Fixups Confidence Check
-    LCC_ASSERT(
-        types.size() == types_size_before_fixups,
-        "Glint Module Deserialisation: fixups changed size of types list (it should not have done this)."
-    );
     for (auto t : types) {
         LCC_ASSERT(
             t,
