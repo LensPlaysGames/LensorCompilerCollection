@@ -4,7 +4,7 @@
 #+begin_src glint
 import foo_simplestruct;
 
-bar.z;
+baz.z;
 #+end_src
 
 #+NAME: source
