@@ -77,6 +77,12 @@ using store_imm_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), v<0, 0>, o<1>>>>;
 
+using store_imm_global = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Store), Immediate<>, Global<>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), v<0, 0>, o<1>>>>;
+
 using store_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Store), Register<>, Register<>>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), o<0>, o<1>>>>;
@@ -470,6 +476,7 @@ using AllPatterns = PatternList<
     store_imm_local,
     store_local_local,
     store_imm_reg,
+    store_imm_global,
     store_reg_reg,
     copy_reg,
     copy_global,
