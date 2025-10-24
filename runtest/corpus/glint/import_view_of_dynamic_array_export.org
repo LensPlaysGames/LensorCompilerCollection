@@ -1,0 +1,32 @@
+* Import View of Dynamic Array Export
+
+#+NAME: source
+#+begin_src glint
+import foo_view_dynamic;
+
+@baz[3];
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_view_dynamic;
+
+  blah : [byte];
+  blah += `4`;
+  blah += `2`;
+  blah += `0`;
+  blah += 69;
+
+  export baz : [byte view];
+  baz := blah;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+

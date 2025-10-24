@@ -1,0 +1,40 @@
+* Import Sum Export
+
+#+NAME: source
+#+begin_src glint
+  import foo_simplesum;
+
+  out :: `0`;
+
+  match baz, {
+    .x out := `x`;
+    .y out := `y`;
+    .z out := `z`;
+  };
+
+  out;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_simplesum;
+
+  bar : sum {
+    x : int;
+    y : bool;
+    z : uint;
+  };
+
+  export baz : bar;
+  baz.z := 69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+122
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+
