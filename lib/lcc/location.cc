@@ -1,5 +1,6 @@
 #include <lcc/context.hh>
 #include <lcc/location.hh>
+#include <lcc/utils.hh>
 
 bool lcc::Location::seekable(const lcc::Context* ctx) const {
     auto& files = ctx->files();
@@ -10,6 +11,9 @@ bool lcc::Location::seekable(const lcc::Context* ctx) const {
 
 /// Seek to a source location. The location must be valid.
 auto lcc::Location::seek(const lcc::Context* ctx) const -> LocInfo {
+    LCC_ASSERT(ctx);
+    LCC_ASSERT(seekable(ctx), "Cannot seek Location that is not seekable");
+
     LocInfo info{};
 
     /// Get the file that the location is in.
@@ -45,6 +49,9 @@ auto lcc::Location::seek(const lcc::Context* ctx) const -> LocInfo {
 /// TODO: Lexer should create map that counts where in a file the lines start so
 /// we can do binary search on that instead of iterating over the entire file.
 auto lcc::Location::seek_line_column(const lcc::Context* ctx) const -> LocInfoShort {
+    LCC_ASSERT(ctx);
+    LCC_ASSERT(seekable(ctx), "Cannot seek Location that is not seekable");
+
     LocInfoShort info{};
 
     /// Get the file that the location is in.
