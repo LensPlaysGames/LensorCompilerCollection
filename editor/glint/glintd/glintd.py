@@ -3,7 +3,7 @@
 # pip install pygls
 #
 # To use in Emacs (replace path to `glintd.py`):
-# (add-to-list 'eglot-server-programs '(glint-ts-mode . ("python3" "/home/lens_r/Programming/play/LensorCompilerCollection/editor/glint/glintd.py")))
+# (add-to-list 'eglot-server-programs '(glint-ts-mode . ("python3" "/home/lens_r/Programming/play/LensorCompilerCollection/editor/glint/glintd/glintd.py")))
 
 # TODO:
 # - Implement "go to"s and "find" server features (see https://pygls.readthedocs.io/en/latest/servers/examples/goto.html)
@@ -13,8 +13,9 @@ import re
 
 # You have to build this yourself, like, with a C++ compiler
 from glinttools import (
-    DeclInfo, Diagnostic, DiagnosticSeverity, Location, Token, Type, TypeKind,
-    findDecl, getDiagnostics, getScopeAtPoint, getScopes, getTypeAtPoint, getValidSymbols, tokenize
+    DeclInfo, Diagnostic, DiagnosticSeverity, Location, Token, Type, TypeKind, Node,
+    findDecl, getDiagnostics, getScopeAtPoint, getScopes,
+    getTree, getTypeAtPoint, getValidSymbols, tokenize
 )
 
 from itertools import islice
@@ -29,8 +30,21 @@ def log(msg : str):
     server.show_message_log(msg)
 
 
-_MARKDOWN_CHARACTERS_TO_ESCAPE = set(r"\`*_{}[]<>()#+-.!|")
+def escaped_control_character(character: str) -> str:
+    match ord(character):
+        case 10: return "\\n"
+        case 13: return "\\r"
+        case 9: return "\\t"
+        case 8: return "\\b"
+        case _: return f"\\{ord(character)}"
 
+def escaped_control_characters(text: str) -> str:
+    return "".join(
+        f"\\{escaped_control_character(character)}" if ord(character) < 32 else character
+        for character in text
+    )
+
+_MARKDOWN_CHARACTERS_TO_ESCAPE = set(r"\`*_{}[]<>()#+-.!|")
 def escaped_markdown(text: str) -> str:
     return "".join(
         f"\\{character}" if character in _MARKDOWN_CHARACTERS_TO_ESCAPE else character
@@ -58,6 +72,9 @@ def publish_diagnostics(doc :TextDocument):
 
     diagnostics = []
     for d in lcc_diagnostics:
+        # Invalid location
+        if d.location.line == -1: continue
+
         # Convert 1-indexed LCC line information to 0-indexed LSP line
         # information.
         start_line = max(d.location.line - 1, 0)
@@ -129,7 +146,7 @@ def hover(ls: LanguageServer, params: types.HoverParams):
     #     hover_content += f" :!: {type_at_point.representation}"
 
     if selected_token:
-        hover_content = f"{token_pos_string(selected_token)}: {escaped_markdown(selected_token.source)}"
+        hover_content = f"{token_pos_string(selected_token)}: {escaped_control_characters(escaped_markdown(selected_token.source))}"
 
         # If selected token is known (i.e. a keyword or a built-in type, add doc string)
         if (selected_token.source == "byte"):
@@ -191,6 +208,58 @@ def hover(ls: LanguageServer, params: types.HoverParams):
         ),
     )
 
+# @param ifTooLate Return this if the given tree's location is after the
+# given needle location. Also return this if given tree is too early.
+# The idea is to keep going until the node returned isn't the third parameter
+def traverseTreeToPoint(tree: Node, location: Location, ifTooLate: Node):
+    if tree.location.line > location.line:
+        return ifTooLate
+    if tree.location.line == location.line and tree.location.character > location.character:
+        return ifTooLate
+
+    if tree.location.line < location.line or (tree.location.line == location.line and tree.location.character + tree.location.length < location.character):
+        return ifTooLate
+
+    out = tree;
+    for c in out.children:
+        n = traverseTreeToPoint(c, location, out)
+        if n != out:
+            return n;
+        out = c
+
+    return out
+
+@server.feature(
+    types.TEXT_DOCUMENT_INLAY_HINT
+)
+def inlay_hints(params: types.InlayHintParams):
+    document_uri = params.text_document.uri
+    document = server.workspace.get_text_document(document_uri)
+
+    start_line = params.range.start.line
+    end_line = params.range.end.line
+
+    lines = document.lines[start_line : end_line + 1]
+    source = "\n".join(lines)
+
+
+    items: List[types.InlayHint] = []
+
+    # TODO: For every non-template type-inferred declaration (using ::), add
+    # an inlay hint between the two ':' of the inferred type.
+    tree = getTree(source)
+
+    # items.append(types.InlayHint(
+    #     label=f":{}",
+    #     kind=types.InlayHintKind.Type,
+    #     padding_left=False,
+    #     padding_right=True,
+    #     position=types.Position(line=lineno, character=match.end()),
+    # ))
+
+    return items
+
+
 @server.feature(
     types.TEXT_DOCUMENT_COMPLETION,
     types.CompletionOptions(trigger_characters=["."]),
@@ -204,8 +273,13 @@ def completions(params: types.CompletionParams):
     except IndexError:
         return None
 
+    # TODO: Use AST to narrow down what the user probably actually wants. It
+    # would be nice if we could query the AST by location, and figure out
+    # things about the program that way (i.e. n = getNodeAtPoint(pos);
+    # if (n.kind = NodeKind.MemberAccess) ...) or something like that.
+
     selected_token = None
-    # Move character selected backwards until we reach a token we can lookup...
+    # Move selected character backwards until we reach a token we can lookup...
     # Ideally, we would just be able to parse the lhs of the member access
     # (or everything left of '.' until ';' or ','), buuuut... yeah
     i = pos.character - 1
@@ -218,10 +292,11 @@ def completions(params: types.CompletionParams):
         )
         i -= 1
 
+
     if selected_token:
         completions = getValidSymbols(document.source)
         return types.CompletionList(
-            is_incomplete=False, # completion list is complete
+            is_incomplete=False,
             items=(types.CompletionItem(
                 label=completion
             ) for completion in completions)
@@ -229,7 +304,7 @@ def completions(params: types.CompletionParams):
 
     completions = getValidSymbols(document.source)
     return types.CompletionList(
-        is_incomplete=False, # completion list is complete
+        is_incomplete=False,
         items=(types.CompletionItem(
             label=completion
         ) for completion in completions)

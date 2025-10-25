@@ -41,17 +41,20 @@ struct PythonLocation {
 };
 
 bool invalid(const PythonLocation& p) {
-    return p.byte_offset < 0;
+    return p.byte_offset < 0 or p.length < 0 or p.line < 0 or p.character < 0;
 }
 
 PythonLocation py_location(lcc::Context* ctx, lcc::Location loc) {
-    auto e_locinfo = loc.seek_line_column(ctx);
-    return {
-        .byte_offset = int(loc.pos),
-        .length = int(loc.len),
-        .line = int(e_locinfo.line),
-        .character = int(e_locinfo.col)
-    };
+    if (loc.seekable(ctx)) {
+        auto e_locinfo = loc.seek_line_column(ctx);
+        return {
+            .byte_offset = int(loc.pos),
+            .length = int(loc.len),
+            .line = int(e_locinfo.line),
+            .character = int(e_locinfo.col)
+        };
+    }
+    return {};
 }
 
 struct PythonDeclInfo {
@@ -97,7 +100,18 @@ struct PythonType {
     std::string representation{};
     int size{};
     int align{};
-    PythonLocation location;
+    PythonLocation location{};
+    bool valid{false};
+
+    PythonType() : valid(false) {}
+
+    PythonType(lcc::Context* context, lcc::glint::Type* type)
+        : kind(type->kind()),
+          representation(type->string()),
+          size((int) type->size_in_bytes(context)),
+          align((int) type->align(context)),
+          location(py_location(context, type->location())),
+          valid(true) {}
 };
 
 constexpr auto default_context() {
@@ -221,7 +235,9 @@ PythonDeclInfo findDecl(std::string source, std::string name) {
     auto& m = *maybe_m;
     LCC_ASSERT(m);
 
-    return findDeclImpl(*m, &context, name, m->top_level_function()->body()).py_info;
+    auto out = findDeclImpl(*m, &context, name, m->top_level_function()->body()).py_info;
+    LCC_ASSERT(m);
+    return out;
 }
 
 std::vector<std::string> getValidTypeConstituents(lcc::glint::Type* t) {
@@ -319,6 +335,48 @@ std::vector<std::string> getValidSymbols(std::string source) {
     return {all_valid_symbols.cbegin(), all_valid_symbols.cend()};
 }
 
+struct PythonNode {
+    lcc::glint::Expr::Kind kind;
+    std::vector<PythonNode> children{};
+    PythonType type{};
+    PythonLocation location{};
+    bool valid{false};
+
+    PythonNode() : valid(false) {}
+
+    PythonNode(lcc::Context* ctx, lcc::glint::Expr* e)
+        : kind(e->kind()),
+          type(ctx, e->type()),
+          location(py_location(ctx, e->location())) {
+        // Should never be null, but always good to check.
+        if (not e) return;
+
+        for (auto c : e->children())
+            children.emplace_back(PythonNode{ctx, c});
+
+        valid = true;
+    }
+};
+
+PythonNode getTree(std::string source) {
+    auto context = default_context();
+    auto maybe_m = get_analysed_module(context, source);
+    if (not maybe_m) return {};
+    auto& m = *maybe_m;
+    LCC_ASSERT(m);
+
+    fmt::print(stderr, "You see this.\n");
+
+    auto e = m->top_level_function()->body();
+
+    fmt::print(stderr, "But, can you see this?\n");
+
+    // If we just return, we risk unique_ptr `m` going out of scope...
+    auto out = PythonNode(&context, e);
+    LCC_ASSERT(m);
+    return out;
+}
+
 auto getScopes(std::string source) -> std::vector<std::vector<std::string>> {
     auto context = default_context();
     auto maybe_m = get_analysed_module(context, source);
@@ -357,10 +415,11 @@ auto getScopeAtPoint(std::string source, PythonLocation location) -> std::vector
 }
 
 auto getDiagnostics(std::string source) -> std::vector<PythonDiagnostic> {
-    std::vector<PythonDiagnostic> out{};
     auto context = default_context();
     auto maybe_m = get_analysed_module(context, source);
 
+    std::vector<PythonDiagnostic> out{};
+    out.reserve(context.diagnostics().size());
     for (auto d : context.diagnostics()) {
         auto kind = PythonDiagnostic::Severity::None;
         switch (d.kind) {
@@ -440,6 +499,8 @@ lcc::glint::Expr* getNodeAtPoint(lcc::glint::Module& mod, lcc::Location loc) {
 }
 
 PythonType getTypeAtPoint(std::string source, PythonLocation location) {
+    if (invalid(location)) return {};
+
     auto context = default_context();
     auto maybe_m = get_analysed_module(context, source);
     if (not maybe_m) return {};
@@ -455,13 +516,7 @@ PythonType getTypeAtPoint(std::string source, PythonLocation location) {
     auto found = getNodeAtPoint(*m, l);
     if (not found) return {};
 
-    return PythonType{
-        found->type()->kind(),
-        found->type()->string(),
-        (int) found->type()->size_in_bytes(&context),
-        (int) found->type()->align(&context),
-        py_location(&context, found->type()->location())
-    };
+    return PythonType{&context, found->type()};
 }
 
 namespace py = pybind11;
@@ -513,12 +568,48 @@ PYBIND11_MODULE(glinttools, m) {
         .value("Integer", lcc::glint::Type::Kind::Integer);
 
     py::class_<PythonType>(m, "Type")
-        .def(py::init<lcc::glint::Type::Kind, std::string, int, int, PythonLocation>())
         .def_readwrite("kind", &PythonType::kind)
         .def_readwrite("representation", &PythonType::representation)
         .def_readwrite("size", &PythonType::size)
         .def_readwrite("align", &PythonType::align)
         .def_readwrite("location", &PythonType::location);
+
+    py::enum_<lcc::glint::Expr::Kind>(m, "ExprKind")
+        .value("While", lcc::glint::Expr::Kind::While)
+        .value("For", lcc::glint::Expr::Kind::For)
+        .value("Return", lcc::glint::Expr::Kind::Return)
+        .value("TypeDecl", lcc::glint::Expr::Kind::TypeDecl)
+        .value("TypeAliasDecl", lcc::glint::Expr::Kind::TypeAliasDecl)
+        .value("EnumeratorDecl", lcc::glint::Expr::Kind::EnumeratorDecl)
+        .value("VarDecl", lcc::glint::Expr::Kind::VarDecl)
+        .value("FuncDecl", lcc::glint::Expr::Kind::FuncDecl)
+        .value("IntegerLiteral", lcc::glint::Expr::Kind::IntegerLiteral)
+        .value("StringLiteral", lcc::glint::Expr::Kind::StringLiteral)
+        .value("CompoundLiteral", lcc::glint::Expr::Kind::CompoundLiteral)
+        .value("OverloadSet", lcc::glint::Expr::Kind::OverloadSet)
+        .value("EvaluatedConstant", lcc::glint::Expr::Kind::EvaluatedConstant)
+        .value("If", lcc::glint::Expr::Kind::If)
+        .value("Block", lcc::glint::Expr::Kind::Block)
+        .value("Call", lcc::glint::Expr::Kind::Call)
+        .value("IntrinsicCall", lcc::glint::Expr::Kind::IntrinsicCall)
+        .value("Cast", lcc::glint::Expr::Kind::Cast)
+        .value("Unary", lcc::glint::Expr::Kind::Unary)
+        .value("Binary", lcc::glint::Expr::Kind::Binary)
+        .value("NameRef", lcc::glint::Expr::Kind::NameRef)
+        .value("Type", lcc::glint::Expr::Kind::Type)
+        .value("MemberAccess", lcc::glint::Expr::Kind::MemberAccess)
+        .value("Module", lcc::glint::Expr::Kind::Module)
+        .value("Match", lcc::glint::Expr::Kind::Match)
+        .value("Sizeof", lcc::glint::Expr::Kind::Sizeof)
+        .value("Alignof", lcc::glint::Expr::Kind::Alignof)
+        .value("Template", lcc::glint::Expr::Kind::Template);
+
+    py::class_<PythonNode>(m, "Node")
+        .def_readwrite("kind", &PythonNode::kind)
+        .def_readwrite("children", &PythonNode::children)
+        .def_readwrite("type", &PythonNode::type)
+        .def_readwrite("location", &PythonNode::location)
+        .def_readwrite("valid", &PythonNode::valid);
 
     py::class_<PythonDeclInfo>(m, "DeclInfo")
         .def(py::init<PythonLocation, PythonLocation, PythonLocation, std::string>())
@@ -526,6 +617,12 @@ PYBIND11_MODULE(glinttools, m) {
         .def_readwrite("decl_location", &PythonDeclInfo::decl_location)
         .def_readwrite("type_location", &PythonDeclInfo::type_location)
         .def_readwrite("type_representation", &PythonDeclInfo::type_representation);
+
+    m.def(
+        "getTree",
+        &getTree,
+        "Return the typed AST."
+    );
 
     m.def(
         "findDecl",
