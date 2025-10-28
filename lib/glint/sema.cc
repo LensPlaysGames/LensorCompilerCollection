@@ -560,7 +560,7 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
     LCC_UNREACHABLE();
 }
 
-auto lcc::glint::Sema::ImplicitDe_Reference(Expr** expr) -> bool {
+auto lcc::glint::Sema::Convert__RemoveReferences(Expr** expr) -> bool {
     LCC_ASSERT(expr and *expr);
 
     if (is<ReferenceType>((*expr)->type())) {
@@ -2682,7 +2682,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
         /// Pointer or array subscript.
         case TokenKind::LBrack: {
-            (void) ImplicitDe_Reference(&b->lhs());
+            (void) Convert__RemoveReferences(&b->lhs());
             auto* ty = b->lhs()->type();
 
             if (is<ArrayViewType, DynamicArrayType>(ty)) {
@@ -2862,7 +2862,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             // LValueToRValue(&b->rhs());
 
             // This removes REFERENCES, _not pointers_. Attempts to produce an lvalue.
-            (void) ImplicitDe_Reference(&b->lhs());
+            (void) Convert__RemoveReferences(&b->lhs());
             if (not b->lhs()->is_lvalue()) {
                 Error(b->location(), "LHS of assignment must be an lvalue");
                 b->set_sema_errored();
@@ -3830,8 +3830,10 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 }
 
 void lcc::glint::Sema::AnalyseCast(CastExpr* c) {
-    /// Implicit casts and lvalue-to-rvalue conversions are
-    /// only ever created by sema, so we know they’re fine.
+    /// Implicit casts and lvalue-to-rvalue conversions are only ever created
+    /// by sema, so we know they’re fine.
+    /// FIXME: The above sounds like a bunch of malarkey made up by an arrogant
+    /// mad-man.
     if (c->is_implicit_cast() or c->is_lvalue_to_rvalue()
         or c->is_lvalue_to_ref() or c->is_ref_to_lvalue()) {
         c->set_lvalue(c->is_ref_to_lvalue());

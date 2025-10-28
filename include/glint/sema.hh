@@ -251,13 +251,14 @@ private:
     [[nodiscard]]
     auto ImplicitDereference(Expr** expr) -> bool;
 
-    /// De-reference an expression, potentially yielding an lvalue.
+    /// Given an expression of reference type, attempt to produce an lvalue
+    /// (reference to lvalue conversion).
     ///
-    /// Does not do anything to pointers.
+    /// !! Does not do anything to pointers. !!
     ///
     /// \return Whether the result is an lvalue.
     [[nodiscard]]
-    auto ImplicitDe_Reference(Expr** expr) -> bool;
+    auto Convert__RemoveReferences(Expr** expr) -> bool;
 
     /// Insert an implicit cast of an expression to a type.
     ///
