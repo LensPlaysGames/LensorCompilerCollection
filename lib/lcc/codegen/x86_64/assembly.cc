@@ -145,6 +145,18 @@ void emit_gnu_att_assembly(
         for (auto n : function.names())
             out += fmt::format("{}:\n", safe_name(n.name));
 
+        out += "# Locals:\n";
+        for (auto [i, l] : vws::enumerate(function.locals())) {
+            out += fmt::format(
+                "# {}, {}(%rbp): {} ({} size, {} align)\n",
+                i,
+                function.local_offset(MOperandLocal{(u32) i, 0}),
+                l->allocated_type()->string(false),
+                l->allocated_type()->bytes(),
+                l->allocated_type()->align_bytes()
+            );
+        }
+
         // TODO: Total hack just to try and get the source to show up at all in a
         // debugger. We would need real location information to properly do this.
         // Keep in mind that debug lines are 1-indexed.
@@ -197,6 +209,12 @@ void emit_gnu_att_assembly(
                 // ================================
                 // QUICK PATH OPTIMISATION (don't move a register into itself)
                 // ================================
+                // Sometimes, the compiler can seem kind of dumb, as it produces
+                // instructions that actually don't do anything. In this case, the
+                // compiler converts virtual registers to hardware ones, sometimes the
+                // same hardware ones, and the moves between virtual registers become
+                // moves between the same register, effectively doing nothing.
+                // Since these instructions do nothing, we just don't emit them.
                 if (
                     instruction.opcode() == +x86_64::Opcode::Move
                     and is_reg_reg(instruction)
@@ -282,13 +300,17 @@ void emit_gnu_att_assembly(
                     // Save caller-saved registers, if necessary.
                     for (auto r : function.registers_used()) {
                         if (r == desc.return_register) continue;
+                        // Instruction defines this register, no need to save it (since we are
+                        // writing to it).
+                        if (r == instruction.reg()) continue;
                         out += fmt::format("    push %{}\n", ToString(x86_64::RegisterId{r}));
                     }
 
                     // Save return register, if necessary.
                     // TODO: CFA `.cfi_offset`
-                    if (instruction.reg() != desc.return_register)
+                    if (instruction.use_count() and instruction.reg() and instruction.reg() != desc.return_register) {
                         out += fmt::format("    push %{}\n", ToString(x86_64::RegisterId(desc.return_register)));
+                    }
                 }
 
                 // ================================
@@ -426,6 +448,9 @@ void emit_gnu_att_assembly(
                     // Restore caller-saved registers, if necessary.
                     for (auto r : vws::reverse(function.registers_used())) {
                         if (r == desc.return_register) continue;
+                        // Instruction defines this register, no need to save it (since we are
+                        // writing to it).
+                        if (r == instruction.reg()) continue;
                         out += fmt::format("    pop %{}\n", ToString(x86_64::RegisterId{r}));
                     }
                 }
