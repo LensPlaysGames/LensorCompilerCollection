@@ -62,6 +62,10 @@ public:
     /// \param use_colours Whether to use colours in diagnostics.
     static void Analyse(Context* ctx, Module& m, bool use_colours = false);
 
+    /// Used by module deserialisation to finalise struct members and the like.
+    [[nodiscard]]
+    static bool AnalyseType(Context* ctx, Module& m, Type** type_ptr);
+
 private:
     /// \see Error()
     template <typename Ty>

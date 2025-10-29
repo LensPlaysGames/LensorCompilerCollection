@@ -3,6 +3,7 @@
 
 #include <glint/ast.hh>
 #include <glint/module_description.hh>
+#include <glint/sema.hh>
 
 #include <algorithm>
 #include <array>
@@ -519,6 +520,15 @@ auto lcc::glint::Module::serialise(
 }
 
 std::vector<lcc::u8> lcc::glint::Module::serialise() {
+    // TODO: List of modules imported by this module (so that a dependency
+    // tree may be formed simply from the metadatas alone).
+    // TODO: InfoTable with different, optional entries:
+    //     Target Entry (target triple)
+    //     Command Line Entry (how module was compiled)
+    //     Time Entry (when module was compiled)
+    //     Location Information Entry (maybe give location corresponding to type index)
+    //     Source File (path to module source)
+
     ModuleDescription::Header hdr{};
     std::vector<u8> declarations{};
     std::vector<u8> types_data{};
@@ -1067,7 +1077,8 @@ auto lcc::glint::Module::deserialise(
                     (unsigned) is_signed
                 );
 
-                new (*this) IntegerType(bitwidth, is_signed, {});
+                auto t_int = new (*this) IntegerType(bitwidth, is_signed, {});
+                t_int->set_sema_done();
             } break;
 
             // ArrayType: element_type_index :TypeIndex, element_count :u64
@@ -1334,42 +1345,62 @@ auto lcc::glint::Module::deserialise(
         // added automatically... If we just left it, we would try to delete it
         // twice, and that causes it's own whole host of errors.
         int types_size = int(types.size());
-        types[fixup.fixup_type_index] = new (*this) PointerType(
+
+        auto t_ptr = new (*this) PointerType(
             types[fixup.replacement_type_index]
         );
-        types[fixup.fixup_type_index]->set_sema_done();
+        t_ptr->set_sema_done();
+
+        types[fixup.fixup_type_index] = t_ptr;
         types.erase(types.begin() + types_size);
     }
 
     for (auto fixup : ref_fixups) {
         validate_fixup(*this, types_zero_index, fixup);
         int types_size = int(types.size());
-        types[fixup.fixup_type_index] = new (*this) ReferenceType(
+
+        auto t_ref = new (*this) ReferenceType(
             types[fixup.replacement_type_index],
             {}
         );
-        types[fixup.fixup_type_index]->set_sema_done();
+        t_ref->set_sema_done();
+
+        types[fixup.fixup_type_index] = t_ref;
         types.erase(types.begin() + types_size);
     }
 
     for (auto fixup : dynarray_fixups) {
         validate_fixup(*this, types_zero_index, fixup);
         int types_size = int(types.size());
-        types[fixup.fixup_type_index] = new (*this) DynamicArrayType(
+
+        auto t_dynarray = new (*this) DynamicArrayType(
             types[fixup.replacement_type_index],
             nullptr
         );
-        types[fixup.fixup_type_index]->set_sema_done();
+
+        (void) t_dynarray->struct_type(*this);
+        LCC_ASSERT(
+            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &t_dynarray->struct_type())
+        );
+
+        t_dynarray->set_sema_done();
+
+        types[fixup.fixup_type_index] = t_dynarray;
         types.erase(types.begin() + types_size);
     }
 
     for (auto fixup : view_fixups) {
         validate_fixup(*this, types_zero_index, fixup);
         int types_size = int(types.size());
-        types[fixup.fixup_type_index] = new (*this) ArrayViewType(
+
+        auto t_view = new (*this) ArrayViewType(
             types[fixup.replacement_type_index]
         );
-        types[fixup.fixup_type_index]->set_sema_done();
+        LCC_ASSERT(
+            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &t_view)
+        );
+
+        types[fixup.fixup_type_index] = t_view;
         types.erase(types.begin() + types_size);
     }
 
@@ -1390,39 +1421,40 @@ auto lcc::glint::Module::deserialise(
                 ),
                 {}
             );
-            // TODO: Analyse(&enum_decl)?
-            enum_decl->set_sema_done();
-            auto decl = scope->declare(
-                context,
-                std::string(fixup.enumerator_names.at(i)),
-                enum_decl
-            );
-            LCC_ASSERT(decl);
 
             enumerator_decls.emplace_back(enum_decl);
         }
 
-        types[fixup.enum_type_index] = new (*this) EnumType(
+        auto t_enum = new (*this) EnumType(
             scope,
             types[fixup.underlying_type_index],
-            enumerator_decls,
+            std::move(enumerator_decls),
             {}
         );
-        types[fixup.enum_type_index]->set_sema_done();
+        LCC_ASSERT(
+            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &t_enum)
+        );
+
+        types[fixup.enum_type_index] = t_enum;
         types.erase(types.begin() + types_size);
     }
 
     for (auto fixup : array_fixups) {
         validate_fixup(*this, types_zero_index, fixup);
         int types_size = int(types.size());
-        types[fixup.fixup_type_index] = new (*this) ArrayType(
+
+        auto t_array = new (*this) ArrayType(
             types[fixup.replacement_type_index],
             new (*this) ConstantExpr(
                 new (*this) IntegerLiteral(fixup.array_size, {}),
                 fixup.array_size
             )
         );
-        types[fixup.fixup_type_index]->set_sema_done();
+        LCC_ASSERT(
+            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &t_array)
+        );
+
+        types[fixup.fixup_type_index] = t_array;
         types.erase(types.begin() + types_size);
     }
 
@@ -1467,17 +1499,16 @@ auto lcc::glint::Module::deserialise(
             LCC_ASSERT(decl);
         }
 
-        auto sum = new (*this) SumType(scope, std::move(members), {});
+        auto t_sum = new (*this) SumType(scope, std::move(members), {});
         // This erases the entry added within SumType allocation, since we
         // will overwrite a previous entry with the created type.
         types.erase(types.begin() + types_size);
 
-        // Set cached struct type.
-        (void) sum->struct_type(*this);
+        LCC_ASSERT(
+            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &t_sum)
+        );
 
-        sum->set_sema_done();
-
-        types[fixup.sum_type_index] = sum;
+        types[fixup.sum_type_index] = t_sum;
     }
 
     for (auto fixup : struct_fixups) {
@@ -1522,8 +1553,10 @@ auto lcc::glint::Module::deserialise(
             LCC_ASSERT(decl);
         }
         auto struct_type = new (*this) StructType(scope, members, {});
-        struct_type->byte_size(fixup.byte_size);
-        struct_type->alignment(fixup.byte_align);
+        LCC_ASSERT(
+            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &struct_type)
+        );
+
         types[fixup.struct_type_index] = struct_type;
         types.erase(types.begin() + types_size);
     }
@@ -1569,9 +1602,10 @@ auto lcc::glint::Module::deserialise(
 
         auto u = new (*this) UnionType(scope, members, {});
         types.erase(types.begin() + types_size);
-        // Set cached underlying type.
-        (void) u->array_type(*this);
-        u->set_sema_done();
+
+        LCC_ASSERT(
+            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &u)
+        );
 
         types[fixup.union_type_index] = u;
     }
@@ -1619,6 +1653,10 @@ auto lcc::glint::Module::deserialise(
         set_attr(FuncAttr::Pure);
         set_attr(FuncAttr::ReturnsTwice);
         set_attr(FuncAttr::Used);
+
+        LCC_ASSERT(
+            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &function)
+        );
 
         types[fixup.function_type_index]->set_sema_done();
         types.erase(types.begin() + types_size);
