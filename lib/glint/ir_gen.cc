@@ -45,7 +45,7 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             return lcc::IntegerType::Get(ctx, in->size(ctx));
 
         case Type::Kind::Named:
-            Diag::ICE("Sema failed to resolve named type");
+            Diag::ICE("Sema failed to resolve named type {}", as<NamedType>(in)->name());
 
         case Type::Kind::Pointer:
         case Type::Kind::Reference:
@@ -74,6 +74,11 @@ lcc::Type* Convert(Context* ctx, Type* in) {
                     "Glint Type-checker should have set DynamicArrayType's cached type (by calling struct_type()), but it appears to be nullptr at time of IRGen"
                 );
             }
+            if (not struct_type->ok()) {
+                Diag::ICE(
+                    "Glint Type-checker should have analysed DynamicArrayType's cached type (by calling Analyse on struct_type()), but it appears to not be analysed at time of IRGen"
+                );
+            }
             std::vector<lcc::Type*> member_types{};
             for (const auto& m : struct_type->members())
                 member_types.push_back(Convert(ctx, m.type));
@@ -86,7 +91,12 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             auto struct_type = t_view->struct_type();
             if (not struct_type) {
                 Diag::ICE(
-                    "Glint Type-checker should have set DynamicArrayType's cached type (by calling struct_type()), but it appears to be nullptr at time of IRGen"
+                    "Glint Type-checker should have set ArrayViewType's cached type (by calling struct_type()), but it appears to be nullptr at time of IRGen"
+                );
+            }
+            if (not struct_type->ok()) {
+                Diag::ICE(
+                    "Glint Type-checker should have analysed ArrayViewType's cached type (by calling Analyse on struct_type()), but it appears to not be analysed at time of IRGen"
                 );
             }
             std::vector<lcc::Type*> member_types{};
@@ -103,6 +113,11 @@ lcc::Type* Convert(Context* ctx, Type* in) {
                     "Glint Type-checker should have set SumType's cached type (by calling struct_type() or similar), but it appears to be nullptr at time of IRGen"
                 );
             }
+            if (not struct_type->ok()) {
+                Diag::ICE(
+                    "Glint Type-checker should have analysed SumType's cached type (by calling Analyse on struct_type()), but it appears to not be analysed at time of IRGen"
+                );
+            }
             std::vector<lcc::Type*> member_types{};
             member_types.reserve(struct_type->members().size());
             for (const auto& m : struct_type->members())
@@ -116,6 +131,11 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             if (not array_type) {
                 Diag::ICE(
                     "Glint Type-checker should have set UnionType's cached type (by calling array_type()), but it appears to be nullptr at time of IRGen"
+                );
+            }
+            if (not array_type->ok()) {
+                Diag::ICE(
+                    "Glint Type-checker should have analysed UnionType's cached type (by calling Analyse on array_type()), but it appears to not be analysed at time of IRGen"
                 );
             }
             return Convert(ctx, array_type);
