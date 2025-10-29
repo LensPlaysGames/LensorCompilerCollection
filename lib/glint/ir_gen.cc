@@ -77,7 +77,8 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             std::vector<lcc::Type*> member_types{};
             for (const auto& m : struct_type->members())
                 member_types.push_back(Convert(ctx, m.type));
-            return lcc::StructType::Get(ctx, std::move(member_types));
+
+            return lcc::StructType::Get(ctx, std::move(member_types), t_dyn_array->align(ctx));
         }
 
         case Type::Kind::ArrayView: {
@@ -91,7 +92,7 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             std::vector<lcc::Type*> member_types{};
             for (const auto& m : struct_type->members())
                 member_types.push_back(Convert(ctx, m.type));
-            return lcc::StructType::Get(ctx, std::move(member_types));
+            return lcc::StructType::Get(ctx, std::move(member_types), t_view->align(ctx));
         }
 
         case Type::Kind::Sum: {
@@ -106,7 +107,7 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             member_types.reserve(struct_type->members().size());
             for (const auto& m : struct_type->members())
                 member_types.emplace_back(Convert(ctx, m.type));
-            return lcc::StructType::Get(ctx, std::move(member_types));
+            return lcc::StructType::Get(ctx, std::move(member_types), t_sum->align(ctx));
         }
 
         case Type::Kind::Union: {
@@ -125,7 +126,7 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             for (const auto& m : as<StructType>(in)->members())
                 member_types.push_back(Convert(ctx, m.type));
 
-            return lcc::StructType::Get(ctx, std::move(member_types));
+            return lcc::StructType::Get(ctx, std::move(member_types), as<StructType>(in)->align(ctx));
         }
 
         case Type::Kind::Enum:

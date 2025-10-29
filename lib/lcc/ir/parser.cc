@@ -1008,7 +1008,12 @@ auto lcc::parser::Parser::ParseType() -> Result<Type*> {
         if (auto r = ConsumeOrError(Tk::RBrace); not r)
             return r.diag();
 
-        base = StructType::Get(mod->context(), members, name);
+        base = StructType::Get(
+            mod->context(),
+            members,
+            StructType::AlignNotSet,
+            name
+        );
     } else if (At(Tk::Global, Tk::Keyword)) {
         auto n = tok.text;
         // Eat name of named type.

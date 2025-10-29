@@ -110,7 +110,8 @@ auto Type::bits() const -> usz {
         case Kind::Struct: {
             const auto& struct_ = as<StructType>(this);
             const std::vector<Type*>& members = struct_->members();
-            return rgs::fold_left(vws::transform(members, &Type::bits), 0, std::plus{});
+            const auto strict_size = rgs::fold_left(vws::transform(members, &Type::bits), 0, std::plus{});
+            return utils::AlignTo(strict_size, struct_->align());
         }
     }
     LCC_UNREACHABLE();
@@ -132,7 +133,16 @@ usz Type::align() const {
         case Kind::Void: return 1; /// Alignment of 0 is invalid.
         case Kind::Array: return as<ArrayType>(this)->element_type()->align();
         case Kind::Integer: return as<IntegerType>(this)->bitwidth();
-        case Kind::Struct: return rgs::max(as<StructType>(this)->members() | vws::transform(&Type::align));
+        case Kind::Struct: {
+            auto s = as<StructType>(this);
+
+            if (s->alignment() != StructType::AlignNotSet)
+                return s->alignment();
+
+            return rgs::max(
+                vws::transform(s->members(), &Type::align)
+            );
+        }
     }
     LCC_UNREACHABLE();
 }
@@ -249,7 +259,7 @@ ArrayType* ArrayType::Get(Context* ctx, usz length, Type* element_type) {
     return out;
 }
 
-StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, std::string name) {
+StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, usz align_bits, std::string name) {
     LCC_ASSERT(ctx);
 
     // Look in ctx type cache.
@@ -266,6 +276,9 @@ StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, std::
     if (not name.empty())
         out = new (ctx) StructType(member_types, name);
     else out = new (ctx) StructType(member_types, (long int) ctx->struct_types.size());
+
+    out->_align = align_bits;
+
     ctx->struct_types.push_back(out);
     return out;
 }
