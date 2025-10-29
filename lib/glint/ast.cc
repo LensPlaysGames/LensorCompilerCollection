@@ -2317,29 +2317,25 @@ void lcc::glint::Expr::print(bool use_colour) const {
     ASTPrinter{use_colour}(this);
 }
 
-auto lcc::glint::UnionType::array_type(Module& mod) -> ArrayType* {
+auto lcc::glint::UnionType::array_type(Module& mod) -> ArrayType*& {
     // FIXME: magic number 8
     if (not _cached_type) {
         _cached_type = new (mod) ArrayType(
             new (mod) IntegerType(8, false, {}),
             new (mod) ConstantExpr(
                 new (mod) IntegerLiteral(byte_size(), {}),
-                EvalResult(aint(byte_size()))
+                byte_size()
             ),
             location()
         );
-        _cached_type->element_type()->set_sema_done();
-        _cached_type->size()->set_sema_done();
-        _cached_type->set_sema_done();
     }
 
     return _cached_type;
 }
 
-auto lcc::glint::SumType::struct_type(Module& mod) -> StructType* {
+auto lcc::glint::SumType::struct_type(Module& mod) -> StructType*& {
     if (not _cached_struct) {
         auto tag_member = new (mod) IntegerType(64, false, {});
-        tag_member->set_sema_done();
 
         auto data_member = new (mod) ArrayType(
             new (mod) IntegerType(8, false, {}),
@@ -2349,15 +2345,12 @@ auto lcc::glint::SumType::struct_type(Module& mod) -> StructType* {
             ),
             location()
         );
-        data_member->elem()->set_sema_done();
-        data_member->set_sema_done();
 
         _cached_struct = new (mod) StructType(
             mod.global_scope(),
             {{"tag", tag_member, {}}, {"data", data_member, {}}},
             location()
         );
-        _cached_struct->set_sema_done();
     }
 
     return _cached_struct;
