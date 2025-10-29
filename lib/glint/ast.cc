@@ -79,7 +79,11 @@ auto lcc::glint::Expr::type() const -> Type* {
 }
 
 auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
-    LCC_ASSERT(sema_done_or_errored());
+    LCC_ASSERT(
+        sema_done_or_errored(),
+        "Type {} has not been analysed; cannot get alignment",
+        this->string(false)
+    );
     if (sema_errored()) return 1;
     switch (kind()) {
         case Kind::Builtin:
@@ -265,7 +269,7 @@ auto lcc::glint::Type::is_overload_set() const -> bool { return ::is_builtin(thi
 auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
     LCC_ASSERT(
         sema_done_or_errored(),
-        "Type {} has not been analysed",
+        "Type {} has not been analysed; cannot get size",
         this->string(false)
     );
     if (sema_errored()) return 0;
@@ -329,7 +333,7 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
             return Type::VoidPtr->size(ctx) + ArrayViewType::IntegerWidth;
 
         case Kind::Sum:
-            return SumType::IntegerWidth + as<SumType>(this)->byte_size();
+            return SumType::IntegerWidth + (as<SumType>(this)->byte_size() * 8);
 
         case Kind::Array:
             return as<ArrayType>(this)->dimension() * elem()->size(ctx);
