@@ -1996,7 +1996,21 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
 };
 } // namespace
 
-auto lcc::glint::Type::representation() const -> std::string {
+auto lcc::glint::Type::representation(std::unordered_set<const Type*> containing_types) const -> std::string {
+    // Special case for handling recursive structs.
+    // If this type is a struct type AND a containing type, use the structs
+    // name instead of it's member definition.
+    if (containing_types.contains(this) and is<StructType>(this)) {
+        // FIXME: Should this be a different encoding?
+        auto d = as<StructType>(this)->decl();
+        return fmt::format("N{}_{}", d->name().size(), d->name());
+    }
+
+    if (containing_types.contains(this)) {
+        Diag::ICE("Infinite recursion caught in Type::representation(): {}", string());
+    }
+    containing_types.emplace(this);
+
     switch (kind()) {
         case Kind::Builtin:
             return fmt::format("B{}", usz(as<BuiltinType>(this)->builtin_kind()));
@@ -2005,25 +2019,25 @@ auto lcc::glint::Type::representation() const -> std::string {
         case Kind::Named:
             return fmt::format("N{}_{}", as<NamedType>(this)->name().size(), as<NamedType>(this)->name());
         case Kind::Pointer:
-            return fmt::format("P{}", elem()->representation());
+            return fmt::format("P{}", elem()->representation(containing_types));
         case Kind::Reference:
-            return fmt::format("R{}", elem()->representation());
+            return fmt::format("R{}", elem()->representation(containing_types));
         case Kind::DynamicArray:
-            return fmt::format("DY{}", elem()->representation());
+            return fmt::format("DY{}", elem()->representation(containing_types));
         case Kind::Array:
             LCC_ASSERT(
                 is<ConstantExpr>(as<ArrayType>(this)->size()),
                 "Array type size is not a constant expression"
             );
-            return fmt::format("ARR{}_{}", as<ConstantExpr>(as<ArrayType>(this)->size())->value().as_int(), elem()->representation());
+            return fmt::format("ARR{}_{}", as<ConstantExpr>(as<ArrayType>(this)->size())->value().as_int(), elem()->representation(containing_types));
         case Kind::ArrayView:
-            return fmt::format("VW{}", elem()->representation());
+            return fmt::format("VW{}", elem()->representation(containing_types));
         case Kind::Function: {
             auto f = as<FuncType>(this);
-            auto out = fmt::format("F{}_{}", f->params().size(), f->return_type()->representation());
+            auto out = fmt::format("F{}_{}", f->params().size(), f->return_type()->representation(containing_types));
             for (auto p : f->params()) {
                 out += '_';
-                out += p.type->representation();
+                out += p.type->representation(containing_types);
             }
             return out;
         }
@@ -2032,7 +2046,7 @@ auto lcc::glint::Type::representation() const -> std::string {
             auto out = fmt::format("SUM{}", s->members().size());
             for (auto m : s->members()) {
                 out += '_';
-                out += m.type->representation();
+                out += m.type->representation(containing_types);
             }
             return out;
         }
@@ -2041,7 +2055,7 @@ auto lcc::glint::Type::representation() const -> std::string {
             auto out = fmt::format("UNN{}", u->members().size());
             for (auto m : u->members()) {
                 out += '_';
-                out += m.type->representation();
+                out += m.type->representation(containing_types);
             }
             return out;
         }
@@ -2050,7 +2064,7 @@ auto lcc::glint::Type::representation() const -> std::string {
             auto out = fmt::format(
                 "ENM{}_{}",
                 e->enumerators().size(),
-                e->underlying_type()->representation()
+                e->underlying_type()->representation(containing_types)
             );
             return out;
         }
@@ -2059,7 +2073,7 @@ auto lcc::glint::Type::representation() const -> std::string {
             auto out = fmt::format("SCT{}", s->members().size());
             for (auto m : s->members()) {
                 out += '_';
-                out += m.type->representation();
+                out += m.type->representation(containing_types);
             }
             return out;
         }

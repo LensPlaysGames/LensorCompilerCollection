@@ -708,7 +708,9 @@ public:
     auto is_overload_set() const -> bool;
 
     // Get the identifier-friendly encoding of this type.
-    auto representation() const -> std::string;
+    auto representation(
+        std::unordered_set<const Type*> containing_types = {}
+    ) const -> std::string;
 
     /// Get the size of this type. It may be target-dependent,
     /// which is why this takes a context parameter.
