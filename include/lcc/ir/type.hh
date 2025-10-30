@@ -165,13 +165,16 @@ class StructType : public Type {
 
     std::vector<Type*> _members;
     std::variant<long int, std::string> _id;
+    usz _align{AlignNotSet};
 
 private:
     StructType(std::vector<Type*> members, std::string name) : Type(Kind::Struct), _members(std::move(members)), _id(std::move(name)) {}
     StructType(std::vector<Type*> members, long int index) : Type(Kind::Struct), _members(std::move(members)), _id(index) {}
 
 public:
-    static auto Get(Context* ctx, std::vector<Type*> member_types, std::string name = {}) -> StructType*;
+    static constexpr usz AlignNotSet = (usz) -1;
+
+    static auto Get(Context* ctx, std::vector<Type*> member_types, usz align_bits = AlignNotSet, std::string name = {}) -> StructType*;
 
     /// Return the element count.
     usz member_count() const { return _members.size(); }
@@ -187,6 +190,8 @@ public:
 
     /// True if this is a unique, named struct type, false otherwise.
     bool named() const { return std::holds_alternative<std::string>(_id); }
+
+    usz alignment() const { return _align; }
 
     /// RTTI.
     static bool classof(const Type* t) { return t->kind == Kind::Struct; }
