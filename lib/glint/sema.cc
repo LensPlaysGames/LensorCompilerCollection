@@ -988,6 +988,14 @@ void lcc::glint::Sema::AnalyseModule() {
         }
     );
     DeclareImportedGlobalFunction(
+        "memset",
+        Type::Void,
+        {{"ptr", Type::VoidPtr, {}},
+         {"value", FFIType::CInt(mod), {}},
+         {"size", FFIType::CULongLong(mod), {}}
+        }
+    );
+    DeclareImportedGlobalFunction(
         "memmove",
         Type::Void,
         {{"dest", Type::VoidPtr, {}},
