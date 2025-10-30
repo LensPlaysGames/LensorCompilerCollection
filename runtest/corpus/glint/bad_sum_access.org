@@ -1,0 +1,25 @@
+* Bad Sum Access
+
+#+NAME: source
+#+begin_src glint
+  foo : sum {
+    x : int;
+    y : byte;
+  }
+
+  bar : foo;
+
+  bar.y := 69;
+
+  bar.x;
+#+end_src
+
+#+NAME: status
+#+begin_example
+7
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+
