@@ -84,4 +84,6 @@ For example, ~RequireOperandSizeLessThan<operand_index, declared_size>~.
 
 * Misc
 
+** TODO Link to Documentation from Error Messages
+
 ** TODO LCC IR TreeSitter Parser and Emacs mode
