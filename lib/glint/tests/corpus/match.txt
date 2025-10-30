@@ -22,13 +22,10 @@ out;
 
 (block
  (type_declaration)
- (variable_declaration)
+ (block (variable_declaration) (block (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))))
  (binary_assignment (member_access (name)) (integer_literal))
- (variable_declaration)
- (if (unary_has (member_access (name)))
-  (binary_assignment (name) (cast (member_access (name))))
-  (if (unary_has (member_access (name)))
-   (binary_assignment (name) (integer_literal))))
+ (block (variable_declaration) (block (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))))
+ (if (unary_has (member_access (name))) (binary_assignment (name) (cast (member_access (name)))) (if (unary_has (member_access (name))) (binary_assignment (name) (integer_literal))))
  (return (cast (name))))
 
 ================
