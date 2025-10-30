@@ -64,3 +64,15 @@ A module may export a declaration, such that it is made available in any Glint p
 #+end_src
 
 In order for type information to be relayed across module borders, the Glint compiler produces metadata that describes the module, all exports, etc. This metadata is either implanted in the built file (in a separate section of an object or assembly file), or emitted as a standalone file with the =.gmeta= extension. Ensuring the built artifacts or the metadata files of a module are findable within an include directory is required to build a Glint program that imports said module.
+
+** Automatic Initialization
+
+If you declare a variable, but do not define an initializing expression for that variable, the compiler will insert default initialization expressions.
+
+Arbitrary Integer, Array, Built-in, Enum, FFI, Struct, Sum, Union, View, and Pointer types are all zero-initialized.
+
+Dynamic arrays have special initialization, involving setting size, capacity, and allocating memory.
+
+Struct members are default initialized /after/ the struct is initialized, with the exception that zero-initialization will not be performed (since the struct zero-initialization will already cover that).
+
+A reference type is not valid for default initialization, as it would require keeping a temporary around for the reference to bind to before it is explicitly bound, and this just feels like it would cause more (if-not as-much) trouble as leaving it uninitialized, so what would be the point?
