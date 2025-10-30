@@ -955,34 +955,42 @@ void lcc::glint::Sema::AnalyseModule() {
     // code).
     // TODO: Once we use C++26, just use #embed
     std::string_view templates_source =
-        "identity :: template(x : expr) x;"
-        "dynarray_grow :: template(dynarray : expr) {"
-        "  if dynarray.size >= dynarray.capacity - 1, {"
-        //   Allocate memory, capacity * 2
+        "identity :: template(x : expr) x;\n"
+
+        // Initialise a dynamic array expression with the given capacity.
+        "dynarray_init :: template(dynarray : expr, capacity : expr) {\n"
+        "  dynarray.capacity := capacity;\n"
+        "  dynarray.size := 0;\n"
+        "  dynarray.data := malloc (capacity (sizeof @dynarray.data))\n"
+        "};\n"
+
+        "dynarray_grow :: template(dynarray : expr) {\n"
+        "  if dynarray.size >= dynarray.capacity - 1, {\n"
+        //   Allocate memory, capacity *\ 2
         //   NOTE: Shouldn't have to put parens around the arguments, but there is
         //   currently a bug in the parser where a "single expression" doesn't
         //   include a binary expression or something like that.
-        "    newmem :: malloc (2 dynarray.capacity);"
+        "    newmem :: malloc (2 dynarray.capacity);\n"
         //   Copy <size> elements into newly-allocated memory
-        "    memcpy newmem, dynarray.data, dynarray.size;"
+        "    memcpy newmem, dynarray.data, dynarray.size;\n"
         //   De-allocate old memory
-        "    free dynarray.data;"
-        //   Assign dynarray.data to newly-allocated memory
+        "    free dynarray.data;\n"
+        //   Assign dynarray.data to newly-allocated memo\ry
         // FIXME: byte.ptr cast is incorrect. It needs to be a cast to the dynamic
         // array's element type. We need typeof, or something similar
         //   dynarray.data := (typeof dynarray.data) newmem;
         //   dynarray.data <- newmem;
-        "    dynarray.data := (typeof dynarray.data) newmem;"
+        "    dynarray.data := (typeof dynarray.data) newmem;\n"
         //   Assign dynarray.capacity to dynarray.capacity * 2
-        "    dynarray.capacity *= 2;"
-        "  };"
-        "};"
-        "print__putchar_each :: template(dynarray : expr)"
-        "  cfor"
-        "      i :: 0;"
-        "      i < dynarray.size;"
-        "      i += 1;"
-        "    putchar @dynarray[i];";
+        "    dynarray.capacity *= 2;\n"
+        "  };\n"
+        "};\n"
+        "print__putchar_each :: template(container : expr)\n"
+        "  cfor\n"
+        "      i :: 0;\n"
+        "      i < container.size;\n"
+        "      i += 1;\n"
+        "    putchar @container[i];\n";
 
     auto& f = context->create_file(
         "sema_templates.g",
@@ -990,8 +998,10 @@ void lcc::glint::Sema::AnalyseModule() {
     );
 
     auto templates_m = glint::Parser::ParseFreestanding(mod, context, f, mod.top_level_scope());
-    if (not templates_m)
+    if (not templates_m) {
+        if (templates_m.is_diag()) templates_m.diag().print();
         Diag::ICE("GlintSema failed to parse semantic templates");
+    }
 
     for (auto c : *templates_m) {
         LCC_ASSERT(
