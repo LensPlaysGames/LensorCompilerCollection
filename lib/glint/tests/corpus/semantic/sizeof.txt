@@ -1,0 +1,9 @@
+================
+Sizeof -> Integer Literal
+================
+
+sizeof :u32;
+
+---
+
+(block (return (integer_literal)))
