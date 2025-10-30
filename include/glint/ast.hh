@@ -1242,7 +1242,7 @@ public:
         : TypeWithOneElement(K, location, element_type) {}
 
     [[nodiscard]]
-    auto struct_type(Module& mod) -> StructType* {
+    auto struct_type(Module& mod) -> StructType*& {
         if (not _cached_struct) {
             _cached_struct = new (mod) StructType(
                 mod.global_scope(),
@@ -1262,7 +1262,7 @@ public:
 
     /// Caller needs to make sure to check the return value is not nullptr.
     [[nodiscard]]
-    auto struct_type() { return _cached_struct; }
+    auto struct_type() -> StructType*& { return _cached_struct; }
 
     [[nodiscard]]
     static auto classof(const Type* type) -> bool { return type->kind() == K; }
@@ -1286,7 +1286,7 @@ public:
     auto initial_size() const -> Expr* { return _initial_size; }
 
     [[nodiscard]]
-    auto struct_type(Module& mod) -> StructType* {
+    auto struct_type(Module& mod) -> StructType*& {
         if (not _cached_struct) {
             _cached_struct = new (mod) StructType(
                 mod.global_scope(),
@@ -1305,7 +1305,7 @@ public:
 
     /// Caller needs to make sure to check the return value is not nullptr.
     [[nodiscard]]
-    auto struct_type() { return _cached_struct; }
+    auto struct_type() -> StructType*& { return _cached_struct; }
 
     [[nodiscard]]
     static auto classof(const Type* type) -> bool { return type->kind() == K; }
@@ -1345,11 +1345,11 @@ public:
     void byte_size(usz byteSize) { _byte_size = byteSize; }
 
     [[nodiscard]]
-    auto struct_type(Module& mod) -> StructType*;
+    auto struct_type(Module& mod) -> StructType*&;
 
     /// Caller needs to make sure to check the return value is not nullptr.
     [[nodiscard]]
-    auto struct_type() -> StructType* {
+    auto struct_type() -> StructType*& {
         return _cached_struct;
     }
 
@@ -1390,7 +1390,9 @@ public:
 
 private:
     std::vector<Member> _members;
+    // BYTES units, _NOT BITS_
     usz _byte_size{};
+    // BYTES units, _NOT BITS_
     usz _alignment{};
     ArrayType* _cached_type{nullptr};
 
@@ -1398,20 +1400,24 @@ public:
     UnionType(Scope* scope, std::vector<Member> members, Location location)
         : DeclaredType(Kind::Union, scope, location), _members(std::move(members)) {}
 
+    /// BYTES, _NOT BITS_
     [[nodiscard]]
     auto alignment() const { return _alignment; }
+    /// BYTES, _NOT BITS_
     void alignment(usz alignment) { _alignment = alignment; }
 
     [[nodiscard]]
+    /// BYTES, _NOT BITS_
     auto byte_size() const { return _byte_size; }
+    /// BYTES, _NOT BITS_
     void byte_size(usz byteSize) { _byte_size = byteSize; }
 
     [[nodiscard]]
-    auto array_type(Module& mod) -> ArrayType*;
+    auto array_type(Module& mod) -> ArrayType*&;
 
     /// Caller needs to make sure to check the return value is not nullptr.
     [[nodiscard]]
-    auto array_type() const -> ArrayType* {
+    auto array_type() -> ArrayType*& {
         return _cached_type;
     }
 
@@ -2356,7 +2362,7 @@ public:
     auto object(Expr* object) { _object = object; }
 
     [[nodiscard]]
-    auto struct_type() const { return _struct; }
+    auto struct_type() -> StructType*& { return _struct; }
 
     static auto classof(const Expr* expr) -> bool {
         return expr->kind() == Kind::MemberAccess;
