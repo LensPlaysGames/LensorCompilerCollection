@@ -4607,6 +4607,13 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
 /// ===========================================================================
 ///  Analysing Types
 /// ===========================================================================
+bool lcc::glint::Sema::AnalyseType(Context* ctx, Module& m, Type** type_ptr) {
+    LCC_ASSERT(ctx);
+    if (ctx->has_error()) return false;
+    Sema s{ctx, m, ctx->option_use_colour()};
+    return s.Analyse(type_ptr);
+}
+
 auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
     auto* type = *type_ptr;
 
