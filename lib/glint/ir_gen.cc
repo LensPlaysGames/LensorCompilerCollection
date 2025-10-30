@@ -91,12 +91,14 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             auto struct_type = t_view->struct_type();
             if (not struct_type) {
                 Diag::ICE(
-                    "Glint Type-checker should have set ArrayViewType's cached type (by calling struct_type()), but it appears to be nullptr at time of IRGen"
+                    "Glint Type-checker should have set ArrayViewType's cached type "
+                    "(by calling struct_type()), but it appears to be nullptr at time of IRGen"
                 );
             }
             if (not struct_type->ok()) {
                 Diag::ICE(
-                    "Glint Type-checker should have analysed ArrayViewType's cached type (by calling Analyse on struct_type()), but it appears to not be analysed at time of IRGen"
+                    "Glint Type-checker should have analysed ArrayViewType's cached type "
+                    "(by calling Analyse on struct_type()), but it appears to not be analysed at time of IRGen"
                 );
             }
             std::vector<lcc::Type*> member_types{};
@@ -110,12 +112,14 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             auto* struct_type = t_sum->struct_type();
             if (not struct_type) {
                 Diag::ICE(
-                    "Glint Type-checker should have set SumType's cached type (by calling struct_type() or similar), but it appears to be nullptr at time of IRGen"
+                    "Glint Type-checker should have set SumType's cached type "
+                    "(by calling struct_type() or similar), but it appears to be nullptr at time of IRGen"
                 );
             }
             if (not struct_type->ok()) {
                 Diag::ICE(
-                    "Glint Type-checker should have analysed SumType's cached type (by calling Analyse on struct_type()), but it appears to not be analysed at time of IRGen"
+                    "Glint Type-checker should have analysed SumType's cached type "
+                    "(by calling Analyse on struct_type()), but it appears to not be analysed at time of IRGen"
                 );
             }
             std::vector<lcc::Type*> member_types{};

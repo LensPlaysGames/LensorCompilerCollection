@@ -40,7 +40,6 @@ lcc::glint::StringLiteral::StringLiteral(
     },
     _index{mod.intern(value)} {} // clang-format on
 
-/// Declare a symbol in this scope.
 auto lcc::glint::Scope::declare(
     Context* ctx,
     std::string&& name,
@@ -267,6 +266,7 @@ auto lcc::glint::Type::is_void() const -> bool { return ::is_builtin(this, Built
 auto lcc::glint::Type::is_overload_set() const -> bool { return ::is_builtin(this, BuiltinType::BuiltinKind::OverloadSet); };
 
 auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
+    constexpr usz byte_bitwidth = 8;
     LCC_ASSERT(
         sema_done_or_errored(),
         "Type {} has not been analysed; cannot get size",
@@ -338,8 +338,8 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
         case Kind::Array:
             return as<ArrayType>(this)->dimension() * elem()->size(ctx);
 
-        case Kind::Struct: return as<StructType>(this)->byte_size() * 8;
-        case Kind::Union: return as<UnionType>(this)->byte_size() * 8;
+        case Kind::Struct: return as<StructType>(this)->byte_size() * byte_bitwidth;
+        case Kind::Union: return as<UnionType>(this)->byte_size() * byte_bitwidth;
         case Kind::Integer: return as<IntegerType>(this)->bit_width();
 
         case Kind::Typeof:
@@ -1130,12 +1130,13 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
             const auto* i = as<lcc::glint::IfExpr>(this);
             if (i->otherwise())
                 return {i->condition(), i->then(), i->otherwise()};
-            else return {i->condition(), i->then()};
+            return {i->condition(), i->then()};
         }
 
         case Kind::Return: {
             const auto* ret = as<lcc::glint::ReturnExpr>(this);
-            if (ret->value()) return {ret->value()};
+            if (ret->value())
+                return {ret->value()};
             return {};
         }
 
@@ -1246,8 +1247,10 @@ auto lcc::glint::Expr::langtest_children() const -> std::vector<lcc::glint::Expr
     // Return function body as child of function declaration.
     if (auto* func_decl = cast<FuncDecl>(this))
         return {func_decl->body()};
+
     // Do not follow NameRefExpr when testing (lots of duplicate variable declarations).
     if (is<NameRefExpr>(this)) return {};
+
     return children();
 }
 
