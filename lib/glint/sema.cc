@@ -2045,13 +2045,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     break;
                 }
 
-                // NOTE: While the actual type of this member access is the type of the
-                // member (as an lvalue), we don't set that here so that we can properly
-                // generate the code needed during IRGen by just checking if the lhs of an
-                // assignment is a sum type or if a member access itself is of a sum type
-                // then we know to add the tag check and default expression path.
-                m->type(sum_type);
-                // m->type(it->type);
+                // The type of the sum type member access is the type of the accessed
+                // member.
+                m->type(it->type);
 
                 m->finalise(
                     sum_type->struct_type(),

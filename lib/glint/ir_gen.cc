@@ -450,6 +450,54 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         case K::Unary: {
             const auto& unary_expr = as<UnaryExpr>(expr);
 
+            // // Early handling to prevent sum type member access from inserting tag
+            // // checking... Basically, `has` uses a member access expression in a
+            // way that alters the semantics of a member access expression. We are not
+            // actually accessing any member, it is simply the only real way to
+            // reference a specific member of a sum type. Think of the difference
+            // between T::x and T.x in C++; we are just using `.` for both.
+            switch (unary_expr->op()) {
+                default: break;
+                case TokenKind::Has: {
+                    // The following
+                    //   has bar.x;
+                    // should turn into
+                    //   bar.tag = foo.tag.x;
+
+                    LCC_ASSERT(is<MemberAccessExpr>(unary_expr->operand()));
+                    LCC_ASSERT(is<SumType>(
+                        as<MemberAccessExpr>(unary_expr->operand())->object()->type()
+                    ));
+
+                    auto* m = as<MemberAccessExpr>(unary_expr->operand());
+                    auto* struct_type = as<SumType>(m->object()->type())->struct_type();
+                    auto* tag_type = Convert(ctx, struct_type->members().at(0).type);
+
+                    generate_expression(m->object());
+
+                    // Get pointer to tag member of underlying struct of sum type.
+                    auto* tag_ptr = new (*module) GetMemberPtrInst(
+                        Convert(ctx, struct_type),
+                        generated_ir[m->object()],
+                        new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0),
+                        m->location()
+                    );
+                    // Load tag from that pointer.
+                    auto* load = new (*module) LoadInst(tag_type, tag_ptr);
+                    // Compare expected tag from member expression to actual tag loaded from
+                    // the sum type.
+                    auto* expected = new (*module) IntegerConstant(tag_type, m->member() + 1);
+                    auto* eq = new (*module) EqInst(load, expected);
+
+                    insert(tag_ptr);
+                    insert(load);
+                    insert(eq);
+
+                    generated_ir[expr] = eq;
+                    return;
+                }
+            }
+
             generate_expression(unary_expr->operand());
 
             switch (unary_expr->op()) {
@@ -515,36 +563,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 } break;
 
                 case TokenKind::Has: {
-                    // The following
-                    //   has bar.x;
-                    // should turn into
-                    //   bar.tag = foo.tag.x;
-
-                    auto* m = as<MemberAccessExpr>(unary_expr->operand());
-
-                    auto* struct_type = as<SumType>(m->type())->struct_type();
-                    auto* tag_type = Convert(ctx, struct_type->members().at(0).type);
-
-                    // Get pointer to tag member of underlying struct of sum type.
-                    auto* tag_ptr = new (*module) GetMemberPtrInst(
-                        Convert(ctx, as<SumType>(m->type())->struct_type()),
-                        generated_ir[m->object()],
-                        new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0),
-                        m->location()
-                    );
-                    // Load tag from that pointer.
-                    auto* load = new (*module) LoadInst(tag_type, tag_ptr);
-                    // Compare expected tag from member expression to actual tag loaded from
-                    // the sum type.
-                    auto* expected = new (*module) IntegerConstant(tag_type, m->member() + 1);
-                    auto* eq = new (*module) EqInst(load, expected);
-
-                    insert(tag_ptr);
-                    insert(load);
-                    insert(eq);
-
-                    generated_ir[expr] = eq;
-                } break;
+                    Diag::ICE("Should have been handled above");
+                }
 
                 case TokenKind::StarStar:
                     LCC_TODO("IRGen for unary operator {}", ToString(unary_expr->op()));
@@ -652,9 +672,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             // Assignment
             if (binary_expr->op() == TokenKind::ColonEq) {
                 // Special handling of assignment to sum type.
-                if (auto* sum_type = cast<SumType>(lhs_expr->type())) {
-                    LCC_ASSERT(is<MemberAccessExpr>(lhs_expr), "Cannot IRGen assignment to sum type when lhs is not a member access");
+                // if (lhs is member access AND member access object is of sum type)
+                if (
                     auto* m = cast<MemberAccessExpr>(lhs_expr);
+                    m and is<SumType>(m->object()->type())
+                ) {
+                    auto sum_type = as<SumType>(m->object()->type());
 
                     // NOTE: Not lhs_expr, but m->object(). If we generated the member access
                     // we'd get the individual data member but we don't want that.
@@ -1168,117 +1191,6 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             }
 
             if (cast->is_lvalue_to_rvalue()) {
-                // SUM TYPE ACCESS
-                if (
-                    auto* m = lcc::cast<MemberAccessExpr>(cast->operand());
-                    m and m->object()->type()->is_sum_type()
-                ) {
-                    // TODO: This should become a builtin function we call, and eventually
-                    // that function should be able to be defined in the Glint program itself
-                    // for a given sum type; this way bad accesses can be handled by returning
-                    // a default value, calling exit, or doing whatever weird and whacky shit
-                    // users are wont to do.
-
-                    // The following
-                    //   foo : sum { x :cint 0, y :uint 0 };
-                    // turns into
-                    //   foo : struct { tag :enum { x:0 y:1 }; data :union { :cint :uint }; }
-                    //
-                    // bar :foo;
-                    //
-                    // The following
-                    //   bar.x;
-                    // should turn into (if tag, then access)
-                    //   if (bar.tag = foo.tag.x)
-                    //     @(:cint.ptr &bar.data);
-                    //   else default_expression of foo.x;
-
-                    auto* sum_type = as<SumType>(m->object()->type());
-                    auto* struct_type = sum_type->struct_type();
-                    auto* tag_type = Convert(ctx, struct_type->members().at(0).type);
-
-                    auto it = rgs::find_if(sum_type->members(), [&](auto& member) { return member.name == m->name(); });
-                    LCC_ASSERT(
-                        it != sum_type->members().end(),
-                        "Sum type {} has no member named '{}'",
-                        sum_type->string(ctx->option_use_colour()),
-                        m->name()
-                    );
-                    auto member_index = usz(std::distance(sum_type->members().begin(), it));
-
-                    // Get pointer to tag member of underlying struct of sum type.
-                    auto* tag_ptr = new (*module) GetMemberPtrInst(
-                        Convert(ctx, struct_type),
-                        generated_ir[m->object()],
-                        new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0),
-                        m->location()
-                    );
-                    // Load tag from that pointer.
-                    auto* load_tag = new (*module) LoadInst(tag_type, tag_ptr);
-                    // Compare expected tag from member expression to actual tag loaded from
-                    // the sum type.
-                    auto* expected = new (*module) IntegerConstant(tag_type, member_index + 1);
-                    auto* eq = new (*module) EqInst(load_tag, expected);
-
-                    // If eq, load from data member of underlying struct. Otherwise, load
-                    // member's default expression.
-
-                    // Create Basic Blocks
-                    static usz total_sum_access{0};
-                    auto* then = new (*module) lcc::Block(fmt::format("sum.access.good.{}", total_sum_access));
-                    auto* otherwise = new (*module) lcc::Block(fmt::format("sum.access.bad.{}", total_sum_access));
-                    auto* exit = new (*module) lcc::Block(fmt::format("sum.access.exit.{}", total_sum_access));
-                    total_sum_access += 1;
-
-                    insert(tag_ptr);
-                    insert(load_tag);
-                    insert(eq);
-                    insert(new (*module) CondBranchInst(eq, then, otherwise, expr->location()));
-
-                    auto& member = sum_type->members().at(member_index);
-                    auto* phi = new (*module) PhiInst(Convert(ctx, member.type), expr->location());
-
-                    update_block(then);
-                    auto* load = new (*module) LoadInst(Convert(ctx, member.type), generated_ir[m]);
-                    insert(load);
-                    insert(new (*module) BranchInst(exit, expr->location()));
-
-                    update_block(otherwise);
-                    { // Code generation for bad sum type access
-                        // TODO: This is when we should "default construct" a value of the given
-                        // type. For now, we just crash the program on bad access.
-
-                        // TODO: Even if we do just crash, it'd be cool to call
-                        // `puts("\nGLINT: Bad Sum Type Access\n");` before we do
-
-                        constexpr u8 rc = 7;
-                        auto exit_func = module->function_by_name("exit");
-                        LCC_ASSERT(exit_func, "Glint IRGen couldn't find `exit'");
-                        auto* exit_call = new (*module) CallInst(
-                            *exit_func,
-                            as<FunctionType>(exit_func->type()),
-                            {new (*module) IntegerConstant(Convert(ctx, Type::UInt), rc)}
-                        );
-                        insert(exit_call);
-                    }
-
-                    // auto last_bad_block = block;
-
-                    insert(new (*module) BranchInst(exit, expr->location()));
-
-                    update_block(exit);
-
-                    // NOTE: If you add basic blocks up above, make sure this one points to
-                    // the last one in the chain of that control flow (like if's do).
-                    phi->set_incoming(load, then);
-                    // TODO: When we do default-construct the value for the bad access path,
-                    // set incoming phi value
-                    // phi->set_incoming(constant, last_bad_block);
-                    insert(phi);
-                    generated_ir[expr] = phi;
-                    return;
-                }
-
                 if (not generated_ir[cast->operand()]) {
                     expr->print(true);
                     Diag::ICE("Cast cannot insert load when operand has not been IRGenned");
@@ -1625,13 +1537,95 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             generate_expression(member_access->object());
 
-            // For member accesses that produce an lvalue sum type, return an lvalue
-            // to the sum type's underlying struct. This allows this member access
-            // node to act like a selector on the sum type if an operation were to
-            // apply to it (like an assignment), but not actually do the calculation
-            // to load a value from the underlying struct's data member.
-            if (is<SumType>(member_access->type())) {
-                generated_ir[expr] = generated_ir[member_access->object()];
+            // For member access of a sum type, return an lvalue to where the data is
+            // actually stored.
+            if (is<SumType>(member_access->object()->type())) {
+                auto m = member_access;
+                auto* sum_type = as<SumType>(m->object()->type());
+                auto* struct_type = sum_type->struct_type();
+                auto* tag_type = Convert(ctx, struct_type->members().at(0).type);
+
+                auto it = rgs::find_if(sum_type->members(), [&](auto& member) { return member.name == m->name(); });
+                LCC_ASSERT(
+                    it != sum_type->members().end(),
+                    "Sum type {} has no member named '{}'",
+                    sum_type->string(ctx->option_use_colour()),
+                    m->name()
+                );
+                auto member_index = usz(std::distance(sum_type->members().begin(), it));
+
+                // Get pointer to tag member of underlying struct of sum type.
+                auto* tag_ptr = new (*module) GetMemberPtrInst(
+                    Convert(ctx, struct_type),
+                    generated_ir[m->object()],
+                    new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0),
+                    m->location()
+                );
+                // Load tag from that pointer.
+                auto* load_tag = new (*module) LoadInst(tag_type, tag_ptr);
+                // Compare expected tag from member expression to actual tag loaded from
+                // the sum type.
+                auto* expected = new (*module) IntegerConstant(tag_type, member_index + 1);
+                auto* eq = new (*module) EqInst(load_tag, expected);
+
+                // If eq, load from data member of underlying struct.
+                // Otherwise, crash.
+
+                // Create Basic Blocks
+                static usz total_sum_access{0};
+                auto* then = new (*module) lcc::Block(fmt::format("sum.access.good.{}", total_sum_access));
+                auto* otherwise = new (*module) lcc::Block(fmt::format("sum.access.bad.{}", total_sum_access));
+                auto* exit = new (*module) lcc::Block(fmt::format("sum.access.exit.{}", total_sum_access));
+                total_sum_access += 1;
+
+                insert(tag_ptr);
+                insert(load_tag);
+                insert(eq);
+                insert(new (*module) CondBranchInst(eq, then, otherwise, expr->location()));
+
+                // ptr type because member access results in an lvalue. Load happens
+                // during lvalue to rvalue conversion.
+                auto* phi = new (*module) PhiInst(lcc::Type::PtrTy, expr->location());
+
+                update_block(then);
+                auto* data_ptr = new (*module) GetMemberPtrInst(
+                    Convert(ctx, struct_type),
+                    generated_ir[m->object()],
+                    // NOTE: `1` magic number is index of "data" member of sum type's underlying struct.
+                    new (*module) IntegerConstant(Convert(ctx, Type::UInt), 1),
+                    m->location()
+                );
+                insert(data_ptr);
+                insert(new (*module) BranchInst(exit, expr->location()));
+
+                update_block(otherwise);
+                { // Code generation for bad sum type access
+
+                    // TODO:
+                    // It'd be cool to call
+                    //   `puts("GLINT: Bad Sum Type Access");`
+                    // before we crash.
+
+                    constexpr u8 rc = 7;
+                    auto exit_func = module->function_by_name("exit");
+                    LCC_ASSERT(exit_func, "Glint IRGen couldn't find `exit'");
+                    auto* exit_call = new (*module) CallInst(
+                        *exit_func,
+                        as<FunctionType>(exit_func->type()),
+                        {new (*module) IntegerConstant(Convert(ctx, Type::UInt), rc)}
+                    );
+                    insert(exit_call);
+                }
+
+                insert(new (*module) BranchInst(exit, expr->location()));
+
+                update_block(exit);
+
+                // NOTE: If you add basic blocks up above, make sure this one points to
+                // the last one in the chain of that control flow (like if's do).
+                phi->set_incoming(data_ptr, then);
+                insert(phi);
+                generated_ir[expr] = phi;
                 break;
             }
 
