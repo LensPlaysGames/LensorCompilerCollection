@@ -245,7 +245,21 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
     }
 
     // FIXME: I'm pretty sure enum to enum should never happen, since sema
-    // should lower every enum access to it's underlying type.
+    // should lower every enum access to it's underlying type?
+    // TODO: Handle enum to underlying
+    if (is<EnumType>(from)) {
+        // TODO: If underlying type is convertible to `to` type, not just equal check.
+        // I think we may be able to "attempt" that via changing the type of
+        // `from` to the underlying type (possible via inserting an
+        // implicit cast) and then calling Convert on that.
+        if (Type::Equal(from->elem(), to)) {
+            if constexpr (PerformConversion)
+                InsertImplicitCast(expr_ptr, to);
+            return NoOp;
+        }
+
+        return ConversionImpossible;
+    }
 
     // Integer to integer
     //
