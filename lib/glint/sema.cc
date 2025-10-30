@@ -1038,6 +1038,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             Linkage::LocalVar,
             param.location
         );
+        Expr* dd{d};
 
         LCC_ASSERT(decl->scope()->declare(context, auto(param.name), as<VarDecl>(d)).is_value());
         if (not Analyse(&d)) {
@@ -1045,7 +1046,8 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             if (not decl->sema_errored())
                 decl->set_sema_errored();
         }
-        decl->param_decls().push_back(as<VarDecl>(d));
+        // NOTE: `dd` copy important, since Analyse() clobbers parameter.
+        decl->param_decls().push_back(as<VarDecl>(dd));
     }
 
     // Gets rid of parameter dynamic array declarations that were falsely
