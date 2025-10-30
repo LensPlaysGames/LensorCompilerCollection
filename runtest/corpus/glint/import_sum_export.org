@@ -29,6 +29,7 @@
   baz.z := 69;
 #+end_src
 
+In ASCII, =z= is equal to =122=.
 #+NAME: status
 #+begin_example
 122

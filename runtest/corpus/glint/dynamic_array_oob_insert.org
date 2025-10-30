@@ -6,12 +6,12 @@ Glint's insert operation requires that the given index is greater than or equal 
 
 #+NAME: source
 #+begin_src glint
-foo:[byte];
+  foo : [byte];
 
-;; 2 is out of bounds, should crash the thing
-foo[2] += `4`;
+  ;; 2 is out of bounds, should crash the thing
+  foo[2] += `4`;
 
--foo;
+  -foo;
 #+end_src
 
 This is the status Glint exits with when a dynamic array OOB occurs.
