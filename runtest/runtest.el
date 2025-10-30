@@ -96,8 +96,8 @@ in the expected output and what we got."
     (unless (string-equal got-output expected-output)
       ;; TODO: Get amount of characters that match from beginning using compare-strings...
       ;; Propertize substring after matching characters to be red in GOT output...
-      (message "UNEXPECTED OUTPUT: %s\n\tEXPECTED:\n'%s'\n\tGOT:\n'%s'"
-               test-name expected-output got-output)))
+      (message "UNEXPECTED OUTPUT: %s\n\tEXPECTED:\n'%s'\n\tGOT:\n'%s'\n%s\n%s"
+               test-name expected-output got-output (string-to-list expected-output) (string-to-list got-output))))
    ((functionp expected-output)
     (unless (funcall expected-output got-output)
       (message "UNEXPECTED OUTPUT: %s\n\tEXPECTED FUNCTION MATCHER TO RETURN t, BUT GOT nil INSTEAD\n\tmatcher: %S\n\tGOT: %s"
@@ -245,27 +245,6 @@ in the expected output and what we got."
   (while (and (not (plist-get test :failed)) (not (run-test--completed (plist-get test :name))))
     (sit-for 0.01)))
 
-;; TODO: Make :source -> :sources, a list of sources to compile with lcc,
-;; and link with gcc. Will require changing the entire runtest structure,
-;; basically, to allow for doing the lcc -> gcc pipeline for every source,
-;; and then one final gcc call to link everything together.
-;;
-;;     for each_source, {
-;;       lcc -o each_source.s each_source.g
-;;       gcc -x assembler -o each_source.o each_source.s
-;;     }
-;;     gcc each_source.o (...)
-;;     ./a.out
-;;
-;; The tricky part will be figuring out the condition to wait until we
-;; call the last gcc call... I think we'll dispatch all the source
-;; pipelines together, then wait for a number to equal the amount of
-;; sources, and have each source increment the number when it is completed
-;; compiling. Then, when the number is equal to the amount of sources (or
-;; set to some sentinel error value that means the test will never finish
-;; compiling), we call gcc with the generated artifacts from each source.
-;; Our "number" could just be the length of a list of artifacts that we
-;; are going to pass to the final invocation of gcc.
 (defun run-test--parse-test-from-org (org-filepath)
   "Returns a property list containing information about the parsed test, or nil
  if parsing did not succeed.
@@ -310,21 +289,20 @@ Additional properties are included, but not necessary:
                     (when (string-empty-p (org-element-property :value elem))
                       (error (concat "Source code block named 'output' is expected to define a matcher function."
                                      " You probably meant to make an empty /example/ block.")))
-                   (setq test
-                        (plist-put
-                         test :output (read (org-element-property :value elem))))
-                   (unless (functionp (plist-get test :output))
-                     (error "Source code block named 'output' is expected to define a matcher function, but got %s instead."
-                            (symbol-name (type-of (plist-get test :output)))))
-                   )
+                    (setq test
+                          (plist-put
+                           test :output (read (org-element-property :value elem))))
+                    (unless (functionp (plist-get test :output))
+                      (error "Source code block named 'output' is expected to define a matcher function, but got %s instead."
+                             (symbol-name (type-of (plist-get test :output))))))
                 (progn
                   (unless (eq (org-element-type elem) 'example-block)
                     (error (concat
                             "Named output block is either an example block containing exact output to match,"
                             " or a source block with Emacs Lisp inside, defining a matcher function.")))
                   (setq test
-                      (plist-put
-                       test :output (org-element-property :value elem))))))))))
+                        (plist-put
+                         test :output (org-element-property :value elem))))))))))
     (let ((invalid-name (string-empty-p (plist-get test :name)))
           (invalid-source (not (plist-get test :source)))
           (invalid-status (or (not (plist-get test :status)) (not (integerp (plist-get test :status)))))
@@ -523,6 +501,9 @@ Additional properties are included, but not necessary:
                    ;; Delete test artifacts once they are no longer needed.
                    (mapc #'delete-file (plist-get test :artifacts))))))))))
    (directory-files "corpus/glint/" t "\\.org\\'"))
+
+  ;; Once tests are over, we should probably clean up any .gmeta files that
+  ;; we may have created over the course of compiling the tests.
 
   ;; Print rundown of Glint tests (what happened)
   (message "Ran %s Glint Tests: %s Passed"
