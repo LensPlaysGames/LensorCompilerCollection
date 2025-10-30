@@ -579,15 +579,7 @@ auto lcc::glint::Sema::Convert__RemoveReferences(Expr** expr) -> bool {
 auto lcc::glint::Sema::ImplicitDereference(Expr** expr) -> bool {
     LCC_ASSERT(expr and *expr);
 
-    if (is<ReferenceType>((*expr)->type())) {
-        /// Don’t strip reference here since we want an lvalue.
-        LValueToRValue(expr, false);
-        WrapWithCast(
-            expr,
-            as<TypeWithOneElement>((*expr)->type())->element_type(),
-            CastKind::ReferenceToLValue
-        );
-    }
+    (void) Convert__RemoveReferences(expr);
 
     while (is<PointerType>((*expr)->type())) {
         *expr = new (mod) UnaryExpr(
