@@ -1906,8 +1906,17 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                 return;
             }
 
+            case K::EvaluatedConstant: {
+                auto c = as<lcc::glint::ConstantExpr>(e);
+                PrintBasicNode("ConstantExpr", e, e->type(), false);
+                if (c->value().is_null()) out += " NULL";
+                else if (c->value().is_int()) out += fmt::format(" INT {}", c->value().as_int());
+                else if (c->value().is_string()) out += fmt::format(" STR.IDX {}", c->value().as_string()->string_index());
+                out += '\n';
+                return;
+            }
+
             case K::OverloadSet: PrintBasicGlintNode("OverloadSet", e, e->type()); return;
-            case K::EvaluatedConstant: PrintBasicGlintNode("ConstantExpr", e, e->type()); return;
             case K::Type: PrintBasicGlintNode("TypeExpr", e, e->type()); return;
             case K::TypeDecl: PrintBasicGlintNode("TypeDecl", e, e->type()); return;
             case K::TypeAliasDecl: PrintBasicGlintNode("TypeAliasDecl", e, e->type()); return;
