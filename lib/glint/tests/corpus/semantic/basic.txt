@@ -69,3 +69,16 @@ void.ptr 42;
 (block
  (cast (integer_literal))
  (return (integer_literal)))
+
+================
+Error on Sum Type of Single Member
+:fail_sema
+================
+
+t_foo : sum {
+  x : int;
+};
+
+---
+
+()
