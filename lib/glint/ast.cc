@@ -45,6 +45,9 @@ auto lcc::glint::Scope::declare(
     std::string&& name,
     Decl* decl
 ) -> Result<Decl*> {
+    LCC_ASSERT(ctx);
+    LCC_ASSERT(decl);
+
     LCC_ASSERT(
         name == decl->name(),
         "The name given to declare() is different to the name from the declaration given to declare()!"
@@ -68,6 +71,7 @@ auto lcc::glint::Scope::declare(
     }
 
     // Otherwise, add the symbol.
+    decl->scope(this);
     symbols.emplace(std::move(name), decl);
     return decl;
 }

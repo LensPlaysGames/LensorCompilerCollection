@@ -368,7 +368,8 @@ class Scope {
     Scope* _parent;
     // This has to be a multimap to support function overloads having the same
     // name yet resolving to different declarations.
-    std::unordered_multimap<std::string, Decl*, detail::StringHash, std::equal_to<>> symbols;
+    std::unordered_multimap<std::string, Decl*, detail::StringHash, std::equal_to<>>
+        symbols;
     bool is_function_scope = false;
 
     Location _location;
@@ -1607,6 +1608,7 @@ public:
 /// Base class for declarations. Declarations have a name.
 class Decl : public TypedExpr {
     std::string _name;
+    Scope* _scope;
 
 protected:
     Decl(Kind kind, std::string name, Type* type, Location location)
@@ -1617,6 +1619,10 @@ public:
     auto name() const -> const std::string& { return _name; }
     [[nodiscard]]
     auto name(std::string name) { _name = std::move(name); }
+
+    [[nodiscard]]
+    auto scope() const -> Scope* { return _scope; }
+    void scope(Scope* new_scope) { _scope = new_scope; }
 
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {
