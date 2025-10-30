@@ -2432,3 +2432,94 @@ auto lcc::glint::GetRightmostLocation(lcc::glint::Expr* expr) -> lcc::Location {
 
     return location;
 }
+
+[[nodiscard]]
+bool lcc::glint::Type::is_compound_type() const {
+    switch (kind()) {
+        case Kind::Union:
+        case Kind::Struct:
+        case Kind::Sum:
+        case Kind::Function:
+        case Kind::ArrayView:
+        case Kind::Array:
+        case Kind::DynamicArray:
+        case Kind::Reference:
+        case Kind::Pointer:
+            return true;
+
+        case Kind::Builtin:
+        case Kind::FFIType:
+        case Kind::Enum:
+        case Kind::Integer:
+            return false;
+
+        case Kind::Named:
+        case Kind::Typeof:
+            LCC_ASSERT(false, "Type {} should have been replaced!", *this);
+    }
+    LCC_UNREACHABLE();
+};
+
+[[nodiscard]]
+auto lcc::glint::Type::types() const -> std::vector<Type*> {
+    switch (kind()) {
+        case Kind::Struct: {
+            auto s = as<lcc::glint::StructType>(this);
+            std::vector<Type*> out{};
+            out.reserve(s->members().size());
+            for (auto& m : s->members())
+                out.emplace_back(m.type);
+
+            return out;
+        }
+
+        case Kind::Union: {
+            auto s = as<lcc::glint::UnionType>(this);
+            std::vector<Type*> out{};
+            out.reserve(s->members().size());
+            for (auto& m : s->members())
+                out.emplace_back(m.type);
+
+            return out;
+        }
+
+        case Kind::Sum: {
+            auto s = as<lcc::glint::SumType>(this);
+            std::vector<Type*> out{};
+            out.reserve(s->members().size());
+            for (auto& m : s->members())
+                out.emplace_back(m.type);
+
+            return out;
+        }
+
+        case Kind::Function: {
+            auto f = as<lcc::glint::FuncType>(this);
+            std::vector<Type*> out = {f->return_type()};
+            out.reserve(f->params().size());
+            for (auto& p : f->params())
+                out.emplace_back(p.type);
+
+            return out;
+        }
+
+        case Kind::ArrayView:
+        case Kind::Array:
+        case Kind::DynamicArray:
+        case Kind::Reference:
+        case Kind::Pointer:
+            return {elem()};
+
+        case Kind::Builtin:
+        case Kind::FFIType:
+        case Kind::Enum:
+        case Kind::Integer:
+            return {};
+
+        case Kind::Named:
+        case Kind::Typeof:
+            LCC_ASSERT(false, "Type {} should have been replaced!", *this);
+    }
+
+    LCC_UNREACHABLE();
+};

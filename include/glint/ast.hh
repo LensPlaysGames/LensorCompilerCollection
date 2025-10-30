@@ -394,6 +394,7 @@ public:
     /// Get the location.
     auto location() -> Location& { return _location; }
 
+    // FIXME: The entire decl system is a fucking mess, an absolute joke.
     /// Declare a symbol in this scope.
     ///
     /// If the name doesn’t already exist in this scope, it is
@@ -707,6 +708,18 @@ public:
     /// Check if this is the builtin overload set type.
     [[nodiscard]]
     auto is_overload_set() const -> bool;
+
+    /// Check if this is a compound type (contains other types).
+    [[nodiscard]]
+    auto is_compound_type() const -> bool;
+
+    /// Return types contained by this type, if any.
+    /// If \c is_compound_type() returns true, this will return a non-zero
+    /// amount of types.
+    /// NOTE: NOT SUITABLE FOR PROPER CONVERSION (i.e. a struct of four bytes
+    /// and an array of byte of size four will not return the same thing).
+    [[nodiscard]]
+    auto types() const -> std::vector<Type*>;
 
     // Get the identifier-friendly encoding of this type.
     auto representation(
