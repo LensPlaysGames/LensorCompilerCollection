@@ -431,19 +431,26 @@ void output_ast(std::filesystem::path p) {
     };
 
     auto mod = lcc::glint::Parser::Parse(&context, source);
-    if (not context.has_error()) {
-        // Perform type-checking
-        lcc::glint::Sema::Analyse(&context, *mod, true);
-        if (not context.has_error()) {
-            auto* root = mod->top_level_function()->body();
-            fmt::print("{}\n", langtest::print_node<lcc::glint::Expr>(root));
-        } else {
-            fmt::print("ERROR: Cannot output AST matcher, error encountered during sema\n");
-            return;
-        }
-    } else {
-        fmt::print("ERROR: Cannot output AST matcher, error encountered during parsing\n");
+    if (context.has_error()) {
+        fmt::print(stderr, "ERROR: Cannot output AST matcher, error encountered during parsing\n");
         return;
+    }
+
+    // TODO: Just output un-checked ast, if asked
+    {
+        auto* root = mod->top_level_function()->body();
+        fmt::print("Syntax:\n{}\n", langtest::print_node<lcc::glint::Expr>(root));
+    }
+    // Perform type-checking
+    lcc::glint::Sema::Analyse(&context, *mod, true);
+    if (context.has_error()) {
+        fmt::print("ERROR: Cannot output AST matcher, error encountered during sema\n");
+        return;
+    }
+
+    {
+        auto* root = mod->top_level_function()->body();
+        fmt::print("Sema:\n{}\n", langtest::print_node<lcc::glint::Expr>(root));
     }
 }
 
