@@ -256,14 +256,14 @@ using add_reg_reg = binary_commutative_reg_reg<usz(MKind::Add), usz(Opcode::Add)
 using add_imm_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Add), o<0>, o<1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+        Inst<Clobbers<>, usz(Opcode::Move), o<1>, i<0>>,
+        Inst<Clobbers<>, usz(Opcode::Add), o<0>, i<0>>>>;
 
 using add_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Register<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Add), o<1>, o<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
+        Inst<Clobbers<>, usz(Opcode::Add), o<1>, i<0>>>>;
 
 using add_imm_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Immediate<>>>,
@@ -302,6 +302,16 @@ using sub_reg_imm = Pattern<
         // NOTE: GNU ordering of operands
         Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+
+using sdiv_imm_imm = Pattern<
+    InstList<
+        Inst<Clobbers<>, usz(MKind::SDiv), Immediate<>, Immediate<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
+        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
 
 using sdiv_reg_reg = Pattern<
     InstList<
@@ -525,8 +535,9 @@ using AllPatterns = PatternList<
     sub_reg_reg,
     sub_reg_imm,
 
-    sdiv_reg_reg,
+    sdiv_imm_imm,
     sdiv_reg_imm,
+    sdiv_reg_reg,
 
     srem_reg_reg,
     srem_reg_imm,
