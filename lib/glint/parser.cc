@@ -998,7 +998,6 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         case TokenKind::RBrace:
         case TokenKind::Dot:
         case TokenKind::Plus:
-        case TokenKind::Star:
         case TokenKind::Slash:
         case TokenKind::Percent:
         case TokenKind::Pipe:
@@ -1032,6 +1031,13 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         case TokenKind::Eof:
         case TokenKind::Supplant:
             return Error("Expected expression, got {}", ToString(tok.kind));
+
+        case TokenKind::Star:
+            return Error(
+                "Expected expression, got {}. You likely meant to use '{}' to dereference.",
+                ToString(tok.kind),
+                ToString(Tk::At)
+            );
 
         case TokenKind::MacroArg:
         case TokenKind::Semicolon:
