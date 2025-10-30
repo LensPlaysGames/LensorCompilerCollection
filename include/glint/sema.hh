@@ -264,6 +264,12 @@ private:
     [[nodiscard]]
     auto Convert__RemoveReferences(Expr** expr) -> bool;
 
+    /// Use like: apply_template("template(x : expr) x", {ast_node0});
+    auto apply_template(
+        std::string template_source,
+        std::vector<Expr*> template_arguments
+    ) -> Expr*;
+
     /// Insert an implicit cast of an expression to a type.
     ///
     /// This creates a new cast expression and replaces the expression

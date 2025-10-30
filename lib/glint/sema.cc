@@ -847,6 +847,51 @@ void lcc::glint::Sema::DeclareImportedGlobalFunction(std::string name, Type* ret
     );
 }
 
+auto lcc::glint::Sema::apply_template(
+    std::string template_source,
+    std::vector<Expr*> template_arguments
+) -> Expr* {
+    auto& f = context->create_file(
+        "sema_apply_template.g",
+        std::vector<char>{
+            template_source.begin(),
+            template_source.end()
+        }
+    );
+
+    auto templates_m = glint::Parser::ParseFreestanding(
+        mod,
+        context,
+        f,
+        mod.top_level_scope()
+    );
+    if (not templates_m) {
+        if (templates_m.is_diag()) templates_m.diag().print();
+        Diag::ICE("GlintSema failed to parse semantic template");
+    }
+
+    if (templates_m->size() != 1) {
+        for (auto e : *templates_m)
+            e->print(context->option_use_colour());
+
+        Diag::ICE(
+            "Malformed template source passed to sema apply_template: expected ONE unnamed template expression (got {} expressions)\n  | {}",
+            templates_m->size(),
+            template_source
+        );
+    }
+    auto template_ = templates_m->at(0);
+    if (not is<TemplateExpr>(template_)) {
+        template_->print(context->option_use_colour());
+        Diag::ICE(
+            "Malformed template source passed to sema apply_template: expected one unnamed TEMPLATE expression\n  | {}",
+            template_source
+        );
+    }
+
+    return new (mod) CallExpr(template_, template_arguments, {});
+};
+
 void lcc::glint::Sema::AnalyseModule() {
     // Load imported modules.
     for (auto& import : mod.imports()) {
