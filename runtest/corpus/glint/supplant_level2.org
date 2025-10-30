@@ -1,0 +1,34 @@
+* Supplant Level 2
+
+#+NAME: source
+#+begin_src glint
+  foo : struct {
+    x : int;
+  };
+
+  bar : struct {
+    a : int;
+    supplant foo;
+    b : int;
+  }
+
+  baz : struct {
+    supplant bar;
+    A : int;
+  }
+
+  blah : baz;
+  blah.x := 42;
+  blah.a := 27;
+  blah.x + blah.a;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+

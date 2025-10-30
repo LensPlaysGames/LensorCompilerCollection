@@ -1,0 +1,28 @@
+* Simple Supplant
+
+#+NAME: source
+#+begin_src glint
+  foo : struct {
+    x : int;
+  };
+
+  bar : struct {
+    a : int;
+    supplant foo;
+    b : int;
+  }
+
+  baz : bar;
+  baz.x := 69;
+  baz.x;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+
