@@ -337,7 +337,8 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
             return Type::VoidPtr->size(ctx) + ArrayViewType::IntegerWidth;
 
         case Kind::Sum:
-            return SumType::IntegerWidth + (as<SumType>(this)->byte_size() * 8);
+            // const_cast because references to pointers are confusing.
+            return const_cast<SumType*>(as<SumType>(this))->struct_type()->size(ctx);
 
         case Kind::Array:
             return as<ArrayType>(this)->dimension() * elem()->size(ctx);
