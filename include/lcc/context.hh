@@ -67,9 +67,9 @@ public:
 
 private:
     /// The files owned by the context.
-    std::vector<std::unique_ptr<File>> owned_files;
+    std::vector<std::unique_ptr<File>> owned_files{};
 
-    std::vector<DiagnosticReport> _diagnostics;
+    std::vector<DiagnosticReport> _diagnostics{};
     bool _suppress_diagnostics{false};
 
     /// Error flag. This is set-only.

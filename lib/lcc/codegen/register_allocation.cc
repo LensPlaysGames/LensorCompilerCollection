@@ -473,7 +473,11 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             auto adj_list = std::find_if(lists.begin(), lists.end(), [&](AdjacencyList& l) {
                 return l.value == i_adj;
             });
-            LCC_ASSERT(adj_list != lists.end(), "Could not find adjacency list corresponding to vreg {}", i_adj);
+            LCC_ASSERT(
+                adj_list != lists.end(),
+                "Could not find adjacency list corresponding to vreg {}",
+                i_adj
+            );
             // If any adjacency of the current list is already colored, the current
             // list must not be colored with that color.
             if (adj_list->color) {
@@ -491,8 +495,14 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
         }
 
         if (not reg_value) {
-            Diag::Error("Can not color graph with {} colors until stack spilling is implemented!", desc.registers.size());
-            Diag::Note("Allocating registers for function `{}`", function.names().at(0).name);
+            Diag::Error(
+                "Can not color graph with {} colors until stack spilling is implemented!",
+                desc.registers.size()
+            );
+            Diag::Note(
+                "Allocating registers for function `{}`",
+                function.names().at(0).name
+            );
             return;
         }
 
