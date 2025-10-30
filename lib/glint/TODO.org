@@ -116,13 +116,19 @@ Separate executable for introspection of Glint programs and modules, as
 well as libraries that may be used by Glint tools written in other
 languages.
 
-** =glinttools [de]mangle <identifier>=
+** =glinttools demangle <identifier>=
 
-- =<identifier>= :: A valid Glint identifier
+- =<identifier>= :: A mangled Glint identifier (=_XGlint...=)
 
-Print the (de)mangled version of the given identifier.
+Print the demangled version of the given identifier.
 
-Name mangling is required for function overloading, but it can make things quite messy. This would give the developer a quick way to see what the heck is going on when given a super, unreadable long name, or just to see what to search for to find the function they want.
+Name mangling is required for function overloading, but it can make things quite messy. This would give the developer a quick way to see what the heck is going on when given a super long, unreadable name.
+
+** =glinttools showmeta <path>=
+
+- =<path>= :: Filepath to Glint module metadata (or built module artifact)
+
+Extract the information from the given module metadata and print it to the user.
 
 ** =glinttools diags <path>=
 
