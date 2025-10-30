@@ -1,0 +1,25 @@
+* Default Initialize Struct Member of Dynamic Array Type
+
+#+NAME: source
+#+begin_src glint :tangle ""
+  t_foo : struct {
+    x : int;
+    y : [byte];
+  };
+
+  foo : t_foo;
+
+  if foo.y.data != (byte.ptr 0),
+    foo.x + foo.y.capacity;
+  else 0;
+#+end_src
+
+Struct should be zero initialized, and dynamic array should have memory allocated and stuff (non-zero data and capacity).
+#+NAME: status
+#+begin_example
+8
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

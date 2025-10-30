@@ -337,8 +337,9 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                     // If dynamic array is already non-default initialized, no need to default
                     // initialize it... (I think...)
-                    if (not decl->init())
-                        insert_dynarray_initialization(decl, alloca);
+                    // TODO: What about members of a struct type? Sum type? Union? etc.
+                    // if (not decl->init() and not IsImportedLinkage(decl->linkage()))
+                    //     insert_dynarray_initialization(decl, alloca);
 
                     // If present, store the init expression into above generated lvalue.
                     if (auto* init_expr = decl->init()) {
@@ -438,8 +439,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                     // If dynamic array is already non-default initialized, no need to default
                     // initialize it...
-                    if (not init)
-                        insert_dynarray_initialization(decl, global);
+                    // if (not init)
+                    //     insert_dynarray_initialization(decl, global);
 
                     generated_ir[expr] = global;
                 } break;

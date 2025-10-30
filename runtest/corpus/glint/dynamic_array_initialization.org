@@ -1,0 +1,19 @@
+* Dynamic Array Initialization
+
+#+NAME: source
+#+begin_src glint :tangle ""
+  foo : [byte];
+
+  foo.size + foo.capacity;
+#+end_src
+
+Size should be zero, capacity should be 8 (or some initial value, doesn't super matter).
+#+NAME: status
+#+begin_example
+8
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+

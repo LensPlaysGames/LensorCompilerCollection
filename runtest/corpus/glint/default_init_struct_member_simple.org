@@ -1,0 +1,23 @@
+* Simple Member Default Initialization
+
+#+NAME: source
+#+begin_src glint :tangle ""
+  t_foo : struct {
+    x : int;
+  };
+
+  foo : t_foo;
+
+  foo.x;
+#+end_src
+
+Integers are zero-initialized, by default, even when they are the member of a struct.
+Structs are also zero-initialized.
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

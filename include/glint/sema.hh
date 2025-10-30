@@ -264,11 +264,31 @@ private:
     [[nodiscard]]
     auto Convert__RemoveReferences(Expr** expr) -> bool;
 
+    /// \param accessor
+    ///     An expression that yields an lvalue, such that we may initialize into
+    ///     it.
+    /// \param do_zero
+    ///     Only zero-initialize if this is true.
+    ///
+    /// \return An expression that default-initializes a value of the type of
+    ///         the passed expression, using the passed expression to reference it.
+    enum ZeroInitializeOption {
+        DontPerformZeroInitialization = 0,
+        PerformZeroInitialization = 1,
+    };
+    auto DefaultInitializeImpl(Expr* accessor, ZeroInitializeOption do_zero) -> Expr*;
+
+    /// \return An expression that default-initializes the given declaration.
+    auto DefaultInitialize(VarDecl* decl) -> Expr*;
+
     /// Use like: apply_template("template(x : expr) x", {ast_node0});
     auto apply_template(
         std::string template_source,
         std::vector<Expr*> template_arguments
     ) -> Expr*;
+
+    // \return A new expression that references the given declaration.
+    auto DeclReference(Decl* decl) -> Expr*;
 
     /// Insert an implicit cast of an expression to a type.
     ///

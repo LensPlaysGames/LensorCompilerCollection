@@ -1,0 +1,18 @@
+* Simple Default Initialization
+
+#+NAME: source
+#+begin_src glint :tangle ""
+  foo : int;
+
+  foo;
+#+end_src
+
+Integers are zero-initialized, by default.
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

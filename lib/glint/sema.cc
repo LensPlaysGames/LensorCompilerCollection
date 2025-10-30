@@ -1293,6 +1293,123 @@ void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
     }
 }
 
+auto lcc::glint::Sema::DefaultInitializeImpl(Expr* accessor, ZeroInitializeOption do_zero) -> Expr* {
+    LCC_ASSERT(accessor);
+    LCC_ASSERT(Analyse(&accessor));
+    LCC_ASSERT(accessor->ok());
+
+    switch (accessor->type()->kind()) {
+        case Type::Kind::Array:
+        case Type::Kind::ArrayView:
+        case Type::Kind::Function:
+        case Type::Kind::Sum:
+        case Type::Kind::Union:
+        case Type::Kind::Enum:
+        case Type::Kind::Integer:
+        case Type::Kind::Builtin:
+        case Type::Kind::FFIType:
+        case Type::Kind::Pointer: {
+            if (do_zero) {
+                return apply_template(
+                    "template(x : expr) { memset (&x), 0, (sizeof x) / 8; };",
+                    {accessor}
+                );
+            }
+            return nullptr;
+        }
+
+        case Type::Kind::DynamicArray: {
+            auto dynarray_init =
+                "template(dynarray : expr, capacity : expr) {"
+                "  dynarray.capacity := capacity;"
+                "  dynarray.size := 0;"
+                "  dynarray.data := (typeof dynarray.data) (malloc (capacity ((sizeof @dynarray.data) / 8)));"
+                "};";
+
+            constexpr usz default_dynamic_array_capacity = 8;
+            return apply_template(
+                dynarray_init,
+                {accessor,
+                 new (mod) IntegerLiteral(default_dynamic_array_capacity, {})}
+            );
+        };
+
+        case Type::Kind::Struct: {
+            auto s = as<StructType>(accessor->type());
+
+            std::vector<Expr*> exprs{};
+
+            if (do_zero) {
+                auto zero_init = apply_template(
+                    "template(x : expr) { memset (&x), 0, (sizeof x) / 8; };",
+                    {accessor}
+                );
+                exprs.emplace_back(zero_init);
+            }
+
+            for (auto m : s->members()) {
+                // TODO: If member needs default-initialized that is NOT zero
+                // initialization, add that expression to exprs...
+                auto member_accessor = new (mod) MemberAccessExpr(accessor, m.name, {});
+                LCC_ASSERT(
+                    Analyse((Expr**) &member_accessor)
+                );
+                auto member_init = DefaultInitializeImpl(
+                    member_accessor,
+                    DontPerformZeroInitialization
+                );
+                if (member_init) exprs.emplace_back(member_init);
+                // FIXME: If memory usage becomes a large problem (I suspect it won't),
+                // then we could free the accessor, if it isn't used. Right now, it is
+                // stored within the module's nodes vector until the module is deleted.
+            }
+
+            // Don't create an empty block expression in the event that we are not
+            // doing zero initialization and no members required initializing.
+            if (exprs.empty()) return nullptr;
+
+            // Don't create a needless block expression.
+            if (exprs.size() == 1) return exprs.at(0);
+
+            return new (mod) BlockExpr(exprs, {});
+        };
+
+        case Type::Kind::Reference:
+            Diag::ICE("Cannot default-initialize a reference type");
+
+        case Type::Kind::Named:
+        case Type::Kind::Typeof:
+            LCC_ASSERT(false, "Type {} should have been replaced...", *accessor->type());
+    }
+    LCC_UNREACHABLE();
+}
+
+auto lcc::glint::Sema::DefaultInitialize(VarDecl* decl) -> Expr* {
+    LCC_ASSERT(decl);
+    LCC_ASSERT(
+        not decl->init(),
+        "Cannot default initialize a variable that already has an initialiser"
+    );
+    LCC_ASSERT(
+        not IsImportedLinkage(decl->linkage()),
+        "Cannot default initialize an imported variable"
+    );
+
+    return DefaultInitializeImpl(
+        DeclReference(decl),
+        PerformZeroInitialization
+    );
+}
+
+auto lcc::glint::Sema::DeclReference(Decl* decl) -> Expr* {
+    LCC_ASSERT(decl);
+    return new (mod) NameRefExpr(
+        decl->name(),
+        decl->scope(),
+        decl->location()
+    );
+}
+
 /// ===========================================================================
 ///  Analysing Expressions
 /// ===========================================================================
@@ -1712,7 +1829,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                                     m.value->type(),
                                     c->type()->elem()
                                 );
-                                v->set_sema_errored();
+                                c->set_sema_errored();
                                 return false;
                             }
                         }
@@ -1724,7 +1841,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                                 "Compound Literal has invalid expression count to be converted to {}",
                                 c->type()
                             );
-                            v->set_sema_errored();
+                            c->set_sema_errored();
                             return false;
                         }
                         for (unsigned i = 0; i < c->values().size(); ++i) {
@@ -1737,7 +1854,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                                     compound_literal_member_expression.value->type(),
                                     s->members().at(i).type
                                 );
-                                v->set_sema_errored();
+                                c->set_sema_errored();
                                 return false;
                             }
                         }
@@ -1747,7 +1864,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                             "Sorry, but initialisation of values of {} type from compound literals is not yet supported",
                             c->type()
                         );
-                        v->set_sema_errored();
+                        c->set_sema_errored();
                         return false;
                     }
                 }
@@ -1809,6 +1926,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     ));
 
                     *expr_ptr = new (mod) BlockExpr(replacement, v->location());
+
                     // Perform conversions (like lvalue to rvalue).
                     (void) Analyse(expr_ptr);
                 } else {
@@ -1828,11 +1946,26 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 curr_func->dangling_dynarrays().push_back(v);
 
             v->set_lvalue();
+
+            v->set_sema_done();
+
+            if (not v->init()) {
+                auto initializer = DefaultInitialize(v);
+                if (not Analyse(&initializer))
+                    return false;
+
+                *expr_ptr = new (mod) BlockExpr({v, initializer}, v->location());
+                LCC_ASSERT(Analyse(expr_ptr));
+            }
         } break;
 
         /// These are handled by the code that also handles enums.
         case Expr::Kind::EnumeratorDecl:
-            Diag::ICE(context, expr->location(), "Invalid semantic analysis of enumerator declaration (should have been handled in enum handling)");
+            Diag::ICE(
+                context,
+                expr->location(),
+                "Invalid semantic analysis of enumerator declaration (should have been handled in enum handling)"
+            );
             LCC_UNREACHABLE();
 
         case Expr::Kind::CompoundLiteral: {
@@ -2259,7 +2392,11 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             aint value{};
             if (auto* typed_expr = cast<TypedExpr>(sizeof_expr->expr()))
                 value = typed_expr->type()->size(context);
-            else Error(sizeof_expr->location(), "Unhandled expression in sizeof");
+            else {
+                Error(sizeof_expr->location(), "Unhandled expression in sizeof");
+                expr->set_sema_errored();
+                break;
+            }
 
             *expr_ptr = new (mod) IntegerLiteral(value, expr->location());
         } break;
@@ -2924,25 +3061,25 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
         /// Assignment.
         case TokenKind::ColonEq: {
-            // FIXME: I'm not sure if we are able to actually get away with not doing
-            // this. To me, it would be better handled by Convert()...
-            // LValueToRValue(&b->rhs());
-
             // This removes REFERENCES, _not pointers_. Attempts to produce an lvalue.
             (void) Convert__RemoveReferences(&b->lhs());
+
             if (not b->lhs()->is_lvalue()) {
+                // FIXME: This error message is cryptic at best. What the fuck is someone
+                // supposed to do about it? We could at least point them to Glint
+                // declaration documentation...
                 Error(b->location(), "LHS of assignment must be an lvalue");
                 b->set_sema_errored();
                 return;
             }
 
-            /// The type of the assignment is the same as the type of the lvalue. Note
-            /// that if the lhs is indeed an lvalue, we don’t ever mark this as errored
-            /// because we know what its type is going to be, irrespective of whether
-            /// the assignment is valid or not.
+            /// The type of the assignment is the same as the type of the lvalue.
+            /// NOTE: As long as the lhs of an assignment is an lvalue, we don’t mark
+            /// the assignment as errored, because we know what its type is going to
+            /// be, irrespective of whether the assignment is valid or not.
             b->type(lhs_t);
 
-            // Assignment always yields an lvalue.
+            // Assignment to an lvalue always yields an lvalue.
             b->set_lvalue();
 
             // Disallow assigning to a sum type directly.
@@ -2964,6 +3101,12 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     return;
                 }
             }
+
+            // FIXME: THIS SHOULD BE HANDLED BY Convert (but it isn't and I don't yet
+            // know why, so, yeah).
+            // QUESTION: This needs to be done /before/ updating sum type stuff. That way we
+            // actually load the sum type that we are trying to get the value from...
+            // LValueToRValue(&b->rhs());
 
             /// The RHS must be assignable to the LHS.
             if (not Convert(&b->rhs(), lhs_type)) {
@@ -3669,7 +3812,19 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     continue;
                 }
 
-                // TODO: Handle array view of byte.
+                // Handle array view of byte.
+                // print x:[byte view] -> puts x.data
+                bool arg_is_view_of_byte
+                    = arg->type()->strip_references()->is_view() and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
+                if (arg_is_view_of_byte) {
+                    auto print_call = new (mod) CallExpr(
+                        named_template("print__putchar_each"),
+                        {arg},
+                        {}
+                    );
+                    exprs.emplace_back(print_call);
+                    continue;
+                }
 
                 // Otherwise, format argument
                 // print x -> { tmp :: format x; puts tmp.data; -tmp; }
@@ -4490,25 +4645,29 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
 
         // Check if a sum type currently stores a given member.
         case TokenKind::Has: {
-            if (not is<SumType>(u->operand()->type())) {
+            auto member_access = cast<MemberAccessExpr>(u->operand());
+            if (not member_access) {
                 Error(
                     u->operand()->location(),
-                    "Operand of 'has' must be a sum type"
+                    "Expected a member access to a sum type as the operand to '{}', i.e. `{} sum.x`.",
+                    ToString(u->op()),
+                    ToString(u->op())
+                );
+                u->set_sema_errored();
+                break;
+            }
+            if (not is<SumType>(member_access->object()->type())) {
+                Error(
+                    u->operand()->location(),
+                    "Operand of '{}' must access a sum type (got {})",
+                    ToString(u->op()),
+                    member_access->object()->type()
                 );
                 u->set_sema_errored();
                 break;
             }
 
-            if (not is<MemberAccessExpr>(u->operand())) {
-                Error(
-                    u->operand()->location(),
-                    "Operand of 'has' must be a member access to a sum type"
-                );
-                u->set_sema_errored();
-                break;
-            }
-
-            // The result of 'has' is boolean.
+            // The result of 'has' is a boolean value.
             u->type(Type::Bool);
         } break;
 
@@ -4708,37 +4867,51 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
         case Type::Kind::Array: {
             auto* a = as<ArrayType>(type);
             LCC_ASSERT(a->element_type(), "Array has NULL element type");
-            (void) Analyse(&a->element_type());
+            if (not Analyse(&a->element_type())) {
+                a->set_sema_errored();
+                return false;
+            }
             a->element_type(DeclTypeDecay(a->element_type()));
 
             auto* elem = a->element_type();
             if (is<ReferenceType>(elem)) {
-                if (elem->ok()) Error(
-                    a->location(),
-                    "Cannot create array of reference type {}",
-                    elem
-                );
+                if (elem->ok()) {
+                    Error(
+                        a->location(),
+                        "Cannot create array of reference type {}",
+                        elem
+                    );
+                } else {
+                    Error(
+                        a->location(),
+                        "Cannot create array of reference type"
+                    );
+                }
                 a->set_sema_errored();
             }
 
             usz size = 0;
             LCC_ASSERT(a->size(), "Array has NULL size expression");
-            (void) Analyse(&a->size());
-            if (a->size()->ok()) {
-                EvalResult res;
-                if (a->size()->evaluate(context, res, false)) {
-                    if (res.as_int().slt(1)) {
-                        Error(a->location(), "Array size must be greater than 0");
-                        a->set_sema_errored();
-                    }
+            if (not Analyse(&a->size())) {
+                a->set_sema_errored();
+                return false;
+            }
+            LCC_ASSERT(a->size()->ok());
 
-                    size = res.as_int().value();
-                    a->size() = new (mod) ConstantExpr(a->size(), EvalResult(size));
-                } else {
-                    // Should be an ICE
-                    Error(a->location(), "Array with variable size should have been made a dynamic array by the parser");
+            EvalResult res;
+            if (a->size()->evaluate(context, res, false)) {
+                if (res.as_int().slt(1)) {
+                    Error(a->location(), "Array size must be greater than 0");
                     a->set_sema_errored();
+                    return false;
                 }
+
+                size = res.as_int().value();
+                a->size() = new (mod) ConstantExpr(a->size(), EvalResult(size));
+            } else {
+                // Should be an ICE
+                Error(a->location(), "Array with variable size should have been made a dynamic array by the parser");
+                Diag::ICE("");
             }
         } break;
 
@@ -4762,7 +4935,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             }
 
             // Cache struct type for IRGen.
-            (void) a->struct_type(mod);
+            LCC_ASSERT(Analyse((Type**) &a->struct_type(mod)));
         } break;
 
         // Apply decltype decay to the element type, prohibit arrays of
@@ -4785,7 +4958,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             }
 
             // Cache struct type for IRGen.
-            (void) a->struct_type(mod);
+            LCC_ASSERT(Analyse((Type**) &a->struct_type(mod)));
 
             if (a->initial_size()) (void) Analyse(&a->initial_size());
         } break;
@@ -4824,15 +4997,50 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
 
                 auto msize = member.type->size(context) / 8;
                 auto malign = member.type->align(context) / 8;
+                // fmt::print("Sum member {}: size:{} align:{}\n", *member.type, msize, malign);
                 s->byte_size(std::max(s->byte_size(), msize));
                 s->alignment(std::max(s->alignment(), malign));
             }
 
+            // Ensure contiguous sum types in memory are aligned properly (adjust size
+            // to alignment).
+            s->byte_size(utils::AlignTo(s->byte_size(), s->alignment()));
+
             // Cache struct type for IRGen.
-            (void) s->struct_type(mod);
+            LCC_ASSERT(Analyse((Type**) &s->struct_type(mod)));
+
+            // IMPORTANT: Struct type alignment calculation is probably wrong, since
+            // the actual types were punned in the underlying type... So, we must
+            // update it ourselves, here. Align underlying struct type to sum type
+            // alignment, and recalculate struct size based on new alignment.
+            s->struct_type()->alignment(s->alignment());
+            s->struct_type()->byte_size(
+                utils::AlignTo(
+                    s->struct_type()->byte_size(),
+                    s->struct_type()->alignment()
+                )
+            );
+
+            // We set it as done so that we may fetch size and alignment in below
+            // assertions.
+            s->set_sema_done();
+            // These are here so that (sizeof <sum-type>) accurately represents the
+            // final size of the sum type.
+            LCC_ASSERT(
+                s->size(context) == s->struct_type()->size(context),
+                "Size of SumType {} does not match size of underlying struct {}"
+                " (meaning using `sizeof` will break everything)",
+                s->size(context),
+                s->struct_type()->size(context)
+            );
+            LCC_ASSERT(
+                s->align(context) == s->struct_type()->align(context),
+                "Align of SumType {} does not match align of underlying struct {}",
+                s->align(context),
+                s->struct_type()->align(context)
+            );
         } break;
 
-        // Set cached struct type for IRGen by calling array_type().
         case Type::Kind::Union: {
             auto* u = as<UnionType>(type);
             usz byte_size = 0;
@@ -4857,8 +5065,20 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             u->byte_size(byte_size);
             u->alignment(alignment);
 
+            // NOTE: This is compiler-specific, not to do with semantic analysis of
+            // the language. Basically, the underlying array type that represents the
+            // generic data CANNOT have a size of zero. So, even though a union may
+            // technically have no members, the underlying data array cannot have a
+            // size of zero.
+            u->byte_size(std::max(u->byte_size(), (usz) 1));
+
+            // Ensure contiguous union types in memory are aligned properly (adjust
+            // size to alignment).
+            u->byte_size(utils::AlignTo(u->byte_size(), u->alignment()));
+
             // Cache struct type for IRGen
-            (void) u->array_type(mod);
+            auto passed = Analyse((Type**) &u->array_type(mod));
+            LCC_ASSERT(passed, "UnionType underlying array type failed analysis");
         } break;
 
         /// Analyse the parameters, the return type, and attributes.
@@ -4946,17 +5166,28 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                 }
 
                 /// Align the member to its alignment.
-                auto msize = member.type->size(context) / 8;
+                auto msize = member.type->size_in_bytes(context);
                 auto malign = member.type->align(context) / 8;
+                // fmt::print("Member {}: size:{} align:{}\n", *member.type, msize, malign);
                 member.byte_offset = utils::AlignTo(byte_size, malign);
                 byte_size = member.byte_offset + msize;
                 alignment = std::max(alignment, malign);
             }
 
             /// Align the struct to its alignment.
-            /// Empty structs have a size of 0.
             s->alignment(alignment);
-            s->byte_size(byte_size ? utils::AlignTo(byte_size, alignment) : 0);
+
+            /// Empty structs have a size of 0.
+            /// Ensure contiguous struct types are aligned properly (adjust size to
+            /// alignment). Only applies to non-zero size structs.
+            if (byte_size)
+                s->byte_size(utils::AlignTo(byte_size, s->alignment()));
+            else s->byte_size(0);
+
+            // {
+            //     s->set_sema_done();
+            //     fmt::print("struct {}: size:{} align:{}\n", *type, s->size_in_bytes(context), s->align(context) / 8);
+            // }
         } break;
 
         /// Calculate enumerator values.
@@ -4976,7 +5207,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                 Error(
                     e->location(),
                     "Disallowed underlying type of enum (sorry!).\n"
-                    "Only integer or integer-like types are allowed, currently."
+                    "Only integer or integer-like types are allowed, currently. We hope to change this in the future."
                 );
                 e->set_sema_errored();
                 return false;
@@ -5087,8 +5318,10 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                     next_val = decltype(next_val)(res.as_int().value()) + 1;
 
                 // Declare the enumerator member in the enum's scope.
-                auto d = e->scope()->declare(context, std::string(val->name()), val);
-                LCC_ASSERT(d, "Failed to declare enumerator member");
+                {
+                    auto d = e->scope()->declare(context, std::string(val->name()), val);
+                    LCC_ASSERT(d, "Failed to declare enumerator member");
+                }
             }
         } break;
 
