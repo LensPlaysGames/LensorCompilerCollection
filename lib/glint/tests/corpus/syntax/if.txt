@@ -1,0 +1,162 @@
+=================
+If, Empty Block
+:syntax
+:fail_parse
+================
+
+if false {};
+
+---
+
+(block
+ (if (integer_literal)
+   (block)))
+
+================
+If, Empty Block, Soft Separator
+:syntax
+================
+
+if false, {};
+
+---
+
+(block
+ (if (integer_literal)
+   (block)))
+
+================
+If, Empty Block, Hard Separator
+:syntax
+================
+
+if false; {};
+
+---
+
+(block (if (integer_literal) (block)))
+
+================
+If/Else, Empty Blocks, No Separators
+:syntax
+:fail_parse
+================
+
+if false {} else {};
+
+---
+
+(block
+ (if (integer_literal)
+   (block)
+   (block)))
+
+================
+If/Else, Empty Blocks, Soft Separator Between condition/then
+:syntax
+================
+
+if false, {} else {};
+
+---
+
+(block
+ (if (integer_literal)
+   (block)
+   (block)))
+
+================
+If/Else, Empty Blocks, Hard Separator Between condition/then
+:syntax
+================
+
+if false; {} else {};
+
+---
+
+================
+If/Else, Empty Blocks, Soft Separator Between then/`else'
+:syntax
+:fail_parse
+================
+
+if false {}, else {};
+
+---
+
+(block
+ (if (integer_literal)
+   (block)
+   (block)))
+
+================
+If/Else, Empty Blocks, Hard Separator Between then/`else'
+:syntax
+:fail_parse
+================
+
+if false {}; else {};
+
+---
+
+(block
+ (if (integer_literal)
+   (block)
+   (block)))
+
+================
+If/Else, Empty Blocks, Soft Separators
+:syntax
+================
+
+if false, {}, else {};
+
+---
+
+(block
+ (if (integer_literal)
+   (block)
+   (block)))
+
+================
+If/Else, Empty Blocks, Hard Separators
+:syntax
+================
+
+if false; {}; else {};
+
+---
+
+(block
+ (if (integer_literal)
+   (block)
+   (block)))
+
+================
+If/Else, Empty Blocks, Soft+Hard Separator
+:syntax
+================
+
+if false, {}; else {};
+
+---
+
+(block
+ (if (integer_literal)
+   (block)
+   (block)))
+
+================
+If/Else, Empty Blocks, Hard+Soft Separator
+:syntax
+================
+
+if false; {}, else {};
+
+---
+
+(block
+ (if (integer_literal)
+   (block)
+   (block)))
+

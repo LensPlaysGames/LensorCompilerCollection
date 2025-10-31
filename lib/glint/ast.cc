@@ -2433,6 +2433,15 @@ auto lcc::glint::GetRightmostLocation(lcc::glint::Expr* expr) -> lcc::Location {
     return location;
 }
 
+auto lcc::glint::GetPastLocation(lcc::glint::Expr* expr) -> lcc::Location {
+    if (not expr) return {};
+
+    lcc::Location location{GetRightmostLocation(expr)};
+    location.pos += 1;
+
+    return location;
+}
+
 [[nodiscard]]
 bool lcc::glint::Type::is_compound_type() const {
     switch (kind()) {

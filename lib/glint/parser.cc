@@ -374,7 +374,7 @@ auto lcc::glint::Parser::ParseExpressionsUntil(lcc::glint::TokenKind until) -> R
                 Warning("Expected ';' but got end of file");
             } else if (expr) {
                 // Error(location, "Expected ';'")
-                Warning(GetRightmostLocation(*expr), "Expected ';'")
+                Warning(GetPastLocation(*expr), "Expected ';'")
                     .attach(Diag::Note(context, tok.location, "Before this"));
             }
         }
@@ -1523,22 +1523,44 @@ auto lcc::glint::Parser::ParseIdentExpr() -> Result<Expr*> {
 }
 
 auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
-    /// Yeet "if".
     auto loc = tok.location;
+    /// Yeet "if".
     LCC_ASSERT(Consume(Tk::If), "ParseIf called while not at 'if'");
 
     /// Parse condition, then, and else.
     auto cond = ParseExpr();
+
+    // If at hard expression separator, check for the common error case of a
+    // condition and then body missing a separator.
+    if (At(TokenKind::Semicolon)) {
+        if (cond and cond->kind() == Expr::Kind::Call) {
+            auto call = as<CallExpr>(*cond);
+            if (call->args().size() == 1) {
+                auto e = Error(
+                    call->location(),
+                    "This if condition is a suspicious call, and there is no 'then' expression..."
+                );
+                e.attach(Note(
+                    GetPastLocation(call->callee()),
+                    "Maybe you forgot an expression separator right here"
+                ));
+                return e;
+            }
+        }
+    }
+
     // Following condition, accept an optional expression separator
     ConsumeExpressionSeparator();
 
     auto then = ParseExprInNewScope();
-    // Following then expression, accept an optional *soft* expression
-    // separator. I /would/ like for any expression separator to appear here,
-    // but the main issue lies in the top level expecting a semi-colon and
-    // that not being there if we consume it here and there is no else.
-    // Basically, what I'd like is if there is an else past a semi-colon then
-    // to handle that, but that requires lookahead and I don't like that lol.
+    // Following then expression, accept an optional expression separator.
+    // We have to use lookahead here because if we ate a separator
+    // unconditionally but weren't subsequently at an 'else', the top level
+    // would report a warning about a missing semi-colon when there isn't one.
+    // Basically, ParseExpr mustn't eat a hard expression separator past the
+    // end of the expression (like one that terminates it).
+    //   foo;
+    //      ^ don't eat this
     if (LookAhead(1)->kind == Tk::Else) {
         if (not +ConsumeExpressionSeparator()) {
             Note(LookAhead(1)->location, "Here");
@@ -1552,7 +1574,9 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     }
 
     auto else_ = ExprResult::Null();
-    if (Consume(Tk::Else)) else_ = ParseExpr();
+    if (Consume(Tk::Else))
+        else_ = ParseExpr();
+
     if (IsError(cond, then, else_)) return Diag();
     return new (*mod) IfExpr(cond.value(), then.value(), else_.value(), loc);
 }

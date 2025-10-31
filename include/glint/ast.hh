@@ -2486,7 +2486,19 @@ public:
     static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Template; }
 };
 
+/// Given an expression, get a location of length one that refers to the
+/// most-advanced character position that still lies within the given
+/// expression's location.
+/// Given identifier node "foo", return location referring to second "o".
+/// Given declaration node "foo : int", return location referring to "t".
 auto GetRightmostLocation(lcc::glint::Expr* expr) -> lcc::Location;
+/// Given an expression, get a location of length one that refers to the
+/// position directly after the expression.
+/// NOTE: This location may not be seekable, or it may point to EOF.
+/// Given identifier node "foo", return location one past the second "o".
+///                           ^
+/// Given declaration node "foo : int", return location referring to "t".
+auto GetPastLocation(lcc::glint::Expr* expr) -> lcc::Location;
 
 } // namespace lcc::glint
 
