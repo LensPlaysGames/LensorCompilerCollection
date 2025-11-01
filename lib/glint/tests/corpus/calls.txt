@@ -45,11 +45,11 @@ foo :void() {};
 
 ================
 Disallowed Call
+:warn_sema
 ================
 
 foo :void(x:int) {};
-;; confusingly in this scenario, this should return 42 and discard foo as
-;; an unused expression.
+;; In this scenario, return 42 and discard foo as an unused expression.
 foo, 42;
 
 ---
@@ -61,7 +61,8 @@ foo, 42;
 
 
 ================
-Multiple Arguments, No Separator
+Multiple Arguments, No Separator (not how that works)
+:fail_sema
 ================
 
 foo :void(x:int y:int) {};
@@ -71,7 +72,7 @@ foo 42 69;
 
 (block
  (function_declaration (block (return)))
- (call (name) (integer_literal) (integer_literal))
+ (call (name) (binary_multiply (integer_literal) (integer_literal)))
  (return (integer_literal)))
 
 
@@ -92,6 +93,7 @@ foo 42, 69;
 
 ================
 Multiple Arguments, Disallowed Call
+:warn_sema
 ================
 
 foo :void(x:int y:int) {};
@@ -108,6 +110,7 @@ foo, 42 69;
 
 ================
 Multiple Arguments, Comma Separated, Disallowed Call
+:warn_sema
 ================
 
 foo :void(x:int y:int) {};

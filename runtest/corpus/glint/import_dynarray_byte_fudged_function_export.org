@@ -1,0 +1,36 @@
+* Import Fudged [byte]() Export
+
+#+NAME: source
+#+begin_src glint
+import foo_dynarray_bytefudgedfun
+
+bar :: foo();
+
+print bar;
+
+-bar;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_dynarray_bytefudgedfun
+
+  export foo : [byte]() {
+    out : [byte];
+    out += `2`;
+    out ~= `4`;
+    out += `0`;
+    out;
+  };
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+420
+#+end_example
+
