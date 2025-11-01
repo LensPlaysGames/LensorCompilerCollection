@@ -1319,7 +1319,14 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
         case lcc::glint::Type::Kind::DynamicArray: {
             auto elem_t = ToSource(*t.elem());
             if (not elem_t) return elem_t;
-            return fmt::format("[{}]", *elem_t);
+
+            auto dynarray_t = as<DynamicArrayType>(&t);
+            if (not dynarray_t->initial_size())
+                return fmt::format("[{}]", *elem_t);
+
+            auto size_e = ToSource(*dynarray_t->initial_size());
+            if (not size_e) return size_e;
+            return fmt::format("[{} {}]", *elem_t, *size_e);
         }
 
         case lcc::glint::Type::Kind::Array: {
@@ -1703,9 +1710,13 @@ auto lcc::glint::Module::ToSource(const Expr& e) -> Result<std::string> {
             auto e_constant = as<ConstantExpr>(&e);
             if (e_constant->expr())
                 return ToSource(*e_constant->expr());
-            if (e_constant->value().is_int()) return fmt::format("{}", e_constant->value().as_int());
-            if (e_constant->value().is_string()) return fmt::format("\"{}\"", strings.at(e_constant->value().as_string()->string_index()));
-            if (e_constant->value().is_null()) return {"NULL"};
+            if (e_constant->value().is_int())
+                return fmt::format("{}", e_constant->value().as_int());
+            if (e_constant->value().is_string())
+                return fmt::format("\"{}\"", strings.at(e_constant->value().as_string()->string_index()));
+            if (e_constant->value().is_null())
+                return {"NULL"};
+
             LCC_ASSERT(false, "Cannot generate source from ill-formed constant expression");
         }
 
