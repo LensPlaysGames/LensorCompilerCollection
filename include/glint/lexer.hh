@@ -83,7 +83,7 @@ protected:
 
 public:
     [[nodiscard]]
-    static auto IsIdentStart(u32 c) -> bool { return IsAlpha(c) or c == '_'; }
+    static auto IsIdentStart(u32 c) -> bool { return IsAlpha(c) or c == '$' or c == '_'; }
     // Search Terms: delimiter
     [[nodiscard]]
     static auto IsIdentContinue(u32 c) -> bool {
