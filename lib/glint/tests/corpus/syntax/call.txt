@@ -41,3 +41,47 @@ foo 69, 42;
 ---
 
 (block (call (name) (integer_literal) (integer_literal)))
+
+================
+LISP-like, no arguments
+:syntax
+================
+
+(foo);
+
+---
+
+(block (name))
+
+================
+LISP-like, one argument
+:syntax
+================
+
+(foo 69);
+
+---
+
+(block (call (name) (integer_literal)))
+
+================
+LISP-like, two arguments, soft separated
+:syntax
+================
+
+(foo 69, 42);
+
+---
+
+(block (call (name) (integer_literal) (integer_literal)))
+
+================
+LISP-like, two arguments, soft separated, trailing
+:syntax
+================
+
+(foo 69, 42, );
+
+---
+
+(block (call (name) (integer_literal) (integer_literal)))
