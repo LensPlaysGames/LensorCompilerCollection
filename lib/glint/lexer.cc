@@ -529,6 +529,8 @@ void lcc::glint::Lexer::NextToken() {
 void lcc::glint::Lexer::NextIdentifier() {
     tok.text.clear();
 
+    LCC_ASSERT(IsIdentStart(lastc));
+
     // Note: Istg if anyone gets the genius idea of extracting a substring
     // instead of appending character by character, DON’T. There is a REASON
     // why NextChar() exists. Character != byte in the source file.
