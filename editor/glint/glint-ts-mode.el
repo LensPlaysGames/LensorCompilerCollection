@@ -29,6 +29,7 @@
 ;;; Code:
 
 (require 'treesit)
+(require 'simple)
 
 (declare-function treesit-parser-create "treesit.c")
 
@@ -130,6 +131,26 @@ See 'treesit-simple-indent-presets' for more info."
      ;;     :   69;
      ;;     : }
      (and (parent-is "declaration") (field-is "init") (node-is "block"))
+     standalone-parent ;; anchor
+     0 ;; offset
+     ) ;; rule-end
+
+    ( ;; rule-begin
+     ;; IF EXPRESSION CAUSES SINGLE INDENT FOR NON-BLOCK BODY
+     ;;     : if x,
+     ;;     :   print x;
+     ;; Presence of not "node-is block" toggles GNU style curly braces (2
+     ;; spaces for braces on newline, 2 spaces for stuff inside braces).
+     (and (parent-is "if") (field-is "then") (not (node-is "block")))
+     standalone-parent ;; anchor
+     glint-ts-mode-indent-offset ;; offset
+     ) ;; rule-end
+    ( ;; rule-begin
+     ;; BLOCK EXPRESSION (IF BODY) ON NEWLINE MATCHES INDENT
+     ;;     : if x,
+     ;;     : {
+     ;;     : };
+     (and (parent-is "if") (field-is "then") (node-is "block"))
      standalone-parent ;; anchor
      0 ;; offset
      ) ;; rule-end
@@ -334,6 +355,122 @@ with the braces' contents having the same indentation.
    :feature 'delimiter
    `(["(" ")" "{" "}"] @font-lock-delimiter-face)
    ))
+
+(defcustom glint-ts-mode--format-nl-before-block-open nil
+  "When non-nil, format will place a newline before the opening brace of a block expression"
+  :group 'glint)
+(defcustom glint-ts-mode--format-nl-after-block-open t
+  "When non-nil, format will place a newline after the opening brace of a block expression"
+  :group 'glint)
+(defcustom glint-ts-mode--format-nl-before-block-close t
+  "When non-nil, format will place a newline before the closing brace of a block expression"
+  :group 'glint)
+(defcustom glint-ts-mode--format-nl-after-block-close nil
+  "When non-nil, format will place a newline after the closing brace of a block expression"
+  :group 'glint)
+
+(defun glint-ts-mode--format-block-egyptian ()
+  (interactive)
+  (customize-set-variable 'glint-ts-mode--format-nl-before-block-open nil)
+  (customize-set-variable 'glint-ts-mode--format-nl-after-block-open t)
+  (customize-set-variable 'glint-ts-mode--format-nl-before-block-close t)
+  (customize-set-variable 'glint-ts-mode--format-nl-after-block-close nil))
+
+(defun glint-ts-mode--format-block-on-newline ()
+  (interactive)
+  (customize-set-variable 'glint-ts-mode--format-nl-before-block-open t)
+  (customize-set-variable 'glint-ts-mode--format-nl-after-block-open t)
+  (customize-set-variable 'glint-ts-mode--format-nl-before-block-close t)
+  (customize-set-variable 'glint-ts-mode--format-nl-after-block-close t))
+
+(defun glint-ts-mode--format-block-lisplike ()
+  (interactive)
+  (customize-set-variable 'glint-ts-mode--format-nl-before-block-open t)
+  (customize-set-variable 'glint-ts-mode--format-nl-after-block-open nil)
+  (customize-set-variable 'glint-ts-mode--format-nl-before-block-close nil)
+  (customize-set-variable 'glint-ts-mode--format-nl-after-block-close t))
+
+(defun glint-ts-mode--format-block-after ()
+  (interactive)
+  (customize-set-variable 'glint-ts-mode--format-nl-before-block-open nil)
+  (customize-set-variable 'glint-ts-mode--format-nl-after-block-open nil)
+  (customize-set-variable 'glint-ts-mode--format-nl-before-block-close nil)
+  (customize-set-variable 'glint-ts-mode--format-nl-after-block-close t))
+
+(defun glint-ts-mode--format-block-none ()
+  (interactive)
+  (customize-set-variable 'glint-ts-mode--format-nl-before-block-open nil)
+  (customize-set-variable 'glint-ts-mode--format-nl-after-block-open nil)
+  (customize-set-variable 'glint-ts-mode--format-nl-before-block-close nil)
+  (customize-set-variable 'glint-ts-mode--format-nl-after-block-close nil))
+
+(defun glint-ts-mode--gather-edits (node)
+  "Return a list of edits to properly format 'NODE'."
+  (unless (treesit-node-p node) (error "Node expected, got %s" (type-of node)))
+  (let ((edits ()))
+
+    ;; Children of source file get a newline after each one.
+    (mapc (lambda (captured-node)
+            (push (list 'nl-at (1+ (treesit-node-end (cdr captured-node)))) edits))
+          (treesit-query-capture node "(source_file (_) @x)"))
+
+    ;; Children of block get a newline between each one.
+    (mapc (lambda (captured-node)
+            (push (list 'nl-at (treesit-node-end (cdr captured-node))) edits))
+          (treesit-query-capture node "(block (_)* @x . (_) )"))
+
+    ;; Newline after block opener when block has at least one containing node.
+    (mapc (lambda (captured-node)
+            (when glint-ts-mode--format-nl-before-block-open
+              (push (list 'nl-before (treesit-node-start (cdr captured-node))) edits))
+            (when glint-ts-mode--format-nl-after-block-open
+              (push (list 'nl-at (1+ (treesit-node-start (cdr captured-node)))) edits))
+            (when glint-ts-mode--format-nl-before-block-close
+              (push (list 'nl-before (1- (treesit-node-end (cdr captured-node)))) edits))
+            (when glint-ts-mode--format-nl-after-block-close
+              (push (list 'nl-at (treesit-node-end (cdr captured-node))) edits))
+            )
+          (treesit-query-capture node "(block (_)) @x"))
+
+    ;; Sort edits by reverse position, such that applying them will not
+    ;; invalidate further edit positions.
+    (sort edits :key (lambda (edit) (nth 1 edit)) :reverse t)))
+
+(defun glint-ts-mode--format-buffer (buffer)
+  "Format 'BUFFER' as Glint source code. Experimental."
+  (interactive "bBuffer to Format: ")
+  (setq buffer (get-buffer buffer))
+  (unless (bufferp buffer) (error "Buffer expected, got %s" (type-of buffer)))
+  (save-mark-and-excursion
+    (with-current-buffer buffer
+      (let* ((root (treesit-buffer-root-node))
+             (edits (glint-ts-mode--gather-edits root)))
+        ;; (message "%S" edits)
+        (mapc
+         (lambda (edit)
+           (cond
+
+            ((eq 'nl-at (nth 0 edit))
+             (goto-char (nth 1 edit))
+             ;; advance past hard separator(s)
+             (while (= ?\; (char-after)) (forward-char))
+             (unless (= ?\n (char-after)) (insert "\n")))
+
+            ((eq 'nl-before (nth 0 edit))
+             (goto-char (nth 1 edit))
+             ;; Move backward until just after non-whitespace or a newline.
+             (while (and (not (= ?\n (char-after)))
+                         (seq-contains " \t\n" (char-before)))
+               (backward-char))
+             (unless (= ?\n (char-after)) (insert "\n")))
+
+            (t (error "Unhandled edit symbol '%s'" (nth 0 edit)))))
+         edits))
+      ;; After applying edits, apply indentation rules.
+      (treesit-indent-region (point-min) (point-max))
+      ;; After applying edits and indentation rules, delete trailing whitespace.
+      (delete-trailing-whitespace)
+      )))
 
 (define-derived-mode glint-ts-mode prog-mode "Glint"
   "Major mode for the Glint programming language."
