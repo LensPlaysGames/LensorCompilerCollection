@@ -1947,9 +1947,10 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             v->set_lvalue();
 
-            v->set_sema_done();
+            if (not v->sema_errored())
+                v->set_sema_done();
 
-            if (not v->init()) {
+            if (v->ok() and not v->init()) {
                 auto initializer = DefaultInitialize(v);
                 if (not Analyse(&initializer))
                     return false;
