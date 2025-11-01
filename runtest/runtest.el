@@ -74,6 +74,13 @@
   (unless (stringp test-name) (error "Expected 'test-name' to be a string"))
   (push test-name run-test--passed-list))
 
+(defun run-test--process-status-unexpected-p (test-name p-status event)
+  "Return 'nil' iff 'p-status' is equal to the symbol 'exit'.
+'p-status' is expected to be a return value from 'process-status'."
+  (unless (eq p-status 'exit)
+    (message "UNEXPECTED EXIT: %s\n\t%s"
+             test-name event)))
+
 ;; Compare program exit status to expected program exit status.
 (defun run-test--status-unexpected-p (test-name expected-status got-status)
   "Return 'nil' iff 'got-status' is equal to 'expected-status' (using '=')"
@@ -117,7 +124,8 @@ in the expected output and what we got."
           (setq ,exe-output (concat ,exe-output o)))
         :sentinel
         (lambda (p e)
-          (when (eq 'exit (process-status p))
+          ;; (message "Process: %s had the event '%s' (process-status:%s)" p e (process-status p))
+          (when (memq (process-status p) '(exit signal))
             ;; Once the program has exited, we no longer need it's executable...
             ;; (message "Test %s: Deleting executable file %s" test-name executable-filepath)
             (delete-file executable-filepath)
@@ -125,6 +133,7 @@ in the expected output and what we got."
             ;; Set failure flag if status or output is unexpected.
             ;; Record test as passing if test passed.
             (if (or
+                 (run-test--process-status-unexpected-p test-name (process-status p) e)
                  (run-test--status-unexpected-p test-name expected-status (process-exit-status p))
                  (run-test--output-unexpected-p test-name expected-output ,exe-output))
                 (setq test (plist-put test :failed t))
