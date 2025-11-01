@@ -12,6 +12,19 @@ foo[27]
 ---
 
 (block
+ (block
+  (variable_declaration)
+  (block (binary_assignment (member_access (name)) (evaluated_constant)) (binary_assignment (member_access (name)) (evaluated_constant)) (binary_assignment (member_access (name)) (cast (call (name) (evaluated_constant))))))
+
+ (block
+  (if (binary_greaterthan_orequal (evaluated_constant) (cast (member_access (name))))
+   (call (name) (integer_literal)))
+  (binary_subscript (cast (member_access (name))) (integer_literal)))
+
+ (unary_negation (name))
+ (return (integer_literal)))
+
+(block
  (variable_declaration)
 
  (block
