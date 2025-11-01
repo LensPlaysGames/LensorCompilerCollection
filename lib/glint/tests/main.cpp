@@ -378,13 +378,26 @@ struct GlintTest : langtest::Test {
                 for (; diff_begin < expected.size() and diff_begin < got.size(); ++diff_begin)
                     if (expected.at(diff_begin) != got.at(diff_begin)) break;
 
+                size_t diff_end{0};
+                if (expected.size() and got.size()) {
+                    for (; expected.size() - 1 - diff_end and got.size() - 1 - diff_end; ++diff_end) {
+                        if (expected.at(expected.size() - 1 - diff_end) != got.at(got.size() - 1 - diff_end))
+                            break;
+                    }
+                }
+
                 auto expected_color = C(lcc::utils::Colour::Green);
                 expected.insert(
                     expected.begin() + lcc::isz(diff_begin),
                     expected_color.begin(),
                     expected_color.end()
                 );
-                expected += C(lcc::utils::Colour::Reset);
+                auto reset_color = C(lcc::utils::Colour::Reset);
+                expected.insert(
+                    expected.end() - lcc::isz(diff_end),
+                    reset_color.begin(),
+                    reset_color.end()
+                );
 
                 auto got_color = C(lcc::utils::Colour::Red);
                 got.insert(
@@ -392,7 +405,11 @@ struct GlintTest : langtest::Test {
                     got_color.begin(),
                     got_color.end()
                 );
-                got += C(lcc::utils::Colour::Reset);
+                got.insert(
+                    got.end() - lcc::isz(diff_end),
+                    reset_color.begin(),
+                    reset_color.end()
+                );
 
                 fmt::print("EXPECTED: {}\n", expected);
                 fmt::print("GOT:      {}\n", got);
