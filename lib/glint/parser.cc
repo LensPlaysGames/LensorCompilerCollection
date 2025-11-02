@@ -1530,6 +1530,10 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     /// Parse condition, then, and else.
     auto cond = ParseExpr();
 
+    // NOTE: We "require" a soft expression separator here in the grammar, but
+    // we don't actually consume it /here/. We consume it as the last part of
+    // parsing the condition expression.
+
     // If at hard expression separator, check for the common error case of a
     // condition and then body missing a separator.
     if (At(TokenKind::Semicolon)) {
@@ -1577,7 +1581,9 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     if (Consume(Tk::Else))
         else_ = ParseExpr();
 
-    if (IsError(cond, then, else_)) return Diag();
+    if (IsError(cond, then, else_))
+        return GetDiag(cond, then, else_).diag();
+
     return new (*mod) IfExpr(cond.value(), then.value(), else_.value(), loc);
 }
 
@@ -2044,7 +2050,7 @@ auto lcc::glint::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
     /// Parse condition and body.
     auto cond = ParseExpr();
     auto body = ParseExprInNewScope();
-    if (IsError(cond, body)) return Diag();
+    if (IsError(cond, body)) return GetDiag(cond, body).diag();
     return new (*mod) WhileExpr(cond.value(), body.value(), loc);
 }
 
@@ -2067,7 +2073,7 @@ auto lcc::glint::Parser::ParseFuncDecl(
 ) -> Result<FuncDecl*> {
     /// Parse attributes and the function body.
     auto body = ParseFuncBody(is_external);
-    if (not body) return Diag();
+    if (not body) return body.diag();
 
     // External implies no mangling.
     if (is_external) type->set_attr(FuncAttr::NoMangle);

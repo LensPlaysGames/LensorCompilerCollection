@@ -186,6 +186,15 @@ template <typename... ValueTypes>
 bool IsError(Result<ValueTypes>&... results) {
     return (results.is_diag() or ...);
 }
+
+template <typename... ValueTypes>
+Result<void> GetDiag(Result<ValueTypes>&... results) {
+    Result<void> out{};
+    // Hopefully compiler doesn't discard (void) cast expressions!
+    ((results.is_diag() ? void(out = results.diag()) : void()), ...);
+    return out;
+}
+
 } // namespace lcc
 
 /// Macro for binding a member function to the \c this pointer.
