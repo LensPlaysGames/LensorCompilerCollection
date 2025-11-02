@@ -430,7 +430,7 @@ with the braces' contents having the same indentation.
             (when glint-ts-mode--format-nl-after-block-close
               (push (list 'nl-at (treesit-node-end (cdr captured-node))) edits))
             )
-          (treesit-query-capture node "(block (_)) @x"))
+          (treesit-query-capture node '((block (_)) @x)))
 
     ;; Sort edits by reverse position, such that applying them will not
     ;; invalidate further edit positions.
@@ -471,6 +471,115 @@ with the braces' contents having the same indentation.
       ;; After applying edits and indentation rules, delete trailing whitespace.
       (delete-trailing-whitespace)
       )))
+
+(defun glint-ts-mode--gather-doc-buffer (buffer)
+  "Gather documentation from Glint comments within 'BUFFER'. Experimental.
+
+Basically, a javadoc inspired tool to retrieve documentation from
+ self-documenting Glint declarations.
+
+When a comment directly precedes a declaration, it is gathered as
+documentation by 'glint-ts-mode--gather-doc-basic-buffer'.
+
+This function then searches the documentation of each declaration for
+lines beginning with special @ directives.
+
+An @ directive is the @ character followed by some word, and applies to
+ the rest of the line it is placed on.
+
+Glint programmer's may use @ directives to annotate declarations with
+ additional, meaningful information.
+
+Available @ Directives:
+
+  @see     :: Reference another declaration.
+  @param   :: Describe a parameter, accepted values, etc.
+              i.e. @param foo -> an integer value, most likely negative.
+  @returns :: Describe the value returned by evaluation of the declared
+              object.
+              i.e. @returns a positive integer.
+"
+  (interactive "bBuffer to Format: ")
+  (setq buffer (get-buffer buffer))
+  (unless (bufferp buffer) (error "Buffer expected, got %s" (type-of buffer)))
+  (save-match-data
+    (save-mark-and-excursion
+      (let ((documentation (glint-ts-mode--gather-doc-basic-buffer buffer)))
+        (mapc (lambda (doc)
+                (message "%s:\n%s" (plist-get doc :name) (plist-get doc :doc))
+                ;; @see
+                ;; Gather all
+                (let ((pos 0))
+                  (while (string-match "@see[:space:]*\\(.*\\)" (plist-get doc :doc) pos)
+                    (setq pos (match-end 0))
+                    (message "\tReferences %s" (match-string-no-properties 1 (plist-get doc :doc)))))
+                ;; @param
+                ;; Gather all
+                (let ((pos 0))
+                  (while (string-match "@param[:space:]*\\(.*\\)" (plist-get doc :doc) pos)
+                    (setq pos (match-end 0))
+                    (message "\tParameter %s" (match-string-no-properties 1 (plist-get doc :doc)))))
+                ;; Gather first
+                (when (string-match "@return[s][:space:]*\\(.*\\)" (plist-get doc :doc))
+                  (message "\tReturns %s" (match-string-no-properties 1 (plist-get doc :doc)))))
+              documentation))))
+  (error "TODO: Do something useful"))
+
+(defun glint-ts-mode--comment-contents (comment-text)
+  "Return cleaned-up text contents of a given comment."
+  (string-trim
+   (string-remove-prefix comment-start
+    (substring-no-properties comment-text))))
+
+(defun glint-ts-mode--gather-doc-basic-buffer (buffer)
+  "Gather all comments before declarations within 'BUFFER'
+ and associate them with each other."
+  (interactive "bBuffer to Format: ")
+  (setq buffer (get-buffer buffer))
+  (unless (bufferp buffer) (error "Buffer expected, got %s" (type-of buffer)))
+  (save-mark-and-excursion
+    (with-current-buffer buffer
+      (let ((root (treesit-buffer-root-node))
+            (current-doc '(:name nil :doc nil))
+            (docs (list)))
+        (mapc
+         (lambda (captured-node)
+           (when (eq 'comments (car captured-node))
+             (setq current-doc
+                   (plist-put current-doc :doc
+                              (cons
+                               (glint-ts-mode--comment-contents (treesit-node-text (cdr captured-node)))
+                               (plist-get current-doc :doc)))))
+           (when (eq 'name (car captured-node))
+             ;; Doc comments are gathered in reverse (in respect to original ordering
+             ;; in source buffer), so we reverse them back here.
+             (setq current-doc
+                   (plist-put current-doc :doc (reverse (plist-get current-doc :doc))))
+             ;; Doc comments are recorded separately; this concatenates all of them.
+             (setq current-doc
+                   (plist-put current-doc :doc (string-join (plist-get current-doc :doc) "\n")))
+             ;; Record the name of the declaration that the comments were associated with
+             (setq current-doc
+                   (plist-put current-doc :name (substring-no-properties (treesit-node-text (cdr captured-node)))))
+             ;; Record this documentation, associating comments with the declaration's name.
+             (push (copy-tree current-doc) docs)
+             ;; Reset current for next set of comment/name matches.
+             (setq current-doc (plist-put current-doc :name nil))
+             (setq current-doc (plist-put current-doc :doc nil))))
+         (treesit-query-capture
+          root
+          '( ((comment) :+ @comments :anchor (declaration name: (identifier) @name) ) )
+          ))
+        ;; Documentation is recorded in reverse, so we reverse them back here to
+        ;; match the ordering in the buffer.
+        (setq docs (reverse docs))
+        (when (called-interactively-p)
+          (message "%s"
+                   (string-join
+                    (mapcar (lambda (d) (format "%s:\n%s\n" (plist-get d :name) (plist-get d :doc)))
+                            docs)
+                    "\n")))
+        docs))))
 
 (define-derived-mode glint-ts-mode prog-mode "Glint"
   "Major mode for the Glint programming language."
