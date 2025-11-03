@@ -311,6 +311,7 @@ add_library(
   lib/lcc/ir/llvm.cc
   lib/lcc/ir/module.cc
   lib/lcc/ir/module_mir.cc
+  lib/lcc/ir/module_wat.cc
   lib/lcc/ir/parser.cc
   lib/lcc/lcc-c.cc
   lib/lcc/location.cc

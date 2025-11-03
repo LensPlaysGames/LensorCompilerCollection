@@ -669,6 +669,12 @@ void Module::emit(std::filesystem::path output_file_path) {
             else File::WriteOrTerminate(llvm_ir.data(), llvm_ir.size(), output_file_path);
         } break;
 
+        case Format::WASM_TEXTUAL: {
+            auto wasm_text = as_wat();
+            if (to_stdout) fmt::print("{}", wasm_text);
+            else File::WriteOrTerminate(wasm_text.data(), wasm_text.size(), output_file_path);
+        } break;
+
         case Format::COFF_OBJECT:
         case Format::ELF_OBJECT:
         case Format::GNU_AS_ATT_ASSEMBLY: {

@@ -44,8 +44,11 @@ void help() {
         // Basically, the name on the left of the colon will pick a default from
         // one on the right of the colon based on the system the compiler was
         // compiled for.
-        {"", "    asm: gnu-as-att,\n"},
-        {"", "    obj: elf, coff,\n"},
+        {"", "    asm: gnu-as-att, wat\n"},
+        {"", "        gnu-as-att: Assembly meant for the GNU Assembler 'as'.\n"},
+        {"", "                    AT&T style assembly: source THEN destination operands.\n"},
+        {"", "        wat: WebAssembly Textual Format (S-expressions).\n"},
+        {"", "    obj: elf, coff\n"},
         {"", "    IR: ir, ssa_ir, llvm\n"},
         {"", "        ir:     LCC's own IR, lowered for target architecture\n"},
         {"", "        ssa_ir: LCC's own IR in SSA form\n"},
@@ -153,7 +156,7 @@ auto parse(int argc, const char** argv) -> Options {
             // What format to emit code in
             auto format = next_arg();
             if (
-                format != "asm" and format != "gnu-as-att"
+                format != "asm" and format != "gnu-as-att" and format != "wat"
                 and format != "obj" and format != "elf" and format != "coff"
                 and format != "IR"
                 and format != "ir" and format != "ssa_ir" and format != "llvm"

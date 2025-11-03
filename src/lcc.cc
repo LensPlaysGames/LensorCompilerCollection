@@ -153,6 +153,8 @@ auto main(int argc, const char** argv) -> int {
         format = lcc::Format::lcc_ssa_ir;
     } else if (options.format == "asm" || options.format == "gnu-as-att") {
         format = lcc::Format::gnu_as_att_assembly;
+    } else if (options.format == "wat") {
+        format = lcc::Format::wasm_textual;
     } else if (options.format == "obj") {
 #if defined(_MSC_VER)
         format = lcc::Format::coff_object;
@@ -196,6 +198,10 @@ auto main(int argc, const char** argv) -> int {
             case lcc::Format::LCC_IR:
             case lcc::Format::LCC_SSA_IR:
                 replacement = ".lcc";
+                break;
+
+            case lcc::Format::WASM_TEXTUAL:
+                replacement = ".wat";
                 break;
 
             case lcc::Format::LLVM_TEXTUAL_IR:

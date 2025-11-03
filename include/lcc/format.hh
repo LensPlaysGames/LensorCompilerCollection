@@ -29,6 +29,9 @@ public:
         // LLVM's Textual IR (as of LLVM 16.0.4)
         LLVM_TEXTUAL_IR,
 
+        // WebAssembly Textual Format (s-expressions)
+        WASM_TEXTUAL,
+
         // GNU's `as` assembler. Emits `.s` files.
         GNU_AS_ATT_ASSEMBLY,
 
@@ -51,6 +54,7 @@ public:
     static const Format* const lcc_ir;
     static const Format* const lcc_ssa_ir;
     static const Format* const llvm_textual_ir;
+    static const Format* const wasm_textual;
     static const Format* const gnu_as_att_assembly;
     static const Format* const elf_object;
     static const Format* const coff_object;
@@ -73,6 +77,12 @@ struct Formats {
     static constexpr Format llvm_textual_ir = [] {
         auto f = Format();
         f._format = Format::LLVM_TEXTUAL_IR;
+        return f;
+    }();
+
+    static constexpr Format wasm_textual = [] {
+        auto f = Format();
+        f._format = Format::WASM_TEXTUAL;
         return f;
     }();
 
@@ -99,6 +109,7 @@ struct Formats {
 constexpr inline const Format* const Format::lcc_ir = &detail::Formats::lcc_ir;
 constexpr inline const Format* const Format::lcc_ssa_ir = &detail::Formats::lcc_ssa_ir;
 constexpr inline const Format* const Format::llvm_textual_ir = &detail::Formats::llvm_textual_ir;
+constexpr inline const Format* const Format::wasm_textual = &detail::Formats::wasm_textual;
 constinit inline const Format* const Format::gnu_as_att_assembly = &detail::Formats::gnu_as_att_assembly;
 constinit inline const Format* const Format::elf_object = &detail::Formats::elf_object;
 constinit inline const Format* const Format::coff_object = &detail::Formats::coff_object;

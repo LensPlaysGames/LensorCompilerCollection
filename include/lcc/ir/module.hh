@@ -80,6 +80,10 @@ public:
     [[nodiscard]]
     auto as_lcc_ir(bool use_colour) -> std::string;
 
+    /// Get the textual WebAssembly of this module.
+    [[nodiscard]]
+    auto as_wat() -> std::string;
+
     [[nodiscard]]
     auto code() -> std::vector<Function*>& { return _code; }
     [[nodiscard]]
