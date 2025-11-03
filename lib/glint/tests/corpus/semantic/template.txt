@@ -64,11 +64,12 @@ Template Invocation, `type` compile-time type
 
 ================
 Named Template Invocation
+:warn_sema
 ================
 
 foo :: template(x : expr) x;
 
-foo 69;
+foo 69; ;; emits unused warning
 foo 42;
 
 ---
