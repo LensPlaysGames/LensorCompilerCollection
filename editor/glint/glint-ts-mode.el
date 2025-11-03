@@ -472,6 +472,21 @@ with the braces' contents having the same indentation.
       (delete-trailing-whitespace)
       )))
 
+(defun glint-ts-mode--string-search-end (needle haystack &optional start-pos)
+  "Return the position after 'needle' within 'haystack'.
+'start-pos' is either nil or an integer with a value that is a valid
+index within 'haystack', and dictates to start searching at that offset."
+  (let ((base-search (string-search needle haystack start-pos)))
+    (when base-search
+      (+ (length needle) base-search))))
+
+(defun glint-ts-mode--substring-after (needle instring &optional start-pos)
+  "Return contents of 'instring' after 'needle' within 'instring',
+ or 'instring' if 'needle' is not present within 'instring'.
+'start-pos' is either nil or an integer with a value that is a valid
+index within 'haystack', and dictates to start searching at that offset."
+  (substring instring (glint-ts-mode--string-search-end needle instring start-pos)))
+
 (defun glint-ts-mode--gather-doc-buffer (buffer)
   "Gather documentation from Glint comments within 'BUFFER'. Experimental.
 
@@ -505,23 +520,43 @@ Available @ Directives:
   (save-match-data
     (save-mark-and-excursion
       (let ((documentation (glint-ts-mode--gather-doc-basic-buffer buffer)))
+        ;; for every doc...
         (mapc (lambda (doc)
-                (message "%s:\n%s" (plist-get doc :name) (plist-get doc :doc))
-                ;; @see
-                ;; Gather all
-                (let ((pos 0))
-                  (while (string-match "@see[:space:]*\\(.*\\)" (plist-get doc :doc) pos)
-                    (setq pos (match-end 0))
-                    (message "\tReferences %s" (match-string-no-properties 1 (plist-get doc :doc)))))
-                ;; @param
-                ;; Gather all
-                (let ((pos 0))
-                  (while (string-match "@param[:space:]*\\(.*\\)" (plist-get doc :doc) pos)
-                    (setq pos (match-end 0))
-                    (message "\tParameter %s" (match-string-no-properties 1 (plist-get doc :doc)))))
-                ;; Gather first
-                (when (string-match "@return[s][:space:]*\\(.*\\)" (plist-get doc :doc))
-                  (message "\tReturns %s" (match-string-no-properties 1 (plist-get doc :doc)))))
+                (message "%s:\n%s" (plist-get doc :name) (string-join (plist-get doc :doc) "\n"))
+
+                ;; for every line of documentation...
+                (let ((out-doclet ""))
+                  (mapc (lambda (docline)
+                          (cond
+                           ((string-search "@see" docline)
+                            (setq out-doclet
+                                  (format "%sReferences %s\n"
+                                          out-doclet
+                                          (glint-ts-mode--substring-after "@see" docline))))
+
+                           ((string-search "@param" docline)
+                            ;; TODO: Parse parameter name wrapped in parentheses, as well.
+                            (let ((param-name
+                                   (car (split-string
+                                         (glint-ts-mode--substring-after "@param" docline)))))
+                              (setq out-doclet
+                                    (format
+                                     "%sParameter '%s': %s\n" out-doclet param-name
+                                     ;; substring of everything past param-name
+                                     (string-trim
+                                      (glint-ts-mode--substring-after
+                                       param-name docline (glint-ts-mode--string-search-end "@param" docline)))))))
+
+                           ((string-search "@returns" docline)
+                            (setq out-doclet (format
+                                              "%sReturns %s\n" out-doclet
+                                              (substring docline (glint-ts-mode--string-search-end "@return" docline))
+                                              )))
+
+                           (t (setq out-doclet (concat out-doclet docline "\n")))
+                           ))
+                        (plist-get doc :doc))
+                  (message "NEW:\n%s" out-doclet)))
               documentation))))
   (error "TODO: Do something useful"))
 
@@ -555,9 +590,6 @@ Available @ Directives:
              ;; in source buffer), so we reverse them back here.
              (setq current-doc
                    (plist-put current-doc :doc (reverse (plist-get current-doc :doc))))
-             ;; Doc comments are recorded separately; this concatenates all of them.
-             (setq current-doc
-                   (plist-put current-doc :doc (string-join (plist-get current-doc :doc) "\n")))
              ;; Record the name of the declaration that the comments were associated with
              (setq current-doc
                    (plist-put current-doc :name (substring-no-properties (treesit-node-text (cdr captured-node)))))
@@ -576,7 +608,7 @@ Available @ Directives:
         (when (called-interactively-p)
           (message "%s"
                    (string-join
-                    (mapcar (lambda (d) (format "%s:\n%s\n" (plist-get d :name) (plist-get d :doc)))
+                    (mapcar (lambda (d) (format "%s:\n%s\n" (plist-get d :name) (string-join (plist-get d :doc) "\n")))
                             docs)
                     "\n")))
         docs))))
