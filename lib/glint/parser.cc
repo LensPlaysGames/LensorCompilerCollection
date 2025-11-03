@@ -1553,28 +1553,38 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
         }
     }
 
-    // Following condition, accept an optional expression separator
-    ConsumeExpressionSeparator();
-
     auto then = ParseExprInNewScope();
-    // Following then expression, accept an optional expression separator.
-    // We have to use lookahead here because if we ate a separator
-    // unconditionally but weren't subsequently at an 'else', the top level
-    // would report a warning about a missing semi-colon when there isn't one.
-    // Basically, ParseExpr mustn't eat a hard expression separator past the
-    // end of the expression (like one that terminates it).
-    //   foo;
-    //      ^ don't eat this
+
+    // The following case makes the grammar ambiguous, since "if condition,
+    // then;" is a valid ifexpr, but so is "if condition, then; else ...;".
+    //
+    //     if condition,
+    //       then;
+    //     else 0;
+    //
+    // The problem with that is, well, I (and many people) write code like
+    // that and assume for it to work properly. We can pretty easily parse
+    // that /here/, by just looking ahead one token to see if we see "else":
+    // if we do, assert that the token between "else" and wherever the parse
+    // state is at now is a hard expression separator. So, /we/ can do it
+    // pretty easily, but, it makes the grammar for the language somewhat
+    // ambiguous... is "else 0" a call to an identifier "else" with an integer
+    // argument "0" directly following a valid if expression "if condition, then;"?
+    // Well, obviously, /we/ know the answer to that, but a lot of formal
+    // grammars do not have a way to properly represent this without making an
+    // absolute mess of precedence, associativity, and possibly even GLR
+    // parsing (slow!).
+    // So, here's where we stand. We don't want ambiguous grammar, but we also
+    // don't want "dangling else" errors when the actual error has to do with
+    // a specific separator. So, we error if the separator exists and point to
+    // it as the problem.
     if (LookAhead(1)->kind == Tk::Else) {
-        if (not +ConsumeExpressionSeparator()) {
-            Note(LookAhead(1)->location, "Here");
-            return Error(
-                loc,
-                "Expected expression separator (like a semicolon or comma)"
-                " between then expression and 'else' of this if, but got {}",
-                ToString(LookAhead(1)->kind)
-            );
-        }
+        auto e = Error(
+            "Invalid token '{}' between if's then expression and else clause.",
+            ToString(tok.kind)
+        );
+        e.attach(Note(loc, "In this if"));
+        return e;
     }
 
     auto else_ = ExprResult::Null();
