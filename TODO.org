@@ -87,3 +87,37 @@ For example, ~RequireOperandSizeLessThan<operand_index, declared_size>~.
 ** TODO Link to Documentation from Error Messages
 
 ** TODO LCC IR TreeSitter Parser and Emacs mode
+
+** TODO S-assembly
+
+Just for fun.
+
+#+begin_src lisp
+  (machine
+   x86_64-att
+
+   (section ".custom-section" list-of-byte-values)
+
+   (label "main" exported)
+
+   ;; imm -> reg
+   (mov 0 rdx)
+
+   ;; reg -> reg
+   (mov rdi rdx)
+
+   ;; reg -> mem
+   ;; dereference rhs
+   (mov rax (into rdx))
+
+   ;; mem -> reg
+   ;; dereference lhs
+   (mov (from rdx) rax)
+
+   ;; div and friends should be forced to list result registers, so no
+   ;; "hidden" clobbers other than flags/rip/rsp register.
+
+   (return)
+
+   )
+#+end_src
