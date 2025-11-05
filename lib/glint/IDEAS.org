@@ -1,3 +1,7 @@
+* If a (mangled) symbol gets long enough, we should just hash it and use that symbol.
+
+We'll just pick a long enough limit where the resulting hash is pretty much guaranteed to be unique, or something. Is a hash written with 64 characters not enough to cover just about everything? Then, we could apply this only to functions over a certain length that makes the chosen hash function very unlikely to collide. We could even use a hash function that intentionally produces pretty short hashes (i.e. =adler32=). Or even =crc32= for simplicity.
+
 * Iterator Invalidation Caught at Compile-Time
 
 If you write a ranged =for= loop, supplying a given container expression, then, if that container expression is modified /at all/ in the =for='s body, raise an error.
