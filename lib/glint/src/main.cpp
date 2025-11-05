@@ -117,6 +117,10 @@ int main(int argc, char** argv) {
                 replacement = ".ll";
                 break;
 
+            case lcc::Format::WASM_TEXTUAL:
+                replacement = ".wat";
+                break;
+
             case lcc::Format::GNU_AS_ATT_ASSEMBLY:
                 replacement = ".s";
                 break;
@@ -137,6 +141,7 @@ int main(int argc, char** argv) {
         default_format,
         lcc::Context::Options{
             lcc::Context::DoNotUseColour,
+            lcc::Context::DoNotPrintStats,
             lcc::Context::DoNotPrintAST,
             lcc::Context::DoNotStopatLex,
             lcc::Context::DoNotStopatSyntax,
