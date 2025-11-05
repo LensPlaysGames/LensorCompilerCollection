@@ -9,6 +9,7 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/platform.hh>
+#include <lcc/utils/twocolumnlayouthelper.hh>
 
 #include <glint/driver.hh>
 
@@ -174,6 +175,7 @@ auto main(int argc, const char** argv) -> int {
         format,
         lcc::Context::Options{
             (lcc::Context::OptionColour) use_colour,
+            options.print_stats,
             options.ast,
             options.stopat_lex,
             options.stopat_syntax,
@@ -226,6 +228,39 @@ auto main(int argc, const char** argv) -> int {
     /// Common path after IR gen.
     auto EmitModule = [&](lcc::Module* m, std::string_view input_file_path, std::string_view output_file_path) {
         if (not m) return;
+
+        if (m->context()->option_print_stats()) {
+            lcc::usz block_count{};
+            lcc::usz inst_count{};
+            lcc::usz most_inst_in_block{};
+            lcc::usz most_block_in_function{};
+            for (auto f : m->code()) {
+                if (f->blocks().size() > most_block_in_function)
+                    most_block_in_function = f->blocks().size();
+
+                block_count += f->blocks().size();
+
+                for (auto b : f->blocks()) {
+                    if (b->instructions().size() > most_inst_in_block)
+                        most_inst_in_block = b->instructions().size();
+
+                    inst_count += b->instructions().size();
+                }
+            }
+            fmt::print(
+                "{}",
+                TwoColumnLayoutHelper{
+                    {{"\nIR Module Stats:\n", ""},
+                     {"  Function Count:", fmt::format("{}\n", m->code().size())},
+                     {"  Block Count:", fmt::format("{}\n", block_count)},
+                     {"  Instruction Count:", fmt::format("{}\n", inst_count)},
+                     {"  Most Blocks in Function:", fmt::format("{}\n", most_block_in_function)},
+                     {"  Most Instructions in Block:", fmt::format("{}\n", most_inst_in_block)},
+                     {"  Global Count:", fmt::format("{}\n", m->vars().size())},
+                     {"  Extra Section Count:", fmt::format("{}\n", m->extra_sections().size())}}
+                }.get()
+            );
+        }
 
         if (not options.optimisation_passes.empty()) {
             lcc::opt::RunPasses(m, options.optimisation_passes);

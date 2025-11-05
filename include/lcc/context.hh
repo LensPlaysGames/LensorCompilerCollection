@@ -47,8 +47,14 @@ public:
         StopatMIR = true,
     };
 
+    enum OptionPrintStats : bool {
+        DoNotPrintStats,
+        PrintStats = true,
+    };
+
     struct Options {
         OptionColour _colour_diagnostics;
+        OptionPrintStats _should_print_stats;
 
         OptionPrintAST _should_print_ast;
         OptionStopatLex _stopat_lex;
@@ -183,6 +189,11 @@ public:
     [[nodiscard]]
     auto option_use_colour() const {
         return _options._colour_diagnostics;
+    }
+
+    [[nodiscard]]
+    auto option_print_stats() const {
+        return _options._should_print_stats;
     }
 
     [[nodiscard]]

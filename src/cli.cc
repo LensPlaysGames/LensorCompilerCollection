@@ -1,9 +1,11 @@
 #include <cli.hh>
 
+#include <lcc/context.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
 
-#include <cstdlib>
 #include <fmt/format.h>
+
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -20,6 +22,7 @@ void help() {
         {"  --ast", "Print AST in human-readable format\n"},
         {"  --ir", "Print LCC intermediate representation at various stages\n"},
         {"  --mir", "Print LCC machine instruction representation at various stages\n"},
+        {"  --stats", "Print various statistics at various stages\n"},
         {"  --stopat-lex", "Request language does not process input further than lexical analysis\n"},
         {"  --stopat-syntax", "Request language does not process input further than syntactic analysis\n"},
         {"  --stopat-sema", "Request language does not process input further than semantic analysis\n"},
@@ -96,6 +99,8 @@ auto parse(int argc, const char** argv) -> Options {
             o.mir = lcc::Context::PrintMIR;
         else if (arg == "--stopat-mir")
             o.stopat_mir = lcc::Context::StopatMIR;
+        else if (arg == "--stats")
+            o.print_stats = lcc::Context::PrintStats;
 
         else if (arg == "-I") {
             // Add a directory to the include search paths
