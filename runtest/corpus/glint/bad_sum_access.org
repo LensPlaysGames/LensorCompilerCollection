@@ -5,7 +5,7 @@
   foo : sum {
     x : int;
     y : byte;
-  }
+  };
 
   bar : foo;
 
@@ -19,6 +19,7 @@
 7
 #+end_example
 
+TODO: Matcher for "Glint Runtime Error".
 #+NAME: output
 #+begin_example
 #+end_example
