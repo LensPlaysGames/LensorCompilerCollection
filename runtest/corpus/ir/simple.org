@@ -1,0 +1,17 @@
+* Simple
+
+#+NAME: source
+#+begin_src lcc-ir
+  main (exported): ccc i32():
+    bb0:
+      return i32 7
+#+end_src
+
+#+NAME: status
+#+begin_example
+7
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

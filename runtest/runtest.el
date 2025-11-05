@@ -114,14 +114,14 @@ in the expected output and what we got."
 (defmacro run-test--execute-macro (executable-filepath test-name expected-status expected-output)
   (let ((exe-output (gensym "exe-output")))
     `(progn
-       (setq ,exe-output "")
+       (setf ,exe-output "")
        (make-process
         :name "exe"
         :buffer nil
         :command (list executable-filepath)
         :filter
         (lambda (p o)
-          (setq ,exe-output (concat ,exe-output o)))
+          (setf ,exe-output (concat ,exe-output o)))
         :sentinel
         (lambda (p e)
           ;; (message "Process: %s had the event '%s' (process-status:%s)" p e (process-status p))
@@ -136,7 +136,7 @@ in the expected output and what we got."
                  (run-test--process-status-unexpected-p test-name (process-status p) e)
                  (run-test--status-unexpected-p test-name expected-status (process-exit-status p))
                  (run-test--output-unexpected-p test-name expected-output ,exe-output))
-                (setq test (plist-put test :failed t))
+                (setf test (plist-put test :failed t))
               (run-test--mark-passed test-name))
 
             ;; Mark test as completed
@@ -188,12 +188,12 @@ in the expected output and what we got."
   (let ((gcc-output (gensym "gcc-output"))
         (gcc-output-filepath (gensym "gcc-output-filepath")))
     `(progn
-       (setq ,gcc-output ""
+       (setf ,gcc-output ""
              ,gcc-output-filepath (file-name-with-extension (make-temp-name (expand-file-name "a")) "out"))
        (run-test--invoke-gcc
         source-filepaths ,gcc-output-filepath
         (lambda (p o)
-          (setq ,gcc-output (concat ,gcc-output o)))
+          (setf ,gcc-output (concat ,gcc-output o)))
         (lambda (p e)
           (when (eq 'exit (process-status p))
             ;; Delete artifacts, once they are no longer needed.
@@ -204,7 +204,7 @@ in the expected output and what we got."
             (if (= (process-exit-status p) 0)
                 (run-test--execute ,gcc-output-filepath test-name expected-status expected-output)
               (progn
-                (setq test (plist-put test :failed t))
+                (setf test (plist-put test :failed t))
                 (message "Error: Test %s: GCC returned non-zero exit code (%i)\n%s"
                          (plist-get test :name) (process-exit-status p) ,gcc-output)))))))))
 
@@ -283,13 +283,13 @@ Additional properties are included, but not necessary:
             ;; (message "%s" (org-element-interpret-data elem))
             ;; (message "Contents:-->%s<--" elem)
             (when (eq (org-element-type elem) 'headline)
-              (setq test
+              (setf test
                     (plist-put
                      test :name (org-element-interpret-data (org-element-property :title elem)))))
             (when (string-equal (org-element-property :name elem) "source")
               (push (org-element-property :value elem) (plist-get test :source)))
             (when (string-equal (org-element-property :name elem) "status")
-              (setq test
+              (setf test
                     (plist-put
                      test :status (string-to-number (org-element-property :value elem)))))
             (when (string-equal (org-element-property :name elem) "output")
@@ -298,7 +298,7 @@ Additional properties are included, but not necessary:
                     (when (string-empty-p (org-element-property :value elem))
                       (error (concat "Source code block named 'output' is expected to define a matcher function."
                                      " You probably meant to make an empty /example/ block.")))
-                    (setq test
+                    (setf test
                           (plist-put
                            test :output (read (org-element-property :value elem))))
                     (unless (functionp (plist-get test :output))
@@ -309,7 +309,7 @@ Additional properties are included, but not necessary:
                     (error (concat
                             "Named output block is either an example block containing exact output to match,"
                             " or a source block with Emacs Lisp inside, defining a matcher function.")))
-                  (setq test
+                  (setf test
                         (plist-put
                          test :output (org-element-property :value elem))))))))))
     (let ((invalid-name (string-empty-p (plist-get test :name)))
@@ -344,11 +344,11 @@ Additional properties are included, but not necessary:
   (let ((gcc-output (gensym "gcc-output"))
         (glint-gcc-output-filepath (gensym "glint-gcc-output-filepath")))
     `(progn
-       (setq ,gcc-output ""
+       (setf ,gcc-output ""
              ,glint-gcc-output-filepath (file-name-with-extension (make-temp-name (expand-file-name "./gcctmp")) "o"))
        (run-test--invoke-gcc
         (list source-filepath) ,glint-gcc-output-filepath
-        (lambda (p o) (setq ,gcc-output (concat ,gcc-output o)))
+        (lambda (p o) (setf ,gcc-output (concat ,gcc-output o)))
         (lambda (p e)
           (when (eq 'exit (process-status p))
             ;; Once the test has finished compiling, delete the intermediate test
@@ -368,7 +368,7 @@ Additional properties are included, but not necessary:
                     (sit-for 0.1))
                   (push ,glint-gcc-output-filepath (plist-get test :artifacts)))
               (progn
-                (setq test (plist-put test :failed t))
+                (setf test (plist-put test :failed t))
                 (message "Error: Test %s: GCC returned non-zero exit code (%i)\n%s"
                          (plist-get test :name) (process-exit-status p) ,gcc-output)))))
         ;; Tell GCC to create an object file
@@ -388,7 +388,7 @@ Additional properties are included, but not necessary:
         (test-source-filepath (gensym "test-source-filepath")))
     ;; We use 'set' so that the symbol will be evaluated to the generated symbol
     `(progn
-       (setq ,glint-lcc-output ""
+       (setf ,glint-lcc-output ""
              ,glint-lcc-output-filepath (file-name-with-extension (make-temp-name (expand-file-name "./lcctmp")) "s")
              ,test-source-filepath (make-temp-file (expand-file-name "glinttest") nil ".g"))
 
@@ -402,7 +402,7 @@ Additional properties are included, but not necessary:
        (run-test--invoke-lcc
         "glint" ,test-source-filepath ,glint-lcc-output-filepath
         ;; Collect program output using filter function
-        (lambda (p o) (setq ,glint-lcc-output (concat ,glint-lcc-output o)))
+        (lambda (p o) (setf ,glint-lcc-output (concat ,glint-lcc-output o)))
         ;; Run this sentinel function when program exits.
         (lambda (p e)
           (when (eq 'exit (process-status p))
@@ -422,7 +422,7 @@ Additional properties are included, but not necessary:
                   (push ,glint-lcc-output-filepath (plist-get test :intermediate_artifacts))
                   (run-test--glint-gcc test ,glint-lcc-output-filepath))
               (progn
-                (setq test (plist-put test :failed t))
+                (setf test (plist-put test :failed t))
                 (message "Error: Test %s: LCC returned non-zero exit code (%i)\n%s"
                          (plist-get test :name) (process-exit-status p) ,glint-lcc-output)))))
         '("-I" ".")))))
@@ -510,7 +510,6 @@ Additional properties are included, but not necessary:
                    ;; Delete test artifacts once they are no longer needed.
                    (mapc #'delete-file (plist-get test :artifacts))))))))))
    (directory-files "corpus/glint/" t "\\.org\\'"))
-
   ;; Once tests are over, we should probably clean up any .gmeta files that
   ;; we may have created over the course of compiling the tests.
 
@@ -519,16 +518,149 @@ Additional properties are included, but not necessary:
            (length run-test--completed-list)
            (length run-test--passed-list)))
 
+(defmacro run-test--ir-lcc-macro (test test-source)
+  ;; NOTE: Exactly like cl-with-gensyms
+  (let ((ir-lcc-output (gensym "ir-lcc-output"))
+        (ir-lcc-output-filepath (gensym "ir-lcc-output-filepath"))
+        (test-source-filepath (gensym "test-source-filepath")))
+    ;; We use 'set' so that the symbol will be evaluated to the generated symbol
+    `(progn
+       (setf ,ir-lcc-output ""
+             ,ir-lcc-output-filepath (file-name-with-extension (make-temp-name (expand-file-name "./lcctmp")) "s")
+             ,test-source-filepath (make-temp-file (expand-file-name "irtest") nil ".g"))
+
+       ;; Generate unique file to write test source into.
+       (with-current-buffer (find-file ,test-source-filepath)
+         (insert test-source)
+         (save-buffer)
+         (kill-buffer))
+
+       ;; Compile test source using LCC
+       (run-test--invoke-lcc
+        "ir" ,test-source-filepath ,ir-lcc-output-filepath
+        ;; Collect program output using filter function
+        (lambda (p o) (setf ,ir-lcc-output (concat ,ir-lcc-output o)))
+        ;; Run this sentinel function when program exits.
+        (lambda (p e)
+          (when (eq 'exit (process-status p))
+            ;; Once the test has finished running, delete the generated test source.
+            ;; (message "Test %s: Deleting intermediate file %s" (plist-get test :name) ,test-source-filepath)
+            (delete-file ,test-source-filepath)
+            ;; Upon success, compile generated assembly into an object file using gcc.
+            ;; Upon failure, mark the test as having failed, and emit an error.
+            (if (= 0 (process-exit-status p))
+                (progn
+                  ;; (message "Test %s: LCC generated intermediate artifact %s" (plist-get test :name) ,ir-lcc-output-filepath)
+                  ;; wait for file to exist
+                  (while (not (file-exists-p ,ir-lcc-output-filepath))
+                    (message "Test %s: Waiting for %s to exist..."
+                             (plist-get test :name) ,ir-lcc-output-filepath)
+                    (sit-for 0.1))
+                  (push ,ir-lcc-output-filepath (plist-get test :intermediate_artifacts))
+                  (run-test--glint-gcc test ,ir-lcc-output-filepath))
+              (progn
+                (setf test (plist-put test :failed t))
+                (message "Error: Test %s: LCC returned non-zero exit code (%i)\n%s"
+                         (plist-get test :name) (process-exit-status p) ,ir-lcc-output)))))))))
+
+(defun run-test--ir-lcc (test test-source)
+  "Compile an LCC IR test source into an object file using LCC, then GCC."
+  (unless (stringp test-source)
+    (error "Expected 'test-source' to be a string"))
+  ;; If a test has multiple sources, this ensures we don't continue trying
+  ;; to compile sources of a test that has already had a source fail to
+  ;; compile...
+  ;; NOTE: These have to be defvar'd and not let'd because they are used
+  ;; within the sentinel, and the sentinel runs after we have exited the
+  ;; scope of the let, and so all the bindings are no longer valid.
+  (defvar ir-lcc-output '(error "You forgot to unquote 'ir-lcc-output', most likely"))
+  (defvar ir-lcc-output-filepath '(error "You forgot to unquote 'ir-lcc-output-filepath', most likely"))
+  (run-test--ir-lcc-macro test test-source))
+
+(defun run-test--ir-tests ()
+  ""
+  (message "Running LCC IR Tests...")
+  (defvar test '(error "NOT A GLOBAL"))
+
+  (mapc
+   (lambda (org-filepath)
+     (let ((test (run-test--parse-test-from-org org-filepath)))
+       (if (not test)
+           (message "Error: Failed to parse test from org file %s" org-filepath)
+         (progn
+           ;; Begin compiling each non-executable (non-last) source.
+           (mapc
+            (lambda (source) (run-test--ir-lcc test source))
+            (butlast (plist-get test :source)))
+
+           ;; Wait for non-executable test artifacts to complete compilation...
+           (run-test--wait-for-test-artifacts-except1 test)
+
+           (if (plist-get test :failed)
+               (progn
+                 ;; Test is finished processing.
+                 (run-test--mark-completed (plist-get test :name))
+                 (mapc #'delete-file (plist-get test :intermediate_artifacts))
+                 (mapc #'delete-file (plist-get test :artifacts))
+                 (message "Error: Test %s failed to compile non-executable artifacts" (plist-get test :name))
+                 (run-test--print-test-result test))
+             (progn
+               ;; Compile executable source
+               (run-test--ir-lcc test (car (last (plist-get test :source))))
+
+               ;; Wait for executable artifact to complete compilation
+               (run-test--wait-for-test-artifacts test)
+
+               ;; Delete all intermediate artifacts...
+               ;; Basically, LCC generates assembly that isn't included in the final
+               ;; link, so we can get rid of it here.
+               (mapc #'delete-file (plist-get test :intermediate_artifacts))
+
+               (if (plist-get test :failed)
+                   (progn
+                     ;; Test is finished processing.
+                     (run-test--mark-completed (plist-get test :name))
+                     (mapc #'delete-file (plist-get test :artifacts))
+                     (message "Error: Test %s failed to compile to object file" (plist-get test :name))
+                     (run-test--print-test-result test))
+                 (progn
+                   ;; Validate that all artifacts exist
+                   (mapc
+                    (lambda (a)
+                      (unless (file-exists-p a)
+                        (error "Test Artifact %s Doesn't Exist!" a)))
+                    (plist-get test :artifacts))
+
+                   ;; Begin linking artifacts into an executable...
+                   (run-test--glint-link test)
+
+                   ;; Wait for test completion
+                   (run-test--wait-for-test-completion test)
+
+                   (run-test--print-test-result test)
+
+                   ;; Delete test artifacts once they are no longer needed.
+                   (mapc #'delete-file (plist-get test :artifacts))))))))))
+   (directory-files "corpus/ir/" t "\\.org\\'"))
+  ;; Once tests are over, we should probably clean up any .gmeta files that
+  ;; we may have created over the course of compiling the tests.
+
+  ;; Print rundown of LCC IR tests (what happened)
+  (message "Ran %s LCC IR Tests: %s Passed"
+           (length run-test--completed-list)
+           (length run-test--passed-list)))
+
 (defun run-test--main ()
   ""
   ;; Initialize state
-  (setq run-test--completed-list ())
-  (setq run-test--passed-list ())
+  (setf run-test--completed-list ())
+  (setf run-test--passed-list ())
 
   ;; Turn off file backups (becomes a mess with all of the I/O that tests
   ;; require)
   (let ((backup-inhibited t))
     ;; Run the tests...
+    (run-test--ir-tests)
     (run-test--glint-tests)
     ;; Print test overview (what happened)
     (message "Ran %s Total Tests: %s Passed"
