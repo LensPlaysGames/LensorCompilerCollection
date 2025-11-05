@@ -1,0 +1,28 @@
+================
+foo -x
+:syntax
+================
+
+foo -x;
+
+---
+
+(block
+ (binary_subtract
+  (name)
+  (name)))
+
+================
+foo (-x)
+:syntax
+================
+
+foo (-x);
+
+---
+
+(block
+ (call
+  (name)
+  (unary_negation (name))))
+
