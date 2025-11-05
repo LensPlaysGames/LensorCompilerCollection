@@ -203,6 +203,7 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::Has:
                 case TokenKind::MinusMinus:
                 case TokenKind::PlusPlus:
+                case TokenKind::BitNOT:
                     LCC_ASSERT(false, "TODO: Implement unary operator {}", ToString(u->op()));
 
                 case TokenKind::Invalid:
@@ -294,6 +295,9 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::Gensym:
                 case TokenKind::MacroArg:
                 case TokenKind::Expression:
+                case TokenKind::BitAND:
+                case TokenKind::BitOR:
+                case TokenKind::BitXOR:
                     LCC_ASSERT(false, "NOT a unary operator: {}", ToString(u->op()));
             }
             LCC_UNREACHABLE();
@@ -308,9 +312,6 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::Star:
                 case TokenKind::Slash:
                 case TokenKind::Percent:
-                case TokenKind::Ampersand:
-                case TokenKind::Pipe:
-                case TokenKind::Caret:
                 case TokenKind::Shl:
                 case TokenKind::Shr:
                 case TokenKind::Eq:
@@ -333,6 +334,9 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::RightArrow:
                 case TokenKind::And:
                 case TokenKind::Or:
+                case TokenKind::BitAND:
+                case TokenKind::BitOR:
+                case TokenKind::BitXOR:
                     LCC_ASSERT(false, "TODO: Implement binary operator {}", ToString(b->op()));
 
                 // Handled elsewhere
@@ -401,6 +405,10 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
                 case TokenKind::Typeof:
+                case TokenKind::BitNOT:
+                case TokenKind::Ampersand:
+                case TokenKind::Pipe:
+                case TokenKind::Caret:
                     LCC_ASSERT(false, "NOT a binary operator: {}", ToString(b->op()));
             }
             LCC_UNREACHABLE();

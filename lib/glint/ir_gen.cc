@@ -556,7 +556,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     generated_ir[expr] = neg;
                     insert(neg);
                 } break;
-                case TokenKind::Tilde: {
+                case TokenKind::BitNOT: {
                     auto* cmpl = new (*module) ComplInst(generated_ir[unary_expr->operand()], expr->location());
                     generated_ir[expr] = cmpl;
                     insert(cmpl);
@@ -665,6 +665,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
                 case TokenKind::Typeof:
+                case TokenKind::Tilde:
+                case TokenKind::BitAND:
+                case TokenKind::BitOR:
+                case TokenKind::BitXOR:
                     LCC_ASSERT(false, "Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
             }
         } break;
@@ -864,14 +868,18 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                 // Binary bitwise operations
                 case TokenKind::And:
-                case TokenKind::Ampersand: {
+                case TokenKind::BitAND: {
                     // Bitwise AND
                     generated_ir[expr] = new (*module) AndInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Or:
-                case TokenKind::Pipe: {
+                case TokenKind::BitOR: {
                     // Bitwise OR
                     generated_ir[expr] = new (*module) OrInst(lhs, rhs, expr->location());
+                } break;
+                case TokenKind::BitXOR: {
+                    // Bitwise XOR
+                    generated_ir[expr] = new (*module) XorInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Shl: {
                     // Bitwise Shift Left
@@ -889,7 +897,6 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Bool:
                 case TokenKind::Byte:
                 case TokenKind::BangLBrace:
-                case TokenKind::Caret:
                 case TokenKind::Colon:
                 case TokenKind::ColonColon:
                 // handled above
@@ -953,6 +960,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
                 case TokenKind::Typeof:
+                case TokenKind::BitNOT:
+                case TokenKind::Ampersand:
+                case TokenKind::Pipe:
+                case TokenKind::Caret:
                     Diag::ICE(
                         ctx,
                         expr->location(),

@@ -64,6 +64,15 @@ lcc::StringMap<Tk> keywords{
     {"culonglong", Tk::CULongLong},
     {"csize", Tk::CLongLong},
     {"cusize", Tk::CULongLong},
+    // Bitwise Operators
+    // TODO: Not happy with how these look, but I don't want these uncommon
+    // operators to take up such valuable binary operator symbols like & and |
+    // and ^ (in fact, I kind of don't want & to be a binary operator at all,
+    // that way we don't have to put parens around addressof expressions).
+    {"bitand", Tk::BitAND},
+    {"bitor", Tk::BitOR},
+    {"bitxor", Tk::BitXOR},
+    {"bitnot", Tk::BitNOT},
 };
 } // namespace
 
@@ -1045,6 +1054,10 @@ auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
         case TokenKind::LBrackEq:
         case TokenKind::Template:
         case TokenKind::Typeof:
+        case TokenKind::BitAND:
+        case TokenKind::BitOR:
+        case TokenKind::BitXOR:
+        case TokenKind::BitNOT:
             return true;
     }
 
@@ -1148,6 +1161,10 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
         case Tk::ByteLiteral: return "byte literal";
         case Tk::Template: return "template";
         case Tk::Typeof: return "typeof";
+        case TokenKind::BitAND: return "bitand";
+        case TokenKind::BitOR: return "bitor";
+        case TokenKind::BitXOR: return "bitxor";
+        case TokenKind::BitNOT: return "bitnot";
     }
 
     return "<unknown>";
@@ -1273,6 +1290,11 @@ auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::s
             return lcc::Diag::Error(
                 "Cannot convert expression token into source, seeing as we can't (yet) turn AST node's back to source code."
             );
+
+        case TokenKind::BitAND: return {"bitand"};
+        case TokenKind::BitOR: return {"bitor"};
+        case TokenKind::BitXOR: return {"bitxor"};
+        case TokenKind::BitNOT: return {"bitnot"};
     }
     LCC_UNREACHABLE();
 }

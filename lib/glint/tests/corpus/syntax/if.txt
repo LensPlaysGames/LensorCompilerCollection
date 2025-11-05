@@ -27,7 +27,7 @@ if false, {};
 
 ================
 If, Empty Block, Hard Separator
-:syntax
+:fail_parse
 ================
 
 if false; {};
@@ -67,7 +67,7 @@ if false, {} else {};
 
 ================
 If/Else, Empty Blocks, Hard Separator Between condition/then
-:syntax
+:fail_parse
 ================
 
 if false; {} else {};
@@ -76,7 +76,6 @@ if false; {} else {};
 
 ================
 If/Else, Empty Blocks, Soft Separator Between then/`else'
-:syntax
 :fail_parse
 ================
 
@@ -91,7 +90,6 @@ if false {}, else {};
 
 ================
 If/Else, Empty Blocks, Hard Separator Between then/`else'
-:syntax
 :fail_parse
 ================
 
@@ -106,7 +104,7 @@ if false {}; else {};
 
 ================
 If/Else, Empty Blocks, Soft Separators
-:syntax
+:fail_parse
 ================
 
 if false, {}, else {};
@@ -120,7 +118,7 @@ if false, {}, else {};
 
 ================
 If/Else, Empty Blocks, Hard Separators
-:syntax
+:fail_parse
 ================
 
 if false; {}; else {};
@@ -134,7 +132,7 @@ if false; {}; else {};
 
 ================
 If/Else, Empty Blocks, Soft+Hard Separator
-:syntax
+:fail_parse
 ================
 
 if false, {}; else {};
@@ -148,7 +146,7 @@ if false, {}; else {};
 
 ================
 If/Else, Empty Blocks, Hard+Soft Separator
-:syntax
+:fail_parse
 ================
 
 if false; {}, else {};

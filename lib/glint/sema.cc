@@ -597,7 +597,7 @@ auto lcc::glint::Sema::ImplicitDereference(Expr** expr) -> bool {
 
     while (is<PointerType>((*expr)->type())) {
         *expr = new (mod) UnaryExpr(
-            TokenKind::At,
+            TokenKind::Dereference,
             *expr,
             false,
             (*expr)->location()
@@ -2519,7 +2519,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
     if (b->op() == TokenKind::PlusEq) {
         if (
             auto subscript = cast<BinaryExpr>(b->lhs());
-            subscript and subscript->op() == TokenKind::LBrack
+            subscript and subscript->op() == TokenKind::Subscript
         ) {
             if (not Analyse(&subscript->lhs())) {
                 subscript->set_sema_errored();
@@ -2595,7 +2595,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     }
                     auto str = new (mod) StringLiteral(mod, str_value, {});
                     auto sub_str = new (mod) BinaryExpr(
-                        TokenKind::LBrack,
+                        TokenKind::Subscript,
                         str,
                         new (mod) IntegerLiteral(0, {}),
                         {}
@@ -2639,10 +2639,10 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                             {}
                         );
                     auto memmove_dest
-                        = new (mod) BinaryExpr(TokenKind::LBrack, dyn_data, index_plusone, {});
+                        = new (mod) BinaryExpr(TokenKind::Subscript, dyn_data, index_plusone, {});
                     // subscript dynarray_expr.data with index_expr
                     auto memmove_source
-                        = new (mod) BinaryExpr(TokenKind::LBrack, dyn_data, index_expr, {});
+                        = new (mod) BinaryExpr(TokenKind::Subscript, dyn_data, index_expr, {});
                     // subtract index_expr from dynarray_expr.size
                     auto memmove_size
                         = new (mod) BinaryExpr(TokenKind::Minus, dyn_size, index_expr, {});
@@ -2655,10 +2655,10 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
                     // Subscript dynarray data with index expression
                     auto assign_lhs_subscript
-                        = new (mod) BinaryExpr(TokenKind::LBrack, dyn_data, index_expr, {});
+                        = new (mod) BinaryExpr(TokenKind::Subscript, dyn_data, index_expr, {});
                     // Dereference subscript
                     auto assign_lhs
-                        = new (mod) UnaryExpr(TokenKind::At, assign_lhs_subscript, false, {});
+                        = new (mod) UnaryExpr(TokenKind::Dereference, assign_lhs_subscript, false, {});
                     // @dynarray[index] := value;
                     auto assign = new (mod) BinaryExpr(
                         TokenKind::ColonEq,
@@ -2726,8 +2726,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 // @b->lhs().data[b->lhs().size] := b->rhs()
                 auto lhs_data = new (mod) MemberAccessExpr(b->lhs(), "data", {});
                 auto lhs_size = new (mod) MemberAccessExpr(b->lhs(), "size", {});
-                auto subscript_lhs = new (mod) BinaryExpr(TokenKind::LBrack, lhs_data, lhs_size, {});
-                auto dereference_subscript = new (mod) UnaryExpr(TokenKind::At, subscript_lhs, false, {});
+                auto subscript_lhs = new (mod) BinaryExpr(TokenKind::Subscript, lhs_data, lhs_size, {});
+                auto dereference_subscript = new (mod) UnaryExpr(TokenKind::Dereference, subscript_lhs, false, {});
                 auto assign = new (mod) BinaryExpr(TokenKind::ColonEq, dereference_subscript, b->rhs(), {});
 
                 // b->lhs().size += 1;
@@ -2764,19 +2764,19 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             break;
 
         case TokenKind::AmpersandEq:
-            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Ampersand, b);
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::BitAND, b);
             break;
 
         case TokenKind::PipeEq:
-            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Pipe, b);
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::BitOR, b);
             break;
 
         case TokenKind::CaretEq:
-            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Caret, b);
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::BitXOR, b);
             break;
 
         case TokenKind::LBrackEq:
-            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::LBrack, b);
+            RewriteToBinaryOpThenAssign(expr_ptr, TokenKind::Subscript, b);
             break;
 
         case TokenKind::TildeEq: {
@@ -2814,7 +2814,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             auto memmove_ref
                 = new (mod) NameRefExpr("memmove", mod.global_scope(), {});
             auto memmove_dest
-                = new (mod) BinaryExpr(TokenKind::LBrack, dyn_data, new (mod) IntegerLiteral(1, {}), {});
+                = new (mod) BinaryExpr(TokenKind::Subscript, dyn_data, new (mod) IntegerLiteral(1, {}), {});
             auto memmove_source
                 = dyn_data;
             auto memmove_size
@@ -2826,7 +2826,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             );
 
             // @b->lhs().data := b->rhs();
-            auto dereference_subscript = new (mod) UnaryExpr(TokenKind::At, dyn_data, false, {});
+            auto dereference_subscript = new (mod) UnaryExpr(TokenKind::Dereference, dyn_data, false, {});
             auto assign = new (mod) BinaryExpr(TokenKind::ColonEq, dereference_subscript, b->rhs(), {});
 
             // b->lhs().size += 1;
@@ -2886,7 +2886,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         } break;
 
         /// Pointer or array subscript.
-        case TokenKind::LBrack: {
+        case TokenKind::Subscript: {
             (void) Convert__RemoveReferences(&b->lhs());
             auto* ty = b->lhs()->type();
 
@@ -2894,7 +2894,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 // rewrite lhs[rhs] as lhs.data[rhs]
 
                 auto member_access = new (mod) MemberAccessExpr(b->lhs(), "data", {});
-                auto subscript = new (mod) BinaryExpr(TokenKind::LBrack, member_access, b->rhs(), {});
+                auto subscript = new (mod) BinaryExpr(TokenKind::Subscript, member_access, b->rhs(), {});
 
                 // TODO: if (bounds_check)...
                 // insert: if rhs >= size, exit 1;
@@ -2976,9 +2976,9 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Minus:
         case TokenKind::Shl:
         case TokenKind::Shr:
-        case TokenKind::Ampersand:
-        case TokenKind::Pipe:
-        case TokenKind::Caret: {
+        case TokenKind::BitAND:
+        case TokenKind::BitOR:
+        case TokenKind::BitXOR: {
             LValueToRValue(&b->lhs());
             LValueToRValue(&b->rhs());
 
@@ -3188,6 +3188,10 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::ByteLiteral:
         case TokenKind::Template:
         case TokenKind::Typeof:
+        case TokenKind::Ampersand:
+        case TokenKind::Pipe:
+        case TokenKind::Caret:
+        case TokenKind::BitNOT:
             Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
             LCC_UNREACHABLE();
     }
@@ -4513,7 +4517,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         } break;
 
         /// Convert a pointer to an lvalue.
-        case TokenKind::At: {
+        case TokenKind::Dereference: {
             /// The pointer itself must be an rvalue.
             LValueToRValue(&u->operand());
             auto* ty = u->operand()->type();
@@ -4608,7 +4612,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         } break;
 
         /// Bitwise-not an integer.
-        case TokenKind::Tilde: {
+        case TokenKind::BitNOT: {
             LValueToRValue(&u->operand());
             auto* ty = u->operand()->type();
             if (not ty->is_integer()) {
@@ -4759,6 +4763,10 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::ByteLiteral:
         case TokenKind::Template:
         case TokenKind::Typeof:
+        case TokenKind::Tilde:
+        case TokenKind::BitAND:
+        case TokenKind::BitOR:
+        case TokenKind::BitXOR:
             Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
             LCC_UNREACHABLE();
     }

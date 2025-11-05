@@ -42,9 +42,9 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Shr:
             return 400;
 
-        case Tk::Ampersand:
-        case Tk::Pipe:
-        case Tk::Caret:
+        case Tk::BitAND:
+        case Tk::BitOR:
+        case Tk::BitXOR:
             return 300;
 
         case Tk::Eq:
@@ -138,6 +138,10 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::MacroArg:
         case Tk::Expression:
         case Tk::ByteLiteral:
+        case Tk::BitNOT:
+        case Tk::Ampersand:
+        case Tk::Pipe:
+        case Tk::Caret:
             return -1;
     }
     LCC_UNREACHABLE();
@@ -155,8 +159,6 @@ constexpr bool IsRightAssociative(lcc::glint::TokenKind t) {
         case Tk::Shl:
         case Tk::Shr:
         case Tk::Ampersand:
-        case Tk::Pipe:
-        case Tk::Caret:
         case Tk::Eq:
         case Tk::Ne:
         case Tk::Lt:
@@ -220,7 +222,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::PlusPlus:
         case Tk::MinusMinus:
         case Tk::Ampersand:
-        case Tk::Tilde:
+        case Tk::BitNOT:
         case Tk::Exclam:
         case Tk::At:
         case Tk::Sizeof:
@@ -289,6 +291,10 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::CaretEq:
         case Tk::TildeEq:
         case Tk::LBrackEq:
+        case Tk::Tilde:
+        case Tk::BitAND:
+        case Tk::BitOR:
+        case Tk::BitXOR:
             return false;
     }
 
@@ -344,10 +350,8 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
 constexpr auto TypeQualifierPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
     using Tk = lcc::glint::TokenKind;
     switch (t) {
-        case Tk::At: return 400;
         case Tk::Dot: return 400;
         case Tk::LBrack: return 300;
-        case Tk::Ampersand: return 200;
         case Tk::LParen: return 100;
         default: return -1;
     }
@@ -922,7 +926,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         case Tk::At:
         case Tk::Exclam:
         case Tk::Minus:
-        case Tk::Tilde:
+        case Tk::BitNOT:
         case TokenKind::MinusMinus:
         case TokenKind::PlusPlus: {
             auto loc = tok.location;
@@ -1030,6 +1034,10 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         case TokenKind::Invalid:
         case TokenKind::Eof:
         case TokenKind::Supplant:
+        case TokenKind::BitAND:
+        case TokenKind::BitOR:
+        case TokenKind::BitXOR:
+        case TokenKind::Tilde:
             return Error("Expected expression, got {}", ToString(tok.kind));
 
         case TokenKind::Star:
@@ -1164,7 +1172,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         std::vector<Expr*> args;
 
         /// Ignore unary operators that could also be binary operators.
-        while (AtStartOfExpression() and not At(Tk::Minus, Tk::Plus, Tk::Ampersand)) {
+        while (AtStartOfExpression() and not At(Tk::Minus, Tk::Plus)) {
             auto expr = ParseExpr(CallPrecedence, true);
             if (not expr) return expr.diag();
             args.push_back(expr.value());
@@ -1578,6 +1586,9 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     // don't want "dangling else" errors when the actual error has to do with
     // a specific separator. So, we error if the separator exists and point to
     // it as the problem.
+    // FIXME: We currently don't catch soft expression separators between the
+    // then expression and else keyword, because the then expression eats it
+    // and we don't pass this lookahead condition.
     if (LookAhead(1)->kind == Tk::Else) {
         auto e = Error(
             "Invalid token '{}' between if's then expression and else clause.",
@@ -1938,22 +1949,6 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
             else return type.diag();
             break;
 
-        /// Pointer type.
-        case Tk::At: {
-            NextToken();
-            auto type = ParseType(TypeQualifierPrecedence(Tk::At));
-            if (not type) return type.diag();
-            ty = new (*mod) PointerType(*type, tok.location);
-        } break;
-
-        /// Reference type.
-        case Tk::Ampersand: {
-            NextToken();
-            auto type = ParseType(TypeQualifierPrecedence(Tk::Ampersand));
-            if (not type) return type.diag();
-            ty = new (*mod) ReferenceType(*type, tok.location);
-        } break;
-
         // Array type.
         case Tk::LBrack: {
             NextToken();
@@ -2040,11 +2035,6 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                 }
                 return Error("Unrecognized type member access {}.{}. Did you mean .ptr or .ref?", *ty, tok.text);
             } break;
-
-            /// An at sign or ampersand here are no longer part of the type.
-            case Tk::At:
-            case Tk::Ampersand:
-                return ty;
 
             /// Function type.
             case Tk::LParen: {

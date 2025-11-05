@@ -54,33 +54,33 @@
 (block (binary_modulo (integer_literal) (integer_literal)))
 
 ================
-&
+bitand
 :syntax
 ================
 
-85 & 101;
+85 bitand 101;
 
 ---
 
 (block (binary_bitand (integer_literal) (integer_literal)))
 
 ================
-|
+bitor
 :syntax
 ================
 
-64 | 5;
+64 bitor 5;
 
 ---
 
 (block (binary_bitor (integer_literal) (integer_literal)))
 
 ================
-^
+bitxor
 :syntax
 ================
 
-21 ^ 80;
+21 bitxor 80;
 
 ---
 

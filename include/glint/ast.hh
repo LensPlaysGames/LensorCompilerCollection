@@ -56,6 +56,7 @@ enum struct TokenKind {
     LParen,
     RParen,
     LBrack,
+    Subscript = LBrack,
     RBrack,
     LBrace,
     RBrace,
@@ -68,18 +69,28 @@ enum struct TokenKind {
     Semicolon, // ;
     Dot,       // .
 
-    Plus,      // +
-    Minus,     // -
-    Star,      // *
-    Slash,     // /
-    Percent,   // %
+    Plus, // +
+    Add = Plus,
+    Minus, // -
+    Subtract = Minus,
+    Star, // *
+    Multiply = Star,
+    Slash, // /
+    Divide = Slash,
+    Percent, // %
+    Modulo = Percent,
+    BitAND,    // bit&
+    BitOR,     // bit|
+    BitXOR,    // bit^
+    BitNOT,    // bit~
     Ampersand, // &
     Pipe,      // |
     Caret,     // ^
     Tilde,     // ~
     Exclam,    // !
     At,        // @
-    Hash,      // #
+    Dereference = At,
+    Hash, // #
 
     Shl,
     Shr,
@@ -112,8 +123,10 @@ enum struct TokenKind {
     // PipeShip,    // <|>
     // EqShip,      // <=>
     // BangShip,    // <!>
-    PlusPlus,    // ++
-    MinusMinus,  // --
+    PlusPlus, // ++
+    Increment = PlusPlus,
+    MinusMinus, // --
+    Decrement = MinusMinus,
     StarStar,    // **
     PlusEq,      // +=
     MinusEq,     // -=

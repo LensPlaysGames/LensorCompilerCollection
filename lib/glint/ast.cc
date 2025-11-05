@@ -873,7 +873,7 @@ std::string lcc::glint::Expr::name() const {
                 case TokenKind::Ampersand: return "unary_addressof";
                 case TokenKind::At: return "unary_dereference";
                 case TokenKind::Minus: return "unary_negation";
-                case TokenKind::Tilde: return "unary_bitnegation";
+                case TokenKind::BitNOT: return "unary_bitnot";
                 case TokenKind::Exclam: return "unary_not";
                 case TokenKind::Has: return "unary_has";
                 case TokenKind::PlusPlus: return "unary_plusplus";
@@ -905,9 +905,9 @@ std::string lcc::glint::Expr::name() const {
                 case TokenKind::Shl: return "binary_shl";
                 case TokenKind::Shr: return "binary_shr";
 
-                case TokenKind::Ampersand: return "binary_bitand";
-                case TokenKind::Pipe: return "binary_bitor";
-                case TokenKind::Caret: return "binary_bitxor";
+                case TokenKind::BitAND: return "binary_bitand";
+                case TokenKind::BitOR: return "binary_bitor";
+                case TokenKind::BitXOR: return "binary_bitxor";
 
                 case TokenKind::Eq: return "binary_equal";
                 case TokenKind::Ne: return "binary_notequal";
@@ -922,7 +922,6 @@ std::string lcc::glint::Expr::name() const {
                 case TokenKind::ColonEq: return "binary_assignment";
                 case TokenKind::ColonColon: return "declaration_type_inferred";
 
-                case TokenKind::Tilde: return "binary_bitnot";
                 case TokenKind::RightArrow: return "binary_rightarrow";
 
                 case TokenKind::PlusEq: return "binary_plus_assign";

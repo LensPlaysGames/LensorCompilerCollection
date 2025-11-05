@@ -133,7 +133,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
 
                     return not_a_constant_expr();
 
-                case TokenKind::Tilde:
+                case TokenKind::BitNOT:
                     if (res.is_int()) {
                         out = ~res.as_int();
                         return true;
@@ -159,6 +159,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                     return unhandled_constant_expr();
 
                 // NOT a unary prefix operator
+                case TokenKind::Tilde:
                 case TokenKind::Alignof:
                 case TokenKind::AmpersandEq:
                 case TokenKind::ArbitraryInt:
@@ -244,6 +245,9 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
                 case TokenKind::Typeof:
+                case TokenKind::BitAND:
+                case TokenKind::BitOR:
+                case TokenKind::BitXOR:
                     Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
                     LCC_UNREACHABLE();
             }
@@ -339,15 +343,15 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                             : lhs.as_int().shr(rhs.as_int());
                     return true;
 
-                case TokenKind::Ampersand:
+                case TokenKind::BitAND:
                     out = lhs.as_int() & rhs.as_int();
                     return true;
 
-                case TokenKind::Pipe:
+                case TokenKind::BitOR:
                     out = lhs.as_int() | rhs.as_int();
                     return true;
 
-                case TokenKind::Caret:
+                case TokenKind::BitXOR:
                     out = lhs.as_int() ^ rhs.as_int();
                     return true;
 
@@ -433,6 +437,10 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
                 case TokenKind::Typeof:
+                case TokenKind::BitNOT:
+                case TokenKind::Ampersand:
+                case TokenKind::Pipe:
+                case TokenKind::Caret:
                     Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
                     LCC_UNREACHABLE();
             }
