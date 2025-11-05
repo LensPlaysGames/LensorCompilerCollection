@@ -136,6 +136,7 @@ auto wat_value(Module& m, Value* v) -> std::string {
             return o;
         }
 
+        case Value::Kind::Return:
         case Value::Kind::Store: LCC_UNREACHABLE();
 
         case Value::Kind::Load: {
@@ -145,13 +146,6 @@ auto wat_value(Module& m, Value* v) -> std::string {
                 wat_value(m, l->ptr()),
                 wat_type(m, l->type())
             );
-        }
-
-        case Value::Kind::Return: {
-            auto r = as<ReturnInst>(v);
-            if (r->has_value())
-                return fmt::format("{}\nreturn", wat_value(m, r->val()));
-            return "return";
         }
 
         case Value::Kind::GetElementPtr:
@@ -200,6 +194,16 @@ auto wat_value(Module& m, Value* v) -> std::string {
 
 auto wat_inst(Module& m, Inst* i) -> std::string {
     LCC_ASSERT(i);
+
+    const auto binary = [&](std::string_view op) {
+        auto b = as<BinaryInst>(i);
+        return fmt::format(
+            "({} {} {})",
+            op,
+            wat_value(m, b->lhs()),
+            wat_value(m, b->rhs())
+        );
+    };
 
     switch (i->kind()) {
         case Value::Kind::IntegerConstant:
@@ -269,6 +273,14 @@ auto wat_inst(Module& m, Inst* i) -> std::string {
             return "return";
         }
 
+        case Value::Kind::Add: return binary("i32.add");
+        case Value::Kind::Sub: return binary("i32.sub");
+        case Value::Kind::Mul: return binary("i32.mul");
+        case Value::Kind::SDiv: return binary("i32.div_s");
+        case Value::Kind::UDiv: return binary("i32.div_u");
+        case Value::Kind::And: return binary("i32.and");
+        case Value::Kind::Or: return binary("i32.or");
+
         case Value::Kind::GetElementPtr:
         case Value::Kind::GetMemberPtr:
         case Value::Kind::Intrinsic:
@@ -283,18 +295,11 @@ auto wat_inst(Module& m, Inst* i) -> std::string {
         case Value::Kind::Neg:
         case Value::Kind::Copy:
         case Value::Kind::Compl:
-        case Value::Kind::Add:
-        case Value::Kind::Sub:
-        case Value::Kind::Mul:
-        case Value::Kind::SDiv:
-        case Value::Kind::UDiv:
         case Value::Kind::SRem:
         case Value::Kind::URem:
         case Value::Kind::Shl:
         case Value::Kind::Sar:
         case Value::Kind::Shr:
-        case Value::Kind::And:
-        case Value::Kind::Or:
         case Value::Kind::Xor:
         case Value::Kind::Eq:
         case Value::Kind::Ne:
