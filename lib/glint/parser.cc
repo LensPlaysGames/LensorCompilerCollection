@@ -1584,6 +1584,13 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
             ToString(tok.kind)
         );
         e.attach(Note(loc, "In this if"));
+        if (+AtExpressionSeparator())
+            e.attach(Note(
+                loc,
+                "Sorry, but accepting a separator here would make the language grammar ambiguous;"
+                " while we are technically able to make it work in LCC,"
+                " it would make Glint itself harder to parse if we did accept it."
+            ));
         return e;
     }
 
