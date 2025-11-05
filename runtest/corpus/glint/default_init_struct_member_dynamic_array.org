@@ -10,7 +10,7 @@
   foo : t_foo;
 
   if foo.y.data != (byte.ptr 0),
-    foo.x + foo.y.capacity;
+    foo.x + foo.y.capacity
   else 0;
 #+end_src
 
