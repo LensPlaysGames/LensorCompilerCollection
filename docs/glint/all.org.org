@@ -1,9 +1,14 @@
-# Created 2025-10-29 Wed 19:39
+# Created 2025-11-05 Wed 03:15
 #+title: 
 #+author: Rylan Kellogg
 * Preface
 
 This document is manually generated and may be a couple commits behind.
+* What Is This?
+
+This is not a Glint tutorial. This is /documentation/ of how Glint, as a language, works (mainly for the purpose of LCC developers being able to understand what the Glint frontend is /supposed/ to be doing).
+
+For Glint learning resources, read the Glint book, or check Lens_r's blog for tutorial posts (he is planning to release a ten-part series there). Of course, there is always YouTube videos, as well.
 * Glint Programming Language
 
 The Glint programming language is a high level programming language with low-level capabilities. Focused on the programmer, the Glint programming language spearheads ease of use while also letting people who know what they are doing, do it better.
