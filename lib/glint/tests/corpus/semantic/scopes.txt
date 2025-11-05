@@ -1,0 +1,28 @@
+================
+Block Scope
+:fail_sema
+================
+
+{ x : int; };
+
+x;
+
+---
+
+()
+
+================
+Paren, No Scope
+================
+
+( x : int; );
+
+x;
+
+---
+
+(block
+ (block
+  (variable_declaration)
+  (block (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))))
+ (return (cast (name))))
