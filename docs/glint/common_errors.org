@@ -2,6 +2,24 @@
 
 Errors you will often run into, what they mean, why they appear, and possible solutions.
 
+** =Error: Expected expression, got .=
+
+You are probably writing a match expression and forgot the separator between the matchee and body expressions.
+
+The following code would emit this error.
+#+begin_src glint
+  match foo { ... };
+#+end_src
+
+Instead, add a separator between the matchee and body expressions.
+#+begin_src glint
+  match foo, { ... };
+  ;;       ^
+  ;; THIS FIXES IT
+#+end_src
+
+For context: a match expression is a special kind of block expression which accepts "named" expressions beginning with =.identifier= syntax.
+
 ** When Linking Executable Which Imports Modules
 
 =undefined reference to `_XGlint__init_<name>= where =<name>= is a name of a module the program has imported. The issue here is simple: if you made it this far, the Glint compiler was able to find the module, but the linker isn't actually finding the module definition.
