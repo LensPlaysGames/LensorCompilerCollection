@@ -214,11 +214,19 @@ On computers, data is represented as bits. Bitwise operations allow you to opera
 
 *** Supplanted Members
 
-** Functions
+** Basic Functions
 
 # what it is
 
+A /function/ is a concept that programming borrows from mathematics.
+
+Remember \( f(x) \) in math class? That is a /function application/. What it means is that, =f= is some operation (or sequence of operations) that we would like to apply to =x=. Hence, /application/.
+
 # what it do be
+
+In programming, we've extended math to suit our use-case; variables have types associated with them, for example (not really a thing in math: numbers are numbers).
+
+Functions are no different; programming extends them to better fit the common use-cases.
 
 # when it should be
 
@@ -230,9 +238,23 @@ On computers, data is represented as bits. Bitwise operations allow you to opera
 
 # Glint subscript doesn't dereference.
 
+** Templates
+
+# Mention differences between C++ templates and Glint templates (Glint's templates are lower level, and invokable expressions without a special syntax).
+
+** Function Overloading
+
+# Show a basic, real-world use-case
+
 ** Modules
 
-*** Writing A Module vs A Program
+*** Writing A Module Vs A Program
+
+A Glint program is a collection of Glint source code that may be compiled and linked to an executable. A Glint program may import Glint modules.
+
+A Glint module is a collection of Glint source code that does not compile to executable, but rather a library. This library then may be used by a linker to include it's code in a separate executable. This library is also used by the Glint compiler to resolve the Glint module's metadata that produced it when compiling code that imports the module.
+
+Programs and modules may import modules, but neither programs nor modules may import programs.
 
 *** Exporting Variables
 
