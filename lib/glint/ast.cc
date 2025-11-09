@@ -2542,3 +2542,15 @@ auto lcc::glint::Type::types() const -> std::vector<Type*> {
 
     LCC_UNREACHABLE();
 };
+
+bool lcc::glint::IsCallable(Expr* expr) {
+    return (
+        is<NameRefExpr>(expr)
+        or is<TypeExpr>(expr)
+        or is<IntegerLiteral>(expr)
+        or is<TemplateExpr>(expr)
+        // Terrible way to check for a lambda
+        or (is<FuncDecl>(expr)
+            and as<FuncDecl>(expr)->name().empty())
+    );
+}

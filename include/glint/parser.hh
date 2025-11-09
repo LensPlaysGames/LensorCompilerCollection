@@ -228,7 +228,7 @@ private:
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
     auto ParseDecl() -> Result<Decl*>;
     auto ParseDeclRest(std::string ident, Location location, bool is_extern) -> Result<Decl*>;
-    auto ParseExpr(isz current_precedence = 0, bool single_expression = false) -> ExprResult;
+    auto ParseExpr(isz current_precedence = 0) -> ExprResult;
     auto ParseExprInNewScope() -> ExprResult;
     auto ParseForExpr() -> Result<ForExpr*>;
     auto ParseRangedForExpr() -> Result<ForExpr*>;

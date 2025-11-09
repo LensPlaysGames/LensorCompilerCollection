@@ -2499,6 +2499,8 @@ public:
     static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Template; }
 };
 
+bool IsCallable(Expr* expr);
+
 /// Given an expression, get a location of length one that refers to the
 /// most-advanced character position that still lies within the given
 /// expression's location.

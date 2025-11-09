@@ -614,7 +614,7 @@ auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
         );
 }
 
-auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expression) -> ExprResult {
+auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
     if (+ConsumeExpressionSeparator())
         return Error(tok.location, "Empty expression probably has unintended consequences.");
 
@@ -707,7 +707,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             /// Yeet ')'.
             if (not Consume(Tk::RParen)) return Error("Expected ')' closing template parameter list");
 
-            lhs = ParseExpr(current_precedence, true);
+            lhs = ParseExpr(current_precedence);
             if (not lhs) return lhs.diag();
 
             lhs = new (*mod) TemplateExpr(*lhs, parameters, {loc, lhs->location()});
@@ -737,8 +737,27 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             // Yeet `match`
             NextToken();
 
-            auto object = ParseExpr(current_precedence, true);
+            auto object = ParseExpr(current_precedence);
             if (not object) return object.diag();
+
+            // NOTE: If the match body is well-formed, we will likely error at the
+            // first `.identifier`, rather than here...
+            // match bar {...}; -> parsed as "match" "call bar with argument {...}".
+            // ERROR in this case, as the user likely meant "match bar, {...};".
+            if (At(TokenKind::Semicolon) and is<CallExpr>(*object)) {
+                auto call = as<CallExpr>(*object);
+                if (call->args().size() == 1) {
+                    auto e = Error(
+                        call->location(),
+                        "This matchee expression is a suspicious call, and there is no 'body' expression..."
+                    );
+                    e.attach(Note(
+                        GetPastLocation(call->callee()),
+                        "Maybe you forgot an expression separator right here"
+                    ));
+                    return e;
+                }
+            }
 
             lhs = new (*mod) MatchExpr(*object, {loc, object->location()});
 
@@ -983,7 +1002,8 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
 
                     NextToken(); // yeet identifier
                 }
-                auto element = ParseExpr(0, true);
+                // FIXME: Why zero precedence?
+                auto element = ParseExpr();
                 if (not element) return element.diag();
                 elements.emplace_back(name, element.value());
                 ConsumeExpressionSeparator(ExpressionSeparator::Soft);
@@ -1102,6 +1122,12 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         return false;
     };
 
+    // Possible TODO: I've been thinking about reworking the parsing
+    // semantics; what if every token except for a hard separator was a valid
+    // binary operator that applied the rhs to the lhs? i.e. "foo bar" would
+    // apply "bar" to "foo". The complicated part would be handling comma
+    // operators, I guess? i.e. where does the lhs expression of a comma
+    // operator go, if there isn't a comma node in the tree.
     /// Binary operator parse loop.
     const auto ParseBinaryOps = [&]() -> Result<void> {
         while (ShouldKeepParsingOperators()) {
@@ -1146,6 +1172,8 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
 
     // "()" after an expression is always a call with no arguments to the
     // preceding expression.
+    // TODO: We may not keep this; so far, we haven't needed to "force" a
+    // call, as there are other ways to disambiguate it.
     if (At(Tk::LParen) and Is(LookAhead(1), Tk::RParen)) {
         lhs = new (*mod) CallExpr(
             lhs.value(),
@@ -1158,6 +1186,8 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
         NextToken();
     }
 
+    // TODO: Probably shouldn't consume separator, such that it may
+    // appropriately caught by whatever is parsing multiple expressions.
     if (+ConsumeExpressionSeparator(ExpressionSeparator::Soft))
         return lhs;
 
@@ -1165,15 +1195,17 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
     /// a single-expression, parse call arguments.
     // Exception: parsed expression (would-be callee) must be an identifier or
     // a lambda or a number or a template.
-    else if (
-        not single_expression
-        and (is<NameRefExpr>(*lhs) or is<TypeExpr>(*lhs) or is<IntegerLiteral>(*lhs) or is<TemplateExpr>(*lhs) or (is<FuncDecl>(*lhs) and as<FuncDecl>(*lhs)->name().empty()))
-    ) {
+    // TODO: We may just want to parse a call even if we aren't at a
+    // "callable".
+    else if (IsCallable(*lhs)) {
         std::vector<Expr*> args;
 
         /// Ignore unary operators that could also be binary operators.
+        // FIXME: Do we actually need AtStartOfExpression? Or could we just do
+        // "not at end" (i.e. semicolon)?
+        // FIXME: Do we actually need to ignore unary/binary operators?
         while (AtStartOfExpression() and not At(Tk::Minus, Tk::Plus)) {
-            auto expr = ParseExpr(CallPrecedence, true);
+            auto expr = ParseExpr(CallPrecedence);
             if (not expr) return expr.diag();
             args.push_back(expr.value());
         }
@@ -1194,10 +1226,6 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence, bool single_expressio
             );
         }
     }
-
-    // Once again try to parse binary operators...
-    if (auto r = ParseBinaryOps(); r.is_diag())
-        return r.diag();
 
     // Eat any amount of commas following an expression
     while (+ConsumeExpressionSeparator(ExpressionSeparator::Soft));
@@ -1588,7 +1616,9 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     // it as the problem.
     // FIXME: We currently don't catch soft expression separators between the
     // then expression and else keyword, because the then expression eats it
-    // and we don't pass this lookahead condition.
+    // and we don't pass this lookahead condition. Ideally, an expression
+    // wouldn't parse any separators that are not part of it (i.e. one that
+    // ends it, like in this case).
     if (LookAhead(1)->kind == Tk::Else) {
         auto e = Error(
             "Invalid token '{}' between if's then expression and else clause.",
