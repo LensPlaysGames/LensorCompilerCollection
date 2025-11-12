@@ -117,21 +117,41 @@ auto from_bytes(std::array<lcc::u8, sizeof(T)> bytes) -> T {
 auto lcc::glint::Module::serialise(
     std::vector<u8>& out,
     std::vector<Type*>& cache,
+    std::vector<Type*>& current,
     Type* ty
 ) -> lcc::u16 {
     auto found = rgs::find(cache, ty);
     if (found != cache.end())
         return u16(found - cache.begin());
 
+    auto found_current = rgs::find(current, ty);
+    LCC_ASSERT(found_current == current.end(), "Self-referencing type not yet handled...");
+
+    // If type we are trying to serialise is already in 'current', that means
+    // a type has a child that references itself. In order to handle this, we
+    // will delay the serialisation of the self-referencing type until after
+    // the referenced type is serialised.
+    // TODO: We need to detect if a /child/ is within current, not if /this/ type is.
+    if (found_current != current.end()) {
+    }
+
     LCC_ASSERT(
         cache.size() < 0xffff,
         "Too many types, cannot serialise in binary metadata format version 1"
     );
-    auto type_index = ModuleDescription::TypeIndex(cache.size());
-    cache.push_back(ty);
+    current.push_back(ty);
 
-    u8 tag = u8(ty->kind());
-    out.push_back(tag);
+    // For later confidence check
+    bool tag_written = false;
+
+    // Helper that should be called before serialising "this" type (i.e. "ty"
+    // parameter). We can't do it now due to post-order traversal possibly
+    // serialising children first.
+    const auto write_tag = [&]() {
+        u8 tag = u8(ty->kind());
+        out.push_back(tag);
+        tag_written = true;
+    };
 
     switch (ty->kind()) {
         // NamedType: length :u32, name :u8[length]
@@ -139,6 +159,8 @@ auto lcc::glint::Module::serialise(
             auto* type = as<NamedType>(ty);
             u16 name_length = u16(type->name().length());
             auto name_length_bytes = to_bytes(name_length);
+
+            write_tag();
             // Write `length: u16`
             out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
             // Write `name : u8[length]`
@@ -148,24 +170,15 @@ auto lcc::glint::Module::serialise(
         // PointerType, ReferenceType: type_index :TypeIndex
         case Type::Kind::Pointer:
         case Type::Kind::Reference: {
-            auto referenced_type_index = ModuleDescription::TypeIndex(-1);
+            // Serialise the referenced type.
+            auto referenced_type_index = serialise(out, cache, current, ty->elem());
+
+            // Convert the type index to it's binary format (an array of bytes).
             auto type_index_bytes = to_bytes(referenced_type_index);
 
-            // Write `type_index: u16`, keeping track of byte index into binary
-            // metadata blob where it can be found again.
-            u32 referenced_type_index_offset = u32(out.size());
+            write_tag();
+            // Write `type_index: u16`.
             out.insert(out.end(), type_index_bytes.begin(), type_index_bytes.end());
-
-            // Serialise the referenced type.
-            referenced_type_index = serialise(out, cache, ty->elem());
-
-            // Go back and fixup the referenced type index from -1 to the actual
-            // proper value.
-            // FIXME: Is it possible to /not/ do this reinterpret cast? I guess we
-            // could manually fuddle with bytes given the index since we know
-            // endianness and size. Yeah, that's probably what we should do.
-            auto* referenced_type_index_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + referenced_type_index_offset);
-            *referenced_type_index_ptr = referenced_type_index;
         } break;
 
         // IntegerType: bitwidth :u16, is_signed :u8
@@ -182,7 +195,10 @@ auto lcc::glint::Module::serialise(
 
             u8 is_signed = type->is_signed() ? 1 : 0;
 
+            write_tag();
+            // Write `bitwidth :u16`.
             out.insert(out.end(), bitwidth_bytes.begin(), bitwidth_bytes.end());
+            // Write `is_signed :u8`.
             out.push_back(is_signed);
         } break;
 
@@ -194,6 +210,9 @@ auto lcc::glint::Module::serialise(
                 "Cannot serialise overload sets; sorry"
             );
             u8 builtin_kind = u8(type->builtin_kind());
+
+            write_tag();
+            // Write `builtin_kind :u8`.
             out.push_back(builtin_kind);
         } break;
 
@@ -202,6 +221,9 @@ auto lcc::glint::Module::serialise(
             FFIType* type = as<FFIType>(ty);
             u16 ffi_kind = u16(type->ffi_kind());
             auto ffi_kind_bytes = to_bytes(ffi_kind);
+
+            write_tag();
+            // Write `ffi_kind :u16`.
             out.insert(out.end(), ffi_kind_bytes.begin(), ffi_kind_bytes.end());
         } break;
 
@@ -213,6 +235,17 @@ auto lcc::glint::Module::serialise(
         //     param_names :(param_name_length :u16, param_name :u8[param_name_length])[param_count]
         case Type::Kind::Function: {
             FuncType* type = as<FuncType>(ty);
+            auto return_type = serialise(out, cache, current, type->return_type());
+            auto return_type_bytes = to_bytes(return_type);
+
+            // Serialise parameter types and fixup parameter type indices previously
+            // allocated.
+            std::vector<ModuleDescription::TypeIndex> param_types{};
+            for (auto param : type->params())
+                param_types.push_back(serialise(out, cache, current, param.type));
+
+            write_tag();
+
             u32 attributes{};
             const auto set_attr_bit = [&](FuncAttr f) {
                 if (type->has_attr(f)) {
@@ -249,11 +282,12 @@ auto lcc::glint::Module::serialise(
             // Allocate enough room to represent parameter types, once we are able to
             // serialise them, keeping track of where they are so we can fix them up
             // later.
-            auto param_types_offset = out.size();
-            out.insert(out.end(), param_count * sizeof(ModuleDescription::TypeIndex), 0);
+            for (auto param_type : param_types) {
+                auto param_type_bytes = to_bytes(param_type);
+                out.insert(out.end(), param_type_bytes.begin(), param_type_bytes.end());
+            }
 
-            auto return_type_offset = out.size();
-            out.insert(out.end(), sizeof(ModuleDescription::TypeIndex), 0);
+            out.insert(out.end(), return_type_bytes.begin(), return_type_bytes.end());
 
             // Write parameter names
             for (auto& param : type->params()) {
@@ -262,21 +296,6 @@ auto lcc::glint::Module::serialise(
                 out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
                 out.insert(out.end(), param.name.begin(), param.name.end());
             }
-
-            // Serialise parameter types and fixup parameter type indices previously
-            // allocated.
-            std::vector<ModuleDescription::TypeIndex> param_types{};
-            for (auto param : type->params())
-                param_types.push_back(serialise(out, cache, param.type));
-
-            auto* param_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + param_types_offset);
-            for (auto param_type : param_types)
-                *param_types_ptr++ = param_type;
-
-            // Serialise return type and fixup return type index previously allocated.
-            auto return_type = serialise(out, cache, type->return_type());
-            auto* return_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + return_type_offset);
-            *return_type_ptr = return_type;
         } break;
 
         // EnumType:
@@ -290,12 +309,15 @@ auto lcc::glint::Module::serialise(
         case Type::Kind::Enum: {
             auto type = as<EnumType>(ty);
 
-            // Write (to be fixed up) underlying type index.
-            auto underlying_type_offset = out.size();
-            out.insert(out.end(), sizeof(ModuleDescription::TypeIndex), 0);
-
             // TODO: Assert that underlying type can fit in 64 bits. But we don't have
             // context here (yet).
+
+            auto underlying_type = serialise(out, cache, current, type->underlying_type());
+            auto underlying_type_bytes = to_bytes(underlying_type);
+
+            write_tag();
+
+            out.insert(out.end(), underlying_type_bytes.begin(), underlying_type_bytes.end());
 
             // Write enumerator count.
             u32 enum_decl_count = u32(type->enumerators().size());
@@ -320,62 +342,53 @@ auto lcc::glint::Module::serialise(
                 out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
                 out.insert(out.end(), enum_decl->name().begin(), enum_decl->name().end());
             }
-
-            auto underlying_type = serialise(out, cache, type->underlying_type());
-
-            // Overwrite type index with serialised underlying type.
-            auto* underlying_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + underlying_type_offset);
-            *underlying_type_ptr = underlying_type;
         } break;
 
         // ArrayViewType: element_type_index :TypeIndex
         case Type::Kind::ArrayView: {
             auto* type = as<ArrayViewType>(ty);
 
-            // Write `element_type_index: TypeIndex`, keeping track of byte index into
-            // binary metadata blob where it can be found again.
-            auto element_type_index_offset = out.size();
-            auto element_type_index = ModuleDescription::TypeIndex(-1);
-            auto type_index_bytes = to_bytes(element_type_index);
-            out.insert(out.end(), type_index_bytes.begin(), type_index_bytes.end());
+            auto element_type = serialise(out, cache, current, type->element_type());
+            auto element_type_bytes = to_bytes(element_type);
 
-            auto element_type = serialise(out, cache, type->element_type());
-
-            auto* element_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + element_type_index_offset);
-            *element_type_ptr = element_type;
+            write_tag();
+            out.insert(out.end(), element_type_bytes.begin(), element_type_bytes.end());
         } break;
 
+        // DynamicArrayType: element_type_index :TypeIndex
         case Type::Kind::DynamicArray: {
             auto* type = as<DynamicArrayType>(ty);
 
-            // Write `element_type_index: TypeIndex`, keeping track of byte index into
-            // binary metadata blob where it can be found again.
-            auto element_type_index_offset = out.size();
-            auto element_type_index = ModuleDescription::TypeIndex(-1);
-            auto type_index_bytes = to_bytes(element_type_index);
-            out.insert(out.end(), type_index_bytes.begin(), type_index_bytes.end());
+            auto element_type = serialise(out, cache, current, type->elem());
+            auto element_type_bytes = to_bytes(element_type);
 
-            auto element_type = serialise(out, cache, type->element_type());
-
-            auto* element_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + element_type_index_offset);
-            *element_type_ptr = element_type;
+            write_tag();
+            out.insert(out.end(), element_type_bytes.begin(), element_type_bytes.end());
         } break;
 
         // ArrayType: element_type_index :u16, element_count :u64
         case Type::Kind::Array: {
             auto type = as<ArrayType>(ty);
 
-            auto element_type_offset = out.size();
-            out.insert(out.end(), sizeof(ModuleDescription::TypeIndex), 0);
+            // Serialise the array's element type.
+            auto element_type = serialise(out, cache, current, type->element_type());
 
+            // Convert the element type to it's binary format.
+            auto element_type_bytes = to_bytes(element_type);
+
+            // Get element count
             u64 element_count = u64(type->dimension());
+
+            // Convert the element count value to it's binary format.
             auto element_count_bytes = to_bytes(element_count);
+
+            write_tag();
+
+            // Write `element_type_index :u16`.
+            out.insert(out.end(), element_type_bytes.begin(), element_type_bytes.end());
+
+            // Write `element_count :u64`.
             out.insert(out.end(), element_count_bytes.begin(), element_count_bytes.end());
-
-            auto element_type = serialise(out, cache, type->element_type());
-
-            auto* element_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + element_type_offset);
-            *element_type_ptr = element_type;
         } break;
 
         // serialise()
@@ -388,25 +401,34 @@ auto lcc::glint::Module::serialise(
         case Type::Kind::Struct: {
             auto type = as<StructType>(ty);
 
+            auto& members = type->members();
+
+            std::vector<ModuleDescription::TypeIndex> member_types{};
+            for (auto& member : members)
+                member_types.push_back(serialise(out, cache, current, member.type));
+
+            write_tag();
+
+            // Struct Size
             auto size_in_bytes = u16(type->byte_size());
             auto size_in_bytes_bytes = to_bytes(size_in_bytes);
             out.insert(out.end(), size_in_bytes_bytes.begin(), size_in_bytes_bytes.end());
 
+            // Struct Alignment
             auto align_in_bytes = u16(type->alignment());
             auto align_in_bytes_bytes = to_bytes(align_in_bytes);
             out.insert(out.end(), align_in_bytes_bytes.begin(), align_in_bytes_bytes.end());
 
-            auto& members = type->members();
-
+            // Member Count
             auto member_count = u16(members.size());
             auto member_count_bytes = to_bytes(member_count);
             out.insert(out.end(), member_count_bytes.begin(), member_count_bytes.end());
 
-            // Allocate enough room to represent member types, once we are able to
-            // serialise them, keeping track of where they are so we can fix them up
-            // later.
-            auto member_types_offset = out.size();
-            out.insert(out.end(), member_count * sizeof(ModuleDescription::TypeIndex), 0);
+            // Member Types
+            for (auto member_type : member_types) {
+                auto member_type_bytes = to_bytes(member_type);
+                out.insert(out.end(), member_type_bytes.begin(), member_type_bytes.end());
+            }
 
             // Member Data
             for (const auto& member : members) {
@@ -420,17 +442,6 @@ auto lcc::glint::Module::serialise(
 
                 out.insert(out.end(), member.name.begin(), member.name.end());
             }
-
-            // Serialise member types and fixup member type indices previously
-            // allocated.
-            std::vector<ModuleDescription::TypeIndex> member_types{};
-            for (auto& member : members)
-                member_types.push_back(serialise(out, cache, member.type));
-
-            auto* member_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + member_types_offset);
-            for (auto& member_type : member_types)
-                *member_types_ptr++ = member_type;
-
         } break;
 
         // serialise()
@@ -443,15 +454,20 @@ auto lcc::glint::Module::serialise(
 
             auto& members = type->members();
 
+            std::vector<ModuleDescription::TypeIndex> member_types{};
+            for (auto& member : members)
+                member_types.push_back(serialise(out, cache, current, member.type));
+
+            write_tag();
+
             auto member_count = u16(members.size());
             auto member_count_bytes = to_bytes(member_count);
             out.insert(out.end(), member_count_bytes.begin(), member_count_bytes.end());
 
-            // Allocate enough room to represent member types, once we are able to
-            // serialise them, keeping track of where they are so we can fix them up
-            // later.
-            auto member_types_offset = out.size();
-            out.insert(out.end(), member_count * sizeof(ModuleDescription::TypeIndex), 0);
+            for (auto member_type : member_types) {
+                auto member_type_bytes = to_bytes(member_type);
+                out.insert(out.end(), member_type_bytes.begin(), member_type_bytes.end());
+            }
 
             // Member Data
             for (const auto& member : members) {
@@ -460,16 +476,6 @@ auto lcc::glint::Module::serialise(
                 out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
                 out.insert(out.end(), member.name.begin(), member.name.end());
             }
-
-            // Serialise member types and fixup member type indices previously
-            // allocated.
-            std::vector<ModuleDescription::TypeIndex> member_types{};
-            for (auto& member : members)
-                member_types.push_back(serialise(out, cache, member.type));
-
-            auto* member_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + member_types_offset);
-            for (auto& member_type : member_types)
-                *member_types_ptr++ = member_type;
         } break;
 
         // UnionType:
@@ -481,15 +487,20 @@ auto lcc::glint::Module::serialise(
 
             auto& members = type->members();
 
+            std::vector<ModuleDescription::TypeIndex> member_types{};
+            for (auto& member : members)
+                member_types.push_back(serialise(out, cache, current, member.type));
+
+            write_tag();
+
             auto member_count = u16(members.size());
             auto member_count_bytes = to_bytes(member_count);
             out.insert(out.end(), member_count_bytes.begin(), member_count_bytes.end());
 
-            // Allocate enough room to represent member types, once we are able to
-            // serialise them, keeping track of where they are so we can fix them up
-            // later.
-            auto member_types_offset = out.size();
-            out.insert(out.end(), member_count * sizeof(ModuleDescription::TypeIndex), 0);
+            for (auto member_type : member_types) {
+                auto member_type_bytes = to_bytes(member_type);
+                out.insert(out.end(), member_type_bytes.begin(), member_type_bytes.end());
+            }
 
             // Member Data
             for (const auto& member : members) {
@@ -498,23 +509,21 @@ auto lcc::glint::Module::serialise(
                 out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
                 out.insert(out.end(), member.name.begin(), member.name.end());
             }
-
-            // Serialise member types and fixup member type indices previously
-            // allocated.
-            std::vector<ModuleDescription::TypeIndex> member_types{};
-            for (auto& member : members)
-                member_types.push_back(serialise(out, cache, member.type));
-
-            auto* member_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(
-                out.data() + member_types_offset
-            );
-            for (auto& member_type : member_types)
-                *member_types_ptr++ = member_type;
         } break;
 
         case Type::Kind::Typeof:
             LCC_ASSERT(false, "Sema should have replaced TypeofType with the type of it's contained expression");
     }
+
+    LCC_ASSERT(
+        tag_written,
+        "You forgot to call write_tag() when implementing serialisation of a new type, most likely"
+    );
+
+    std::erase(current, ty);
+
+    auto type_index = ModuleDescription::TypeIndex(cache.size());
+    cache.emplace_back(ty);
 
     return type_index;
 }
@@ -536,11 +545,17 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
 
     // Decls and types collected from exports.
     std::vector<Type*> type_cache{};
+    std::vector<Type*> current{};
     for (auto* decl : exports) {
         // Decl: DeclHeader, length :u8, name :u8[length]
 
         // Prepare declaration header
-        ModuleDescription::TypeIndex type_index = serialise(types_data, type_cache, decl->type());
+        ModuleDescription::TypeIndex type_index = serialise(
+            types_data,
+            type_cache,
+            current,
+            decl->type()
+        );
         ModuleDescription::DeclarationHeader decl_hdr{
             u16(ModuleDescription::DeclarationHeader::get_kind(decl)),
             type_index
@@ -969,8 +984,6 @@ auto lcc::glint::Module::deserialise(
     std::vector<fixups::BasicFixup> view_fixups{};
     // Fixup underlying type, and scope declarations.
     std::vector<EnumFixup> enum_fixups{};
-    // Fixup element type + size expression.
-    std::vector<ArrayFixup> array_fixups{};
     // Fixup return type and parameter types.
     std::vector<FunctionFixup> function_fixups{};
     // Fixup member types and scope declarations.
@@ -1084,20 +1097,16 @@ auto lcc::glint::Module::deserialise(
             // ArrayType: element_type_index :TypeIndex, element_count :u64
             case Type::Kind::Array: {
                 auto element_type_index = read_t(ModuleDescription::TypeIndex());
-
                 auto element_count = read_t(u64());
+
+                // FIXME: Should we leave stuff like this for sema to catch?
                 LCC_ASSERT(element_count != 0, "ArrayType with zero elements is invalid");
 
-                // Normally done in operator new of Type, but we do it manually here since
-                // we can't new the array type until we have the pointer to the element
-                // type, and we (may) have not deserialised that yet.
-                types.push_back(nullptr);
-                array_fixups.emplace_back(
-                    types_zero_index,
-                    type_index,
-                    element_type_index,
-                    element_count
-                );
+                auto e_size = new (*this) IntegerLiteral(element_count, {});
+                auto t_elem = types.at(element_type_index);
+
+                auto t_array = new (*this) ArrayType(t_elem, e_size, {});
+                LCC_ASSERT(Sema::AnalyseType(context, *this, (Type**) &t_array));
             } break;
 
             // FunctionType:
@@ -1436,25 +1445,6 @@ auto lcc::glint::Module::deserialise(
         );
 
         types[fixup.enum_type_index] = t_enum;
-        types.erase(types.begin() + types_size);
-    }
-
-    for (auto fixup : array_fixups) {
-        validate_fixup(*this, types_zero_index, fixup);
-        int types_size = int(types.size());
-
-        auto t_array = new (*this) ArrayType(
-            types[fixup.replacement_type_index],
-            new (*this) ConstantExpr(
-                new (*this) IntegerLiteral(fixup.array_size, {}),
-                fixup.array_size
-            )
-        );
-        LCC_ASSERT(
-            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &t_array)
-        );
-
-        types[fixup.fixup_type_index] = t_array;
         types.erase(types.begin() + types_size);
     }
 

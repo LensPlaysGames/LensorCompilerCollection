@@ -320,11 +320,13 @@ public:
     [[nodiscard]]
     auto serialise() -> std::vector<u8>;
 
-    // Serialise type into given out parameter and append type to cache iff it
-    // is not already in the cache. Return the index within the cache of the
-    // given type.
     [[nodiscard]]
-    auto serialise(std::vector<u8>& out, std::vector<Type*>& cache, Type*) -> lcc::u16;
+    auto serialise(
+        std::vector<u8>& out,
+        std::vector<Type*>& cache,
+        std::vector<Type*>& current,
+        Type*
+    ) -> lcc::u16;
 
     /// Deserialise a module metadata blob into `this`.
     /// \return a boolean value denoting `true` iff deserialisation succeeded.
