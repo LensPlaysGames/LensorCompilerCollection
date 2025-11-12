@@ -104,8 +104,7 @@ An escapeable string accepts the "escape" syntax that byte literals also accept.
 A variable is a name we give to some Glint construct. In most cases, a variable refers to data at some address in memory; as such, it is sort of like a labelled, specialty box. The box may only contain the type of data the box is declared to contain, and the box may be referenced by it's name. Any value may go in the box, as long as it fits both in the box and through the opening.
 
 A variable is a named location in the computer's memory at the time of evaluation.
-You may store data at this named location for easier retrieval later on.
-The type of data that is stored at this location is declared by the programmer either explicitly or implicitly in a /declaration expression/.
+You may store data at this named location for easier retrieval later on. The data is stored on a computer, and, as such, is in a binary format (just bits). However, Glint makes use of types of data that the hardware cannot understand, allowing the Glint programmer to write more idiomatic source code. You can think of types as an interpretation of the binary bits that are actually on your computer hardware when the code is running. The type of data that is stored at this location is declared by the programmer either explicitly or implicitly in a /declaration expression/.
 
 *** Declaration Forms
 

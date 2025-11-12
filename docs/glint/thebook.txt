@@ -210,9 +210,14 @@ _________________
 
   A variable is a named location in the computer's memory at the time of
   evaluation.  You may store data at this named location for easier
-  retrieval later on.  The type of data that is stored at this location
-  is declared by the programmer either explicitly or implicitly in a
-  /declaration expression/.
+  retrieval later on. The data is stored on a computer, and, as such, is
+  in a binary format (just bits). However, Glint makes use of types of
+  data that the hardware cannot understand, allowing the Glint
+  programmer to write more idiomatic source code. You can think of types
+  as an interpretation of the binary bits that are actually on your
+  computer hardware when the code is running. The type of data that is
+  stored at this location is declared by the programmer either
+  explicitly or implicitly in a /declaration expression/.
 
 
 1.3.1 Declaration Forms
