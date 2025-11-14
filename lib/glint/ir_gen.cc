@@ -1424,7 +1424,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 update_block(then);
                 const auto then_copy = generated_ir;
                 generate_expression(if_expr->then());
-                insert(new (*module) BranchInst(exit, expr->location()));
+                // Basically, if the if expression is a 'return' or something like that,
+                // the block is already closed, and we do not need to (automatically)
+                // branch out, since the user did explicitly...
+                auto last_then_block = block;
+                if (not last_then_block->closed())
+                    insert(new (*module) BranchInst(exit, expr->location()));
 
                 // If anything outside of the then branch references an AST node that was
                 // used in this then branch, it needs to re-generate the IR for that
@@ -1450,14 +1455,16 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             const auto then_copy = generated_ir;
             generate_expression(if_expr->then());
             auto* last_then_block = block;
-            insert(new (*module) BranchInst(exit, expr->location()));
+            if (not last_then_block->closed())
+                insert(new (*module) BranchInst(exit, expr->location()));
 
             generated_ir = then_copy;
 
             update_block(otherwise);
             generate_expression(if_expr->otherwise());
             auto* last_else_block = block;
-            insert(new (*module) BranchInst(exit, expr->location()));
+            if (not last_else_block->closed())
+                insert(new (*module) BranchInst(exit, expr->location()));
 
             generated_ir = then_copy;
 
@@ -1685,7 +1692,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 void IRGen::generate_function(glint::FuncDecl* f) {
     function = as<Function>(generated_ir[f]);
 
-    if (f->linkage() != Linkage::Imported and f->linkage() != Linkage::Reexported) {
+    if (not IsImportedLinkage(f->linkage())) {
         // Hard to generate code for a function without a body.
         if (auto* expr = f->body()) {
             block = new (*module) lcc::Block(fmt::format("body.{}", total_block));

@@ -314,3 +314,21 @@ Programs and modules may import modules, but neither programs nor modules may im
 *** Exporting Variables
 
 *** Importing Modules
+
+** Example Programs
+
+*** Recursive Fibonacci
+
+#+begin_src glint
+  fib : uint(n : uint) {
+    if n <= 1, return n;
+    (fib n - 1) + (fib n - 2);
+  };
+
+  ;; Calculate 5th number in the Fibonacci sequence, and return that.
+  fib 7;
+#+end_src
+
+[fn:: Writing this example actually caught a bug in the compiler implementation]
+
+*** Euclid GCD
