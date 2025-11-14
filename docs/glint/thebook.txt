@@ -51,6 +51,9 @@ _________________
 ..... 1. Writing A Module Vs A Program
 ..... 2. Exporting Variables
 ..... 3. Importing Modules
+.. 14. Example Programs
+..... 1. Recursive Fibonacci
+..... 2. Euclid GCD
 
 
 1 Programming in Lensor Glint
@@ -545,3 +548,39 @@ _________________
 
 1.13.3 Importing Modules
 ------------------------
+
+
+1.14 Example Programs
+~~~~~~~~~~~~~~~~~~~~~
+
+1.14.1 Recursive Fibonacci
+--------------------------
+
+  ,----
+  | fib : uint(n : uint) {
+  |   if n <= 1, return n;
+  |   (fib n - 1) + (fib n - 2);
+  | };
+  | 
+  | ;; Calculate 7th number in the Fibonacci sequence, and return that.
+  | fib 7;
+  `----
+
+  Writing this example actually caught a bug in the compiler
+  implementation regarding IR generation; see commit 9d152973, if
+  interested.
+
+
+1.14.2 Euclid GCD
+-----------------
+
+  ,----
+  | gcd : uint(a : uint, b : uint) {
+  |   if b = 0, return a;
+  |   gcd b, a % b;
+  | };
+  | 
+  | ;; Calculate the greatest common denominator of 32 and 80, and return
+  | ;; that.
+  | gcd 32, 80;
+  `----
