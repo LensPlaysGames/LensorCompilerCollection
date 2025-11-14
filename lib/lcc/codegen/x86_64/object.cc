@@ -1063,6 +1063,7 @@ static void assemble_inst(
         case Opcode::MoveZeroExtended:
         case Opcode::ShiftRightLogical:
         case Opcode::SignedDivide:
+        case Opcode::UnsignedDivide:
         case Opcode::Xor:
             LCC_TODO("Assemble {}\n", PrintMInstImpl(inst, opcode_to_string));
 

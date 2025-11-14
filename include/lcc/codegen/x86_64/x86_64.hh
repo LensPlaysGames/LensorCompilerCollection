@@ -38,11 +38,13 @@ enum struct Opcode : u32 {
     ShiftRightLogical,
     ShiftLeft,
 
-    Add,      // add
+    Add, // add
+    Sub, // sub
+
     Multiply, // mul
 
-    Sub,          // sub
-    SignedDivide, // idiv
+    SignedDivide,   // idiv
+    UnsignedDivide, // div
 
     Compare,        // cmp
     Test,           // test
@@ -144,6 +146,7 @@ constexpr auto ToString(Opcode op) -> std::string_view {
         case Opcode::Multiply: return "imul";
         case Opcode::Sub: return "sub";
         case Opcode::SignedDivide: return "idiv";
+        case Opcode::UnsignedDivide: return "div";
         case Opcode::Push: return "push";
         case Opcode::Pop: return "pop";
         case Opcode::Test: return "test";

@@ -492,11 +492,20 @@ struct PatternList {
         out.locals() = function.locals();
         out.location(function.location());
 
-        // Get the longest input pattern length
+        // Get the longest input pattern length.
         usz longest_pattern_length = 0;
-        Foreach<Patterns...>([&]<typename _> {
-            ++longest_pattern_length;
+        Foreach<Patterns...>([&]<typename pattern> {
+            // Calculate amount of instructions within input of pattern.
+            usz pattern_length = 0;
+            pattern::input::foreach ([&]<typename inst> {
+                ++pattern_length;
+            });
+
+            // Update longest pattern input length, if necessary.
+            if (pattern_length > longest_pattern_length)
+                longest_pattern_length = pattern_length;
         });
+
         LCC_ASSERT(longest_pattern_length, "Cannot do instruction selection with no input patterns to match");
 
         // NOTE: If you modify block.instructions() in any way, you are going to

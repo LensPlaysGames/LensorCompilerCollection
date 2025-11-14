@@ -333,25 +333,33 @@ using sdiv_reg_imm = Pattern<
         Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
 
-using srem_reg_reg = Pattern<
+template <usz in, usz op>
+using rem_reg_reg = Pattern<
     InstList<
-        Inst<Clobbers<>, usz(MKind::SRem), Register<>, Register<>>>,
+        Inst<Clobbers<>, in, Register<>, Register<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
-        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
+        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, op, v<0, 1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RDX), Sizeof<0>>, i<0>>>>;
 
-using srem_reg_imm = Pattern<
+using srem_reg_reg = rem_reg_reg<usz(MKind::SRem), usz(x86_64::Opcode::SignedDivide)>;
+using urem_reg_reg = rem_reg_reg<usz(MKind::URem), usz(x86_64::Opcode::UnsignedDivide)>;
+
+template <usz in, usz op>
+using rem_reg_imm = Pattern<
     InstList<
-        Inst<Clobbers<>, usz(MKind::SRem), Register<>, Immediate<>>>,
+        Inst<Clobbers<>, in, Register<>, Immediate<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
-        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
+        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, op, v<0, 1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RDX), Sizeof<0>>, i<0>>>>;
+
+using srem_reg_imm = rem_reg_imm<usz(MKind::SRem), usz(x86_64::Opcode::SignedDivide)>;
+using urem_reg_imm = rem_reg_imm<usz(MKind::URem), usz(x86_64::Opcode::UnsignedDivide)>;
 
 using cond_branch_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::CondBranch), Register<>, Block<>, Block<>>>,
@@ -541,6 +549,9 @@ using AllPatterns = PatternList<
 
     srem_reg_reg,
     srem_reg_imm,
+
+    urem_reg_reg,
+    urem_reg_imm,
 
     bitcast_imm,
 
