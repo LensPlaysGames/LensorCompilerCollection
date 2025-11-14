@@ -396,13 +396,122 @@ _________________
   Functions are no different; programming extends them to better fit the
   common use-cases.
 
+  Just like in math, Glint functions may have any amount of parameters.
+
+  Remember `f(x)' from before? `x' is a /function parameter/. `f' is
+  said to be a function with a single parameter. A parameter is a
+  variable (as in, it may vary) value that may change upon different
+  invocations of the function. You may think of it like a name for a
+  placeholder value that will be filled in at some later point.
+
+  On Parameters vs Arguments
+        Parameters appear in the function declaration and definition,
+        while arguments appear in each function invocation. An argument
+        is the value that a parameter takes on during a particular
+        invocation of a function.
+
+  Functions do not /just/ execute an operation, or sequence of
+  operations, though. They apply operations in order to form a result
+  value, which is then said to be "returned from" the function, upon
+  application. In Glint, the result of evaluating the last expression in
+  a function is the return value, unless otherwise explicitly returning
+  via `return'.
+
+  A function's return value is constrained to be of the declared return
+  type of the function (such that uses of the function may rely upon a
+  binary format of the returned value).
+
+  Basic functions allow the programmer to de-duplicate code, increase
+  readability, and form custom control flow.
+
+  You should write a function when you find yourself writing the same
+  set of expressions over and over, with just a few values swapped out
+  for another in each set. Instead, extract that set of expressions into
+  a function body, then invoke that function each time you need to do
+  that set of operations.
+
+  Basic function example:
+  ,----
+  | foo : [int 2] !{ 69, 42 };
+  | bar : [int 2] !{ 27, 42 };
+  | baz : [int 2] !{ 64920, 42 };
+  | 
+  | @foo[1] *= 10;
+  | @bar[1] *= 10;
+  | @baz[1] *= 10;
+  `----
+
+  With a function:
+  ,----
+  | foo : [int 2] !{ 69, 42 };
+  | bar : [int 2] !{ 27, 42 };
+  | baz : [int 2] !{ 64920, 42 };
+  | 
+  | ten_times_second : void(x : [int 2])
+  |   @x[1] *= 10;
+  | 
+  | ten_times_second foo;
+  | ten_times_second bar;
+  | ten_times_second baz;
+  `----
+
+  As you can see, when proper names are picked, functions increase the
+  ability for code readers to understand what the code is trying to do
+  (vs what it may actually be doing). They also allow for easier
+  refactors; imagine you want to also multiply the first value of every
+  array by 3. That would be one expression, one extra line of Glint code
+  to write in the function body. Without a function, you'd have to write
+  and edit that line of code where every invocation is! For this simple
+  example, it would be doable, but, with a large and growing codebase,
+  that becomes more and more difficult.
+
 
 1.10 Pointers and References
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+  We've talked a little about how variables (for the most part) are
+  named locations in the computer's memory. When we say memory, we mean
+  it's RAM (/Random Access Memory/). RAM is (usually) a linear set of
+  addressable bytes that the CPU may read from and write to.
+
+  When we say /addressable/, we mean that there is a unique way of
+  referring to each and every byte within that linear set. Mostly, this
+  is done simply by index, and we call this index a /memory address/.
+
+  A /pointer/ is simply a memory address; an index into that linear set
+  of bytes that the CPU can do whatever it wants with. In Glint,
+  pointers have an associated underlying type; the type tells Glint how
+  to interpret the value in memory at that memory address. So, a value
+  of type `int.ptr' (a pointer to an integer) will be some index into
+  the linear memory array; we don't really care what it is. If we were
+  to `load' the value at that memory address (technically the next eight
+  values, since an `int' is eight bytes), we would then have a value of
+  type `int'.
+
+  In Glint, subscripting is the act of offsetting a pointer by some
+  multiple of the size of a given type. So, to continue with our last
+  example, subscripting a value of type `int.ptr' by one would increase
+  the value by eight, since that is the size in bytes of an integer. The
+  idea is, the first subscript of a pointer gets the address where the
+  next element in contiguous memory would be, if there were one. This
+  applies to every value, not just the first, so the zero-eth subscript
+  leaves the pointer unchanged, while the second subscript increases the
+  pointer by the size of two elements (sixteen bytes in the case of
+  `int.ptr').
+
+  Do keep in mind that, unlike most other languages, Glint's subscript
+  does *NOT* dereference. That is, the act of subscripting does not load
+  any values in Glint; it simply calculates the memory address. In order
+  to load a value from a memory address, you have to dereference it. In
+  Glint, that is done via the unary prefix operator `@' (i.e. get the
+  value "at" the given memory address).
+
 
 1.11 Templates
 ~~~~~~~~~~~~~~
+
+  Templates, at their core, are expressions which evaluate to other
+  expressions.
 
 
 1.12 Function Overloading
