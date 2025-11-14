@@ -6,6 +6,10 @@ A binary tree data structure. How to do this in Glint?
 
 How can I both assign something to nothing, as well as check against the presence of something.
 
+* Tests for =return=
+
+=return= lets the user close an IR block themselves, and there are lots of places where we assume that isn't the case in IR generation, afaik.
+
 * =-= as identifier continuation character?
 
 That way =foo-bar= would be a valid identifier. I just kind of like how it looks vs snake case. Modules could have fun with this and do =category-thing--detail= style naming.
