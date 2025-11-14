@@ -118,22 +118,17 @@ auto lcc::glint::Module::serialise(
     std::vector<u8>& out,
     std::vector<Type*>& cache,
     std::vector<Type*>& current,
+    std::unordered_map<Type*, ModuleDescription::TypeIndex> indices,
     Type* ty
 ) -> lcc::u16 {
     auto found = rgs::find(cache, ty);
     if (found != cache.end())
         return u16(found - cache.begin());
 
+    // Handle self-referencing type (type used in it's own definition).
     auto found_current = rgs::find(current, ty);
-    LCC_ASSERT(found_current == current.end(), "Self-referencing type not yet handled...");
-
-    // If type we are trying to serialise is already in 'current', that means
-    // a type has a child that references itself. In order to handle this, we
-    // will delay the serialisation of the self-referencing type until after
-    // the referenced type is serialised.
-    // TODO: We need to detect if a /child/ is within current, not if /this/ type is.
-    if (found_current != current.end()) {
-    }
+    if (found_current != current.end())
+        return ModuleDescription::TypeIndex(indices.at(ty));
 
     LCC_ASSERT(
         cache.size() < 0xffff,
@@ -171,7 +166,7 @@ auto lcc::glint::Module::serialise(
         case Type::Kind::Pointer:
         case Type::Kind::Reference: {
             // Serialise the referenced type.
-            auto referenced_type_index = serialise(out, cache, current, ty->elem());
+            auto referenced_type_index = serialise(out, cache, current, indices, ty->elem());
 
             // Convert the type index to it's binary format (an array of bytes).
             auto type_index_bytes = to_bytes(referenced_type_index);
@@ -235,14 +230,14 @@ auto lcc::glint::Module::serialise(
         //     param_names :(param_name_length :u16, param_name :u8[param_name_length])[param_count]
         case Type::Kind::Function: {
             FuncType* type = as<FuncType>(ty);
-            auto return_type = serialise(out, cache, current, type->return_type());
+            auto return_type = serialise(out, cache, current, indices, type->return_type());
             auto return_type_bytes = to_bytes(return_type);
 
             // Serialise parameter types and fixup parameter type indices previously
             // allocated.
             std::vector<ModuleDescription::TypeIndex> param_types{};
             for (auto param : type->params())
-                param_types.push_back(serialise(out, cache, current, param.type));
+                param_types.push_back(serialise(out, cache, current, indices, param.type));
 
             write_tag();
 
@@ -312,7 +307,7 @@ auto lcc::glint::Module::serialise(
             // TODO: Assert that underlying type can fit in 64 bits. But we don't have
             // context here (yet).
 
-            auto underlying_type = serialise(out, cache, current, type->underlying_type());
+            auto underlying_type = serialise(out, cache, current, indices, type->underlying_type());
             auto underlying_type_bytes = to_bytes(underlying_type);
 
             write_tag();
@@ -348,7 +343,7 @@ auto lcc::glint::Module::serialise(
         case Type::Kind::ArrayView: {
             auto* type = as<ArrayViewType>(ty);
 
-            auto element_type = serialise(out, cache, current, type->element_type());
+            auto element_type = serialise(out, cache, current, indices, type->element_type());
             auto element_type_bytes = to_bytes(element_type);
 
             write_tag();
@@ -359,7 +354,7 @@ auto lcc::glint::Module::serialise(
         case Type::Kind::DynamicArray: {
             auto* type = as<DynamicArrayType>(ty);
 
-            auto element_type = serialise(out, cache, current, type->elem());
+            auto element_type = serialise(out, cache, current, indices, type->elem());
             auto element_type_bytes = to_bytes(element_type);
 
             write_tag();
@@ -371,7 +366,7 @@ auto lcc::glint::Module::serialise(
             auto type = as<ArrayType>(ty);
 
             // Serialise the array's element type.
-            auto element_type = serialise(out, cache, current, type->element_type());
+            auto element_type = serialise(out, cache, current, indices, type->element_type());
 
             // Convert the element type to it's binary format.
             auto element_type_bytes = to_bytes(element_type);
@@ -405,7 +400,7 @@ auto lcc::glint::Module::serialise(
 
             std::vector<ModuleDescription::TypeIndex> member_types{};
             for (auto& member : members)
-                member_types.push_back(serialise(out, cache, current, member.type));
+                member_types.push_back(serialise(out, cache, current, indices, member.type));
 
             write_tag();
 
@@ -456,7 +451,7 @@ auto lcc::glint::Module::serialise(
 
             std::vector<ModuleDescription::TypeIndex> member_types{};
             for (auto& member : members)
-                member_types.push_back(serialise(out, cache, current, member.type));
+                member_types.push_back(serialise(out, cache, current, indices, member.type));
 
             write_tag();
 
@@ -489,7 +484,7 @@ auto lcc::glint::Module::serialise(
 
             std::vector<ModuleDescription::TypeIndex> member_types{};
             for (auto& member : members)
-                member_types.push_back(serialise(out, cache, current, member.type));
+                member_types.push_back(serialise(out, cache, current, indices, member.type));
 
             write_tag();
 
@@ -523,10 +518,81 @@ auto lcc::glint::Module::serialise(
     std::erase(current, ty);
 
     auto type_index = ModuleDescription::TypeIndex(cache.size());
+
+    LCC_ASSERT(
+        indices.at(ty) == type_index,
+        "Mismatch in AoT index calculation and actual serialisation"
+    );
+
     cache.emplace_back(ty);
 
     return type_index;
 }
+
+namespace lcc::glint {
+void calculate_indices(std::unordered_map<Type*, ModuleDescription::TypeIndex>& out, usz& index, Type* ty) {
+    // Don't visit a type twice.
+    if (out.contains(ty)) return;
+
+    // Add dummy entry to out so that we don't visit the type twice if the
+    // type is self-referencing. This needs to be updated after all the
+    // children indices are calculated, and we actually know the index where
+    // this type will be serialised.
+    out.emplace(ty, -1);
+
+    // Visit type's children, first.
+    switch (ty->kind()) {
+        case glint::Type::Kind::Builtin:
+        case glint::Type::Kind::FFIType:
+        case glint::Type::Kind::Named:
+        case glint::Type::Kind::Integer:
+            break;
+
+        case glint::Type::Kind::Pointer:
+        case glint::Type::Kind::Reference:
+        case glint::Type::Kind::DynamicArray:
+        case glint::Type::Kind::Array:
+        case glint::Type::Kind::ArrayView:
+        case glint::Type::Kind::Enum:
+            calculate_indices(out, index, ty->elem());
+            break;
+
+        case glint::Type::Kind::Function: {
+            auto f_ty = as<glint::FuncType>(ty);
+
+            calculate_indices(out, index, f_ty->return_type());
+
+            for (auto p : f_ty->params())
+                calculate_indices(out, index, p.type);
+
+        } break;
+
+        case glint::Type::Kind::Sum: {
+            auto s_ty = as<glint::SumType>(ty);
+            for (auto m : s_ty->members())
+                calculate_indices(out, index, m.type);
+        } break;
+
+        case glint::Type::Kind::Union: {
+            auto u_ty = as<glint::UnionType>(ty);
+            for (auto m : u_ty->members())
+                calculate_indices(out, index, m.type);
+        } break;
+
+        case glint::Type::Kind::Struct: {
+            auto s_ty = as<glint::StructType>(ty);
+            for (auto m : s_ty->members())
+                calculate_indices(out, index, m.type);
+        } break;
+
+        case glint::Type::Kind::Typeof: LCC_ASSERT(false);
+    };
+
+    // Finally, visit the type itself.
+    out.at(ty) = ModuleDescription::TypeIndex(index);
+    ++index;
+}
+} // namespace lcc::glint
 
 std::vector<lcc::u8> lcc::glint::Module::serialise() {
     // TODO: List of modules imported by this module (so that a dependency
@@ -543,6 +609,18 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
     std::vector<u8> types_data{};
     std::vector<u8> serialised_name{};
 
+    // Associate every single Type* we will end up serialising with an
+    // index, ahead of time. This means that, even for circular references, we
+    // know "where" it will end up (at least, enough about where it will end
+    // up to write a type index).
+    std::unordered_map<Type*, ModuleDescription::TypeIndex> indices{};
+    {
+        usz index{0};
+        for (auto* decl : exports) {
+            calculate_indices(indices, index, decl->type());
+        }
+    }
+
     // Decls and types collected from exports.
     std::vector<Type*> type_cache{};
     std::vector<Type*> current{};
@@ -554,6 +632,7 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
             types_data,
             type_cache,
             current,
+            indices,
             decl->type()
         );
         ModuleDescription::DeclarationHeader decl_hdr{
@@ -608,86 +687,6 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
     return out;
 }
 
-// NOTE: Big issue here is forward references. i.e. a pointer type at
-// index 3 that stores a pointee type index of 4. So, we need to know the
-// Type* of any given index /before/ we start parsing any of the types.
-namespace fixups {
-using TypeIndex = lcc::glint::ModuleDescription::TypeIndex;
-struct BasicFixup {
-    // Type index of the type that needs fixing up. This index will be
-    // overwritten with a type created from the replacement type index.
-    TypeIndex fixup_type_index;
-    // Type index of the type that has not yet been deserialised; the cause of
-    // the fixup.
-    TypeIndex replacement_type_index;
-    BasicFixup(
-        TypeIndex zero_index,
-        TypeIndex fixup_index,
-        TypeIndex replacement_index
-    ) : fixup_type_index(zero_index + fixup_index),
-        replacement_type_index(zero_index + replacement_index) {}
-};
-
-struct UnionFixup {
-    TypeIndex union_type_index;
-    std::vector<TypeIndex> member_type_indices;
-    std::vector<std::string> member_names;
-    UnionFixup(
-        TypeIndex zero_index,
-        TypeIndex union_index,
-        std::vector<TypeIndex> member_types,
-        std::vector<std::string> names
-    ) : union_type_index(zero_index + union_index),
-        member_type_indices(member_types),
-        member_names(names) {
-        for (auto& index : member_type_indices)
-            index += zero_index;
-    }
-};
-
-constexpr auto low_msg
-    = "You probably forgot to account for the non-zero zero index into the types container.";
-constexpr auto high_msg
-    = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
-
-void validate_fixup_type_index(
-    lcc::glint::Module& m,
-    TypeIndex types_zero_index,
-    TypeIndex index_to_check
-) {
-    LCC_ASSERT(
-        index_to_check >= types_zero_index,
-        low_msg
-    );
-    LCC_ASSERT(
-        index_to_check < m.types.size(),
-        high_msg,
-        index_to_check,
-        m.types.size()
-    );
-}
-
-void validate_fixup(
-    lcc::glint::Module& m,
-    TypeIndex types_zero_index,
-    const BasicFixup& fixup
-) {
-    validate_fixup_type_index(m, types_zero_index, fixup.fixup_type_index);
-    validate_fixup_type_index(m, types_zero_index, fixup.replacement_type_index);
-};
-
-void validate_union_fixup(
-    lcc::glint::Module& m,
-    TypeIndex types_zero_index,
-    const UnionFixup& fixup
-) {
-    validate_fixup_type_index(m, types_zero_index, fixup.union_type_index);
-    for (auto t : fixup.member_type_indices)
-        validate_fixup_type_index(m, types_zero_index, t);
-}
-
-} // namespace fixups
-
 auto lcc::glint::Module::deserialise(
     lcc::Context* context,
     std::vector<u8> module_metadata_blob
@@ -726,272 +725,6 @@ auto lcc::glint::Module::deserialise(
     auto types_zero_index = (ModuleDescription::TypeIndex) types.size();
     types.reserve(types.size() + type_count);
 
-    struct ArrayFixup : public fixups::BasicFixup {
-        u64 array_size;
-        ArrayFixup(
-            u16 zero_index,
-            ModuleDescription::TypeIndex fixup_index,
-            ModuleDescription::TypeIndex replacement_index,
-            u64 array_size_
-        ) : BasicFixup(zero_index, fixup_index, replacement_index),
-            array_size(array_size_) {}
-    };
-
-    struct StructFixup {
-        ModuleDescription::TypeIndex struct_type_index;
-        std::vector<ModuleDescription::TypeIndex> member_type_indices;
-        std::vector<std::string> member_names;
-        std::vector<u16> member_byte_offsets;
-        usz byte_align;
-        usz byte_size;
-
-        StructFixup(
-            ModuleDescription::TypeIndex zero_index,
-            ModuleDescription::TypeIndex struct_index,
-            std::vector<ModuleDescription::TypeIndex> member_indices,
-            std::vector<std::string> names,
-            std::vector<u16> offsets,
-            usz align,
-            usz size
-        ) : struct_type_index(zero_index + struct_index),
-            member_type_indices(member_indices),
-            member_names(names),
-            member_byte_offsets(offsets),
-            byte_align(align),
-            byte_size(size) {
-            for (auto& index : member_type_indices)
-                index += zero_index;
-        }
-    };
-
-    const auto validate_struct_fixup = [this, types_zero_index](StructFixup& fixup) {
-        // Bounds-check index to be replaced with a struct type.
-        fixups::validate_fixup_type_index(*this, types_zero_index, fixup.struct_type_index);
-
-        // Bounds-check index of the struct's members' types.
-        for (auto m : fixup.member_type_indices)
-            fixups::validate_fixup_type_index(*this, types_zero_index, m);
-
-        // Struct member names and types have to map 1:1 (same amount)
-        LCC_ASSERT(
-            fixup.member_names.size() == fixup.member_type_indices.size(),
-            "StructType fixup: Mismatch in deserialised member type and name count"
-        );
-        // Struct member names and byte offsets have to map 1:1 (same amount)
-        LCC_ASSERT(
-            fixup.member_names.size() == fixup.member_byte_offsets.size(),
-            "StructType fixup: Mismatch in deserialised member byte offset and name count ({} offsets, {} names)",
-            fixup.member_byte_offsets.size(),
-            fixup.member_names.size()
-        );
-        // NOTE: Logically, member_type_indices and member_byte_offsets are
-        // asserted equal here.
-    };
-
-    struct EnumFixup {
-        ModuleDescription::TypeIndex enum_type_index;
-        ModuleDescription::TypeIndex underlying_type_index;
-        // TODO: u64 isn't guaranteed to hold an enums value...
-        std::vector<u64> enumerator_values{};
-        std::vector<std::string> enumerator_names{};
-
-        EnumFixup(
-            u16 zero_index,
-            ModuleDescription::TypeIndex enum_index,
-            ModuleDescription::TypeIndex underlying_index,
-            decltype(enumerator_values) enum_values,
-            decltype(enumerator_names) enum_names
-        ) : enum_type_index(zero_index + enum_index),
-            underlying_type_index(zero_index + underlying_index),
-            enumerator_values(enum_values),
-            enumerator_names(enum_names) {}
-    };
-
-    auto validate_enum_fixup = [this, types_zero_index](const EnumFixup fixup) {
-        constexpr auto low_msg
-            = "You probably forgot to account for the non-zero zero index into the types container.";
-        constexpr auto high_msg
-            = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
-
-        // Bounds-check index to be replaced with an enum type.
-        LCC_ASSERT(
-            fixup.enum_type_index >= types_zero_index,
-            low_msg
-        );
-        LCC_ASSERT(
-            fixup.enum_type_index < types.size(),
-            high_msg,
-            fixup.enum_type_index,
-            types.size()
-        );
-
-        // Bounds-check index of the enum's underlying type.
-        LCC_ASSERT(
-            fixup.underlying_type_index >= types_zero_index,
-            low_msg
-        );
-        LCC_ASSERT(
-            fixup.underlying_type_index < types.size(),
-            high_msg,
-            fixup.enum_type_index,
-            types.size()
-        );
-
-        // Enumerator names and values have to map 1:1 (same amount)
-        LCC_ASSERT(
-            fixup.enumerator_names.size() == fixup.enumerator_values.size(),
-            "EnumType fixup: Mismatch in deserialised value and name count"
-        );
-    };
-
-    struct SumFixup {
-        ModuleDescription::TypeIndex sum_type_index;
-        std::vector<ModuleDescription::TypeIndex> member_type_indices;
-        std::vector<std::string> member_names;
-        /// FIXUP is replaced with REPLACEMENT
-        SumFixup(
-            u16 zero_index,
-            ModuleDescription::TypeIndex sum_index,
-            std::vector<ModuleDescription::TypeIndex> member_types,
-            std::vector<std::string> member_names_
-        ) : sum_type_index(zero_index + sum_index),
-            member_type_indices(member_types),
-            member_names(member_names_) {
-            for (auto& index : member_type_indices)
-                index += zero_index;
-        }
-    };
-
-    auto validate_sum_fixup = [this, types_zero_index](const SumFixup& fixup) {
-        constexpr auto low_msg
-            = "You probably forgot to account for the non-zero zero index into the types container.";
-        constexpr auto high_msg
-            = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
-
-        // Bounds-check index to be replaced with a sum type.
-        LCC_ASSERT(
-            fixup.sum_type_index >= types_zero_index,
-            low_msg
-        );
-        LCC_ASSERT(
-            fixup.sum_type_index < types.size(),
-            high_msg,
-            fixup.sum_type_index,
-            types.size()
-        );
-
-        // Bounds-check all member type indices.
-        for (auto member_i : fixup.member_type_indices) {
-            LCC_ASSERT(
-                member_i >= types_zero_index,
-                low_msg
-            );
-            LCC_ASSERT(
-                member_i < types.size(),
-                high_msg,
-                member_i,
-                types.size()
-            );
-        }
-
-        // Parameter names and type indices have to map 1:1 (same amount)
-        LCC_ASSERT(
-            fixup.member_type_indices.size() == fixup.member_names.size(),
-            "SumType fixup: Mismatch in deserialised type and name count"
-        );
-    };
-
-    struct FunctionFixup {
-        // Type index of the type that needs fixing up. This index will be
-        // overwritten with the type at the replacement type index.
-        u32 function_attributes;
-        ModuleDescription::TypeIndex function_type_index;
-        ModuleDescription::TypeIndex return_type_index;
-        std::vector<ModuleDescription::TypeIndex> param_type_indices;
-        std::vector<std::string> param_names;
-        /// FIXUP is replaced with REPLACEMENT
-        FunctionFixup(
-            u16 zero_index,
-            ModuleDescription::TypeIndex function_index,
-            ModuleDescription::TypeIndex return_index,
-            std::vector<ModuleDescription::TypeIndex> param_types,
-            std::vector<std::string> param_names_,
-            u32 attributes
-        ) : function_attributes(attributes), function_type_index(zero_index + function_index),
-            return_type_index(zero_index + return_index),
-            param_type_indices(std::move(param_types)),
-            param_names(std::move(param_names_)) {
-            for (auto& index : param_type_indices)
-                index += zero_index;
-        }
-    };
-
-    auto validate_function_fixup = [this, types_zero_index](const FunctionFixup& fixup) {
-        constexpr auto low_msg
-            = "You probably forgot to account for the non-zero zero index into the types container.";
-        constexpr auto high_msg
-            = "You really messed up creating a fixup that is entirely out of range of the types container.\n  fixup:{}  size:{}\n";
-
-        // Bounds-check index to be replaced with a function type.
-        LCC_ASSERT(
-            fixup.function_type_index >= types_zero_index,
-            low_msg
-        );
-        LCC_ASSERT(
-            fixup.function_type_index < types.size(),
-            high_msg,
-            fixup.function_type_index,
-            types.size()
-        );
-
-        // Bounds-check return type index.
-        LCC_ASSERT(
-            fixup.return_type_index >= types_zero_index,
-            low_msg
-        );
-        LCC_ASSERT(
-            fixup.return_type_index < types.size(),
-            high_msg,
-            fixup.return_type_index,
-            types.size()
-        );
-
-        // Bounds-check all parameter indices.
-        for (auto param_i : fixup.param_type_indices) {
-            LCC_ASSERT(
-                param_i >= types_zero_index,
-                low_msg
-            );
-            LCC_ASSERT(
-                param_i < types.size(),
-                high_msg,
-                param_i,
-                types.size()
-            );
-        }
-
-        // Parameter names and type indices have to map 1:1 (same amount)
-        LCC_ASSERT(
-            fixup.param_type_indices.size() == fixup.param_names.size(),
-            "Mismatch in deserialised type and name count"
-        );
-    };
-
-    // Fixup element type.
-    std::vector<fixups::BasicFixup> ptr_fixups{};
-    std::vector<fixups::BasicFixup> ref_fixups{};
-    std::vector<fixups::BasicFixup> dynarray_fixups{};
-    std::vector<fixups::BasicFixup> view_fixups{};
-    // Fixup underlying type, and scope declarations.
-    std::vector<EnumFixup> enum_fixups{};
-    // Fixup return type and parameter types.
-    std::vector<FunctionFixup> function_fixups{};
-    // Fixup member types and scope declarations.
-    std::vector<SumFixup> sum_fixups{};
-    // Fixup member types and scope declarations.
-    std::vector<StructFixup> struct_fixups{};
-    std::vector<fixups::UnionFixup> union_fixups{};
-
     const auto read_t = [&]<typename T> [[nodiscard]] (T _) {
         constexpr auto size = sizeof(T);
         std::array<u8, size> array{};
@@ -1000,8 +733,16 @@ auto lcc::glint::Module::deserialise(
         return from_bytes<T>(array);
     };
 
+    // NOTE: Please, PLEASE take care when referencing 'types'. The ZERO INDEX
+    // is VERY IMPORTANT and MUST be taken into account, lest the code be
+    // full 'o' bugs.
+    const auto type_at = [&] [[nodiscard]] (ModuleDescription::TypeIndex i) {
+        return types.at(types_zero_index + i);
+    };
+
     for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
         auto tag = module_metadata_blob.at(type_offset++);
+        // TODO: Ensure kind is within range/a valid kind.
         auto kind = Type::Kind(tag);
         switch (kind) {
             // NamedType: length :u32, name :u8[length]
@@ -1020,6 +761,8 @@ auto lcc::glint::Module::deserialise(
                 // FIXME: This may need to be top level scope, not entirely sure the
                 // semantics of this yet.
                 new (*this) NamedType(deserialised_name, global_scope(), {});
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             // BuiltinType: builtin_kind :u8
@@ -1044,6 +787,8 @@ auto lcc::glint::Module::deserialise(
                 auto builtin_kind = BuiltinType::BuiltinKind(builtin_kind_value);
                 // Purely for the side-effect of recording the type in the module.
                 (void) BuiltinType::Make(*this, builtin_kind, {});
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             // FFIType: ffi_kind :u16
@@ -1053,29 +798,37 @@ auto lcc::glint::Module::deserialise(
                 auto ffi_kind = FFIType::FFIKind(ffi_kind_value);
                 // Purely for the side-effect of recording the type in the module.
                 (void) FFIType::Make(*this, ffi_kind, {});
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
-            // PointerType, ReferenceType: type_index :TypeIndex
-            case Type::Kind::ArrayView:
-            case Type::Kind::DynamicArray:
-            case Type::Kind::Pointer:
+            case Type::Kind::ArrayView: {
+                auto elem_type_index = read_t(ModuleDescription::TypeIndex());
+                (void) new (*this) ArrayViewType(type_at(elem_type_index), {});
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
+            } break;
+
+            case Type::Kind::DynamicArray: {
+                auto elem_type_index = read_t(ModuleDescription::TypeIndex());
+                // TODO: Size expression
+                (void) new (*this) DynamicArrayType(type_at(elem_type_index), nullptr, {});
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
+            } break;
+
+            case Type::Kind::Pointer: {
+                auto elem_type_index = read_t(ModuleDescription::TypeIndex());
+                (void) new (*this) PointerType(type_at(elem_type_index), {});
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
+            } break;
+
             case Type::Kind::Reference: {
-                auto ref_type_index = read_t(ModuleDescription::TypeIndex());
+                auto elem_type_index = read_t(ModuleDescription::TypeIndex());
+                (void) new (*this) ReferenceType(type_at(elem_type_index), {});
 
-                // Normally done in operator new of Type, but we do it manually here since
-                // we can't new the pointer type until we have the pointer to the element
-                // type, and we (may) have not deserialised that yet.
-                types.push_back(nullptr);
-
-                if (kind == Type::Kind::Pointer)
-                    ptr_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
-                else if (kind == Type::Kind::Reference)
-                    ref_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
-                else if (kind == Type::Kind::DynamicArray)
-                    dynarray_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
-                else if (kind == Type::Kind::ArrayView)
-                    view_fixups.emplace_back(types_zero_index, type_index, ref_type_index);
-                else LCC_TODO("Unhandled type kind in element type deserialisation");
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             // IntegerType: bitwidth :u16, is_signed :u8
@@ -1090,8 +843,9 @@ auto lcc::glint::Module::deserialise(
                     (unsigned) is_signed
                 );
 
-                auto t_int = new (*this) IntegerType(bitwidth, is_signed, {});
-                t_int->set_sema_done();
+                (void) new (*this) IntegerType(bitwidth, is_signed, {});
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             // ArrayType: element_type_index :TypeIndex, element_count :u64
@@ -1103,10 +857,11 @@ auto lcc::glint::Module::deserialise(
                 LCC_ASSERT(element_count != 0, "ArrayType with zero elements is invalid");
 
                 auto e_size = new (*this) IntegerLiteral(element_count, {});
-                auto t_elem = types.at(element_type_index);
+                auto t_elem = type_at(element_type_index);
 
-                auto t_array = new (*this) ArrayType(t_elem, e_size, {});
-                LCC_ASSERT(Sema::AnalyseType(context, *this, (Type**) &t_array));
+                (void) new (*this) ArrayType(t_elem, e_size, {});
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             // FunctionType:
@@ -1145,15 +900,48 @@ auto lcc::glint::Module::deserialise(
                     param_names.emplace_back(std::move(param_name));
                 }
 
-                types.push_back(nullptr);
-                function_fixups.emplace_back(
-                    types_zero_index,
-                    type_index,
-                    return_type_index,
-                    std::move(param_type_indices),
-                    std::move(param_names),
-                    attributes
+                std::vector<FuncType::Param> params{};
+                {
+                    usz param_i{0};
+                    for (auto param_type_index : param_type_indices) {
+                        params.emplace_back(
+                            param_names.at(param_i),
+                            type_at(param_type_index),
+                            Location{}
+                        );
+                        ++param_i;
+                    }
+                }
+
+                auto function = new (*this) FuncType(
+                    params,
+                    type_at(return_type_index),
+                    {},
+                    {}
                 );
+
+                const auto set_attr = [&](FuncAttr f) {
+                    if (attributes & (u32(1) << u32(f)))
+                        function->set_attr(f);
+                };
+
+                static_assert(
+                    +FuncAttr::COUNT == 11,
+                    "Exhaustive handling of function attributes in module deserialisation"
+                );
+                set_attr(FuncAttr::Const);
+                set_attr(FuncAttr::Discardable);
+                set_attr(FuncAttr::Flatten);
+                set_attr(FuncAttr::Inline);
+                set_attr(FuncAttr::NoInline);
+                set_attr(FuncAttr::NoMangle);
+                set_attr(FuncAttr::NoOpt);
+                set_attr(FuncAttr::NoReturn);
+                set_attr(FuncAttr::Pure);
+                set_attr(FuncAttr::ReturnsTwice);
+                set_attr(FuncAttr::Used);
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             // deserialise()
@@ -1184,15 +972,46 @@ auto lcc::glint::Module::deserialise(
                     member_names.emplace_back(std::move(member_name));
                 }
 
-                // This reserves the saved index in types vector for this type (which will
-                // be created later while handling the fixup).
-                types.emplace_back(nullptr);
-                sum_fixups.emplace_back(
-                    types_zero_index,
-                    type_index,
-                    std::move(member_type_indices),
-                    std::move(member_names)
-                );
+                // Member Types
+                std::vector<SumType::Member> members{};
+                members.reserve(member_type_indices.size());
+                usz member_i{0};
+                for (auto member_type_index : member_type_indices) {
+                    // TODO: Get default expression, somehow (requires (de)serialisation of
+                    // Glint Expr*).
+                    members.emplace_back(
+                        member_names.at(member_i),
+                        type_at(member_type_index),
+                        nullptr,
+                        Location{}
+                    );
+                    ++member_i;
+                }
+
+                // FIXME: What should parent scope of sum type scope be?
+                auto scope = new (*this) Scope(nullptr);
+
+                // Declare members in scope
+                for (auto& m : members) {
+                    auto member_decl = new (*this) VarDecl(
+                        std::string(m.name),
+                        m.type,
+                        nullptr,
+                        this,
+                        Linkage::Internal,
+                        {}
+                    );
+                    auto decl = scope->declare(
+                        context,
+                        std::string(m.name),
+                        member_decl
+                    );
+                    LCC_ASSERT(decl);
+                }
+
+                (void) new (*this) SumType(scope, std::move(members), {});
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             // EnumType:
@@ -1233,14 +1052,30 @@ auto lcc::glint::Module::deserialise(
                     enum_names.emplace_back(name);
                 }
 
-                types.emplace_back(nullptr);
-                enum_fixups.emplace_back(
-                    types_zero_index,
-                    type_index,
-                    underlying_type_index,
-                    enum_values,
-                    enum_names
+                // FIXME: What should parent of imported enum scope be?
+                auto scope = new (*this) Scope(nullptr);
+                std::vector<EnumeratorDecl*> enumerator_decls{};
+
+                for (unsigned i = 0; i < enum_names.size(); ++i) {
+                    auto enum_decl = new (*this) EnumeratorDecl(
+                        std::string(enum_names.at(i)),
+                        new (*this) ConstantExpr(
+                            new (*this) IntegerLiteral(enum_values.at(i), {}),
+                            enum_values.at(i)
+                        ),
+                        {}
+                    );
+
+                    enumerator_decls.emplace_back(enum_decl);
+                }
+
+                (void) new (*this) EnumType(
+                    scope,
+                    type_at(underlying_type_index),
+                    std::move(enumerator_decls),
+                    {}
                 );
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             // deserialise()
@@ -1287,18 +1122,49 @@ auto lcc::glint::Module::deserialise(
                     member_names.emplace_back(std::move(member_name));
                 }
 
-                // Reserve index for struct type.
-                types.emplace_back(nullptr);
-                // Record fixup to be handled after all types are parsed.
-                struct_fixups.emplace_back(
-                    types_zero_index,
-                    type_index,
-                    member_type_indices,
-                    member_names,
-                    member_byte_offsets,
-                    struct_byte_size,
-                    struct_byte_align
-                );
+                std::vector<StructType::Member> members{};
+                members.reserve(member_type_indices.size());
+                usz member_i{0};
+                for (auto member_type_index : member_type_indices) {
+                    // TODO: serialise/deserialise supplanted boolean for each member.
+                    members.emplace_back(
+                        member_names.at(member_i),
+                        type_at(member_type_index),
+                        Location{},
+                        member_byte_offsets.at(member_i),
+                        false
+                    );
+                    ++member_i;
+                }
+
+                // FIXME: What should parent scope of struct type scope be?
+                auto scope = new (*this) Scope(nullptr);
+
+                // Declare members in scope
+                for (auto& m : members) {
+                    // TODO: Maybe parse default init expression from module metadata, once we
+                    // can serialise expressions...
+                    auto member_decl = new (*this) VarDecl(
+                        std::string(m.name),
+                        m.type,
+                        nullptr,
+                        this,
+                        Linkage::Internal,
+                        {}
+                    );
+                    auto decl = scope->declare(
+                        context,
+                        std::string(m.name),
+                        member_decl
+                    );
+                    LCC_ASSERT(decl);
+                }
+
+                auto s = new (*this) StructType(scope, members, {});
+                LCC_ASSERT(lcc::glint::Sema::AnalyseType(context, *this, &types.back()));
+
+                s->byte_size(struct_byte_size);
+                s->alignment(struct_byte_align);
             } break;
 
             // UnionType:
@@ -1328,336 +1194,50 @@ auto lcc::glint::Module::deserialise(
                     member_names.emplace_back(std::move(member_name));
                 }
 
-                // This reserves the saved index in types vector for this type (which will
-                // be created later while handling the fixup).
-                types.emplace_back(nullptr);
-                union_fixups.emplace_back(
-                    types_zero_index,
-                    type_index,
-                    std::move(member_type_indices),
-                    std::move(member_names)
-                );
+                std::vector<UnionType::Member> members{};
+                members.reserve(member_type_indices.size());
+                usz member_i{0};
+                for (auto member_type_index : member_type_indices) {
+                    members.emplace_back(
+                        member_names.at(member_i),
+                        type_at(member_type_index),
+                        Location{}
+                    );
+                    ++member_i;
+                }
+
+                // FIXME: What should parent scope of struct type scope be?
+                auto scope = new (*this) Scope(nullptr);
+
+                // Declare members in scope
+                for (auto& m : members) {
+                    // TODO: Maybe parse default init expression from module metadata, once we
+                    // can serialise expressions...
+                    auto member_decl = new (*this) VarDecl(
+                        std::string(m.name),
+                        m.type,
+                        nullptr,
+                        this,
+                        Linkage::Internal,
+                        {}
+                    );
+                    auto decl = scope->declare(
+                        context,
+                        std::string(m.name),
+                        member_decl
+                    );
+                    LCC_ASSERT(decl);
+                }
+
+                (void) new (*this) UnionType(scope, members, {});
+
+                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
+
             } break;
 
             case Type::Kind::Typeof:
                 LCC_ASSERT(false, "Sema should have replaced TypeofType with the type of it's contained expression");
         }
-    }
-
-    // FIXME: Should we iterate fixups in reverse, such that an earlier fixup
-    // that relies on a later one doesn't have the fucky-wucky happen to it?
-
-    for (auto fixup : ptr_fixups) {
-        validate_fixup(*this, types_zero_index, fixup);
-        // NOTE: Since new adds the newed type to the types container, we end up
-        // with the same type duplicated, so we have to remove the one that gets
-        // added automatically... If we just left it, we would try to delete it
-        // twice, and that causes it's own whole host of errors.
-        int types_size = int(types.size());
-
-        auto t_ptr = new (*this) PointerType(
-            types[fixup.replacement_type_index]
-        );
-        t_ptr->set_sema_done();
-
-        types[fixup.fixup_type_index] = t_ptr;
-        types.erase(types.begin() + types_size);
-    }
-
-    for (auto fixup : ref_fixups) {
-        validate_fixup(*this, types_zero_index, fixup);
-        int types_size = int(types.size());
-
-        auto t_ref = new (*this) ReferenceType(
-            types[fixup.replacement_type_index],
-            {}
-        );
-        t_ref->set_sema_done();
-
-        types[fixup.fixup_type_index] = t_ref;
-        types.erase(types.begin() + types_size);
-    }
-
-    for (auto fixup : dynarray_fixups) {
-        validate_fixup(*this, types_zero_index, fixup);
-        int types_size = int(types.size());
-
-        auto t_dynarray = new (*this) DynamicArrayType(
-            types[fixup.replacement_type_index],
-            nullptr
-        );
-
-        (void) t_dynarray->struct_type(*this);
-        LCC_ASSERT(
-            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &t_dynarray->struct_type())
-        );
-
-        t_dynarray->set_sema_done();
-
-        types[fixup.fixup_type_index] = t_dynarray;
-        types.erase(types.begin() + types_size);
-    }
-
-    for (auto fixup : view_fixups) {
-        validate_fixup(*this, types_zero_index, fixup);
-        int types_size = int(types.size());
-
-        auto t_view = new (*this) ArrayViewType(
-            types[fixup.replacement_type_index]
-        );
-        LCC_ASSERT(
-            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &t_view)
-        );
-
-        types[fixup.fixup_type_index] = t_view;
-        types.erase(types.begin() + types_size);
-    }
-
-    for (auto fixup : enum_fixups) {
-        validate_enum_fixup(fixup);
-        int types_size = int(types.size());
-
-        // FIXME: What should parent of imported enum scope be?
-        auto scope = new (*this) Scope(nullptr);
-        std::vector<EnumeratorDecl*> enumerator_decls{};
-
-        for (unsigned i = 0; i < fixup.enumerator_names.size(); ++i) {
-            auto enum_decl = new (*this) EnumeratorDecl(
-                std::string(fixup.enumerator_names.at(i)),
-                new (*this) ConstantExpr(
-                    new (*this) IntegerLiteral(fixup.enumerator_values.at(i), {}),
-                    fixup.enumerator_values.at(i)
-                ),
-                {}
-            );
-
-            enumerator_decls.emplace_back(enum_decl);
-        }
-
-        auto t_enum = new (*this) EnumType(
-            scope,
-            types[fixup.underlying_type_index],
-            std::move(enumerator_decls),
-            {}
-        );
-        LCC_ASSERT(
-            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &t_enum)
-        );
-
-        types[fixup.enum_type_index] = t_enum;
-        types.erase(types.begin() + types_size);
-    }
-
-    for (auto fixup : sum_fixups) {
-        validate_sum_fixup(fixup);
-        int types_size = int(types.size());
-
-        // Member Types
-        std::vector<SumType::Member> members{};
-        members.reserve(fixup.member_type_indices.size());
-        usz member_i{0};
-        for (auto member_type_index : fixup.member_type_indices) {
-            // TODO: Get default expression, somehow (requires (de)serialisation of
-            // Glint Expr*).
-            members.emplace_back(
-                fixup.member_names.at(member_i),
-                types[member_type_index],
-                nullptr,
-                Location{}
-            );
-            ++member_i;
-        }
-
-        // FIXME: What should parent scope of sum type scope be?
-        auto scope = new (*this) Scope(nullptr);
-
-        // Declare members in scope
-        for (auto& m : members) {
-            auto member_decl = new (*this) VarDecl(
-                std::string(m.name),
-                m.type,
-                nullptr,
-                this,
-                Linkage::Internal,
-                {}
-            );
-            auto decl = scope->declare(
-                context,
-                std::string(m.name),
-                member_decl
-            );
-            LCC_ASSERT(decl);
-        }
-
-        auto t_sum = new (*this) SumType(scope, std::move(members), {});
-        // This erases the entry added within SumType allocation, since we
-        // will overwrite a previous entry with the created type.
-        types.erase(types.begin() + types_size);
-
-        LCC_ASSERT(
-            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &t_sum)
-        );
-
-        types[fixup.sum_type_index] = t_sum;
-    }
-
-    for (auto fixup : struct_fixups) {
-        validate_struct_fixup(fixup);
-        int types_size = int(types.size());
-
-        std::vector<StructType::Member> members{};
-        members.reserve(fixup.member_type_indices.size());
-        usz member_i{0};
-        for (auto member_type_index : fixup.member_type_indices) {
-            // TODO: serialise/deserialise supplanted boolean for each member.
-            members.emplace_back(
-                fixup.member_names.at(member_i),
-                types[member_type_index],
-                Location{},
-                fixup.member_byte_offsets.at(member_i),
-                false
-            );
-            ++member_i;
-        }
-
-        // FIXME: What should parent scope of struct type scope be?
-        auto scope = new (*this) Scope(nullptr);
-
-        // Declare members in scope
-        for (auto& m : members) {
-            // TODO: Maybe parse default init expression from module metadata, once we
-            // can serialise expressions...
-            auto member_decl = new (*this) VarDecl(
-                std::string(m.name),
-                m.type,
-                nullptr,
-                this,
-                Linkage::Internal,
-                {}
-            );
-            auto decl = scope->declare(
-                context,
-                std::string(m.name),
-                member_decl
-            );
-            LCC_ASSERT(decl);
-        }
-        auto struct_type = new (*this) StructType(scope, members, {});
-        LCC_ASSERT(
-            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &struct_type)
-        );
-
-        types[fixup.struct_type_index] = struct_type;
-        types.erase(types.begin() + types_size);
-    }
-
-    for (auto fixup : union_fixups) {
-        fixups::validate_union_fixup(*this, types_zero_index, fixup);
-        int types_size = int(types.size());
-
-        std::vector<UnionType::Member> members{};
-        members.reserve(fixup.member_type_indices.size());
-        usz member_i{0};
-        for (auto member_type_index : fixup.member_type_indices) {
-            members.emplace_back(
-                fixup.member_names.at(member_i),
-                types[member_type_index],
-                Location{}
-            );
-            ++member_i;
-        }
-
-        // FIXME: What should parent scope of struct type scope be?
-        auto scope = new (*this) Scope(nullptr);
-
-        // Declare members in scope
-        for (auto& m : members) {
-            // TODO: Maybe parse default init expression from module metadata, once we
-            // can serialise expressions...
-            auto member_decl = new (*this) VarDecl(
-                std::string(m.name),
-                m.type,
-                nullptr,
-                this,
-                Linkage::Internal,
-                {}
-            );
-            auto decl = scope->declare(
-                context,
-                std::string(m.name),
-                member_decl
-            );
-            LCC_ASSERT(decl);
-        }
-
-        auto u = new (*this) UnionType(scope, members, {});
-        types.erase(types.begin() + types_size);
-
-        LCC_ASSERT(
-            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &u)
-        );
-
-        types[fixup.union_type_index] = u;
-    }
-
-    for (auto fixup : function_fixups) {
-        validate_function_fixup(fixup);
-        int types_size = int(types.size());
-
-        std::vector<FuncType::Param> params{};
-        usz param_i{0};
-        for (auto param_type_index : fixup.param_type_indices) {
-            params.emplace_back(
-                fixup.param_names.at(param_i),
-                types[param_type_index],
-                Location{}
-            );
-            ++param_i;
-        }
-
-        auto* function = new (*this) FuncType(
-            std::move(params),
-            types[fixup.return_type_index],
-            {},
-            {}
-        );
-        types[fixup.function_type_index] = function;
-
-        const auto set_attr = [fixup, function](FuncAttr f) {
-            if (fixup.function_attributes & (u32(1) << u32(f)))
-                function->set_attr(f);
-        };
-
-        static_assert(
-            +FuncAttr::COUNT == 11,
-            "Exhaustive handling of function attributes in module deserialisation"
-        );
-        set_attr(FuncAttr::Const);
-        set_attr(FuncAttr::Discardable);
-        set_attr(FuncAttr::Flatten);
-        set_attr(FuncAttr::Inline);
-        set_attr(FuncAttr::NoInline);
-        set_attr(FuncAttr::NoMangle);
-        set_attr(FuncAttr::NoOpt);
-        set_attr(FuncAttr::NoReturn);
-        set_attr(FuncAttr::Pure);
-        set_attr(FuncAttr::ReturnsTwice);
-        set_attr(FuncAttr::Used);
-
-        LCC_ASSERT(
-            lcc::glint::Sema::AnalyseType(context, *this, (Type**) &function)
-        );
-
-        types[fixup.function_type_index]->set_sema_done();
-        types.erase(types.begin() + types_size);
-    }
-
-    // Fixups Confidence Check
-    for (auto t : types) {
-        LCC_ASSERT(
-            t,
-            "Glint Module Deserialisation: fixup not properly applied, and a null type was left in the type cache..."
-        );
     }
 
     // Starting after the header, begin parsing declarations. Stop after
@@ -1706,7 +1286,14 @@ auto lcc::glint::Module::deserialise(
             // Created from Expr::Kind::VarDecl
             case ModuleDescription::DeclarationHeader::Kind::VARIABLE: {
                 // FIXME: Should possibly be reexported.
-                auto* var_decl = new (*this) VarDecl(name, ty, nullptr, this, Linkage::Imported, {});
+                auto* var_decl = new (*this) VarDecl(
+                    name,
+                    ty,
+                    nullptr,
+                    this,
+                    Linkage::Imported,
+                    {}
+                );
                 var_decl->set_lvalue();
                 var_decl->set_sema_done();
                 auto decl = scope->declare(context, std::string(name), var_decl);
@@ -1719,7 +1306,15 @@ auto lcc::glint::Module::deserialise(
                     "Cannot create FuncDecl when deserialised type, {}, is not a function",
                     *ty
                 );
-                auto* func_decl = new (*this) FuncDecl(name, as<FuncType>(ty), nullptr, scope, this, Linkage::Imported, {});
+                auto* func_decl = new (*this) FuncDecl(
+                    name,
+                    as<FuncType>(ty),
+                    nullptr,
+                    scope,
+                    this,
+                    Linkage::Imported,
+                    {}
+                );
                 // FIXME: Not sure if imported function declaration is an lvalue? I mean,
                 // we can't assign to it...
                 func_decl->set_sema_done();
@@ -1748,7 +1343,12 @@ auto lcc::glint::Module::deserialise(
         Module::InitFunctionName(module_name),
         new (*this) FuncDecl(
             Module::InitFunctionName(module_name),
-            new (*this) FuncType({}, Type::Void, {{FuncAttr::NoMangle, true}}, {}),
+            new (*this) FuncType(
+                {},
+                Type::Void,
+                {{FuncAttr::NoMangle, true}},
+                {}
+            ),
             nullptr,
             global_scope(),
             this,

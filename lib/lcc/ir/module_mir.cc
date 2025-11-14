@@ -944,11 +944,9 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto member_index = as<IntegerConstant>(gmp_ir->idx())->value().value();
 
-                        usz offset = 0;
-                        for (auto [member_idx, member_ty] : vws::enumerate(as<StructType>(gmp_ir->struct_type())->members())) {
-                            if (usz(member_idx) >= member_index) break;
-                            offset += member_ty->bytes();
-                        }
+                        auto maybe_offset = gmp_ir->struct_type()->member_offset(member_index);
+                        LCC_ASSERT(maybe_offset);
+                        auto offset = maybe_offset.value();
 
                         if (not offset) {
                             auto copy = MInst(MInst::Kind::Copy, reg);

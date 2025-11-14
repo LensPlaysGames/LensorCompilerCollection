@@ -325,6 +325,8 @@ public:
         std::vector<u8>& out,
         std::vector<Type*>& cache,
         std::vector<Type*>& current,
+        // indices calculated ahead of time
+        std::unordered_map<Type*, u16> indices,
         Type*
     ) -> lcc::u16;
 

@@ -182,11 +182,42 @@ public:
     /// Return the types of the members of the struct.
     auto members() const -> const std::vector<Type*>& { return _members; }
 
+    /// A struct member's BYTE offset.
+    /// Offset of struct member N is calculated via the following rules:
+    /// - struct member 0 -> offset 0
+    /// - struct member N -> (struct member N-1 offset) + (struct member N-1 byte
+    ///                      size), then ALIGNED TO struct member N alignment.
+    ///                      This ensures enough space for the data, as well as preserves alignment
+    ///                      for every member.
+    ///
+    /// @returns optional if member index out of range, otherwise returns
+    ///          byte offset of member at index.
+    auto member_offset(usz member_index) const -> std::optional<usz> {
+        if (member_index > member_count())
+            return {};
+
+        if (member_index == 0) return 0;
+
+        // If the index is both non-zero AND less than member count, we know there
+        // are at least two members.
+
+        usz offset{};
+        for (usz i = 1; i <= member_index; ++i) {
+            offset += members().at(i - 1)->bytes();
+            offset = utils::AlignTo(offset, members().at(i)->align_bytes());
+        }
+
+        return offset;
+    };
+
     /// The name of this struct type if it is named
     auto name() const -> const std::string& { return std::get<std::string>(_id); }
 
     /// The global index, within its context, for this struct if it is unnamed
-    auto index() const -> long int { return std::get<long int>(_id); }
+    auto index() const -> long int {
+        LCC_ASSERT(std::holds_alternative<long int>(_id));
+        return std::get<long int>(_id);
+    }
 
     /// True if this is a unique, named struct type, false otherwise.
     bool named() const { return std::holds_alternative<std::string>(_id); }
