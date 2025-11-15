@@ -2,8 +2,16 @@
 #+author: lens_r
 #+created: 2025-11-04
 #+options: ^:{}
+# Do not export answer drawers
+#+options: d:(not "answer")
 
-# (progn (org-latex-export-to-pdf) (org-ascii-export-to-ascii))
+#+begin_src emacs-lisp :exports none
+  (defun lens/export-the-book ()
+    "Export the book when it is your current buffer"
+    (interactive)
+    (org-latex-export-to-pdf)
+    (org-ascii-export-to-ascii))
+#+end_src
 
 * Programming in Lensor Glint
 
@@ -43,12 +51,66 @@ The hope is that, even if this language doesn't change your perceptions entirely
 *** Program Structure
 
 A Glint program consists of:
+- Header :: The first portion of the file designates module status and imported dependencies.
 - Comments :: Non-code portions of the file that are used to describe, annotate, and document the code portions of the file. Comments begin at =;;= and go until a newline or EOF.
 - Expressions :: Code portions of the file that are used to tell the computer what to do; they are said to "return" a value of some type upon evaluation/execution.
 
 *** Glint Exercise
 
-# TODO: An exercise for the reader to explore and ensure their knowledge on the very basics of Glint program structure. The idea is to ensure they can read the examples coming up.
+# An exercise for the reader to explore and ensure their knowledge on the very basics of Glint program structure. The idea is to ensure they can read the examples coming up. I think the idea is to give an example program, and provide a small, five-question quiz for the reader to test their knowledge. i.e. "what is the first word of the 4th comment", "what is the first expression", etc.
+
+#+begin_src glint -n
+  ;; Declare some variables with initial values.
+  a : int 42;
+  b : byte 27;
+
+  ;; @returns the sum of parameters x and y.
+  foo : int(x : int, y : int)
+    x + y; ;; adds x and y
+
+  ;; Invocation of function foo with parameters a and b.
+  foo a, b;
+#+end_src
+
+The following questions relate to the above example. If you don't know the answer to one, just keep reading and move on, it's okay; you can come back whenever you are ready.
+
+1. On what line does the first /expression/ appear?
+  :answer:
+  2
+  :end:
+
+2. On what line does the comment with an @ directive appear?
+  :answer:
+  5
+  :end:
+
+3. Is there an expression on line 7?
+  :answer:
+  yes
+  :end:
+
+4. What would the result of the entire program be?
+  :answer:
+  69
+  OR a + b
+:end:
+
+5. Is there a comment on line 7?
+  :answer:
+  yes
+  :end:
+
+Extra credit:
+
+6. How many parameters does =foo= take?
+  :answer:
+  2
+  :end:
+
+7. What kind of type is =foo= of?
+  :answer:
+  Function
+  :end:
 
 ** Simple Values
 
@@ -77,7 +139,7 @@ Often, it can be messy to have control characters appear in the source code, so 
 
 Relevant escape characters include =\n= for a line feed, =\\= for a =\= (backslash), and =\t= for a tab stop.
 
-*** Booleans
+*** Boolean
 
 Logical values that denote veracity of an expression.
 
@@ -87,21 +149,21 @@ Logical values that denote veracity of an expression.
 
 A string allows the Glint programmer to include (textual) data directly from the source code into the final program as an array of byte values.
 
-Inescapeable strings are wrapped with ='= , and escapeable strings with ="=.
+Inescapable strings are wrapped with ='= , and escape-able strings with ="=.
 
-An inescapeable string will contain the contents between the two ='=, verbatim. =\= is not special within an inescapeable string. An inescapeable string may span any amount of newlines.
+An inescapable string will contain the contents between the two ='=, verbatim. =\= is not special within an inescapable string. An inescapable string may span any amount of newlines.
 
-'foo\﻿n' -> [102, 111, 111, 92, 110, 0]
+='foo\﻿n'= -> [102, 111, 111, 92, 110, 0]
 
-An escapeable string accepts the "escape" syntax that byte literals also accept.
+An escape-able string accepts the "escape" syntax that byte literals also accept.
 
-"foo\﻿n" -> [102, 111, 111, 10, 0]
+="foo\﻿n"= -> [102, 111, 111, 10, 0]
 
 ** Variables
 
 # Covers variables, scopes, declarations, maybe primitive types
 
-A variable is a name we give to some Glint construct. In most cases, a variable refers to data at some address in memory; as such, it is sort of like a labelled, specialty box. The box may only contain the type of data the box is declared to contain, and the box may be referenced by it's name. Any value may go in the box, as long as it fits both in the box and through the opening.
+A variable is a name we give to some Glint construct. In most cases, a variable refers to data at some address in memory; as such, it is sort of like a labeled, specialty box. The box may only contain the type of data the box is declared to contain, and the box may be referenced by it's name. Any value may go in the box, as long as it fits both in the box and through the opening.
 
 A variable is a named location in the computer's memory at the time of evaluation.
 You may store data at this named location for easier retrieval later on. The data is stored on a computer, and, as such, is in a binary format (just bits). However, Glint makes use of types of data that the hardware cannot understand, allowing the Glint programmer to write more idiomatic source code. You can think of types as an interpretation of the binary bits that are actually on your computer hardware when the code is running. The type of data that is stored at this location is declared by the programmer either explicitly or implicitly in a /declaration expression/.
@@ -137,15 +199,60 @@ Uninitialized variables are default initialized, which, for the most part, means
 
 One of the more confusing parts of any type system is declaration type decay; as long as you aren't doing anything too weird, you'll never run into problems. But, if you are trying to pass functions as parameters to other functions, it becomes relevant. For now, just understand that some types are quite complex in Glint, but quite simple in the underlying implementation, and that means that sometimes you want the simple underlying implementation rather than all the complexities that come with the Glint type (if that makes any sense).
 
+*** Scopes
+
+# TODO
+
+A /scope/ is a concept of a meaningful collection of declarations. For example, the body of a function is within a new scope, such that any variable declarations are not accessible from outside the function.
+
+A Glint programmer may open a scope manually by using a block expression; the contents of which is within a new scope.
+
+Whenever a new scope is created (or /opened/), it is given a parent scope; if a name lookup doesn't match in the enclosing scope, the parent will be searched until either the name is found or there are no more parent scopes.
+
+#+begin_src glint
+  x : int;
+
+  {
+    y : int;
+  }
+
+  y; ;; Error! Unknown symbol y'
+#+end_src
+
+The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
+#+begin_example
+root
+|-- x
+`--block
+   `-- y
+#+end_example
+
+When we "exit" the block expression, the scope is exited as well; further expressions are once again within the parent scope.
+
+If we were to lookup =x= from the =block= scope, we would not find it in the enclosing scope, search the parent (=root=), and find it. This means that =x= is accessible from the block scope, and it would not be an error to use it there.
+
+On the contrary, if we were to lookup =y= from the =root= scope, we would again not find it in the enclosing scope; but, there is no parent of the =root= scope, so we are done searching. Because we exhausted the search of scopes and did not find a matching declaration, that means this symbol is not valid at this point in the program. That is why the above use of =y=, outside of the block expression, is invalid.
+
+In Glint, shadowing is not allowed, so you cannot actually declare a variable of the same name as another if both would be valid at that point.
+
+#+begin_src glint
+  x : int;
+  { x : int; } ;; Error! Redeclaration of 'x'
+#+end_src
+
 *** Glint Exercise
 
 # TODO: Recognize declarations, names vs types vs initializers.
+# "What is the name of the first variable declared in the above program"
+# "how many variables are declared"
+# "what is the value of initialized variable 'x' when the program starts vs when the program finishes
+# "what is the type of the third variable declared"
 
 ** Assignment and Basic Expressions
 
 *** Assignment
 
-Assignment is the operation of setting a variable's value, such that further accesses to the variable result in the set value. Assignment uses the =:== operator (like Pascal).
+Assignment is the operation of setting a variable's value, such that further accesses to the variable result in the set value. Assignment uses the =:== operator (like Pascal). Assignment destructively modifies the values in memory associated with the given variable. After assignment, any value that was held in the memory /before/ the assignment is destroyed, and can not be accessed.
 
 #+begin_src glint
   x : int;
@@ -154,7 +261,7 @@ Assignment is the operation of setting a variable's value, such that further acc
   x := 69;
 #+end_src
 
-# Mention extended assigment operators i.e. -=
+# Mention extended assignment operators i.e. -=
 
 Often, you want to use the variable itself in the calculation of the new value of the variable; there are short-hands for lots of operations mixed with assignment.
 #+begin_src glint
@@ -174,15 +281,45 @@ On computers, data is represented as bits. Bitwise operations allow you to opera
 
 # What types of coercion are allowed.
 
+In Glint, the philosophy is that you should have to write less code /when you can/. That means that, as long as everything is clear to the compiler, you don't need to mark up your program with meaning that is already implied. This reduces the code the Glint programmer has to write, and, in turn, reduces chances that they may introduce a bug.
+
+An integer is implicitly convertible to a boolean, and vice versa.
+
+For integer to integer casts, it is valid if the bitwidth we are casting from is less than or equal to the bitwidth we are casting to, OR, if the values are known at compile time, if data is preserved through performing the cast.
+
+A struct is implicitly convertible to any supplanted member.
+
+A fixed array is implicitly convertible to an array view.
+
+A dynamic array is implicitly convertible to an array view.
+
+Functions are implicitly convertible to their corresponding function pointers.
+
+Functions with no parameters are implicitly convertible to their return type.
+
+Pointers are convertible to =void.ptr=.
+
 *** Explicit Casting
 
+To treat a variable's memory as if it were of another type, you can explicitly cast a value. To do this, simply invoke the type with a single argument of the type you'd like to cast.
+
+To cast integer =42= to =byte=:
+#+begin_src glint
+  byte 42;
+#+end_src
+
 *** Glint Exercise
+
+# Gotcha test with explicit cast of a large value to a small type.
 
 ** Glint's Print
 
 # How printing stuff works.
 
 *** Glint Exercise
+
+# "what is the output of the program?"
+# "what would the output of the program be if 'x' was '3'?"
 
 ** Arrays
 
@@ -194,7 +331,7 @@ On computers, data is represented as bits. Bitwise operations allow you to opera
 
 *** Array Views
 
-*** Initialing Array Views
+*** Initializing Array Views
 
 *** Initializing Fixed Arrays
 
@@ -207,6 +344,57 @@ On computers, data is represented as bits. Bitwise operations allow you to opera
 # if, and logical operators.
 
 # while, cfor, for, match
+
+*** =if=
+
+=if= evaluates a condition expression, and, if the result is truthy, evaluates a body expression. Optionally, when an =else= clause is present, a different body expression will be evaluated if the result of evaluating the condition expression is falsy.
+
+#+begin_src glint
+  if condition, body;
+#+end_src
+
+#+begin_src glint
+  if condition,
+    then
+  else otherwise;
+#+end_src
+
+*** =while=
+
+=while= evaluates a condition expression, and, if the result is truthy, evaluates a body expression. After evaluating the body expression, it will jump back to evaluating the condition expression.
+
+#+begin_src glint
+  while condition, body;
+#+end_src
+
+*** =for=
+
+=for= is a loop structure that will iterate over anything with =data= and =size= members (like dynamic arrays or array views). It provides a reference to the corresponding element for each iteration.
+
+#+begin_src glint
+  for element in container, body;
+#+end_src
+
+*** =cfor=
+
+=cfor= is a control structure that mimics C's =for=.
+
+#+begin_src glint
+  cfor init; condition; increment; body;
+#+end_src
+
+*** =match=
+
+=match= selects a control flow depending on which member of a sum type is held.
+
+=match= must handle every possible member a sum type may have.
+
+#+begin_src glint
+  match value_of_sum_type, {
+    .member0 expr;
+    .member1 expr;
+  };
+#+end_src
 
 ** Declared Types
 
@@ -293,13 +481,55 @@ Do keep in mind that, unlike most other languages, Glint's subscript does *NOT* 
 
 ** Templates
 
-# Mention differences between C++ templates and Glint templates (Glint's templates are lower level, and invokable expressions without a special syntax).
+# Mention differences between C++ templates and Glint templates (Glint's templates are lower level, and invocable expressions without a special syntax).
 
 Templates, at their core, are expressions which evaluate to other expressions.
+
+A template is a special form of expression that results in an expression upon evaluation. You can think of it as code that generates code.
+
+This is often useful when you have some expression (or set of expressions) that end up being duplicated throughout a function, with just a few values swapped out for different ones here and there.
+
+First, let's look at the most basic template expression: the /identity/ template.
+
+#+begin_src glint
+  template(x : expr) x;
+#+end_src
+
+This template expression, when invoked with an expression, would evaluate to that argument expression unchanged.
+
+Often, you want to use a template more than once; for convenience, a Glint programmer may name a template expression. This may also improve readability. Remember that templates are NOT functions! They are their own type of invocable (callable) expression.
+
+#+begin_src glint
+  identity :: template(x : expr) x;
+
+  ;; Evaluates to '69420'.
+  identity 69420;
+#+end_src
+
+# TODO: example of binary read
 
 ** Function Overloading
 
 # Show a basic, real-world use-case
+
+Glint supports /function overloading/, which is the idea of giving multiple definitions to a single, named function; each definition differs in their signature (return type and/or parameter types), and the compiler determines which definition to call at each call site based on the types of the argument expressions.
+
+#+begin_src glint
+  ;; [0]
+  make_byte : byte(v : int)
+    byte v;
+
+  ;; [1]
+  make_byte : byte(v : byte)
+    v;
+
+  make_byte 69; ;; calls [0]
+  make_byte `0`; ;; calls [1]
+#+end_src
+
+** Operator Overloading
+
+# TODO: 
 
 ** Modules
 

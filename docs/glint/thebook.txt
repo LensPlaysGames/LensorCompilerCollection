@@ -18,12 +18,13 @@ _________________
 .. 2. Simple Values
 ..... 1. Integers
 ..... 2. Bytes
-..... 3. Booleans
+..... 3. Boolean
 ..... 4. Strings
 .. 3. Variables
 ..... 1. Declaration Forms
 ..... 2. Type Decay
-..... 3. Glint Exercise
+..... 3. Scopes
+..... 4. Glint Exercise
 .. 4. Assignment and Basic Expressions
 ..... 1. Assignment
 ..... 2. Arithmetic
@@ -37,21 +38,27 @@ _________________
 ..... 1. Fixed Arrays
 ..... 2. Dynamic Arrays
 ..... 3. Array Views
-..... 4. Initialing Array Views
+..... 4. Initializing Array Views
 ..... 5. Initializing Fixed Arrays
 ..... 6. Initializing Dynamic Arrays
 .. 7. Conditionals and Control Flow
+..... 1. `if'
+..... 2. `while'
+..... 3. `for'
+..... 4. `cfor'
+..... 5. `match'
 .. 8. Declared Types
 ..... 1. Supplanted Members
 .. 9. Basic Functions
 .. 10. Pointers and References
 .. 11. Templates
 .. 12. Function Overloading
-.. 13. Modules
+.. 13. Operator Overloading
+.. 14. Modules
 ..... 1. Writing A Module Vs A Program
 ..... 2. Exporting Variables
 ..... 3. Importing Modules
-.. 14. Example Programs
+.. 15. Example Programs
 ..... 1. Recursive Fibonacci
 ..... 2. Euclid GCD
 
@@ -114,6 +121,9 @@ _________________
 -----------------------
 
   A Glint program consists of:
+  Header
+        The first portion of the file designates module status and
+        imported dependencies.
   Comments
         Non-code portions of the file that are used to describe,
         annotate, and document the code portions of the file. Comments
@@ -126,6 +136,39 @@ _________________
 
 1.1.4 Glint Exercise
 --------------------
+
+  ,----
+  |  1  ;; Declare some variables with initial values.
+  |  2  a : int 42;
+  |  3  b : byte 27;
+  |  4  
+  |  5  ;; @returns the sum of parameters x and y.
+  |  6  foo : int(x : int, y : int)
+  |  7    x + y; ;; adds x and y
+  |  8  
+  |  9  ;; Invocation of function foo with parameters a and b.
+  | 10  foo a, b;
+  `----
+
+  The following questions relate to the above example. If you don't know
+  the answer to one, just keep reading and move on, it's okay; you can
+  come back whenever you are ready.
+
+  1. On what line does the first /expression/ appear?
+
+  2. On what line does the comment with an @ directive appear?
+
+  3. Is there an expression on line 7?
+
+  4. What would the result of the entire program be?
+
+  5. Is there a comment on line 7?
+
+  Extra credit:
+
+  1. How many parameters does `foo' take?
+
+  2. What kind of type is `foo' of?
 
 
 1.2 Simple Values
@@ -171,8 +214,8 @@ _________________
   `\' (backslash), and `\t' for a tab stop.
 
 
-1.2.3 Booleans
---------------
+1.2.3 Boolean
+-------------
 
   Logical values that denote veracity of an expression.
 
@@ -186,19 +229,19 @@ _________________
   directly from the source code into the final program as an array of
   byte values.
 
-  Inescapeable strings are wrapped with `'' , and escapeable strings
+  Inescapable strings are wrapped with `'' , and escape-able strings
   with `"'.
 
-  An inescapeable string will contain the contents between the two `'',
-  verbatim. `\' is not special within an inescapeable string. An
-  inescapeable string may span any amount of newlines.
+  An inescapable string will contain the contents between the two `'',
+  verbatim. `\' is not special within an inescapable string. An
+  inescapable string may span any amount of newlines.
 
-  'foo\﻿n' -> [102, 111, 111, 92, 110, 0]
+  `'foo\﻿n'' -> [102, 111, 111, 92, 110, 0]
 
-  An escapeable string accepts the "escape" syntax that byte literals
+  An escape-able string accepts the "escape" syntax that byte literals
   also accept.
 
-  "foo\﻿n" -> [102, 111, 111, 10, 0]
+  `"foo\﻿n"' -> [102, 111, 111, 10, 0]
 
 
 1.3 Variables
@@ -206,10 +249,10 @@ _________________
 
   A variable is a name we give to some Glint construct. In most cases, a
   variable refers to data at some address in memory; as such, it is sort
-  of like a labelled, specialty box. The box may only contain the type
-  of data the box is declared to contain, and the box may be referenced
-  by it's name. Any value may go in the box, as long as it fits both in
-  the box and through the opening.
+  of like a labeled, specialty box. The box may only contain the type of
+  data the box is declared to contain, and the box may be referenced by
+  it's name. Any value may go in the box, as long as it fits both in the
+  box and through the opening.
 
   A variable is a named location in the computer's memory at the time of
   evaluation.  You may store data at this named location for easier
@@ -277,7 +320,68 @@ _________________
   complexities that come with the Glint type (if that makes any sense).
 
 
-1.3.3 Glint Exercise
+1.3.3 Scopes
+------------
+
+  A /scope/ is a concept of a meaningful collection of declarations. For
+  example, the body of a function is within a new scope, such that any
+  variable declarations are not accessible from outside the function.
+
+  A Glint programmer may open a scope manually by using a block
+  expression; the contents of which is within a new scope.
+
+  Whenever a new scope is created (or /opened/), it is given a parent
+  scope; if a name lookup doesn't match in the enclosing scope, the
+  parent will be searched until either the name is found or there are no
+  more parent scopes.
+
+  ,----
+  | x : int;
+  | 
+  | {
+  |   y : int;
+  | }
+  | 
+  | y; ;; Error! Unknown symbol y'
+  `----
+
+  The scope structure of the above program might look something like the
+  following. (NOTE: Simplification for explanation purposes: leaves out
+  global and top level scope).
+  ,----
+  | root
+  | |-- x
+  | `--block
+  |    `-- y
+  `----
+
+  When we "exit" the block expression, the scope is exited as well;
+  further expressions are once again within the parent scope.
+
+  If we were to lookup `x' from the `block' scope, we would not find it
+  in the enclosing scope, search the parent (`root'), and find it. This
+  means that `x' is accessible from the block scope, and it would not be
+  an error to use it there.
+
+  On the contrary, if we were to lookup `y' from the `root' scope, we
+  would again not find it in the enclosing scope; but, there is no
+  parent of the `root' scope, so we are done searching. Because we
+  exhausted the search of scopes and did not find a matching
+  declaration, that means this symbol is not valid at this point in the
+  program. That is why the above use of `y', outside of the block
+  expression, is invalid.
+
+  In Glint, shadowing is not allowed, so you cannot actually declare a
+  variable of the same name as another if both would be valid at that
+  point.
+
+  ,----
+  | x : int;
+  | { x : int; } ;; Error! Redeclaration of 'x'
+  `----
+
+
+1.3.4 Glint Exercise
 --------------------
 
 
@@ -289,7 +393,10 @@ _________________
 
   Assignment is the operation of setting a variable's value, such that
   further accesses to the variable result in the set value. Assignment
-  uses the `:=' operator (like Pascal).
+  uses the `:=' operator (like Pascal). Assignment destructively
+  modifies the values in memory associated with the given
+  variable. After assignment, any value that was held in the memory
+  /before/ the assignment is destroyed, and can not be accessed.
 
   ,----
   | x : int;
@@ -328,9 +435,45 @@ _________________
 1.4.4 Implicit Casting
 ----------------------
 
+  In Glint, the philosophy is that you should have to write less code
+  /when you can/. That means that, as long as everything is clear to the
+  compiler, you don't need to mark up your program with meaning that is
+  already implied. This reduces the code the Glint programmer has to
+  write, and, in turn, reduces chances that they may introduce a bug.
+
+  An integer is implicitly convertible to a boolean, and vice versa.
+
+  For integer to integer casts, it is valid if the bitwidth we are
+  casting from is less than or equal to the bitwidth we are casting to,
+  OR, if the values are known at compile time, if data is preserved
+  through performing the cast.
+
+  A struct is implicitly convertible to any supplanted member.
+
+  A fixed array is implicitly convertible to an array view.
+
+  A dynamic array is implicitly convertible to an array view.
+
+  Functions are implicitly convertible to their corresponding function
+  pointers.
+
+  Functions with no parameters are implicitly convertible to their
+  return type.
+
+  Pointers are convertible to `void.ptr'.
+
 
 1.4.5 Explicit Casting
 ----------------------
+
+  To treat a variable's memory as if it were of another type, you can
+  explicitly cast a value. To do this, simply invoke the type with a
+  single argument of the type you'd like to cast.
+
+  To cast integer `42' to `byte':
+  ,----
+  | byte 42;
+  `----
 
 
 1.4.6 Glint Exercise
@@ -359,8 +502,8 @@ _________________
 -----------------
 
 
-1.6.4 Initialing Array Views
-----------------------------
+1.6.4 Initializing Array Views
+------------------------------
 
 
 1.6.5 Initializing Fixed Arrays
@@ -373,6 +516,74 @@ _________________
 
 1.7 Conditionals and Control Flow
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1.7.1 `if'
+----------
+
+  `if' evaluates a condition expression, and, if the result is truthy,
+  evaluates a body expression. Optionally, when an `else' clause is
+  present, a different body expression will be evaluated if the result
+  of evaluating the condition expression is falsy.
+
+  ,----
+  | if condition, body;
+  `----
+
+  ,----
+  | if condition,
+  |   then
+  | else otherwise;
+  `----
+
+
+1.7.2 `while'
+-------------
+
+  `while' evaluates a condition expression, and, if the result is
+  truthy, evaluates a body expression. After evaluating the body
+  expression, it will jump back to evaluating the condition expression.
+
+  ,----
+  | while condition, body;
+  `----
+
+
+1.7.3 `for'
+-----------
+
+  `for' is a loop structure that will iterate over anything with `data'
+  and `size' members (like dynamic arrays or array views). It provides a
+  reference to the corresponding element for each iteration.
+
+  ,----
+  | for element in container, body;
+  `----
+
+
+1.7.4 `cfor'
+------------
+
+  `cfor' is a control structure that mimics C's `for'.
+
+  ,----
+  | cfor init; condition; increment; body;
+  `----
+
+
+1.7.5 `match'
+-------------
+
+  `match' selects a control flow depending on which member of a sum type
+  is held.
+
+  `match' must handle every possible member a sum type may have.
+
+  ,----
+  | match value_of_sum_type, {
+  |   .member0 expr;
+  |   .member1 expr;
+  | };
+  `----
 
 
 1.8 Declared Types
@@ -516,15 +727,68 @@ _________________
   Templates, at their core, are expressions which evaluate to other
   expressions.
 
+  A template is a special form of expression that results in an
+  expression upon evaluation. You can think of it as code that generates
+  code.
+
+  This is often useful when you have some expression (or set of
+  expressions) that end up being duplicated throughout a function, with
+  just a few values swapped out for different ones here and there.
+
+  First, let's look at the most basic template expression: the
+  /identity/ template.
+
+  ,----
+  | template(x : expr) x;
+  `----
+
+  This template expression, when invoked with an expression, would
+  evaluate to that argument expression unchanged.
+
+  Often, you want to use a template more than once; for convenience, a
+  Glint programmer may name a template expression. This may also improve
+  readability. Remember that templates are NOT functions! They are their
+  own type of invocable (callable) expression.
+
+  ,----
+  | identity :: template(x : expr) x;
+  | 
+  | ;; Evaluates to '69420'.
+  | identity 69420;
+  `----
+
 
 1.12 Function Overloading
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
+  Glint supports /function overloading/, which is the idea of giving
+  multiple definitions to a single, named function; each definition
+  differs in their signature (return type and/or parameter types), and
+  the compiler determines which definition to call at each call site
+  based on the types of the argument expressions.
 
-1.13 Modules
+  ,----
+  | ;; [0]
+  | make_byte : byte(v : int)
+  |   byte v;
+  | 
+  | ;; [1]
+  | make_byte : byte(v : byte)
+  |   v;
+  | 
+  | make_byte 69; ;; calls [0]
+  | make_byte `0`; ;; calls [1]
+  `----
+
+
+1.13 Operator Overloading
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+1.14 Modules
 ~~~~~~~~~~~~
 
-1.13.1 Writing A Module Vs A Program
+1.14.1 Writing A Module Vs A Program
 ------------------------------------
 
   A Glint program is a collection of Glint source code that may be
@@ -542,18 +806,18 @@ _________________
   modules may import programs.
 
 
-1.13.2 Exporting Variables
+1.14.2 Exporting Variables
 --------------------------
 
 
-1.13.3 Importing Modules
+1.14.3 Importing Modules
 ------------------------
 
 
-1.14 Example Programs
+1.15 Example Programs
 ~~~~~~~~~~~~~~~~~~~~~
 
-1.14.1 Recursive Fibonacci
+1.15.1 Recursive Fibonacci
 --------------------------
 
   ,----
@@ -571,7 +835,7 @@ _________________
   interested.
 
 
-1.14.2 Euclid GCD
+1.15.2 Euclid GCD
 -----------------
 
   ,----
