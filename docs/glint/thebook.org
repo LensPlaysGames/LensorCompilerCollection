@@ -17,6 +17,8 @@
 
 NOTE: Glint is a language, Lensor is the specification of the language described by this book.
 
+RECOMMENDATION TO READERS: It is my belief that you will learn faster, and better understand the concepts presented, if you have a computer with /some/ implementation of a Glint compiler present on the system. As you read, test yourself by trying to write Glint programs that you believe to follow the rules as you currently understand them. The feedback the compiler gives you when trying to build the programs you write is invaluable in quickly correcting small errors in your current mental model.
+
 ** Introduction, Overview
 
 *** History
@@ -130,6 +132,8 @@ An octal number literal is prefixed with =0o=. =0o25= has the value of =25= in o
 
 A binary number literal is prefixed with =0b=. =0b10= has the value of =10= in binary, or =2= in decimal.
 
+Integer literals are always of =int= type.
+
 *** Bytes
 
 Glint makes no distinction between character and integer data types (unlike Pascal, and like C).
@@ -142,11 +146,15 @@ Often, it can be messy to have control characters appear in the source code, so 
 
 Relevant escape characters include =\n= for a line feed, =\\= for a =\= (backslash), and =\t= for a tab stop.
 
+Byte literals are always of =byte= type.
+
 *** Boolean
 
 Logical values that denote veracity of an expression.
 
 =true= and =false= keywords to access these values.
+
+Boolean values are always of =s1= (one-bit signed integer) type.
 
 *** Strings
 
@@ -161,6 +169,8 @@ An inescapable string will contain the contents between the two ='=, verbatim. =
 An escape-able string accepts the "escape" syntax that byte literals also accept.
 
 ="foo\﻿n"= -> [102, 111, 111, 10, 0]
+
+String literals are always a fixed array of =byte=, with the length set long enough to store the string and the implicit NUL byte.
 
 ** Variables
 
@@ -196,7 +206,7 @@ There is another form of declaration, though, that allows us to shorten a lot of
 
 This may be read as "x has the value of 69". The type of x will be set to whatever the type of the initializing expression is (in this case, =int=).
 
-Uninitialized variables are default initialized, which, for the most part, means they have a value of zero (except for dynamic arrays, but, we'll get to that).
+*Uninitialized variables are default initialized*, which, for the most part, means they have a value of zero (except for dynamic arrays, but, we'll get to that).
 
 *** Type Decay
 
@@ -369,6 +379,21 @@ To cast integer =42= to =byte=:
 ** Glint's Print
 
 # How printing stuff works.
+
+Often, a program will need to "print" values, such that a human running the program may see them. We still use the word "print", but we are not referring to printing onto paper; now-a-days, we have software terminals which are much faster and cheaper to run than a dedicated printer =:^)=.
+
+In =Glint=, the =print= keyword acts as a pseudo-function, and inserts code for each argument passed to it according to the type of the argument.
+
+- =void= arguments signal an error.
+- =byte= arguments get printed immediately using =putchar= or similar.
+- =[byte]=, =[byte view]=, and fixed byte arrays (i.e. =[byte 4]=) arguments get each byte printed using =putchar= or similar.
+- Otherwise, a call to =format=, a function that returns a dynamic byte array, is inserted, the contents of that returned dynamic byte array are printed, and then the dynamic array is freed.
+
+Since byte literals are of =byte= type, they get printed "verbatim". The following Glint program would print =420= and then a newline (line feed character).
+
+#+begin_src glint
+  print `4`, `2`, `0`, `\n`;
+#+end_src
 
 *** Glint Exercise
 
