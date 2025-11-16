@@ -75,6 +75,9 @@ A Glint program consists of:
 The following questions relate to the above example. If you don't know the answer to one, just keep reading and move on, it's okay; you can come back whenever you are ready.
 
 1. On what line does the first /expression/ appear?
+  # NOTE: answer drawers are not included in the export.
+  # The idea is that I (or a program) will go through and write the answers
+  # in the back of the book.
   :answer:
   2
   :end:
@@ -93,7 +96,7 @@ The following questions relate to the above example. If you don't know the answe
   :answer:
   69
   OR a + b
-:end:
+  :end:
 
 5. Is there a comment on line 7?
   :answer:
@@ -201,8 +204,6 @@ One of the more confusing parts of any type system is declaration type decay; as
 
 *** Scopes
 
-# TODO
-
 A /scope/ is a concept of a meaningful collection of declarations. For example, the body of a function is within a new scope, such that any variable declarations are not accessible from outside the function.
 
 A Glint programmer may open a scope manually by using a block expression; the contents of which is within a new scope.
@@ -240,15 +241,14 @@ In Glint, shadowing is not allowed, so you cannot actually declare a variable of
   { x : int; } ;; Error! Redeclaration of 'x'
 #+end_src
 
-*** Glint Exercise
+The following is a non-exhaustive list of expressions which have containing expressions that are parsed in a different scope.
 
-# TODO: Recognize declarations, names vs types vs initializers.
-# "What is the name of the first variable declared in the above program"
-# "how many variables are declared"
-# "what is the value of initialized variable 'x' when the program starts vs when the program finishes
-# "what is the type of the third variable declared"
-
-** Assignment and Basic Expressions
+- Block Expression
+- If Expression
+- Else Clause
+- For/CFor
+- Function Body
+- Each Match Expression
 
 *** Assignment
 
@@ -268,6 +268,60 @@ Often, you want to use the variable itself in the calculation of the new value o
   x :: 42;
   x += 27; ;; Now, x = 69
 #+end_src
+
+*** Glint Exercise
+
+Exercise Mission
+- Recognize declarations of any form.
+- Differentiate variable names, types, and initializing expressions.
+- Reason about the values variables have at different points in the control flow of the program.
+
+#+begin_src glint
+  x : int;
+  y : int = 420;
+
+  ;; y := y - x;
+  y -= x;
+
+  x := 351;
+
+  z :: y - x;
+#+end_src
+
+The following questions relate to the above example.
+
+1. What is the name of the first variable declared?
+  :answer:
+  x
+  :end:
+
+2. How many variables are declared?
+  :answer:
+  3
+  :end:
+
+3. What is the value of variable 'y' when the program starts, and when the program finishes?
+  :answer:
+  420, 420
+  :end:
+
+4. What is the initial value of 'z'?
+  :answer:
+  69
+  :end:
+
+5. What is the type of 'z'?
+  :answer:
+  int
+  OR the common type of 'y' and 'x'
+  :end:
+
+6. What is the value of the variable 'x' when the program starts, and when the program finishes?
+  :answer:
+  0, 351
+  :end:
+
+** Basic Expressions
 
 *** Arithmetic
 
@@ -548,7 +602,7 @@ A templated type is like a template expression that defines a type.
 TODO: Syntax not final.
 #+begin_src glint
   vector :: struct templated {
-    data : auto.ptr;
+    data : (auto).ptr;
     size : uint;
     capacity : uint;
   };
@@ -559,7 +613,7 @@ TODO: Syntax not final.
 A templated function is like a template expression that defines a function.
 
 #+begin_src glint
-  vector_push : void(vec : vector auto.element, val : auto.element) {
+  vector_push : void(vec : (vector auto.element).ref, val : auto.element) {
     if vec.size + 2 > vec.capacity,
       vector_grow vec;
 
