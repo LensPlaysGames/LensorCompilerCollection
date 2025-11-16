@@ -529,7 +529,57 @@ Glint supports /function overloading/, which is the idea of giving multiple defi
 
 ** Operator Overloading
 
-# TODO: 
+/Operators/ are tokens, or sequences of tokens, that may be placed somewhere around an expression in order to alter the result of the expression in some way. Operators may be defined by how many inputs they operate on (/arity/), as well as where the operator is placed in relation to the inputs (prefix, infix, or postfix). An operator that comes before the single expression it operates on would be a /unary prefix operator/. An operator that sits between the two expressions it operates on would be a /binary infix operator/.
+
+For simple types like pointers or integers, an operator will map quite neatly to one (or a minimal amount of) machine instruction(s), so there is really no advantage to defining functions for these operations; instead, we insert the instructions directly.
+
+However, in Glint, a programmer may declare their own types, as well as variables with values of those declared types. The programmer may want to take advantage of these operators for their own types; to accomplish this, Glint inserts calls to specially-named functions when these custom types are used in these operators that normally wouldn't support them. The programmer may then define these functions themselves, customizing the code that runs when these operators are used.
+
+TODO: syntax example
+# operator[] ?
+# __op_subscript?
+
+** Templated Functions, Templated Types
+
+You do not ever need to implement a vector in Glint, as there is the dynamic array type built-in to the language. However, vectors are simple to understand, and widespread enough that I believe this to be the best (as in least-confusing) example to give.
+
+A templated type is like a template expression that defines a type.
+
+TODO: Syntax not final.
+#+begin_src glint
+  vector :: struct templated {
+    data : auto.ptr;
+    size : uint;
+    capacity : uint;
+  };
+
+  my_vec_of_int : vector int;
+#+end_src
+
+A templated function is like a template expression that defines a function.
+
+#+begin_src glint
+  vector_push : void(vec : vector auto.element, val : auto.element) {
+    if vec.size + 2 > vec.capacity,
+      vector_grow vec;
+
+    @vec.data[vec.size] := val;
+    vec.size += 1;
+  };
+#+end_src
+
+Now, upon invocation of =vector_push=, the compiler will first look for a defined function with the signature matching the given arguments (i.e. =auto.element= is =int=). If it exists, it will call it. If it doesn't, it will use the templated function's body as a template body and expand it with the given type(s). It will then call that defined function.
+
+#+begin_src glint
+  vector_push :: template(element : type)
+    vector_push_impl : void(vec : vector element, val : element)
+      ...;
+
+  ;; Invocations could be thought of like this
+  (vector_push int) my_vec_of_int 69;
+#+end_src
+
+Basically, a templated function is shorthand to define a template that defines a unique function for every unique set of types passed in place of =auto= in the parameters.
 
 ** Modules
 
