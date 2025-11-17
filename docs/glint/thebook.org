@@ -1,7 +1,10 @@
 #+title: Programming in Lensor Glint
 #+author: lens_r
 #+created: 2025-11-04
+
+# Do not treat _ and ^ as subscript and superscript, respectively.
 #+options: ^:{}
+
 # Do not export answer drawers
 #+options: d:(not "answer")
 
@@ -374,6 +377,7 @@ To cast integer =42= to =byte=:
 
 *** Glint Exercise
 
+# TODO
 # Gotcha test with explicit cast of a large value to a small type.
 
 ** Glint's Print
@@ -397,24 +401,106 @@ Since byte literals are of =byte= type, they get printed "verbatim". The followi
 
 *** Glint Exercise
 
+# TODO
 # "what is the output of the program?"
 # "what would the output of the program be if 'x' was '3'?"
 
 ** Arrays
 
+An array is a (contiguous) collection of a given element type.
+
+A fixed array has the amount of elements known at compile-time. This is like arrays in the C language.
+
+A dynamic array has the amount of elements known at runtime. This is like vectors in the C++ language.
+
+An array view is a non-owning view of a contiguous collection of elements of a given type.
+
 *** Fixed Arrays
 
+
+A fixed array has the amount of elements known at compile-time. This means that the compiler is able to check every compile-time known subscript to be in range. You should use this type of array if the amount of elements never changes.
+
 # Mention how these are what string literals are.
+The type of a string literal is a fixed array with an element type of =byte=. The size of the fixed array is the amount of bytes needed to contain the contents of the string literal, plus one for the implicit terminating NUL byte.
+
+# TODO: Fixed array interaction with ranged for loop expression
 
 *** Dynamic Arrays
 
+A dynamic array may have any amount of elements; any given instance of a dynamic array type stores a value regarding it's size.
+
+A dynamic array's =data= pointer is initialized using the return value of =malloc= (A function provided by the C standard library). Glint is (mainly) intended to write userspace programs, and as such defaults to defining =main= (such that a C runtime may call it). Therefore, Glint implementations may rely on the presence of any C runtime functions (like =malloc=) to implement their features.
+
+That's right! Dynamic arrays are /always/ default initialized, and =data= /always/ points to some memory of size =capacity * byte_size_of_element_type=.
+
+Therefore, the elements of a dynamic array are available via a subscriptable pointer at the =data= member. The first element of dynamic array =d= is accessible via =@d.data[0]=; there is a short-hand that subscripting a dynamic array directly is equivalent to subscripting it's =data= member. That means the first element is usually accessed using =@d[0]=.
+
+You can think of a dynamic array type as a shorthand for defining the following struct, where =T= is the element type of the dynamic array.
+#+begin_src glint
+  [T];
+  ;; equivalent to
+  struct {
+    data : T.ptr;
+    size : uint;
+    capacity : uint;
+  };
+#+end_src
+
+Where =size= is the first invalid index at =data=. =capacity= refers to the size of memory located at =data=. If the memory at =data= is not large enough to store an inserted element, =data= is reallocated and all of the old elements are copied to the new memory.
+
+An element may be prepended to (added to the front of) a dynamic array using the =~== operator.
+#+begin_src glint
+  d : [byte];
+  d ~= `9`;
+  d ~= `6`;
+
+  ;; Outputs 69, then a newline
+  print d, `\n`;
+#+end_src
+
+An element may be appended to (added to the back of) a dynamic array using the =+== operator.
+#+begin_src glint
+  d : [byte];
+  d += `6`;
+  d += `9`;
+
+  ;; Outputs 69, then a newline
+  print d, `\n`;
+#+end_src
+
+Finally, when a dynamic array is declared, memory is allocated; that means that, after the dynamic array is done being used, the programmer must free it by using the unary minus operator =-=.
+#+begin_src glint
+  d : [byte];
+  d += `6`;
+  d += `9`;
+
+  ;; Outputs 69, then a newline
+  print d, `\n`;
+
+  ;; Free the memory associated with the dynamic array.
+  -d;
+  ;; Any further uses of 'd' would be a program error reported by the
+  ;; compiler.
+#+end_src
+
+A dynamic array is compatible with a ranged for loop expression (more on that later).
+
 *** Array Views
 
-*** Initializing Array Views
+# TODO
+You can think of a view type as a shorthand for defining the following struct, where =T= is the element type.
+#+begin_src glint
+  [T view];
+  ;; equivalent to
+  struct {
+    data : T.ptr;
+    size : uint;
+  };
+#+end_src
 
-*** Initializing Fixed Arrays
+A view is meant to act as the minimal representation of a contiguous set of elements of a given type; it contains a pointer to the contiguous memory where all the elements are stored, as well as a value denoting how many elements are stored there.
 
-*** Initializing Dynamic Arrays
+A view is compatible with a ranged for loop expression (more on that later).
 
 ** Conditionals and Control Flow
 
@@ -618,7 +704,7 @@ TODO: syntax example
 # operator[] ?
 # __op_subscript?
 
-** Templated Functions, Templated Types
+** Templated Functions and Templated Types
 
 You do not ever need to implement a vector in Glint, as there is the dynamic array type built-in to the language. However, vectors are simple to understand, and widespread enough that I believe this to be the best (as in least-confusing) example to give.
 
@@ -672,9 +758,50 @@ Programs and modules may import modules, but neither programs nor modules may im
 
 *** Exporting Variables
 
+# TODO
+
+A Glint module may export any amount of variables, such that those variables are accessible by any Glint program or module that imports the module. This is done via the =export= keyword, a storage specifier. Storage specifiers come before the name, within a declaration expression.
+
+#+begin_src glint
+  module Foo;
+
+  export foo : int 69;
+#+end_src
+
 *** Importing Modules
 
+#+begin_src glint
+  import Foo;
+
+  foo; ;; equals int 69
+#+end_src
+
 ** Example Programs
+
+*** Hello, World!
+
+#+begin_src glint
+  print "Hello, World!";
+#+end_src
+
+*** Factorial
+
+#+begin_src glint
+  factorial : uint(n : uint) {
+    result :: 1;
+
+    cfor
+        i : uint 1;
+        i <= n;
+        i += 1;
+      result *= i;
+
+    result;
+  };
+
+  ;; Calculate the factorial of 5, and return that.
+  factorial 5;
+#+end_src
 
 *** Recursive Fibonacci
 
