@@ -271,6 +271,8 @@ using add_imm_imm = Pattern<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
         Inst<Clobbers<>, usz(Opcode::Add), o<1>, i<0>>>>;
 
+using mul_reg_reg = binary_commutative_reg_reg<usz(MKind::Mul), usz(Opcode::Multiply)>;
+
 using mul_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Mul), Register<>, Immediate<>>>,
     InstList<
@@ -536,6 +538,7 @@ using AllPatterns = PatternList<
     add_imm_imm,
     add_global_imm,
 
+    mul_reg_reg,
     mul_imm_reg,
     mul_reg_imm,
     mul_imm_imm,

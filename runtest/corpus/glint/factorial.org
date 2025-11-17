@@ -1,0 +1,28 @@
+* Factorial
+
+#+NAME: source
+#+begin_src glint
+  factorial : uint(n : uint) {
+    result :: 1;
+
+    cfor
+        i : uint 1;
+        i <= n;
+        i += 1;
+      result *= i;
+
+    result;
+  };
+
+  ;; Calculate the factorial of 5, and return that.
+  factorial 5;
+#+end_src
+
+#+NAME: status
+#+begin_example
+120
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
