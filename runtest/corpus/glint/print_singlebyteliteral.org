@@ -1,0 +1,16 @@
+* Print Single Byte Literal
+
+#+NAME: source
+#+begin_src glint
+print `\n`;
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+
+#+end_example
