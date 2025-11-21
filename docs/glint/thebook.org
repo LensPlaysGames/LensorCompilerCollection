@@ -5,7 +5,7 @@
 # Do not treat _ and ^ as subscript and superscript, respectively.
 #+options: ^:{}
 
-# Do not export answer drawers
+# Do not export answer drawers.
 #+options: d:(not "answer")
 
 #+begin_src emacs-lisp :exports none
@@ -163,15 +163,17 @@ Boolean values are always of =s1= (one-bit signed integer) type.
 
 A string allows the Glint programmer to include (textual) data directly from the source code into the final program as an array of byte values.
 
-Inescapable strings are wrapped with ='= , and escape-able strings with ="=.
+Inescapable strings are wrapped with ='= (U+0027, apostrophe), and escape-able strings with ="= (U+0022, quotation mark).
 
-An inescapable string will contain the contents between the two ='=, verbatim. =\= is not special within an inescapable string. An inescapable string may span any amount of newlines.
+An inescapable string will contain the contents between the two ='= (apostrophes), verbatim. *=\= is not special within an inescapable string.* An inescapable string may span any amount of newlines.
 
 ='foo\﻿n'= -> [102, 111, 111, 92, 110, 0]
 
 An escape-able string accepts the "escape" syntax that byte literals also accept.
 
 ="foo\﻿n"= -> [102, 111, 111, 10, 0]
+
+For historical reasons, and compatibility with other languages and tooling, Glint strings have a NUL byte (value of zero) appended. So, the empty string literal =''= contains the bytes =[0]=, and is of type =[byte 1]=.
 
 String literals are always a fixed array of =byte=, with the length set long enough to store the string and the implicit NUL byte.
 
@@ -377,7 +379,7 @@ To cast integer =42= to =byte=:
 
 *** Glint Exercise
 
-# TODO
+TODO
 # Gotcha test with explicit cast of a large value to a small type.
 
 ** Glint's Print
@@ -401,7 +403,7 @@ Since byte literals are of =byte= type, they get printed "verbatim". The followi
 
 *** Glint Exercise
 
-# TODO
+TODO
 # "what is the output of the program?"
 # "what would the output of the program be if 'x' was '3'?"
 
@@ -487,7 +489,6 @@ A dynamic array is compatible with a ranged for loop expression (more on that la
 
 *** Array Views
 
-# TODO
 You can think of a view type as a shorthand for defining the following struct, where =T= is the element type.
 #+begin_src glint
   [T view];
@@ -597,6 +598,8 @@ Functions do not /just/ execute an operation, or sequence of operations, though.
 
 A function's return value is constrained to be of the declared return type of the function (such that uses of the function may rely upon a binary format of the returned value).
 
+NOTE: There is a special built-in type named =void= which declares the absence of a valid binary value. Therefore, it is an incomplete type and uses of it are invalid. However, it is most used as the return type of a function that doesn't return anything; that way, the compiler knows not to expect a value to return, and you don't have to return an =int= for no reason or something (making future users of your module question why in the world you are returning zero from a function every time).
+
 # when it should be
 
 Basic functions allow the programmer to de-duplicate code, increase readability, and form custom control flow.
@@ -629,6 +632,8 @@ With a function:
 #+end_src
 
 As you can see, when proper names are picked, functions increase the ability for code readers to understand what the code is trying to do (vs what it may actually be doing). They also allow for easier refactors; imagine you want to also multiply the first value of every array by 3. That would be one expression, one extra line of Glint code to write in the function body. Without a function, you'd have to write and edit that line of code where every invocation is! For this simple example, it would be doable, but, with a large and growing codebase, that becomes more and more difficult.
+
+*** Function Attributes
 
 ** Pointers and References
 
@@ -758,8 +763,6 @@ Programs and modules may import modules, but neither programs nor modules may im
 
 *** Exporting Variables
 
-# TODO
-
 A Glint module may export any amount of variables, such that those variables are accessible by any Glint program or module that imports the module. This is done via the =export= keyword, a storage specifier. Storage specifiers come before the name, within a declaration expression.
 
 #+begin_src glint
@@ -775,6 +778,127 @@ A Glint module may export any amount of variables, such that those variables are
 
   foo; ;; equals int 69
 #+end_src
+
+* Types
+
+Just some extra information on the type sub-language. A lot of the first portion of the book goes into expressions, and types are used within them, but the types themselves are not fully expanded upon in one area. That's why this exists.
+
+** Built-in Types
+
+#+begin_src glint
+  ;; architecture-sized integer. 64 bits on x86_64, for example.
+  int;
+  ;; architecture-sized unsigned integer. Same size as 'int'.
+  uint;
+  ;; Boolean: binary value 'true' or 'false'.
+  bool;
+  ;; The nothing type. Declares absence of something (i.e. a function that
+  ;; doesn't return anything).
+  void;
+#+end_src
+
+** FFI Types
+
+FFI stands for Foreign Function Interface. These types allow you to define variables as if they had a type from another language. For now, C is the only supported "foreign" (read: non-Glint) language by the Lensor Compiler Collection Glint implementation.
+
+#+begin_src glint
+  ;; The convention is to take the primitive integer type from C, and
+  ;; prepend the 'c' character, codepoint U+0063. Where 'unsigned' would
+  ;; appear, instead prepend 'cu'.
+  cshort;     ;; 'short'
+  cint;       ;; 'int'
+  clong;      ;; 'long'
+  clonglong;  ;; 'long long'
+  ;; Unsigned
+  cushort;    ;; 'unsigned short'
+  cuint;      ;; 'unsigned int'
+  culong;     ;; 'unsigned long'
+  culonglong; ;; 'unsigned long long'
+#+end_src
+
+** Arbitrary Integers
+
+TODO
+
+** Types with One Element
+
+*** Pointers
+
+You can make a pointer to any type by appending =.ptr=.
+
+This is a pointer to a signed integer type.
+#+begin_src glint
+  int.ptr;
+#+end_src
+
+Pointers may be loaded from, which yields the underlying type.
+
+#+begin_src glint
+  value : int
+    69;
+  pointer : int.ptr
+    &value;
+  loaded_value : int
+    @pointer;
+#+end_src
+
+Pointers may be stored into, which destrucively modifies the underlying value.
+
+#+begin_src glint
+  value : int
+    69;
+  pointer : int.ptr
+    &value;
+
+  @pointer := 420;
+
+  value = 69; ;; false!!!
+#+end_src
+
+As you can see, a pointer doesn't store an =int= value, it stores somewhere an =int= may be found (upon loading from it). This also lets you change the value where that =int= may be found (upon storing into it).
+
+*** References
+
+You can make a reference to /almost/ any type by appending =.ref=.
+
+This is a reference to a signed integer type.
+#+begin_src glint
+  int.ref;
+#+end_src
+
+Like a pointer, a reference doesn't store the underlying value, but a location where that value may be found. The difference is that a reference does not require /explicit/ loading and storing via the =@= operator; you can just use it like it's the underlying type.
+
+#+begin_src glint
+  value : int
+    69;
+
+  reference : int.ref
+    &value;
+
+  reference -= 27;
+
+  value = 42; ;; true!!!
+#+end_src
+
+# What types /can't/ you make references out of?
+
+# Use case: function that modifies an index and reads from a [byte view]
+
+#+begin_src glint
+  reference_example : uint()
+#+end_src
+
+** Composite Types
+
+TODO
+
+Struct Types
+
+Sum Types
+
+Union Types
+
+* Postface
 
 ** Example Programs
 
