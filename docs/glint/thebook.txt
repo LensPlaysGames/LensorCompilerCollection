@@ -9,7 +9,11 @@
 Table of Contents
 _________________
 
-1. Programming in Lensor Glint
+1. Preface: What's It to You?
+.. 1. Hardware
+.. 2. Software
+.. 3. Tooling
+2. Programming in Lensor Glint
 .. 1. Introduction, Overview
 ..... 1. History
 ..... 2. Example Program
@@ -57,7 +61,7 @@ _________________
 ..... 1. Writing A Module Vs A Program
 ..... 2. Exporting Variables
 ..... 3. Importing Modules
-2. Types
+3. Types
 .. 1. Built-in Types
 .. 2. FFI Types
 .. 3. Arbitrary Integers
@@ -65,7 +69,12 @@ _________________
 ..... 1. Pointers
 ..... 2. References
 .. 5. Composite Types
-3. Postface
+..... 1. Struct Types
+..... 2. Union Types
+..... 3. Sum Types
+.. 6. `sizeof' and `alignof'
+..... 1. On bits vs bytes
+4. Postface
 .. 1. Example Programs
 ..... 1. Hello, World!
 ..... 2. Factorial
@@ -73,7 +82,176 @@ _________________
 ..... 4. Euclid GCD
 
 
-1 Programming in Lensor Glint
+1 Preface: What's It to You?
+============================
+
+1.1 Hardware
+~~~~~~~~~~~~
+
+  Glint is a programming language. This book is meant to teach it (at
+  least somewhat). A programming language is not useful in a vacuum
+  (literally or figuratively); a programming language is a language that
+  allows a programmer to instruct a computer with what to do (and when
+  to do it).
+
+  A computer is a broad term, but, for the most part, simply refers to a
+  machine that does "work" via a sequence of operations on binary (on or
+  off) values. This sequence of operations is called /code/. A
+  collection of code that a computer may run is called a /program/. So,
+  a program is a collection of code, and code is a sequence of
+  operations that tells the computer what to do.
+
+  A program /starts/ at a specific point (usually called the entry
+  point). A program is not required to end explicitly, and there are
+  various routes through which a program may end up not running
+  anymore. A program is said to be /running/ on a given computer when
+  operations from that program's code are currently executing on that
+  computer.
+
+  A computer has to do operations /on/ something. That is, an addition
+  operation isn't useful unless you are actually operating on meaningful
+  values. In the real world, computers have all sorts of different
+  hardware to make this happen (i.e. CPU registers, ALUs, etc.), but we
+  won't get into all of that right now.
+
+  For now, you just need to learn about something called /memory/. A
+  computer has to operate on values, and store the result somewhere; it
+  also has to store code, and keep track of it's place. Computers often
+  store those values in their /memory/ (so they can recall it later).
+
+  A computer's memory may be implemented in the real world in all sorts
+  of ways with differing amounts of limitations (i.e. size, speed,
+  etc.), but the most important takeaway is that, while a computer's
+  memory is made up of binary /bits/ (values that may only be on or
+  off), it is addressed via /bytes/. In hardware, a byte (the minimum
+  addressable unit in memory) is /usually/ eight bits.
+
+  ,----
+  | MEMORY
+  | | off on  off off off on  off on | ...
+  | | BYTE 0                         | BYTE 1
+  `----
+
+  In the example above, each `off' and `on' represents a bit (an actual
+  stored value in memory that is either `on' or `off'). Every eight bits
+  is labeled as a `byte'. If we were to access any value seen above
+  within the computer's memory, we would do so by first /loading/ the
+  zero-eth byte from memory.
+
+  To `load' from memory means to copy the relevant set of bits from
+  memory. Loading requires a memory address: the index of the byte we'd
+  like to load.
+
+  The opposite of /loading from/ memory is /storing into/ memory. A
+  value (or values) may be stored into memory, such that further loads
+  from that memory result in the stored value(s). Because loading and
+  storing both work with memory, they have the same limitations of not
+  working directly on bits, but on sets of bits called /bytes/.
+
+  The operations that a computer performs (or, the /code/ that a
+  computer /executes/) operate directly on sets of bit values (on or
+  off). These values may be written to or loaded from memory for later
+  use/re-use.
+
+  As we touched on earlier, even a computer's code is stored in it's own
+  memory. That is, a computer's operations are encoded in a binary
+  format (such that they may be represented by values that may only be
+  `on' or `off'), and those binary values are stored into the computer's
+  memory. When the computer is started, the computer loads an operation
+  from it's memory, executes it, and repeats. The computer keeps track
+  of where in it's memory it is executing via a /program counter/. The
+  program counter is also sometimes known as an /instruction
+  pointer/. The program counter simply keeps track of which byte within
+  memory the current operation is stored at. When the operation is
+  finished, the computer may look at the next byte within memory to find
+  the next operation.
+
+  There is also a more permanent form of memory known as /storage/. A
+  computer's storage is, like memory, a set of binary values (on or
+  off). In an ideal world, memory and storage wouldn't be different. In
+  the real world, storage is much slower (as it solves a different
+  physical problem; it doesn't just store bit values while the computer
+  is on, it stores them even without power). For the most part, computer
+  /files/ are meaningful, named portions of a computer's storage.
+
+
+1.2 Software
+~~~~~~~~~~~~
+
+  Now that you know what a computer is, and a little bit about how a
+  computer functions, we can now learn some basic conventions about how
+  all modern computers use that hardware to do useful things.
+
+  Most computers come with code in their memory that may not ever be
+  changed; it is locked into the hardware (physical parts of the
+  computer machine). This code is called /firmware/, since it is not
+  physical, yet it is still unchanging. A computer's firmware usually
+  handles doing initialisation procedures when the computer turns on,
+  getting the computer to a known state. It does this so that the user
+  of the computer may write software with a known starting state (it'd
+  be quite difficult to guess where the computer has started executing
+  code at, if the program counter's value was random every time the
+  computer was started).
+
+  That code that the user runs on their computer is known as
+  /software/. Most computers these days come with a conventional piece
+  of software known as an /operating system/ (often abbreviated
+  /OS/). An /OS/ is software that deals with the specifics of the
+  particular hardware, such that /it/ may provide a /more/ known
+  starting state to /other/ software. An OS usually consists of a kernel
+  program that "talks" to the hardware; in reality, it does whatever is
+  needed to make hardware do a given operation whenever software
+  requests that operation be completed (no actual "talking" involved).
+
+  The programs that an OS runs are usually called "user programs", and
+  the known state that the OS provides to software called
+  "userspace". User programs are said to run within userspace.
+
+  Glint is a programming language meant to write user programs, so,
+  Glint code runs within userspace of some OS on some computer. This is
+  important to understand how to get the computer to do what you want it
+  to do. /If you want to shoot an arrow and hit a target, you have to
+  know where you are standing./
+
+
+1.3 Tooling
+~~~~~~~~~~~
+
+  Now, the weird part is that we actually /use/ computers to do (or at
+  least help with) the work of producing code. This means there is
+  actually /software/ we use when writing /software/.
+
+  One such piece of software is a /compiler/ program. A compiler
+  produces code in a file, given some input. The format that a compiler
+  inputs and outputs is not set in stone, and varies depending on your
+  particular OS, hardware, etc. A compiler is usually referred to by the
+  /language/ the compiler accepts as input. For example, a /C compiler/
+  would be a compiler that takes as input the language /C/, and outputs
+  code in some other (possibly machine-ready) format.
+
+  A compiler will often tell you when a program is ill-formed; a good
+  compiler will tell you where and how. An ill-formed program is like a
+  sentence that doesn't follow grammar rules: the sentence will never
+  convey any meaning until the rules are followed, as it is
+  fundamentally flawed. Some problems in programs mean the program will
+  never work; these are usually called /errors/. Other problems are just
+  things that are likely to be misinterpreted or often cause confusion
+  (like a sentence that starts with "Because"); these are usually called
+  /warnings/.
+
+  The file a compiler produces is called an /object/ file. An object
+  file is a type of file that stores code and data, and necessary
+  information about that code and data.
+
+  An object file must be turned into an executable file via a /linker/
+  program before a computer may load it into memory and actually execute
+  the operations. An executable file is just a binary format that an OS
+  supports loading, like /the Executable and Linkable Format (ELF)/. A
+  linker's main job is to convert named portions of memory to actual
+  memory addresses.
+
+
+2 Programming in Lensor Glint
 =============================
 
   NOTE: Glint is a language, Lensor is the specification of the language
@@ -89,10 +267,10 @@ _________________
   your current mental model.
 
 
-1.1 Introduction, Overview
+2.1 Introduction, Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-1.1.1 History
+2.1.1 History
 -------------
 
   Glint started in 2023 when Lens_r decided he wanted to make a
@@ -113,7 +291,7 @@ _________________
   of promise in an otherwise dark world `:^)'.
 
 
-1.1.2 Example Program
+2.1.2 Example Program
 ---------------------
 
   ,----
@@ -136,7 +314,7 @@ _________________
   `----
 
 
-1.1.3 Program Structure
+2.1.3 Program Structure
 -----------------------
 
   A Glint program consists of:
@@ -153,7 +331,7 @@ _________________
         evaluation/execution.
 
 
-1.1.4 Glint Exercise
+2.1.4 Glint Exercise
 --------------------
 
   ,----
@@ -190,13 +368,13 @@ _________________
   2. What kind of type is `foo' of?
 
 
-1.2 Simple Values
+2.2 Simple Values
 ~~~~~~~~~~~~~~~~~
 
   or, Literals and Constants, or, Self-evaluating Expressions.
 
 
-1.2.1 Integers
+2.2.1 Integers
 --------------
 
   Glint supports decimal, hexadecimal, octal, and binary integer literal
@@ -215,7 +393,7 @@ _________________
   Integer literals are always of `int' type.
 
 
-1.2.2 Bytes
+2.2.2 Bytes
 -----------
 
   Glint makes no distinction between character and integer data types
@@ -237,7 +415,7 @@ _________________
   Byte literals are always of `byte' type.
 
 
-1.2.3 Boolean
+2.2.3 Boolean
 -------------
 
   Logical values that denote veracity of an expression.
@@ -247,7 +425,7 @@ _________________
   Boolean values are always of `s1' (one-bit signed integer) type.
 
 
-1.2.4 Strings
+2.2.4 Strings
 -------------
 
   A string allows the Glint programmer to include (textual) data
@@ -277,7 +455,7 @@ _________________
   set long enough to store the string and the implicit NUL byte.
 
 
-1.3 Variables
+2.3 Variables
 ~~~~~~~~~~~~~
 
   A variable is a name we give to some Glint construct. In most cases, a
@@ -299,7 +477,7 @@ _________________
   explicitly or implicitly in a /declaration expression/.
 
 
-1.3.1 Declaration Forms
+2.3.1 Declaration Forms
 -----------------------
 
   A declaration expression may take on several different /forms/. All of
@@ -340,7 +518,7 @@ _________________
    but, we'll get to that).
 
 
-1.3.2 Type Decay
+2.3.2 Type Decay
 ----------------
 
   One of the more confusing parts of any type system is declaration type
@@ -353,7 +531,7 @@ _________________
   complexities that come with the Glint type (if that makes any sense).
 
 
-1.3.3 Scopes
+2.3.3 Scopes
 ------------
 
   A /scope/ is a concept of a meaningful collection of declarations. For
@@ -424,7 +602,7 @@ _________________
   - Each Match Expression
 
 
-1.3.4 Assignment
+2.3.4 Assignment
 ----------------
 
   Assignment is the operation of setting a variable's value, such that
@@ -450,7 +628,7 @@ _________________
   `----
 
 
-1.3.5 Glint Exercise
+2.3.5 Glint Exercise
 --------------------
 
   Exercise Mission
@@ -488,10 +666,10 @@ _________________
      when the program finishes?
 
 
-1.4 Basic Expressions
+2.4 Basic Expressions
 ~~~~~~~~~~~~~~~~~~~~~
 
-1.4.1 Arithmetic
+2.4.1 Arithmetic
 ----------------
 
   Glint programs often need to do basic math; for this, there are the
@@ -500,7 +678,7 @@ _________________
   (`%').
 
 
-1.4.2 Bitwise
+2.4.2 Bitwise
 -------------
 
   On computers, data is represented as bits. Bitwise operations allow
@@ -509,7 +687,7 @@ _________________
   operations include AND, OR, XOR, and NOT.
 
 
-1.4.3 Implicit Casting
+2.4.3 Implicit Casting
 ----------------------
 
   In Glint, the philosophy is that you should have to write less code
@@ -540,7 +718,7 @@ _________________
   Pointers are convertible to `void.ptr'.
 
 
-1.4.4 Explicit Casting
+2.4.4 Explicit Casting
 ----------------------
 
   To treat a variable's memory as if it were of another type, you can
@@ -553,13 +731,13 @@ _________________
   `----
 
 
-1.4.5 Glint Exercise
+2.4.5 Glint Exercise
 --------------------
 
   TODO
 
 
-1.5 Glint's Print
+2.5 Glint's Print
 ~~~~~~~~~~~~~~~~~
 
   Often, a program will need to "print" values, such that a human
@@ -589,13 +767,13 @@ _________________
   `----
 
 
-1.5.1 Glint Exercise
+2.5.1 Glint Exercise
 --------------------
 
   TODO
 
 
-1.6 Arrays
+2.6 Arrays
 ~~~~~~~~~~
 
   An array is a (contiguous) collection of a given element type.
@@ -610,7 +788,7 @@ _________________
   elements of a given type.
 
 
-1.6.1 Fixed Arrays
+2.6.1 Fixed Arrays
 ------------------
 
   A fixed array has the amount of elements known at compile-time. This
@@ -624,7 +802,7 @@ _________________
   terminating NUL byte.
 
 
-1.6.2 Dynamic Arrays
+2.6.2 Dynamic Arrays
 --------------------
 
   A dynamic array may have any amount of elements; any given instance of
@@ -708,7 +886,7 @@ _________________
   on that later).
 
 
-1.6.3 Array Views
+2.6.3 Array Views
 -----------------
 
   You can think of a view type as a shorthand for defining the following
@@ -731,10 +909,10 @@ _________________
   later).
 
 
-1.7 Conditionals and Control Flow
+2.7 Conditionals and Control Flow
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-1.7.1 `if'
+2.7.1 `if'
 ----------
 
   `if' evaluates a condition expression, and, if the result is truthy,
@@ -753,7 +931,7 @@ _________________
   `----
 
 
-1.7.2 `while'
+2.7.2 `while'
 -------------
 
   `while' evaluates a condition expression, and, if the result is
@@ -765,7 +943,7 @@ _________________
   `----
 
 
-1.7.3 `for'
+2.7.3 `for'
 -----------
 
   `for' is a loop structure that will iterate over anything with `data'
@@ -777,7 +955,7 @@ _________________
   `----
 
 
-1.7.4 `cfor'
+2.7.4 `cfor'
 ------------
 
   `cfor' is a control structure that mimics C's `for'.
@@ -787,7 +965,7 @@ _________________
   `----
 
 
-1.7.5 `match'
+2.7.5 `match'
 -------------
 
   `match' selects a control flow depending on which member of a sum type
@@ -803,14 +981,14 @@ _________________
   `----
 
 
-1.8 Declared Types
+2.8 Declared Types
 ~~~~~~~~~~~~~~~~~~
 
-1.8.1 Supplanted Members
+2.8.1 Supplanted Members
 ------------------------
 
 
-1.9 Basic Functions
+2.9 Basic Functions
 ~~~~~~~~~~~~~~~~~~~
 
   A /function/ is a concept that programming borrows from mathematics.
@@ -906,11 +1084,11 @@ _________________
   that becomes more and more difficult.
 
 
-1.9.1 Function Attributes
+2.9.1 Function Attributes
 -------------------------
 
 
-1.10 Pointers and References
+2.10 Pointers and References
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   We've talked a little about how variables (for the most part) are
@@ -951,7 +1129,7 @@ _________________
   value "at" the given memory address).
 
 
-1.11 Templates
+2.11 Templates
 ~~~~~~~~~~~~~~
 
   Templates, at their core, are expressions which evaluate to other
@@ -988,7 +1166,7 @@ _________________
   `----
 
 
-1.12 Function Overloading
+2.12 Function Overloading
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
   Glint supports /function overloading/, which is the idea of giving
@@ -1011,7 +1189,7 @@ _________________
   `----
 
 
-1.13 Operator Overloading
+2.13 Operator Overloading
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
   /Operators/ are tokens, or sequences of tokens, that may be placed
@@ -1040,7 +1218,7 @@ _________________
   TODO: syntax example
 
 
-1.14 Templated Functions and Templated Types
+2.14 Templated Functions and Templated Types
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   You do not ever need to implement a vector in Glint, as there is the
@@ -1095,10 +1273,10 @@ _________________
   place of `auto' in the parameters.
 
 
-1.15 Modules
+2.15 Modules
 ~~~~~~~~~~~~
 
-1.15.1 Writing A Module Vs A Program
+2.15.1 Writing A Module Vs A Program
 ------------------------------------
 
   A Glint program is a collection of Glint source code that may be
@@ -1116,7 +1294,7 @@ _________________
   modules may import programs.
 
 
-1.15.2 Exporting Variables
+2.15.2 Exporting Variables
 --------------------------
 
   A Glint module may export any amount of variables, such that those
@@ -1132,7 +1310,7 @@ _________________
   `----
 
 
-1.15.3 Importing Modules
+2.15.3 Importing Modules
 ------------------------
 
   ,----
@@ -1142,7 +1320,7 @@ _________________
   `----
 
 
-2 Types
+3 Types
 =======
 
   Just some extra information on the type sub-language. A lot of the
@@ -1151,7 +1329,7 @@ _________________
   one area. That's why this exists.
 
 
-2.1 Built-in Types
+3.1 Built-in Types
 ~~~~~~~~~~~~~~~~~~
 
   ,----
@@ -1167,7 +1345,7 @@ _________________
   `----
 
 
-2.2 FFI Types
+3.2 FFI Types
 ~~~~~~~~~~~~~
 
   FFI stands for Foreign Function Interface. These types allow you to
@@ -1191,16 +1369,16 @@ _________________
   `----
 
 
-2.3 Arbitrary Integers
+3.3 Arbitrary Integers
 ~~~~~~~~~~~~~~~~~~~~~~
 
   TODO
 
 
-2.4 Types with One Element
+3.4 Types with One Element
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-2.4.1 Pointers
+3.4.1 Pointers
 --------------
 
   You can make a pointer to any type by appending `.ptr'.
@@ -1241,7 +1419,7 @@ _________________
   it).
 
 
-2.4.2 References
+3.4.2 References
 ----------------
 
   You can make a reference to /almost/ any type by appending `.ref'.
@@ -1273,25 +1451,102 @@ _________________
   `----
 
 
-2.5 Composite Types
+3.5 Composite Types
 ~~~~~~~~~~~~~~~~~~~
 
-  TODO
-
-  Struct Types
-
-  Sum Types
-
-  Union Types
+  A composite type is a type that is made up of other types; that is,
+  these types allow you to group types together.
 
 
-3 Postface
+3.5.1 Struct Types
+------------------
+
+  A struct type is a sequential set of typed values that may be accessed
+  via a given name. These are called the struct's /members/.
+
+  For an instance of the following struct...
+  ,----
+  | struct {
+  |   x : int;
+  |   y : uint;
+  | };
+  `----
+
+  If `x' was modified, `y' would be unchanged, and vice versa. A struct
+  may have as many members as you could feasibly want, and their types
+  are not required to be unique. You may have two `int' typed values in
+  one struct with different names.
+
+
+3.5.2 Union Types
+-----------------
+
+  A union type is an non-type-safe way of converting between types. A
+  union declaration looks a lot like a struct, but the underlying
+  semantics are very different. For one, a union is only large enough to
+  store it's largest member, and all the members share an address. This
+  means that, if one member is changed, all the others are destructively
+  modified! For most use cases, you should use a sum type instead. But,
+  this is here if you know what you are doing and need to do it your
+  way. You are the Glint programmer, after all, you are in total
+  control.
+
+  For a real world use case: use unions to convert between a type and
+  it's binary format easily.
+  ,----
+  | union {
+  |   value : int;
+  |   bytes : [byte (sizeof int)];
+  | };
+  `----
+
+
+3.5.3 Sum Types
+---------------
+
+  A sum type is a type-safe way of storing a group of types in one
+  location. A sum type may only have one of it's members valid at a
+  time, and, each time an access is performed, Glint will safely (and
+  forcefully) exit the program before any memory errors may occur iff
+  the access is not to the valid member.
+
+  A sum type's members are much like a union type's: only one member is
+  valid at a given point in the program, and all the members share an
+  address. However, the sum type has a hidden `tag' value that stores
+  which member is currently valid (if any). Whenever an access occurs,
+  this tag may be checked against, and an access to an invalid value
+  will error. This means that sum types do not allow you to convert
+  between types, like a union, but they do allow you to have one
+  variable have "one of a group of" types.
+
+
+3.6 `sizeof' and `alignof'
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  `sizeof T' where `T' is any valid type will return the size *IN BITS*
+  of the given type.
+
+  `alignof T' where `T' is any valid type will return the size *IN
+  BYTES* of the given type.
+
+
+3.6.1 On bits vs bytes
+----------------------
+
+  Bit alignment is not something that is supported by any real machine
+  or language. By definition, a byte is the minimum addressable unit in
+  any computer. So, when it comes to alignment of an address, bytes are
+  relevant. However, when it comes to the size of a type in Glint, bits
+  are definitely relevant, since you may have a `u27' or a `s42'.
+
+
+4 Postface
 ==========
 
-3.1 Example Programs
+4.1 Example Programs
 ~~~~~~~~~~~~~~~~~~~~
 
-3.1.1 Hello, World!
+4.1.1 Hello, World!
 -------------------
 
   ,----
@@ -1299,7 +1554,7 @@ _________________
   `----
 
 
-3.1.2 Factorial
+4.1.2 Factorial
 ---------------
 
   ,----
@@ -1320,7 +1575,7 @@ _________________
   `----
 
 
-3.1.3 Recursive Fibonacci
+4.1.3 Recursive Fibonacci
 -------------------------
 
   ,----
@@ -1338,7 +1593,7 @@ _________________
   interested.
 
 
-3.1.4 Euclid GCD
+4.1.4 Euclid GCD
 ----------------
 
   ,----

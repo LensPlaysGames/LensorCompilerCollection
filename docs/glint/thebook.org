@@ -16,6 +16,68 @@
     (org-ascii-export-to-ascii))
 #+end_src
 
+* Preface: What's It to You?
+
+** Hardware
+
+# Computer definition. Execution environment explanation.
+
+Glint is a programming language. This book is meant to teach it (at least somewhat). A programming language is not useful in a vacuum (literally or figuratively); a programming language is a language that allows a programmer to instruct a computer with what to do (and when to do it).
+
+A computer is a broad term, but, for the most part, simply refers to a machine that does "work" via a sequence of operations on binary (on or off) values. This sequence of operations is called /code/. A collection of code that a computer may run is called a /program/. So, a program is a collection of code, and code is a sequence of operations that tells the computer what to do.
+
+A program /starts/ at a specific point (usually called the entry point). A program is not required to end explicitly, and there are various routes through which a program may end up not running anymore. A program is said to be /running/ on a given computer when operations from that program's code are currently executing on that computer.
+
+A computer has to do operations /on/ something. That is, an addition operation isn't useful unless you are actually operating on meaningful values. In the real world, computers have all sorts of different hardware to make this happen (i.e. CPU registers, ALUs, etc.), but we won't get into all of that right now.
+
+For now, you just need to learn about something called /memory/. A computer has to operate on values, and store the result somewhere; it also has to store code, and keep track of it's place. Computers often store those values in their /memory/ (so they can recall it later).
+
+A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary /bits/ (values that may only be on or off), it is addressed via /bytes/. In hardware, a byte (the minimum addressable unit in memory) is /usually/ eight bits.
+
+#+begin_example
+MEMORY
+| off on  off off off on  off on | ...
+| BYTE 0                         | BYTE 1
+#+end_example
+
+In the example above, each =off= and =on= represents a bit (an actual stored value in memory that is either =on= or =off=). Every eight bits is labeled as a =byte=. If we were to access any value seen above within the computer's memory, we would do so by first /loading/ the zero-eth byte from memory.
+
+To =load= from memory means to copy the relevant set of bits from memory. Loading requires a memory address: the index of the byte we'd like to load.
+
+The opposite of /loading from/ memory is /storing into/ memory. A value (or values) may be stored into memory, such that further loads from that memory result in the stored value(s). Because loading and storing both work with memory, they have the same limitations of not working directly on bits, but on sets of bits called /bytes/.
+
+The operations that a computer performs (or, the /code/ that a computer /executes/) operate directly on sets of bit values (on or off). These values may be written to or loaded from memory for later use/re-use.
+
+As we touched on earlier, even a computer's code is stored in it's own memory. That is, a computer's operations are encoded in a binary format (such that they may be represented by values that may only be =on= or =off=), and those binary values are stored into the computer's memory. When the computer is started, the computer loads an operation from it's memory, executes it, and repeats. The computer keeps track of where in it's memory it is executing via a /program counter/. The program counter is also sometimes known as an /instruction pointer/. The program counter simply keeps track of which byte within memory the current operation is stored at. When the operation is finished, the computer may look at the next byte within memory to find the next operation.
+
+There is also a more permanent form of memory known as /storage/. A computer's storage is, like memory, a set of binary values (on or off). In an ideal world, memory and storage wouldn't be different. In the real world, storage is much slower (as it solves a different physical problem; it doesn't just store bit values while the computer is on, it stores them even without power). For the most part, computer /files/ are meaningful, named portions of a computer's storage.
+
+** Software
+
+Now that you know what a computer is, and a little bit about how a computer functions, we can now learn some basic conventions about how all modern computers use that hardware to do useful things.
+
+Most computers come with code in their memory that may not ever be changed; it is locked into the hardware (physical parts of the computer machine). This code is called /firmware/, since it is not physical, yet it is still unchanging. A computer's firmware usually handles doing initialisation procedures when the computer turns on, getting the computer to a known state. It does this so that the user of the computer may write software with a known starting state (it'd be quite difficult to guess where the computer has started executing code at, if the program counter's value was random every time the computer was started).
+
+That code that the user runs on their computer is known as /software/. Most computers these days come with a conventional piece of software known as an /operating system/ (often abbreviated /OS/). An /OS/ is software that deals with the specifics of the particular hardware, such that /it/ may provide a /more/ known starting state to /other/ software. An OS usually consists of a kernel program that "talks" to the hardware; in reality, it does whatever is needed to make hardware do a given operation whenever software requests that operation be completed (no actual "talking" involved).
+
+The programs that an OS runs are usually called "user programs", and the known state that the OS provides to software called "userspace". User programs are said to run within userspace.
+
+Glint is a programming language meant to write user programs, so, Glint code runs within userspace of some OS on some computer. This is important to understand how to get the computer to do what you want it to do. /If you want to shoot an arrow and hit a target, you have to know where you are standing./
+
+** Tooling
+
+# Compilers and linkers, object and executable files.
+
+Now, the weird part is that we actually /use/ computers to do (or at least help with) the work of producing code. This means there is actually /software/ we use when writing /software/.
+
+One such piece of software is a /compiler/ program. A compiler produces code in a file, given some input. The format that a compiler inputs and outputs is not set in stone, and varies depending on your particular OS, hardware, etc. A compiler is usually referred to by the /language/ the compiler accepts as input. For example, a /C compiler/ would be a compiler that takes as input the language /C/, and outputs code in some other (possibly machine-ready) format.
+
+A compiler will often tell you when a program is ill-formed; a good compiler will tell you where and how. An ill-formed program is like a sentence that doesn't follow grammar rules: the sentence will never convey any meaning until the rules are followed, as it is fundamentally flawed. Some problems in programs mean the program will never work; these are usually called /errors/. Other problems are just things that are likely to be misinterpreted or often cause confusion (like a sentence that starts with "Because"); these are usually called /warnings/.
+
+The file a compiler produces is called an /object/ file. An object file is a type of file that stores code and data, and necessary information about that code and data.
+
+An object file must be turned into an executable file via a /linker/ program before a computer may load it into memory and actually execute the operations. An executable file is just a binary format that an OS supports loading, like /the Executable and Linkable Format (ELF)/. A linker's main job is to convert named portions of memory to actual memory addresses.
+
 * Programming in Lensor Glint
 
 NOTE: Glint is a language, Lensor is the specification of the language described by this book.
@@ -890,13 +952,49 @@ Like a pointer, a reference doesn't store the underlying value, but a location w
 
 ** Composite Types
 
-TODO
+A composite type is a type that is made up of other types; that is, these types allow you to group types together.
 
-Struct Types
+*** Struct Types
 
-Sum Types
+A struct type is a sequential set of typed values that may be accessed via a given name. These are called the struct's /members/.
 
-Union Types
+For an instance of the following struct...
+#+begin_src glint
+  struct {
+    x : int;
+    y : uint;
+  };
+#+end_src
+
+If =x= was modified, =y= would be unchanged, and vice versa. A struct may have as many members as you could feasibly want, and their types are not required to be unique. You may have two =int= typed values in one struct with different names.
+
+*** Union Types
+
+A union type is an non-type-safe way of converting between types. A union declaration looks a lot like a struct, but the underlying semantics are very different. For one, a union is only large enough to store it's largest member, and all the members share an address. This means that, if one member is changed, all the others are destructively modified! For most use cases, you should use a sum type instead. But, this is here if you know what you are doing and need to do it your way. You are the Glint programmer, after all, you are in total control.
+
+For a real world use case: use unions to convert between a type and it's binary format easily.
+#+begin_src glint
+  union {
+    value : int;
+    bytes : [byte (sizeof int)];
+  };
+#+end_src
+
+*** Sum Types
+
+A sum type is a type-safe way of storing a group of types in one location. A sum type may only have one of it's members valid at a time, and, each time an access is performed, Glint will safely (and forcefully) exit the program before any memory errors may occur iff the access is not to the valid member.
+
+A sum type's members are much like a union type's: only one member is valid at a given point in the program, and all the members share an address. However, the sum type has a hidden =tag= value that stores which member is currently valid (if any). Whenever an access occurs, this tag may be checked against, and an access to an invalid value will error. This means that sum types do not allow you to convert between types, like a union, but they do allow you to have one variable have "one of a group of" types.
+
+** =sizeof= and =alignof=
+
+=sizeof T= where =T= is any valid type will return the size *IN BITS* of the given type.
+
+=alignof T= where =T= is any valid type will return the size *IN BYTES* of the given type.
+
+*** On bits vs bytes
+
+Bit alignment is not something that is supported by any real machine or language. By definition, a byte is the minimum addressable unit in any computer. So, when it comes to alignment of an address, bytes are relevant. However, when it comes to the size of a type in Glint, bits are definitely relevant, since you may have a =u27= or a =s42=.
 
 * Postface
 
