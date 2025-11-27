@@ -226,8 +226,12 @@ add_library(
   include/glint/parser.hh
   include/glint/sema.hh
   lib/glint/ast.cc
+  lib/glint/ast_deserialise_expr.cc
+  lib/glint/ast_deserialise_type.cc
   lib/glint/ast_eval.cc
   lib/glint/ast_module.cc
+  lib/glint/ast_serialise_expr.cc
+  lib/glint/ast_serialise_type.cc
   lib/glint/driver.cc
   lib/glint/eval.cc
   lib/glint/init.cc
@@ -294,8 +298,8 @@ add_library(
   include/lcc/utils/result.hh
   include/lcc/utils/rtti.hh
   include/lcc/utils/twocolumnlayouthelper.hh
-  lib/lcc/calling_conventions/sysv_x86_64.cc
   lib/lcc/calling_conventions/ms_x64.cc
+  lib/lcc/calling_conventions/sysv_x86_64.cc
   lib/lcc/codegen/isel.cc
   lib/lcc/codegen/mir.cc
   lib/lcc/codegen/register_allocation.cc

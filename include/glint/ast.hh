@@ -330,11 +330,26 @@ public:
         Type*
     ) -> lcc::u16;
 
+    [[nodiscard]]
+    auto serialise_expr(
+        std::vector<u8>& out,
+        std::vector<Expr*>& cache,
+        std::vector<Expr*>& current,
+        // indices calculated ahead of time
+        std::unordered_map<Expr*, u16> indices,
+        std::unordered_map<Type*, u16> type_indices,
+        Expr*
+    ) -> lcc::u16;
+
     /// Deserialise a module metadata blob into `this`.
     /// \return a boolean value denoting `true` iff deserialisation succeeded.
     /// NOTE: Does not clear out old module before deserialising into `this`.
     [[nodiscard]]
     auto deserialise(lcc::Context*, std::vector<u8> module_metadata_blob) -> bool;
+
+    // After deserialising all expressions, walk each one and build/fixup
+    // scopes.
+    void scope_walk(lcc::Context*, Expr*, Scope*);
 
     /// Convert a type back to the source it may have been lexed from.
     [[nodiscard]]
@@ -2348,6 +2363,7 @@ public:
 
     [[nodiscard]]
     auto scope() const -> Scope* { return _scope; }
+    void scope(Scope* scope) { _scope = scope; }
 
     [[nodiscard]]
     auto target() const -> Expr* { return _target; }

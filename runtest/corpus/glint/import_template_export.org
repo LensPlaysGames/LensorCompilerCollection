@@ -16,7 +16,7 @@ export x :: template(e : expr) e;
 
 #+NAME: status
 #+begin_example
-0
+69
 #+end_example
 
 #+NAME: output

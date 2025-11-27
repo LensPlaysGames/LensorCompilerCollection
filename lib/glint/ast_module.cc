@@ -6,10 +6,8 @@
 #include <glint/sema.hh>
 
 #include <algorithm>
-#include <array>
 #include <cstring>
 #include <iterator>
-#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -86,451 +84,19 @@ void lcc::glint::Module::add_top_level_expr(Expr* node) {
 
 auto lcc::glint::Module::intern(std::string_view str) -> usz {
     auto it = rgs::find(strings, str);
-    if (it != strings.end()) { return usz(std::distance(strings.begin(), it)); }
+    if (it != strings.end())
+        return usz(std::distance(strings.begin(), it));
+
     strings.emplace_back(str);
     return strings.size() - 1;
 }
 
-/// ================
-/// Serialisation
-/// ================
-
-// FIXME: This should probably be backwards for big endian machines, afaik.
-template <typename T>
-auto to_bytes(const T object) -> std::array<lcc::u8, sizeof(T) / sizeof(lcc::u8)> {
-    std::array<lcc::u8, sizeof(T)> out{};
-    const lcc::u8* begin = reinterpret_cast<const lcc::u8*>(&object);
-    const lcc::u8* end = begin + (sizeof(T));
-    std::copy(begin, end, out.begin());
-    return out;
-}
-
-// FIXME: This should probably be backwards for big endian machines, afaik.
-// requires std::is_trivially_constructible?
-template <typename T>
-auto from_bytes(std::array<lcc::u8, sizeof(T)> bytes) -> T {
-    T out{};
-    std::memcpy(&out, bytes.data(), sizeof(T));
-    return out;
-}
-
-auto lcc::glint::Module::serialise(
-    std::vector<u8>& out,
-    std::vector<Type*>& cache,
-    std::vector<Type*>& current,
-    std::unordered_map<Type*, ModuleDescription::TypeIndex> indices,
-    Type* ty
-) -> lcc::u16 {
-    auto found = rgs::find(cache, ty);
-    if (found != cache.end())
-        return u16(found - cache.begin());
-
-    // Handle self-referencing type (type used in it's own definition).
-    auto found_current = rgs::find(current, ty);
-    if (found_current != current.end())
-        return ModuleDescription::TypeIndex(indices.at(ty));
-
-    LCC_ASSERT(
-        cache.size() < 0xffff,
-        "Too many types, cannot serialise in binary metadata format version 1"
-    );
-    current.push_back(ty);
-
-    // For later confidence check
-    bool tag_written = false;
-
-    // Helper that should be called before serialising "this" type (i.e. "ty"
-    // parameter). We can't do it now due to post-order traversal possibly
-    // serialising children first.
-    const auto write_tag = [&]() {
-        u8 tag = u8(ty->kind());
-        out.push_back(tag);
-        tag_written = true;
-    };
-
-    switch (ty->kind()) {
-        // NamedType: length :u32, name :u8[length]
-        case Type::Kind::Named: {
-            auto* type = as<NamedType>(ty);
-            u16 name_length = u16(type->name().length());
-            auto name_length_bytes = to_bytes(name_length);
-
-            write_tag();
-            // Write `length: u16`
-            out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
-            // Write `name : u8[length]`
-            out.insert(out.end(), type->name().begin(), type->name().end());
-        } break;
-
-        // PointerType, ReferenceType: type_index :TypeIndex
-        case Type::Kind::Pointer:
-        case Type::Kind::Reference: {
-            // Serialise the referenced type.
-            auto referenced_type_index = serialise(out, cache, current, indices, ty->elem());
-
-            // Convert the type index to it's binary format (an array of bytes).
-            auto type_index_bytes = to_bytes(referenced_type_index);
-
-            write_tag();
-            // Write `type_index: u16`.
-            out.insert(out.end(), type_index_bytes.begin(), type_index_bytes.end());
-        } break;
-
-        // IntegerType: bitwidth :u16, is_signed :u8
-        case Type::Kind::Integer: {
-            IntegerType* type = as<IntegerType>(ty);
-            LCC_ASSERT(
-                type->bit_width() <= 0xffff,
-                "Cannot encode over-large bitwidth of integer type {}",
-                *ty
-            );
-
-            u16 bitwidth = u16(type->bit_width());
-            auto bitwidth_bytes = to_bytes(bitwidth);
-
-            u8 is_signed = type->is_signed() ? 1 : 0;
-
-            write_tag();
-            // Write `bitwidth :u16`.
-            out.insert(out.end(), bitwidth_bytes.begin(), bitwidth_bytes.end());
-            // Write `is_signed :u8`.
-            out.push_back(is_signed);
-        } break;
-
-        // BuiltinType: builtin_kind :u8
-        case Type::Kind::Builtin: {
-            BuiltinType* type = as<BuiltinType>(ty);
-            LCC_ASSERT(
-                type->builtin_kind() != BuiltinType::BuiltinKind::OverloadSet,
-                "Cannot serialise overload sets; sorry"
-            );
-            u8 builtin_kind = u8(type->builtin_kind());
-
-            write_tag();
-            // Write `builtin_kind :u8`.
-            out.push_back(builtin_kind);
-        } break;
-
-        // FFIType: ffi_kind :u16
-        case Type::Kind::FFIType: {
-            FFIType* type = as<FFIType>(ty);
-            u16 ffi_kind = u16(type->ffi_kind());
-            auto ffi_kind_bytes = to_bytes(ffi_kind);
-
-            write_tag();
-            // Write `ffi_kind :u16`.
-            out.insert(out.end(), ffi_kind_bytes.begin(), ffi_kind_bytes.end());
-        } break;
-
-        // FunctionType:
-        //     attributes :u32
-        //     param_count :u16
-        //     param_types :u16[param_count]
-        //     return_type :u16
-        //     param_names :(param_name_length :u16, param_name :u8[param_name_length])[param_count]
-        case Type::Kind::Function: {
-            FuncType* type = as<FuncType>(ty);
-            auto return_type = serialise(out, cache, current, indices, type->return_type());
-            auto return_type_bytes = to_bytes(return_type);
-
-            // Serialise parameter types and fixup parameter type indices previously
-            // allocated.
-            std::vector<ModuleDescription::TypeIndex> param_types{};
-            for (auto param : type->params())
-                param_types.push_back(serialise(out, cache, current, indices, param.type));
-
-            write_tag();
-
-            u32 attributes{};
-            const auto set_attr_bit = [&](FuncAttr f) {
-                if (type->has_attr(f)) {
-                    static constexpr auto one = decltype(attributes)(1);
-                    attributes |= one << u32(f);
-                }
-            };
-            // Probably don't need all of these. If we run out of bits, we could
-            // remove some that aren't needed.
-            static_assert(
-                +FuncAttr::COUNT == 11,
-                "Exhaustive handling of function attributes in module deserialisation"
-            );
-            set_attr_bit(FuncAttr::Const);
-            set_attr_bit(FuncAttr::Discardable);
-            set_attr_bit(FuncAttr::Flatten);
-            set_attr_bit(FuncAttr::Inline);
-            set_attr_bit(FuncAttr::NoInline);
-            set_attr_bit(FuncAttr::NoMangle);
-            set_attr_bit(FuncAttr::NoOpt);
-            set_attr_bit(FuncAttr::NoReturn);
-            set_attr_bit(FuncAttr::Pure);
-            set_attr_bit(FuncAttr::ReturnsTwice);
-            set_attr_bit(FuncAttr::Used);
-
-            u16 param_count = u16(type->params().size());
-
-            auto attributes_bytes = to_bytes(attributes);
-            out.insert(out.end(), attributes_bytes.begin(), attributes_bytes.end());
-
-            auto param_count_bytes = to_bytes(param_count);
-            out.insert(out.end(), param_count_bytes.begin(), param_count_bytes.end());
-
-            // Allocate enough room to represent parameter types, once we are able to
-            // serialise them, keeping track of where they are so we can fix them up
-            // later.
-            for (auto param_type : param_types) {
-                auto param_type_bytes = to_bytes(param_type);
-                out.insert(out.end(), param_type_bytes.begin(), param_type_bytes.end());
-            }
-
-            out.insert(out.end(), return_type_bytes.begin(), return_type_bytes.end());
-
-            // Write parameter names
-            for (auto& param : type->params()) {
-                auto name_length = u16(param.name.length());
-                auto name_length_bytes = to_bytes(name_length);
-                out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
-                out.insert(out.end(), param.name.begin(), param.name.end());
-            }
-        } break;
-
-        // EnumType:
-        //     underlying_type_index :TypeIndex
-        //     enum_decl_count :u32
-        //     enum_decls :u64[enum_decl_count]
-        //     enum_names :(name_length :u16, name :u8[name_length])[enum_decl_count]
-        // FIXME: Ideally we should get the size of the value (enum_decls element
-        // type) from the underlying type, instead of just assuming it fits in 64
-        // bits.
-        case Type::Kind::Enum: {
-            auto type = as<EnumType>(ty);
-
-            // TODO: Assert that underlying type can fit in 64 bits. But we don't have
-            // context here (yet).
-
-            auto underlying_type = serialise(out, cache, current, indices, type->underlying_type());
-            auto underlying_type_bytes = to_bytes(underlying_type);
-
-            write_tag();
-
-            out.insert(out.end(), underlying_type_bytes.begin(), underlying_type_bytes.end());
-
-            // Write enumerator count.
-            u32 enum_decl_count = u32(type->enumerators().size());
-            auto enum_decl_count_bytes = to_bytes(enum_decl_count);
-            out.insert(out.end(), enum_decl_count_bytes.begin(), enum_decl_count_bytes.end());
-
-            // Write enumerator values.
-            for (auto* enum_decl : type->enumerators()) {
-                u64 value = enum_decl->value().value();
-                auto value_bytes = to_bytes(value);
-                out.insert(out.end(), value_bytes.begin(), value_bytes.end());
-            }
-
-            // Write enumerator names.
-            for (auto* enum_decl : type->enumerators()) {
-                LCC_ASSERT(
-                    enum_decl->name().length() <= std::numeric_limits<u16>::max(),
-                    "Enumerator has over-long name, cannot export..."
-                );
-                u16 name_length = (u16) enum_decl->name().length();
-                auto name_length_bytes = to_bytes(name_length);
-                out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
-                out.insert(out.end(), enum_decl->name().begin(), enum_decl->name().end());
-            }
-        } break;
-
-        // ArrayViewType: element_type_index :TypeIndex
-        case Type::Kind::ArrayView: {
-            auto* type = as<ArrayViewType>(ty);
-
-            auto element_type = serialise(out, cache, current, indices, type->element_type());
-            auto element_type_bytes = to_bytes(element_type);
-
-            write_tag();
-            out.insert(out.end(), element_type_bytes.begin(), element_type_bytes.end());
-        } break;
-
-        // DynamicArrayType: element_type_index :TypeIndex
-        case Type::Kind::DynamicArray: {
-            auto* type = as<DynamicArrayType>(ty);
-
-            auto element_type = serialise(out, cache, current, indices, type->elem());
-            auto element_type_bytes = to_bytes(element_type);
-
-            write_tag();
-            out.insert(out.end(), element_type_bytes.begin(), element_type_bytes.end());
-        } break;
-
-        // ArrayType: element_type_index :u16, element_count :u64
-        case Type::Kind::Array: {
-            auto type = as<ArrayType>(ty);
-
-            // Serialise the array's element type.
-            auto element_type = serialise(out, cache, current, indices, type->element_type());
-
-            // Convert the element type to it's binary format.
-            auto element_type_bytes = to_bytes(element_type);
-
-            // Get element count
-            u64 element_count = u64(type->dimension());
-
-            // Convert the element count value to it's binary format.
-            auto element_count_bytes = to_bytes(element_count);
-
-            write_tag();
-
-            // Write `element_type_index :u16`.
-            out.insert(out.end(), element_type_bytes.begin(), element_type_bytes.end());
-
-            // Write `element_count :u64`.
-            out.insert(out.end(), element_count_bytes.begin(), element_count_bytes.end());
-        } break;
-
-        // serialise()
-        // StructType:
-        //     size_in_bytes :u16
-        //     align_in_bytes :u16
-        //     member_count :u16
-        //     member_types :TypeIndex[member_count]
-        //     member_data :(byte_offset :u16, name_length :u16, member_name :u8[name_length])[member_count]
-        case Type::Kind::Struct: {
-            auto type = as<StructType>(ty);
-
-            auto& members = type->members();
-
-            std::vector<ModuleDescription::TypeIndex> member_types{};
-            for (auto& member : members)
-                member_types.push_back(serialise(out, cache, current, indices, member.type));
-
-            write_tag();
-
-            // Struct Size
-            auto size_in_bytes = u16(type->byte_size());
-            auto size_in_bytes_bytes = to_bytes(size_in_bytes);
-            out.insert(out.end(), size_in_bytes_bytes.begin(), size_in_bytes_bytes.end());
-
-            // Struct Alignment
-            auto align_in_bytes = u16(type->alignment());
-            auto align_in_bytes_bytes = to_bytes(align_in_bytes);
-            out.insert(out.end(), align_in_bytes_bytes.begin(), align_in_bytes_bytes.end());
-
-            // Member Count
-            auto member_count = u16(members.size());
-            auto member_count_bytes = to_bytes(member_count);
-            out.insert(out.end(), member_count_bytes.begin(), member_count_bytes.end());
-
-            // Member Types
-            for (auto member_type : member_types) {
-                auto member_type_bytes = to_bytes(member_type);
-                out.insert(out.end(), member_type_bytes.begin(), member_type_bytes.end());
-            }
-
-            // Member Data
-            for (const auto& member : members) {
-                auto byte_offset = u16(member.byte_offset);
-                auto byte_offset_bytes = to_bytes(byte_offset);
-                out.insert(out.end(), byte_offset_bytes.begin(), byte_offset_bytes.end());
-
-                auto name_length = u16(member.name.length());
-                auto name_length_bytes = to_bytes(name_length);
-                out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
-
-                out.insert(out.end(), member.name.begin(), member.name.end());
-            }
-        } break;
-
-        // serialise()
-        // SumType:
-        //     member_count :u16
-        //     member_types :TypeIndex[member_count]
-        //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
-        case Type::Kind::Sum: {
-            auto type = as<SumType>(ty);
-
-            auto& members = type->members();
-
-            std::vector<ModuleDescription::TypeIndex> member_types{};
-            for (auto& member : members)
-                member_types.push_back(serialise(out, cache, current, indices, member.type));
-
-            write_tag();
-
-            auto member_count = u16(members.size());
-            auto member_count_bytes = to_bytes(member_count);
-            out.insert(out.end(), member_count_bytes.begin(), member_count_bytes.end());
-
-            for (auto member_type : member_types) {
-                auto member_type_bytes = to_bytes(member_type);
-                out.insert(out.end(), member_type_bytes.begin(), member_type_bytes.end());
-            }
-
-            // Member Data
-            for (const auto& member : members) {
-                auto name_length = u16(member.name.length());
-                auto name_length_bytes = to_bytes(name_length);
-                out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
-                out.insert(out.end(), member.name.begin(), member.name.end());
-            }
-        } break;
-
-        // UnionType:
-        //     member_count :u16
-        //     member_types :TypeIndex[member_count]
-        //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
-        case Type::Kind::Union: {
-            auto type = as<UnionType>(ty);
-
-            auto& members = type->members();
-
-            std::vector<ModuleDescription::TypeIndex> member_types{};
-            for (auto& member : members)
-                member_types.push_back(serialise(out, cache, current, indices, member.type));
-
-            write_tag();
-
-            auto member_count = u16(members.size());
-            auto member_count_bytes = to_bytes(member_count);
-            out.insert(out.end(), member_count_bytes.begin(), member_count_bytes.end());
-
-            for (auto member_type : member_types) {
-                auto member_type_bytes = to_bytes(member_type);
-                out.insert(out.end(), member_type_bytes.begin(), member_type_bytes.end());
-            }
-
-            // Member Data
-            for (const auto& member : members) {
-                auto name_length = u16(member.name.length());
-                auto name_length_bytes = to_bytes(name_length);
-                out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
-                out.insert(out.end(), member.name.begin(), member.name.end());
-            }
-        } break;
-
-        case Type::Kind::Typeof:
-            LCC_ASSERT(false, "Sema should have replaced TypeofType with the type of it's contained expression");
-    }
-
-    LCC_ASSERT(
-        tag_written,
-        "You forgot to call write_tag() when implementing serialisation of a new type, most likely"
-    );
-
-    std::erase(current, ty);
-
-    auto type_index = ModuleDescription::TypeIndex(cache.size());
-
-    LCC_ASSERT(
-        indices.at(ty) == type_index,
-        "Mismatch in AoT index calculation and actual serialisation"
-    );
-
-    cache.emplace_back(ty);
-
-    return type_index;
-}
-
 namespace lcc::glint {
-void calculate_indices(std::unordered_map<Type*, ModuleDescription::TypeIndex>& out, usz& index, Type* ty) {
+void calculate_indices(
+    std::unordered_map<Type*, ModuleDescription::TypeIndex>& out,
+    usz& index,
+    Type* ty
+) {
     // Don't visit a type twice.
     if (out.contains(ty)) return;
 
@@ -540,49 +106,55 @@ void calculate_indices(std::unordered_map<Type*, ModuleDescription::TypeIndex>& 
     // this type will be serialised.
     out.emplace(ty, -1);
 
+    const auto recurse = [&](Type* t) {
+        calculate_indices(out, index, t);
+    };
+
     // Visit type's children, first.
     switch (ty->kind()) {
+        // Types with no children.
         case glint::Type::Kind::Builtin:
         case glint::Type::Kind::FFIType:
         case glint::Type::Kind::Named:
         case glint::Type::Kind::Integer:
             break;
 
+        // Types that always have a single child.
         case glint::Type::Kind::Pointer:
         case glint::Type::Kind::Reference:
         case glint::Type::Kind::DynamicArray:
         case glint::Type::Kind::Array:
         case glint::Type::Kind::ArrayView:
         case glint::Type::Kind::Enum:
-            calculate_indices(out, index, ty->elem());
+            recurse(ty->elem());
             break;
 
         case glint::Type::Kind::Function: {
             auto f_ty = as<glint::FuncType>(ty);
 
-            calculate_indices(out, index, f_ty->return_type());
+            recurse(f_ty->return_type());
 
             for (auto p : f_ty->params())
-                calculate_indices(out, index, p.type);
+                recurse(p.type);
 
         } break;
 
         case glint::Type::Kind::Sum: {
             auto s_ty = as<glint::SumType>(ty);
             for (auto m : s_ty->members())
-                calculate_indices(out, index, m.type);
+                recurse(m.type);
         } break;
 
         case glint::Type::Kind::Union: {
             auto u_ty = as<glint::UnionType>(ty);
             for (auto m : u_ty->members())
-                calculate_indices(out, index, m.type);
+                recurse(m.type);
         } break;
 
         case glint::Type::Kind::Struct: {
             auto s_ty = as<glint::StructType>(ty);
             for (auto m : s_ty->members())
-                calculate_indices(out, index, m.type);
+                recurse(m.type);
         } break;
 
         case glint::Type::Kind::Typeof: LCC_ASSERT(false);
@@ -592,9 +164,152 @@ void calculate_indices(std::unordered_map<Type*, ModuleDescription::TypeIndex>& 
     out.at(ty) = ModuleDescription::TypeIndex(index);
     ++index;
 }
+
+void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& out, usz& index, Expr* expr) {
+    // Don't visit an expr twice.
+    if (out.contains(expr)) return;
+
+    // Add dummy entry to out so that we don't visit the expr twice if the
+    // expr is self-referencing. This needs to be updated after all the
+    // children indices are calculated, and we actually know the index where
+    // this type will be serialised.
+    out.emplace(expr, -1);
+
+    const auto recurse = [&](Expr* e) {
+        calculate_indices(out, index, e);
+    };
+
+    // Visit expression's children, first.
+    switch (expr->kind()) {
+        // Expressions that never have children
+        case Expr::Kind::EvaluatedConstant:
+        case Expr::Kind::IntegerLiteral:
+        case Expr::Kind::NameRef:
+        case Expr::Kind::StringLiteral:
+        case Expr::Kind::Type:
+            break;
+
+        // Expressions that may have a single child.
+        case Expr::Kind::Return: {
+            auto r = as<ReturnExpr>(expr);
+            if (r->value())
+                recurse(r->value());
+        } break;
+
+        // Expressions that have a single child.
+        case Expr::Kind::Template: {
+            auto t = as<TemplateExpr>(expr);
+            recurse(t->body());
+        } break;
+
+        case Expr::Kind::MemberAccess: {
+            auto m = as<MemberAccessExpr>(expr);
+            recurse(m->object());
+        } break;
+
+        case Expr::Kind::Cast: {
+            auto c = as<CastExpr>(expr);
+            recurse(c->operand());
+        } break;
+
+        case Expr::Kind::Sizeof: {
+            auto s = as<SizeofExpr>(expr);
+            recurse(s->expr());
+        } break;
+
+        case Expr::Kind::Alignof: {
+            auto a = as<AlignofExpr>(expr);
+            recurse(a->expr());
+        } break;
+
+        case Expr::Kind::Unary: {
+            auto u = as<UnaryExpr>(expr);
+            recurse(u->operand());
+        } break;
+
+        // Expressions that have multiple children.
+        case Expr::Kind::Binary: {
+            auto b = as<BinaryExpr>(expr);
+            recurse(b->lhs());
+            recurse(b->rhs());
+        } break;
+
+        case Expr::Kind::If: {
+            auto i = as<IfExpr>(expr);
+            recurse(i->condition());
+            recurse(i->then());
+            if (i->otherwise())
+                recurse(i->otherwise());
+        } break;
+
+        case Expr::Kind::While: {
+            auto w = as<WhileExpr>(expr);
+            recurse(w->condition());
+            recurse(w->body());
+        } break;
+
+        case Expr::Kind::For: {
+            auto f = as<ForExpr>(expr);
+            recurse(f->init());
+            recurse(f->condition());
+            recurse(f->increment());
+            recurse(f->body());
+        } break;
+
+        // Expressions that have a variable amount of children.
+        case Expr::Kind::Call: {
+            auto c = as<CallExpr>(expr);
+            recurse(c->callee());
+            for (auto e : c->args())
+                recurse(e);
+        } break;
+
+        case Expr::Kind::IntrinsicCall: {
+            expr->print(true);
+            LCC_TODO("Implement serialisation of intrinsic call");
+        } break;
+
+        case Expr::Kind::CompoundLiteral: {
+            auto c = as<CompoundLiteral>(expr);
+            for (auto e : c->children())
+                recurse(e);
+        } break;
+
+        case Expr::Kind::Block: {
+            auto b = as<BlockExpr>(expr);
+            for (auto e : b->children())
+                recurse(e);
+        } break;
+
+        case Expr::Kind::Match: {
+            auto m = as<MatchExpr>(expr);
+            recurse(m->object());
+
+            for (auto e : m->bodies())
+                recurse(e);
+
+        } break;
+
+        case Expr::Kind::Module:
+        case Expr::Kind::EnumeratorDecl:
+        case Expr::Kind::FuncDecl:
+        case Expr::Kind::OverloadSet:
+        case Expr::Kind::TypeAliasDecl:
+        case Expr::Kind::TypeDecl:
+        case Expr::Kind::VarDecl:
+            expr->print(true);
+            LCC_TODO("Implement serialisation of preceding expression AST\n");
+    };
+
+    // Finally, visit the expression itself.
+    out.at(expr) = ModuleDescription::ExprIndex(index);
+    ++index;
+}
 } // namespace lcc::glint
 
-std::vector<lcc::u8> lcc::glint::Module::serialise() {
+auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
+    // NOTE: See glint/module_description.hh for binary format details.
+
     // TODO: List of modules imported by this module (so that a dependency
     // tree may be formed simply from the metadatas alone).
     // TODO: InfoTable with different, optional entries:
@@ -607,23 +322,55 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
     ModuleDescription::Header hdr{};
     std::vector<u8> declarations{};
     std::vector<u8> types_data{};
+    std::vector<u8> exprs_data{};
     std::vector<u8> serialised_name{};
 
     // Associate every single Type* we will end up serialising with an
     // index, ahead of time. This means that, even for circular references, we
     // know "where" it will end up (at least, enough about where it will end
     // up to write a type index).
-    std::unordered_map<Type*, ModuleDescription::TypeIndex> indices{};
+    std::unordered_map<Type*, ModuleDescription::TypeIndex> type_indices{};
     {
         usz index{0};
         for (auto* decl : exports) {
-            calculate_indices(indices, index, decl->type());
+            calculate_indices(type_indices, index, decl->type());
+
+            if (
+                ModuleDescription::DeclarationHeader::get_kind(decl)
+                == ModuleDescription::DeclarationHeader::Kind::TEMPLATE
+            ) {
+                auto* v = as<VarDecl>(decl);
+                LCC_ASSERT(v->init(), "Named Template has NULL body");
+                for (auto template_parameter : as<TemplateExpr>(v->init())->params())
+                    calculate_indices(type_indices, index, template_parameter.type);
+            }
+        }
+    }
+    // Associate every single Expr* THAT WE WILL END UP SERIALISING with an
+    // index, ahead of time. This means that, even for circular references, we
+    // know "where" it will end up (at least, enough about where it will end
+    // up to write an expression index).
+    std::unordered_map<Expr*, ModuleDescription::ExprIndex> expr_indices{};
+    {
+        usz index{0};
+        for (auto* decl : exports) {
+            if (
+                ModuleDescription::DeclarationHeader::get_kind(decl)
+                == ModuleDescription::DeclarationHeader::Kind::TEMPLATE
+            ) {
+                auto* v = as<VarDecl>(decl);
+                LCC_ASSERT(v->init(), "Named Template has NULL body");
+                calculate_indices(expr_indices, index, v->init());
+            }
         }
     }
 
-    // Decls and types collected from exports.
     std::vector<Type*> type_cache{};
-    std::vector<Type*> current{};
+    std::vector<Type*> type_current{};
+
+    std::vector<Expr*> expr_cache{};
+    std::vector<Expr*> expr_current{};
+
     for (auto* decl : exports) {
         // Decl: DeclHeader, length :u8, name :u8[length]
 
@@ -631,15 +378,36 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
         ModuleDescription::TypeIndex type_index = serialise(
             types_data,
             type_cache,
-            current,
-            indices,
+            type_current,
+            type_indices,
             decl->type()
         );
         ModuleDescription::DeclarationHeader decl_hdr{
             u16(ModuleDescription::DeclarationHeader::get_kind(decl)),
             type_index
         };
-        auto decl_hdr_bytes = to_bytes(decl_hdr);
+
+        if (decl_hdr.kind == +ModuleDescription::DeclarationHeader::Kind::TEMPLATE) {
+            for (auto template_parameter : as<TemplateExpr>(as<VarDecl>(decl)->init())->params()) {
+                (void) serialise(
+                    types_data,
+                    type_cache,
+                    type_current,
+                    type_indices,
+                    template_parameter.type
+                );
+            };
+            decl_hdr.expr_index = serialise_expr(
+                exprs_data,
+                expr_cache,
+                expr_current,
+                expr_indices,
+                type_indices,
+                as<VarDecl>(decl)->init()
+            );
+        }
+
+        auto decl_hdr_bytes = lcc::utils::to_bytes(decl_hdr);
 
         // Prepare length
         LCC_ASSERT(
@@ -648,9 +416,17 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
         );
         u8 length = u8(decl->name().length());
 
-        declarations.insert(declarations.end(), decl_hdr_bytes.begin(), decl_hdr_bytes.end());
+        declarations.insert(
+            declarations.end(),
+            decl_hdr_bytes.begin(),
+            decl_hdr_bytes.end()
+        );
         declarations.push_back(length);
-        declarations.insert(declarations.end(), decl->name().begin(), decl->name().end());
+        declarations.insert(
+            declarations.end(),
+            decl->name().begin(),
+            decl->name().end()
+        );
     }
 
     // TODO: Make name serialisable
@@ -670,693 +446,49 @@ std::vector<lcc::u8> lcc::glint::Module::serialise() {
     serialised_name.push_back('\0');
 
     // Final header fixups now that nothing will change.
-    hdr.size = u32(sizeof(ModuleDescription::Header) + declarations.size() + types_data.size() + serialised_name.size());
-    hdr.type_table_offset = u32(sizeof(ModuleDescription::Header) + declarations.size());
-    hdr.name_offset = u32(sizeof(ModuleDescription::Header) + declarations.size() + types_data.size());
+    hdr.size = u32(
+        sizeof(ModuleDescription::Header)
+        + declarations.size()
+        + types_data.size()
+        + exprs_data.size()
+        + serialised_name.size()
+    );
+    hdr.type_table_offset = u32(
+        sizeof(ModuleDescription::Header)
+        + declarations.size()
+    );
+    hdr.expr_table_offset = u32(
+        sizeof(ModuleDescription::Header)
+        + declarations.size()
+        + types_data.size()
+    );
+    hdr.name_offset = u32(
+        sizeof(ModuleDescription::Header)
+        + declarations.size()
+        + types_data.size()
+        + exprs_data.size()
+    );
     hdr.declaration_count = u16(exports.size());
     hdr.type_count = u16(type_cache.size());
+    hdr.expr_count = u16(expr_cache.size());
+
+    // TODO: Set to false if there are no top level non-declaration
+    // expressions.
+    hdr.requires_initialisation = true;
 
     // Convert header to byte representation that is easy to serialise.
-    auto hdr_bytes = to_bytes(hdr);
+    auto hdr_bytes = lcc::utils::to_bytes(hdr);
+
+    for (auto e : expr_cache) {
+        fmt::print("Serialised expression:\n");
+        e->print(true);
+    }
 
     std::vector<u8> out{};
     out.insert(out.end(), hdr_bytes.begin(), hdr_bytes.end());
     out.insert(out.end(), declarations.begin(), declarations.end());
     out.insert(out.end(), types_data.begin(), types_data.end());
+    out.insert(out.end(), exprs_data.begin(), exprs_data.end());
     out.insert(out.end(), serialised_name.begin(), serialised_name.end());
     return out;
-}
-
-auto lcc::glint::Module::deserialise(
-    lcc::Context* context,
-    std::vector<u8> module_metadata_blob
-) -> bool {
-    // We need at least enough bytes for a header, for a zero-exports module
-    // (if that is even allowed past sema).
-    if (module_metadata_blob.size() < sizeof(ModuleDescription::Header))
-        return false;
-
-    // Copy the header from the binary metadata blob.
-    ModuleDescription::Header hdr{};
-    std::memcpy(&hdr, module_metadata_blob.data(), sizeof(ModuleDescription::Header));
-
-    // Verify header has expected values.
-    if (hdr.version != 1) {
-        fmt::print("ERROR: Could not deserialise: Invalid version {} in header\n", hdr.version);
-        return false;
-    }
-    if (
-        hdr.magic[0] != ModuleDescription::magic_byte0
-        or hdr.magic[1] != ModuleDescription::magic_byte1
-        or hdr.magic[2] != ModuleDescription::magic_byte2
-    ) {
-        fmt::print("ERROR: Could not deserialise: Invalid magic bytes in header: {} {} {}\n", hdr.magic[0], hdr.magic[1], hdr.magic[2]);
-        return false;
-    }
-
-    // Starting at the type table offset, parse all types. Stop after parsing
-    // the amount of types specified in the header.
-    auto type_count = hdr.type_count;
-    auto type_offset = hdr.type_table_offset;
-    LCC_ASSERT(
-        types.size() <= std::numeric_limits<ModuleDescription::TypeIndex>::max(),
-        "Too many types, cannot serialise with current integer type of type index"
-    );
-    auto types_zero_index = (ModuleDescription::TypeIndex) types.size();
-    types.reserve(types.size() + type_count);
-
-    const auto read_t = [&]<typename T> [[nodiscard]] (T _) {
-        constexpr auto size = sizeof(T);
-        std::array<u8, size> array{};
-        for (unsigned i = 0; i < size; ++i)
-            array[i] = module_metadata_blob.at(type_offset++);
-        return from_bytes<T>(array);
-    };
-
-    // NOTE: Please, PLEASE take care when referencing 'types'. The ZERO INDEX
-    // is VERY IMPORTANT and MUST be taken into account, lest the code be
-    // full 'o' bugs.
-    const auto type_at = [&] [[nodiscard]] (ModuleDescription::TypeIndex i) {
-        return types.at(types_zero_index + i);
-    };
-
-    for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
-        auto tag = module_metadata_blob.at(type_offset++);
-        // TODO: Ensure kind is within range/a valid kind.
-        auto kind = Type::Kind(tag);
-        switch (kind) {
-            // NamedType: length :u32, name :u8[length]
-            case Type::Kind::Named: {
-                auto length = read_t(u32());
-
-                // TODO: Wth is this checking???
-                LCC_ASSERT(not name().empty(), "Deserialised named type has zero-length name");
-
-                std::string deserialised_name{};
-                for (u32 i = 0; i < length; ++i)
-                    deserialised_name += char(module_metadata_blob.at(type_offset++));
-
-                LCC_ASSERT(not deserialised_name.empty(), "Deserialised named type has empty name");
-
-                // FIXME: This may need to be top level scope, not entirely sure the
-                // semantics of this yet.
-                new (*this) NamedType(deserialised_name, global_scope(), {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            // BuiltinType: builtin_kind :u8
-            case Type::Kind::Builtin: {
-                auto builtin_kind_value = module_metadata_blob.at(type_offset++);
-                // clang-format off
-                LCC_ASSERT(
-                    builtin_kind_value == +BuiltinType::BuiltinKind::Bool
-                    or builtin_kind_value == +BuiltinType::BuiltinKind::Byte
-                    or builtin_kind_value == +BuiltinType::BuiltinKind::Int
-                    or builtin_kind_value == +BuiltinType::BuiltinKind::UInt
-                    or builtin_kind_value == +BuiltinType::BuiltinKind::Void
-                    or builtin_kind_value == +BuiltinType::BuiltinKind::Unknown
-                    or builtin_kind_value == +BuiltinType::BuiltinKind::OverloadSet,
-                    "Invalid builtin kind value {}", builtin_kind_value
-                );
-                // clang-format on
-                LCC_ASSERT(
-                    builtin_kind_value != +BuiltinType::BuiltinKind::OverloadSet,
-                    "Cannot deserialise overload sets; sorry"
-                );
-                auto builtin_kind = BuiltinType::BuiltinKind(builtin_kind_value);
-                // Purely for the side-effect of recording the type in the module.
-                (void) BuiltinType::Make(*this, builtin_kind, {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            // FFIType: ffi_kind :u16
-            case Type::Kind::FFIType: {
-                auto ffi_kind_value = read_t(u16());
-                // TODO: Verify/validate ffi kind
-                auto ffi_kind = FFIType::FFIKind(ffi_kind_value);
-                // Purely for the side-effect of recording the type in the module.
-                (void) FFIType::Make(*this, ffi_kind, {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            case Type::Kind::ArrayView: {
-                auto elem_type_index = read_t(ModuleDescription::TypeIndex());
-                (void) new (*this) ArrayViewType(type_at(elem_type_index), {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            case Type::Kind::DynamicArray: {
-                auto elem_type_index = read_t(ModuleDescription::TypeIndex());
-                // TODO: Size expression
-                (void) new (*this) DynamicArrayType(type_at(elem_type_index), nullptr, {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            case Type::Kind::Pointer: {
-                auto elem_type_index = read_t(ModuleDescription::TypeIndex());
-                (void) new (*this) PointerType(type_at(elem_type_index), {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            case Type::Kind::Reference: {
-                auto elem_type_index = read_t(ModuleDescription::TypeIndex());
-                (void) new (*this) ReferenceType(type_at(elem_type_index), {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            // IntegerType: bitwidth :u16, is_signed :u8
-            case Type::Kind::Integer: {
-                auto bitwidth = read_t(u16());
-                LCC_ASSERT(bitwidth != 0, "IntegerType: Bitwidth of zero is invalid");
-
-                auto is_signed = module_metadata_blob.at(type_offset++);
-                LCC_ASSERT(
-                    is_signed == 0 or is_signed == 1,
-                    "Expected is_signed to be a boolean value, but got {}\n",
-                    (unsigned) is_signed
-                );
-
-                (void) new (*this) IntegerType(bitwidth, is_signed, {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            // ArrayType: element_type_index :TypeIndex, element_count :u64
-            case Type::Kind::Array: {
-                auto element_type_index = read_t(ModuleDescription::TypeIndex());
-                auto element_count = read_t(u64());
-
-                // FIXME: Should we leave stuff like this for sema to catch?
-                LCC_ASSERT(element_count != 0, "ArrayType with zero elements is invalid");
-
-                auto e_size = new (*this) IntegerLiteral(element_count, {});
-                auto t_elem = type_at(element_type_index);
-
-                (void) new (*this) ArrayType(t_elem, e_size, {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            // FunctionType:
-            //     attributes :u32
-            //     param_count :u16
-            //     param_types :TypeIndex[param_count]
-            //     return_type :TypeIndex
-            //     param_names :(param_name_length :u16, param_name :u8[param_name_length])[param_count]
-            case Type::Kind::Function: {
-                // Attributes
-                auto attributes = read_t(u32());
-
-                // Parameter Count
-                auto param_count = read_t(u16());
-
-                // Parameter Type Indices
-                std::vector<ModuleDescription::TypeIndex> param_type_indices{};
-                for (usz param_index = 0; param_index < param_count; ++param_index) {
-                    auto param_type_index = read_t(ModuleDescription::TypeIndex());
-                    param_type_indices.emplace_back(param_type_index);
-                }
-
-                // Return Type Index
-                auto return_type_index = read_t(ModuleDescription::TypeIndex());
-
-                // Parameter Names
-                std::vector<std::string> param_names{};
-                for (usz param_index = 0; param_index < param_count; ++param_index) {
-                    auto param_name_length = read_t(u16());
-
-                    std::string param_name{};
-                    param_name.reserve(param_name_length);
-                    for (unsigned i = 0; i < param_name_length; ++i)
-                        param_name += char(module_metadata_blob.at(type_offset++));
-
-                    param_names.emplace_back(std::move(param_name));
-                }
-
-                std::vector<FuncType::Param> params{};
-                {
-                    usz param_i{0};
-                    for (auto param_type_index : param_type_indices) {
-                        params.emplace_back(
-                            param_names.at(param_i),
-                            type_at(param_type_index),
-                            Location{}
-                        );
-                        ++param_i;
-                    }
-                }
-
-                auto function = new (*this) FuncType(
-                    params,
-                    type_at(return_type_index),
-                    {},
-                    {}
-                );
-
-                const auto set_attr = [&](FuncAttr f) {
-                    if (attributes & (u32(1) << u32(f)))
-                        function->set_attr(f);
-                };
-
-                static_assert(
-                    +FuncAttr::COUNT == 11,
-                    "Exhaustive handling of function attributes in module deserialisation"
-                );
-                set_attr(FuncAttr::Const);
-                set_attr(FuncAttr::Discardable);
-                set_attr(FuncAttr::Flatten);
-                set_attr(FuncAttr::Inline);
-                set_attr(FuncAttr::NoInline);
-                set_attr(FuncAttr::NoMangle);
-                set_attr(FuncAttr::NoOpt);
-                set_attr(FuncAttr::NoReturn);
-                set_attr(FuncAttr::Pure);
-                set_attr(FuncAttr::ReturnsTwice);
-                set_attr(FuncAttr::Used);
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            // deserialise()
-            // SumType:
-            //     member_count :u16
-            //     member_types :TypeIndex[member_count]
-            //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
-            case Type::Kind::Sum: {
-                auto member_count = read_t(u16());
-
-                // Member Type Indices
-                std::vector<ModuleDescription::TypeIndex> member_type_indices{};
-                for (usz member_index = 0; member_index < member_count; ++member_index) {
-                    auto member_type_index = read_t(ModuleDescription::TypeIndex());
-                    member_type_indices.emplace_back(member_type_index);
-                }
-
-                // Member Names
-                std::vector<std::string> member_names{};
-                for (usz member_index = 0; member_index < member_count; ++member_index) {
-                    auto member_name_length = read_t(u16());
-
-                    std::string member_name{};
-                    member_name.reserve(member_name_length);
-                    for (unsigned i = 0; i < member_name_length; ++i)
-                        member_name += char(module_metadata_blob.at(type_offset++));
-
-                    member_names.emplace_back(std::move(member_name));
-                }
-
-                // Member Types
-                std::vector<SumType::Member> members{};
-                members.reserve(member_type_indices.size());
-                usz member_i{0};
-                for (auto member_type_index : member_type_indices) {
-                    // TODO: Get default expression, somehow (requires (de)serialisation of
-                    // Glint Expr*).
-                    members.emplace_back(
-                        member_names.at(member_i),
-                        type_at(member_type_index),
-                        nullptr,
-                        Location{}
-                    );
-                    ++member_i;
-                }
-
-                // FIXME: What should parent scope of sum type scope be?
-                auto scope = new (*this) Scope(nullptr);
-
-                // Declare members in scope
-                for (auto& m : members) {
-                    auto member_decl = new (*this) VarDecl(
-                        std::string(m.name),
-                        m.type,
-                        nullptr,
-                        this,
-                        Linkage::Internal,
-                        {}
-                    );
-                    auto decl = scope->declare(
-                        context,
-                        std::string(m.name),
-                        member_decl
-                    );
-                    LCC_ASSERT(decl);
-                }
-
-                (void) new (*this) SumType(scope, std::move(members), {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            // EnumType:
-            //     underlying_type_index :TypeIndex
-            //     enum_decl_count :u32
-            //     enum_decls :u64[enum_decl_count]
-            //     enum_names :(name_length :u16, name: u8[name_length])[enum_decl_count]
-            // FIXME: Ideally we should get the size of the value (enum_decls element
-            // type) from the underlying type, instead of just assuming it fits in 64
-            // bits... But... yeah.
-            case Type::Kind::Enum: {
-                // Get underlying type index
-                auto underlying_type_index = read_t(ModuleDescription::TypeIndex());
-
-                // Get enum decl count
-                auto enum_decl_count = read_t(u32());
-
-                // Get enum values
-                std::vector<u64> enum_values{};
-                enum_values.reserve(enum_decl_count);
-                for (unsigned value_index = 0; value_index < enum_decl_count; ++value_index) {
-                    // TODO: Don't just assume it fits in 64 bits.
-                    auto value = read_t(u64());
-                    enum_values.emplace_back(value);
-                }
-
-                // Get enum names
-                std::vector<std::string> enum_names{};
-                enum_names.reserve(enum_decl_count);
-                for (unsigned name_index = 0; name_index < enum_decl_count; ++name_index) {
-                    auto name_length = read_t(u16());
-
-                    std::string name{};
-                    name.reserve(name_length);
-                    for (auto i = 0; i < name_length; ++i)
-                        name += (char) module_metadata_blob.at(type_offset++);
-
-                    enum_names.emplace_back(name);
-                }
-
-                // FIXME: What should parent of imported enum scope be?
-                auto scope = new (*this) Scope(nullptr);
-                std::vector<EnumeratorDecl*> enumerator_decls{};
-
-                for (unsigned i = 0; i < enum_names.size(); ++i) {
-                    auto enum_decl = new (*this) EnumeratorDecl(
-                        std::string(enum_names.at(i)),
-                        new (*this) ConstantExpr(
-                            new (*this) IntegerLiteral(enum_values.at(i), {}),
-                            enum_values.at(i)
-                        ),
-                        {}
-                    );
-
-                    enumerator_decls.emplace_back(enum_decl);
-                }
-
-                (void) new (*this) EnumType(
-                    scope,
-                    type_at(underlying_type_index),
-                    std::move(enumerator_decls),
-                    {}
-                );
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-            } break;
-
-            // deserialise()
-            // StructType:
-            //     size_in_bytes :u16
-            //     align_in_bytes :u16
-            //     member_count :u16
-            //     member_types :TypeIndex[member_count]
-            //     member_data :(byte_offset :u16, name_length :u16, member_name :u8[name_length])[member_count]
-            case Type::Kind::Struct: {
-                // Get size in bytes
-                auto struct_byte_size = read_t(u16());
-
-                // Get align in bytes
-                auto struct_byte_align = read_t(u16());
-
-                // Get member count
-                auto struct_member_count = read_t(u16());
-
-                // Get member type indices
-                std::vector<ModuleDescription::TypeIndex> member_type_indices{};
-                for (unsigned i = 0; i < struct_member_count; ++i) {
-                    // Get member type index
-                    auto member_type_index = read_t(ModuleDescription::TypeIndex());
-                    member_type_indices.emplace_back(member_type_index);
-                }
-
-                // Get member data, including byte offsets and names.
-                std::vector<u16> member_byte_offsets{};
-                std::vector<std::string> member_names{};
-                for (unsigned i = 0; i < struct_member_count; ++i) {
-                    // Get member byte offset
-                    auto member_byte_offset = read_t(u16());
-                    member_byte_offsets.emplace_back(member_byte_offset);
-
-                    // Get member name length
-                    auto member_name_length = read_t(u16());
-
-                    // Get member name
-                    std::string member_name{};
-                    for (unsigned j = 0; j < member_name_length; ++j)
-                        member_name += (char) module_metadata_blob.at(type_offset++);
-
-                    member_names.emplace_back(std::move(member_name));
-                }
-
-                std::vector<StructType::Member> members{};
-                members.reserve(member_type_indices.size());
-                usz member_i{0};
-                for (auto member_type_index : member_type_indices) {
-                    // TODO: serialise/deserialise supplanted boolean for each member.
-                    members.emplace_back(
-                        member_names.at(member_i),
-                        type_at(member_type_index),
-                        Location{},
-                        member_byte_offsets.at(member_i),
-                        false
-                    );
-                    ++member_i;
-                }
-
-                // FIXME: What should parent scope of struct type scope be?
-                auto scope = new (*this) Scope(nullptr);
-
-                // Declare members in scope
-                for (auto& m : members) {
-                    // TODO: Maybe parse default init expression from module metadata, once we
-                    // can serialise expressions...
-                    auto member_decl = new (*this) VarDecl(
-                        std::string(m.name),
-                        m.type,
-                        nullptr,
-                        this,
-                        Linkage::Internal,
-                        {}
-                    );
-                    auto decl = scope->declare(
-                        context,
-                        std::string(m.name),
-                        member_decl
-                    );
-                    LCC_ASSERT(decl);
-                }
-
-                auto s = new (*this) StructType(scope, members, {});
-                LCC_ASSERT(lcc::glint::Sema::AnalyseType(context, *this, &types.back()));
-
-                s->byte_size(struct_byte_size);
-                s->alignment(struct_byte_align);
-            } break;
-
-            // UnionType:
-            //     member_count :u16
-            //     member_types :TypeIndex[member_count]
-            //     member_data  :(name_length :u16, member_name :u8[name_length])[member_count]
-            case Type::Kind::Union: {
-                auto member_count = read_t(u16());
-
-                // Member Type Indices
-                std::vector<ModuleDescription::TypeIndex> member_type_indices{};
-                for (usz member_index = 0; member_index < member_count; ++member_index) {
-                    auto member_type_index = read_t(ModuleDescription::TypeIndex());
-                    member_type_indices.emplace_back(member_type_index);
-                }
-
-                // Member Names
-                std::vector<std::string> member_names{};
-                for (usz member_index = 0; member_index < member_count; ++member_index) {
-                    auto member_name_length = read_t(u16());
-
-                    std::string member_name{};
-                    member_name.reserve(member_name_length);
-                    for (unsigned i = 0; i < member_name_length; ++i)
-                        member_name += char(module_metadata_blob.at(type_offset++));
-
-                    member_names.emplace_back(std::move(member_name));
-                }
-
-                std::vector<UnionType::Member> members{};
-                members.reserve(member_type_indices.size());
-                usz member_i{0};
-                for (auto member_type_index : member_type_indices) {
-                    members.emplace_back(
-                        member_names.at(member_i),
-                        type_at(member_type_index),
-                        Location{}
-                    );
-                    ++member_i;
-                }
-
-                // FIXME: What should parent scope of struct type scope be?
-                auto scope = new (*this) Scope(nullptr);
-
-                // Declare members in scope
-                for (auto& m : members) {
-                    // TODO: Maybe parse default init expression from module metadata, once we
-                    // can serialise expressions...
-                    auto member_decl = new (*this) VarDecl(
-                        std::string(m.name),
-                        m.type,
-                        nullptr,
-                        this,
-                        Linkage::Internal,
-                        {}
-                    );
-                    auto decl = scope->declare(
-                        context,
-                        std::string(m.name),
-                        member_decl
-                    );
-                    LCC_ASSERT(decl);
-                }
-
-                (void) new (*this) UnionType(scope, members, {});
-
-                LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
-
-            } break;
-
-            case Type::Kind::Typeof:
-                LCC_ASSERT(false, "Sema should have replaced TypeofType with the type of it's contained expression");
-        }
-    }
-
-    // Starting after the header, begin parsing declarations. Stop after
-    // parsing the amount of declarations specified in the header.
-    auto offset = sizeof(ModuleDescription::Header);
-    auto decl_count = hdr.declaration_count;
-    while (decl_count--) {
-        ModuleDescription::DeclarationHeader decl_hdr{};
-        std::memcpy(
-            &decl_hdr,
-            module_metadata_blob.data() + offset,
-            sizeof(decl_hdr)
-        );
-        offset += sizeof(decl_hdr);
-
-        u8 name_length = module_metadata_blob.at(offset++);
-
-        std::string name{};
-        for (decltype(offset) i = 0; i < name_length; ++i)
-            name += char(*(module_metadata_blob.data() + offset + i));
-        offset += name_length;
-
-        auto* ty = types.at(types_zero_index + decl_hdr.type_index);
-
-        // FIXME: Should it be top level scope instead of global?
-        auto* scope = global_scope();
-        switch (ModuleDescription::DeclarationHeader::Kind(decl_hdr.kind)) {
-            // Created from Expr::Kind::TypeDecl
-            case ModuleDescription::DeclarationHeader::Kind::TYPE: {
-                LCC_ASSERT(
-                    is<DeclaredType>(ty),
-                    "Can't make TypeDecl from a Type that is not derived from DeclaredType"
-                );
-                auto type_decl = new (*this) TypeDecl(this, name, as<DeclaredType>(ty), {});
-                type_decl->set_sema_done();
-                auto decl = scope->declare(context, std::string(name), type_decl);
-            } break;
-
-            // Created from Expr::Kind::TypeAliasDecl
-            case ModuleDescription::DeclarationHeader::Kind::TYPE_ALIAS: {
-                auto* type_alias_decl = new (*this) TypeAliasDecl(name, ty, {});
-                type_alias_decl->set_sema_done();
-                auto decl = scope->declare(context, std::string(name), type_alias_decl);
-            } break;
-
-            // Created from Expr::Kind::VarDecl
-            case ModuleDescription::DeclarationHeader::Kind::VARIABLE: {
-                // FIXME: Should possibly be reexported.
-                auto* var_decl = new (*this) VarDecl(
-                    name,
-                    ty,
-                    nullptr,
-                    this,
-                    Linkage::Imported,
-                    {}
-                );
-                var_decl->set_lvalue();
-                var_decl->set_sema_done();
-                auto decl = scope->declare(context, std::string(name), var_decl);
-            } break;
-
-            // Created from Expr::Kind::FuncDecl
-            case ModuleDescription::DeclarationHeader::Kind::FUNCTION: {
-                LCC_ASSERT(
-                    is<FuncType>(ty),
-                    "Cannot create FuncDecl when deserialised type, {}, is not a function",
-                    *ty
-                );
-                auto* func_decl = new (*this) FuncDecl(
-                    name,
-                    as<FuncType>(ty),
-                    nullptr,
-                    scope,
-                    this,
-                    Linkage::Imported,
-                    {}
-                );
-                // FIXME: Not sure if imported function declaration is an lvalue? I mean,
-                // we can't assign to it...
-                func_decl->set_sema_done();
-                auto decl = scope->declare(context, std::string(name), func_decl);
-            } break;
-
-            // Created from Expr::Kind::EnumeratorDecl
-            // FIXME: Is it possible to export a single enum decl? I'm pretty sure the
-            // only place an enum decl can happen is within an enum type.
-            case ModuleDescription::DeclarationHeader::Kind::ENUMERATOR: {
-                LCC_TODO("Make an EnumeratorDecl in the global scope");
-            }
-
-            case ModuleDescription::DeclarationHeader::Kind::INVALID:
-            default:
-                LCC_ASSERT(false, "Invalid declaration kind in declaration header: {}", decl_hdr.kind);
-        }
-    }
-
-    std::string module_name{};
-    for (auto i = module_metadata_blob.begin() + hdr.name_offset; *i; ++i)
-        module_name += (char) *i;
-
-    auto init_function_decl = global_scope()->declare(
-        context,
-        Module::InitFunctionName(module_name),
-        new (*this) FuncDecl(
-            Module::InitFunctionName(module_name),
-            new (*this) FuncType(
-                {},
-                Type::Void,
-                {{FuncAttr::NoMangle, true}},
-                {}
-            ),
-            nullptr,
-            global_scope(),
-            this,
-            Linkage::Imported,
-            {}
-        )
-    );
-    LCC_ASSERT(init_function_decl);
-
-    return true;
 }

@@ -10,6 +10,7 @@
 #include <chrono>
 #include <coroutine>
 #include <cstdio>
+#include <cstring>
 #include <deque>
 #include <filesystem>
 #include <functional>
@@ -436,6 +437,25 @@ template <rgs::range Range>
 auto to_vec(Range r) -> std::vector<rgs::range_value_t<Range>> {
     std::vector<rgs::range_value_t<Range>> out{};
     out.insert(out.end(), rgs::begin(r), rgs::end(r));
+    return out;
+}
+
+// FIXME: This should probably be backwards for big endian machines, afaik.
+template <typename T>
+auto to_bytes(const T object) -> std::array<lcc::u8, sizeof(T) / sizeof(lcc::u8)> {
+    std::array<lcc::u8, sizeof(T)> out{};
+    const lcc::u8* begin = reinterpret_cast<const lcc::u8*>(&object);
+    const lcc::u8* end = begin + (sizeof(T));
+    std::copy(begin, end, out.begin());
+    return out;
+}
+
+// FIXME: This should probably be backwards for big endian machines, afaik.
+// FIXME: requires std::is_trivially_constructible?
+template <typename T>
+auto from_bytes(std::array<lcc::u8, sizeof(T)> bytes) -> T {
+    T out{};
+    std::memcpy(&out, bytes.data(), sizeof(T));
     return out;
 }
 

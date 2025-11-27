@@ -11,14 +11,16 @@ namespace glint {
 ///
 /// OVERALL STRUCTURE of BINARY METADATA BLOB version 1:
 ///
-/// Beginning of file       type_table_offset  name_offset
-/// V                       V                  V
-/// Header { Declarations } { Types }          [ Module Name ]
+/// Beginning of file       type_table_offset expr_table_offset name_offset
+/// V                       V                 V                 V
+/// Header { Declarations } { Types }         { Expressions }   [ Module Name ]
+///
+/// While the above /is/ how LCC lays things out, the format allows for any
+/// of those things to be in any order in the actual file, simply by
+/// specifying the correct offsets for each section.
 ///
 /// A declaration is encoded as a DeclarationHeader + N amount of bytes
 /// determined by the values in the declaration header.
-///
-/// TODO: Figure out how to serialise a template (oh no).
 ///
 /// TODO: Include more information that is not needed for Glint, but would
 /// probably be very useful for both Glint and surrounding tools.
@@ -27,7 +29,11 @@ namespace glint {
 /// |   to automagically build resolved import dependencies)
 /// `-- Compiler and Version that generated this metadata/module
 struct ModuleDescription {
+    // A strong typedef would be better, but C++ is as C++ does.
     using TypeIndex = u16;
+    using ExprIndex = u16;
+    static constexpr TypeIndex bad_type_index = TypeIndex(-1);
+    static constexpr ExprIndex bad_expr_index = ExprIndex(-1);
 
     // Default/expected values.
     static constexpr u8 default_version = 1;
@@ -50,6 +56,10 @@ struct ModuleDescription {
         u32 type_table_offset;
 
         /// The offset within this binary metadata blob at which you will find the
+        /// beginning of the expression table. Value undefined iff expr_count is zero.
+        u32 expr_table_offset;
+
+        /// The offset within this binary metadata blob at which you will find the
         /// beginning of a NULL-terminated string: the name of the serialised
         /// module.
         u32 name_offset;
@@ -64,6 +74,17 @@ struct ModuleDescription {
         /// Once the reader deserialised this many types, the reader should stop
         /// reading types.
         u16 type_count;
+
+        /// The amount of expressions encoded in this binary metadata blob.
+        /// Determines maximum exclusive allowed value of declaration expr_index
+        /// field. Once the reader deserialised this many expressions, the reader
+        /// should stop reading types.
+        u16 expr_count;
+
+        /// If a module has no top level expressions, this may be set to false.
+        /// When false, consumers of the module this description describes are not
+        /// required to call the initialisation function for this module.
+        bool requires_initialisation{true};
     };
 
     struct DeclarationHeader {
@@ -74,12 +95,20 @@ struct ModuleDescription {
             ENUMERATOR,
             VARIABLE,
             FUNCTION,
+            TEMPLATE, // named templates may be exported
         };
 
-        // One of DeclarationHeader::Kind.
+        /// One of DeclarationHeader::Kind.
         // Untyped to avoid UB when deserialising.
-        u16 kind;
-        TypeIndex type_index;
+        u16 kind{+Kind::INVALID};
+
+        /// The type associated with the declaration. Every declaration must have a
+        /// valid type index.
+        TypeIndex type_index{u16(-1)};
+
+        /// The expression associated with the declaration.
+        /// Used by TEMPLATE declarations to store body expression.
+        ExprIndex expr_index{u16(-1)};
 
         static constexpr Kind get_kind(Decl* decl) {
             using K = glint::Expr::Kind;
@@ -88,7 +117,12 @@ struct ModuleDescription {
                 case K::TypeDecl: return Kind::TYPE;
                 case K::TypeAliasDecl: return Kind::TYPE_ALIAS;
                 case K::EnumeratorDecl: return Kind::ENUMERATOR;
-                case K::VarDecl: return Kind::VARIABLE;
+                case K::VarDecl: {
+                    if (as<VarDecl>(decl)->init() and is<TemplateExpr>(as<VarDecl>(decl)->init()))
+                        return Kind::TEMPLATE;
+
+                    return Kind::VARIABLE;
+                }
                 case K::FuncDecl: return Kind::FUNCTION;
 
                 // Non-decl kinds
