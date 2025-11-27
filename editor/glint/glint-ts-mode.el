@@ -340,12 +340,14 @@ with the braces' contents having the same indentation.
       "external" "export"
       "return"
       "supplant" "match" "print"
+      "mapf"
       ]
      @font-lock-keyword-face)
 
    :feature 'operator
    `(["@" "!" ; "~"
-      "+" "-" "*" "/" "&" "|" "^" "=" "!=" "<" "<=" ">" ">="
+      "+" "-" "*" "/" "&"  "=" "!=" "<" "<=" ">" ">="
+      "bitand" "bitor" "bitxor"
       "::" ":" ":="
       "++" "--"
       "+=" "-=" "*=" "/=" "%=" "~=" "&=" "|=" "^=" "[="
