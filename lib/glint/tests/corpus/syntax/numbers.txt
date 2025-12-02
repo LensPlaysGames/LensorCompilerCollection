@@ -1,0 +1,77 @@
+================
+Decimal
+:syntax
+================
+
+0
+
+---
+
+(block (integer_literal))
+
+================
+Binary
+:syntax
+================
+
+0b0
+
+---
+
+(block (integer_literal))
+
+================
+Octal
+:syntax
+================
+
+0o0
+
+---
+
+(block (integer_literal))
+
+================
+Hexadecimal
+:syntax
+================
+
+0x0
+
+---
+
+(block (integer_literal))
+
+================
+Invalid Digit, Binary
+:syntax
+:fail_parse
+================
+
+0b20
+
+---
+()
+
+================
+Invalid Digit, Octal
+:syntax
+:fail_parse
+================
+
+0o90
+
+---
+()
+
+================
+Invalid Digit, Hexadecimal
+:syntax
+:fail_parse
+================
+
+0xz0
+
+---
+()
+

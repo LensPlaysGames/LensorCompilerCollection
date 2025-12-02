@@ -1,0 +1,70 @@
+================
+Compound Literal, Empty
+:syntax
+================
+
+!{};
+
+---
+
+(block (compound_literal))
+
+================
+Compound Literal, Single
+:syntax
+================
+
+!{ foo };
+
+---
+
+(block (compound_literal (name)))
+
+================
+Compound Literal, Multiple (2)
+:syntax
+================
+
+!{ foo, bar };
+
+---
+
+(block (compound_literal (name) (name)))
+
+================
+Compound Literal, Multiple (3)
+:syntax
+================
+
+!{ foo, bar, baz };
+
+---
+
+(block (compound_literal (name) (name) (name)))
+
+================
+Compound Literal, Fail Upon Hard Separator Within
+:syntax
+:fail_parse
+================
+
+!{ foo; };
+
+---
+
+(block (compound_literal (name) (name)))
+
+
+================
+Compound Literal, Fail Upon Hard Separator Within (2)
+:syntax
+:fail_parse
+================
+
+!{ foo; bar; };
+
+---
+
+(block (compound_literal (name) (name)))
+
+

@@ -32,6 +32,17 @@ foo, 69;
 (block (name) (integer_literal))
 
 ================
+Multiple Separated Expressions Doesn't Become Call, Even Within Parentheses
+:syntax
+================
+
+(foo, 69);
+
+---
+
+(block (name) (integer_literal))
+
+================
 Multiple Expressions w/ Soft Separated Arguments Becomes Call
 :syntax
 ================

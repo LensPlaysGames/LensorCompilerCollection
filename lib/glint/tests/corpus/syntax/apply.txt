@@ -1,0 +1,11 @@
+================
+Apply
+:syntax
+================
+
+apply foo, !{ bar };
+
+---
+
+(block
+ (apply (name) (compound_literal (name))))
