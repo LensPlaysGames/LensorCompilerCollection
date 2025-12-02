@@ -1,0 +1,32 @@
+* Allowed Casts In Glint
+
+** [Explicit] Struct to Fixed Array of Byte
+
+A struct assigns an identifier to each member. Each member must take up a unique place in the computer's memory. A computer's memory is addressed via units of multiple bits called bytes. So, a struct is a named layout of memory, of /bytes/. That means that any struct is convertible (explicitly) to the underlying bytes that it represents.
+
+In Glint:
+#+begin_src glint
+  ;; TODO: not implemented
+#+end_src
+
+** [Implicit] Fixed Array to Dynamic Array
+
+** [Implicit] Dynamic Array to Array View
+
+** [Implicit] Fixed Array to Array View
+
+** [Implicit] Enum to Underlying
+
+** [Implicit] Boolean <-> Integer
+
+An integer is convertible to a boolean /implicitly/, and vice versa.
+
+#+begin_src glint
+  (0 + true) = 1;
+#+end_src
+
+#+begin_src glint
+  x :: 0;
+  y :: 1;
+  if x + y, 1 else 0;
+#+end_src

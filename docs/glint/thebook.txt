@@ -9,7 +9,7 @@
 Table of Contents
 _________________
 
-1. Preface: What's It to You?
+1. Preface
 .. 1. Hardware
 .. 2. Software
 .. 3. Tooling
@@ -49,7 +49,10 @@ _________________
 ..... 4. `cfor'
 ..... 5. `match'
 .. 8. Declared Types
-..... 1. Supplanted Members
+..... 1. Structs
+..... 2. Unions
+..... 3. Enumerations
+..... 4. Sums
 .. 9. Basic Functions
 ..... 1. Function Attributes
 .. 10. Pointers and References
@@ -82,8 +85,8 @@ _________________
 ..... 4. Euclid GCD
 
 
-1 Preface: What's It to You?
-============================
+1 Preface
+=========
 
 1.1 Hardware
 ~~~~~~~~~~~~
@@ -984,8 +987,238 @@ _________________
 2.8 Declared Types
 ~~~~~~~~~~~~~~~~~~
 
-2.8.1 Supplanted Members
-------------------------
+2.8.1 Structs
+-------------
+
+  The most important declared type there is, the `struct'. A struct is a
+  way to group other types together in memory, and reference each type's
+  value by a name.
+
+  ,----
+  | struct {
+  |   x : int;
+  |   y : uint;
+  | };
+  `----
+
+  Given an instance of the above struct, setting the value of `x' would
+  *not* alter the value of `y', and vice versa. They are unique, named
+  points in memory.
+
+  To access these points, you use the member access operator, `.', with
+  the object you are trying to access on the left hand side, and the
+  name of the member you are trying to reference on the right hand
+  side. A member access, as it references a unique point in memory, may
+  be assigned to.
+
+  ,----
+  | A : struct {
+  |   x : int;
+  |   y : int;
+  | };
+  | 
+  | foo : A;
+  | 
+  | foo.x := 70;
+  | foo.y := -1;
+  | 
+  | foo.x + foo.y;
+  `----
+
+
+* 2.8.1.1 Supplanted Members
+
+  A struct may have another struct (or sum) type supplanted within it;
+  this means that the supplanted type's members are now accessible as if
+  they were members of the struct the member resides in. In reality, the
+  compiler does generate a unique name for the member and generates code
+  to access that member by name; this construct is simply for the
+  programmer's convenience.
+
+  ,----
+  | A : struct {
+  |   x : int;
+  |   y : int;
+  | };
+  | 
+  | B : struct {
+  |   supplant A;
+  |   z : int;
+  | };
+  | 
+  | foo : B;
+  | foo.x;
+  | foo.y;
+  | foo.z;
+  `----
+
+
+2.8.2 Unions
+------------
+
+  A union is a way to store multiple types in one place in memory. A
+  union is only as big as it's largest member.
+
+  ,----
+  | union {
+  |   x : int;
+  |   y : uint;
+  | };
+  `----
+
+  Given an instance of the above struct, *setting the value of `x' would
+  alter the value of `y'*, and vice versa. They /are/ named points in
+  memory, but they are not unique. You could say a union gives multiple
+  names to the same position in memory.
+
+  If you can't picture why that'd be useful, then you don't ever need to
+  use unions; they are really just there so that people who want to
+  solve problems a certain way are able to do it that way.
+
+
+2.8.3 Enumerations
+------------------
+
+  Enumerations, often shortened to just /enums/, are named constant
+  values.
+
+  Let's say you wanted the number `1' to be called `Success', and the
+  number `7' to be called `Erased', to make your Glint code more
+  readable, or understandable.
+  ,----
+  | enum(int) {
+  |   Success :: 1;
+  |   Erased :: 7;
+  | };
+  `----
+
+  Enumerators (in Glint) are /just named constants/. If you come from
+  Rust (you crustacean, you), see sum types for what you may call
+  enums. If you come from C or C++, not too much has changed.
+
+
+2.8.4 Sums
+----------
+
+  A sum is a way to store *one of* a group of types in one position.
+
+  A sum type is a lot like a union, except that when you access a member
+  of a sum type, it is verified that the member you are accessing is
+  /actually/ currently stored in the memory where that member is
+  stored. You see, each member of a sum type is stored at the same
+  position in memory (like a union), but the sum type also keeps track
+  of what member was last assigned to, and, as such, what kind of value
+  is stored in it's member memory.
+
+  ,----
+  | sum {
+  |   x : int;
+  |   y : int;
+  |   z : byte;
+  | };
+  `----
+
+  Given an instance of the above struct, *setting the value of `x' would
+  alter the value of* `y', and vice versa. The catch is that, you would
+  never be able to access `y' after setting `x'; doing so would actually
+  cause the program to exit.
+
+  ,----
+  | A : sum {
+  |   x : int;
+  |   y : byte;
+  | };
+  | 
+  | foo : A;
+  | foo.x; ;; program exits here
+  `----
+
+  The only way to get your Glint program to continue execution when
+  accessing a sum's member is to access the /right/ one. The /right/ one
+  is whichever one is currently stored in the sum type. Note that this
+  is NOT calculated at compile-time; each sum type stores a value in the
+  computer's memory /at run-time/ indicating which member is valid (if
+  any). The compiler automatically generates code to update this value
+  accordingly whenever assigning to any sum type's member.
+
+  ,----
+  | A : sum {
+  |   x : int;
+  |   y : byte;
+  | };
+  | 
+  | foo : A;
+  | foo.x := 69;
+  | foo.y; ;; program exits here
+  `----
+
+  ,----
+  | A : sum {
+  |   x : int;
+  |   y : byte;
+  | };
+  | 
+  | foo : A;
+  | foo.x := 69;
+  | foo.y := foo.x;
+  | foo.y;
+  | foo.x; ;; program exits here
+  `----
+
+  The members of a given instance of a sum type may not co-exist at any
+  one time. However, over the "lifetime" of an instance of a sum type,
+  any amount of members may be valid.
+
+  You may query if a given member is valid using the `has' unary prefix
+  operator.
+
+  ,----
+  | A : sum {
+  |   x : int;
+  |   y : byte;
+  | };
+  | 
+  | foo : A;
+  | foo.x := 69;
+  | foo.y := foo.x;
+  | 
+  | out : int;
+  | 
+  | if (has foo.x), out := foo.x;
+  | if (has foo.y), out := foo.y;
+  | 
+  | out;
+  `----
+
+  To avoid long chains of `if' expressions used in conjunction with
+  `has', as seen above, the `match' expression may be used in turn. In
+  fact, there are more benefits to using `match', such as compile-time
+  guarantee that every possible member has a control flow to handle it.
+
+  ,----
+  | A : sum {
+  |   x : int;
+  |   y : byte;
+  | };
+  | 
+  | foo : A;
+  | foo.x := 69;
+  | foo.y := foo.x;
+  | 
+  | match foo, {
+  |   .x out := foo.x;
+  |   .y out := foo.y;
+  | };
+  `----
+
+  The match expression will execute exactly one of it's named body
+  expressions: the one matching the name of the value currently stored
+  in the instance of the given sum type.
+
+  The program would not compile if there were no body expression named
+  `x' or if there were no body expression named `y'; every declared
+  member within the sum type must have an expression associated with it
+  in a `match' expression on that sum type.
 
 
 2.9 Basic Functions
@@ -1228,10 +1461,9 @@ _________________
 
   A templated type is like a template expression that defines a type.
 
-  TODO: Syntax not final.
   ,----
-  | vector :: struct templated {
-  |   data : (auto).ptr;
+  | vector :: struct (T : type) {
+  |   data : T.ptr;
   |   size : uint;
   |   capacity : uint;
   | };
@@ -1240,7 +1472,13 @@ _________________
   `----
 
   A templated function is like a template expression that defines a
-  function.
+  function.  The catch here is that the template arguments are all types
+  (because, well, templating a function on a value seems an awful lot
+  like you may just want to use a parameter instead `:^)'). Because of
+  that, the syntax has removed the `(T1 : type, T2 : type)' boilerplate
+  in favor of automagically generating them from the amount of unique
+  `auto' types in the signature. Notice the `auto' type allows for
+  partial definition of a type, just like C++20's concepts.
 
   ,----
   | vector_push : void(vec : (vector auto.element).ref, val : auto.element) {
@@ -1309,6 +1547,16 @@ _________________
   | export foo : int 69;
   `----
 
+  Within Glint, you may now put `import Foo;' at the top of a file, and
+  subsequent expressions will execute as if `foo : int 69;' was at the
+  top of the file (but without having to execute any code for that to
+  happen!).
+
+  In practice, this most often makes the symbol associated with the
+  variable "visible" to the linker in the generated object file. This
+  means that other object files may reference the symbol to access,
+  operate on, and interact with the variable.
+
 
 2.15.3 Importing Modules
 ------------------------
@@ -1318,6 +1566,8 @@ _________________
   | 
   | foo; ;; equals int 69
   `----
+
+  TODO: Mention Glint compiler not being able to find module metadata.
 
 
 3 Types
