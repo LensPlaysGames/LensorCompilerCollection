@@ -1,0 +1,22 @@
+* Euclid's Greatest Common Denominator Algorithm
+
+#+NAME: source
+#+begin_src glint
+  gcd : uint(a : uint, b : uint) {
+    if b = 0, return a;
+    gcd b, a % b;
+  };
+
+  ;; Calculate the greatest common denominator of 32 and 80, and return
+  ;; that.
+  gcd 32, 80;
+#+end_src
+
+#+NAME: status
+#+begin_example
+16
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

@@ -1,0 +1,14 @@
+================
+Out-of-Order Variable Declaration
+:fail-sema
+================
+
+foo : int x;
+
+x :: 69;
+
+foo;
+
+---
+
+()

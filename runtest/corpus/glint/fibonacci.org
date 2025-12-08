@@ -1,0 +1,21 @@
+* Fibonacci, Recursive
+
+#+NAME: source
+#+begin_src glint
+  fib : uint(n : uint) {
+    if n <= 1, return n;
+    (fib n - 1) + (fib n - 2);
+  };
+
+  ;; Calculate 7th number in the Fibonacci sequence, and return that.
+  fib 7;
+#+end_src
+
+#+NAME: status
+#+begin_example
+13
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
