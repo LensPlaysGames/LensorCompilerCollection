@@ -4424,16 +4424,25 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             " Glint does not support any other kind of overloading."
         );
 
-        // Make a copy of the pointer so we don't accidentally overwrite the
-        // declaration's pointer in the following analysation.
         Expr* e = syms.at(0);
-        (void) Analyse(&e);
 
-        // FIXME: What in the fuck is this for? The assert would mean we wouldn't
-        // need the following line and the line following means we wouldn't need
-        // the assert. A fucking idiot wrote this, clearly.
-        LCC_ASSERT(syms.at(0) == e);
-        syms.at(0) = as<Decl>(e);
+        if (not e->ok()) {
+            auto err = Error(
+                expr->location(),
+                "Reference to '{}' before it has been declared (and therefore initialized).\n"
+                "Allowing this access would mean allowing potentially uninitialized data to alter your program!",
+                expr->name()
+            );
+            err.attach(Note(e->location(), "Declared here"));
+            // TODO: Suggestions:
+            //   1) Move the declaration of 'x' to be before this access.
+            //   2) Move the "expression containing this access" to after the
+            //      declaration of 'x'.
+            //      Where "the expression containing this access" refers to the previous
+            //      sibling of the declaration of 'x' that has this access as a child.
+            expr->set_sema_errored();
+            return;
+        }
 
         if (e->sema() == SemaNode::State::NoLongerViable) {
             Error(
