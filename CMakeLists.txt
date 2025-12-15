@@ -337,6 +337,14 @@ add_executable(
 )
 target_include_directories(lcc PUBLIC src)
 
+# Make project version accessible from source code
+configure_file(
+    src/version.hh.in
+    ${CMAKE_CURRENT_BINARY_DIR}/version.hh
+    @ONLY
+)
+target_include_directories(lcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+
 # Link lcc driver with language libraries.
 target_link_libraries(lcc PUBLIC glint)
 

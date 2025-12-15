@@ -1,4 +1,5 @@
 #include <cli.hh>
+#include <version.hh>
 
 #include <lcc/context.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
@@ -19,6 +20,7 @@ void help() {
     fmt::print("FLAGS:\n");
     fmt::print("{}", TwoColumnLayoutHelper{{
         {"  -v", "Enable verbose output\n"},
+        {"  --version", "Print compiler version information, then exit\n"},
         {"  --ast", "Print AST in human-readable format\n"},
         {"  --ir", "Print LCC intermediate representation at various stages\n"},
         {"  --mir", "Print LCC machine instruction representation at various stages\n"},
@@ -77,6 +79,11 @@ auto parse(int argc, const char** argv) -> Options {
         const auto arg = std::string_view{argv[i]};
         if (arg.substr(0, 3) == "--h" or arg.substr(0, 2) == "-h") {
             help();
+        }
+
+        if (arg == "--version") {
+            fmt::print("lcc (LCC) {}\n", LCC_VERSION_STRING);
+            std::exit(0);
         }
 
         if (arg == "-v")
