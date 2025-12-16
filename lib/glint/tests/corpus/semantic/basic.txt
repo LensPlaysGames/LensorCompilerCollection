@@ -31,11 +31,13 @@ foo 2 2;
 
 ---
 
-(block (return
- (call (name)
-  (binary_multiply
-   (integer_literal)
-   (integer_literal)))))
+(block
+ (function_declaration (return (cast (name))))
+ (return
+  (call (name)
+   (binary_multiply
+    (integer_literal)
+    (integer_literal)))))
 
 ================
 Invoking Many Integers Multiplies
