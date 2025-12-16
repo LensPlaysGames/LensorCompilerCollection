@@ -1,4 +1,6 @@
 #include <cli.hh>
+#include <sarif.hh>
+#include <version.hh>
 
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
@@ -228,6 +230,8 @@ auto main(int argc, const char** argv) -> int {
     /// Common path after IR gen.
     auto EmitModule = [&](lcc::Module* m, std::string_view input_file_path, std::string_view output_file_path) {
         if (not m) return;
+        LCC_ASSERT(m->context());
+        if (m->context()->has_error()) return;
 
         if (m->context()->option_print_stats()) {
             lcc::usz block_count{};
@@ -326,7 +330,6 @@ auto main(int argc, const char** argv) -> int {
             or (specified_language == "default" and path_str.ends_with(".lcc"))
         ) {
             auto mod = lcc::Module::Parse(&context, file);
-            if (context.has_error()) return; // the error condition is handled by the caller already
             EmitModule(mod.get(), path_str, output_file_path);
             return;
         }
@@ -353,6 +356,12 @@ auto main(int argc, const char** argv) -> int {
             output_file_path = ConvertFileExtensionToOutputFormat(input_files[0]);
 
         GenerateOutputFile(input_files[0], output_file_path);
+
+        if (options.emit_sarif) {
+            auto s = as_sarif(context);
+            lcc::File::WriteOrTerminate(s.data(), s.size(), "out.sarif");
+        }
+
         if (context.has_error()) return 1;
 
         if (
@@ -373,6 +382,7 @@ auto main(int argc, const char** argv) -> int {
             );
         }
 
+        // TODO: Generate SARIF for each file as a separate SARIF "run"...
         for (auto& input_file : input_files) {
             std::string input_file_path = input_file;
             std::string output_file_path = ConvertFileExtensionToOutputFormat(input_file_path);

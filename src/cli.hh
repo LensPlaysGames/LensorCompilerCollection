@@ -14,6 +14,8 @@ struct Options {
     bool aluminium{false};
     bool ir{false};
     bool stopat_ir{false};
+    bool emit_sarif{false};
+
     lcc::Context::OptionPrintStats print_stats{false};
     lcc::Context::OptionPrintAST ast{false};
     lcc::Context::OptionPrintMIR mir{false};
