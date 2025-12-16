@@ -45,11 +45,23 @@ You'll probably want to build it in parallel, otherwise it might take a minute.
 
 ** Implemented Languages
 
-- Glint | Low Level, Higher Order
-
-See [[file:docs/glint/][relevant documentation]].
-
 In the future, we hope to support
 
 - some of C
-- YOUR language :) (it's easy, really)
+- YOUR language :) (it's easy!! really)
+
+*** Glint | Low Level, Higher Order
+
+See [[file:docs/glint/][relevant documentation]].
+
+- Separate Compilation (via Modules system)
+
+This allows build tools to parallelize the embarrassingly parallel problem of compilation.
+
+- Functional Programming in an Imperative Language
+
+- Meta Programming via templates; compile-time code generation.
+
+- =name : type= syntax (vs C =type name=).
+
+- Out of order (function) declaration
