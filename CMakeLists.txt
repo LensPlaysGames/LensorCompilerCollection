@@ -214,36 +214,6 @@ endif()
 # default, and I don't take kindly to those not willing to put in the
 # effort ơ_ơ.
 
-# Glint language library
-add_library(
-  glint STATIC
-  include/glint/ast.hh
-  include/glint/ast_eval.hh
-  include/glint/driver.hh
-  include/glint/eval.hh
-  include/glint/ir_gen.hh
-  include/glint/lexer.hh
-  include/glint/parser.hh
-  include/glint/sema.hh
-  lib/glint/ast.cc
-  lib/glint/ast_deserialise_expr.cc
-  lib/glint/ast_deserialise_type.cc
-  lib/glint/ast_eval.cc
-  lib/glint/ast_module.cc
-  lib/glint/ast_serialise_expr.cc
-  lib/glint/ast_serialise_type.cc
-  lib/glint/driver.cc
-  lib/glint/eval.cc
-  lib/glint/init.cc
-  lib/glint/ir_gen.cc
-  lib/glint/lexer.cc
-  lib/glint/parser.cc
-  lib/glint/sema.cc
-)
-target_include_directories(glint PUBLIC include)
-target_link_libraries(glint PRIVATE options)
-target_link_libraries(glint PRIVATE object)
-
 # Generic object library (convertible to ELF and COFF, currently)
 add_library(
   object STATIC
@@ -329,13 +299,51 @@ set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
 # Link main lcc library with generic object library.
 target_link_libraries(liblcc PUBLIC object)
 
+# Apply options to main lcc library
+target_link_libraries(liblcc PRIVATE options)
+
+# Glint language library
+add_library(
+  glint STATIC
+  include/glint/ast.hh
+  include/glint/ast_eval.hh
+  include/glint/driver.hh
+  include/glint/eval.hh
+  include/glint/ir_gen.hh
+  include/glint/lexer.hh
+  include/glint/parser.hh
+  include/glint/sema.hh
+  lib/glint/ast.cc
+  lib/glint/ast_deserialise_expr.cc
+  lib/glint/ast_deserialise_type.cc
+  lib/glint/ast_eval.cc
+  lib/glint/ast_module.cc
+  lib/glint/ast_serialise_expr.cc
+  lib/glint/ast_serialise_type.cc
+  lib/glint/driver.cc
+  lib/glint/eval.cc
+  lib/glint/init.cc
+  lib/glint/ir_gen.cc
+  lib/glint/lexer.cc
+  lib/glint/parser.cc
+  lib/glint/sema.cc
+)
+target_include_directories(glint PUBLIC include)
+target_link_libraries(glint PRIVATE options)
+target_link_libraries(glint PRIVATE object)
+target_link_libraries(glint PRIVATE liblcc)
+
 # Add the driver.
 add_executable(
   lcc
   src/cli.cc
   src/lcc.cc
+  src/sarif.cc
 )
 target_include_directories(lcc PUBLIC src)
+
+# Apply options to driver.
+target_link_libraries(lcc PRIVATE options liblcc)
 
 # Make project version accessible from source code
 configure_file(
@@ -345,14 +353,16 @@ configure_file(
 )
 target_include_directories(lcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
+# Link lcc driver with main lcc library.
+target_link_libraries(lcc PRIVATE liblcc)
+
 # Link lcc driver with language libraries.
 target_link_libraries(lcc PUBLIC glint)
 
-# Apply options.
-target_link_libraries(liblcc PRIVATE options)
-target_link_libraries(lcc PRIVATE options liblcc)
-
 if (BUILD_TESTING)
+  # TODO Write a test driver or something
+  # add_test()
+
   # TODO
   message(FATAL_ERROR "Testing has not yet been re-implemented")
 endif()
