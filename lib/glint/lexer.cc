@@ -53,6 +53,7 @@ lcc::StringMap<Tk> keywords{
     {"alignof", Tk::Alignof},
     {"template", Tk::Template},
     {"typeof", Tk::Typeof},
+    {"apply", Tk::Apply},
     // C FFI Types
     {"cshort", Tk::CShort},
     {"cushort", Tk::CUShort},
@@ -969,6 +970,7 @@ auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
 
         case TokenKind::Invalid:
         case TokenKind::Eof:
+        case TokenKind::Apply:
         case TokenKind::LParen:
         case TokenKind::RParen:
         case TokenKind::LBrack:
@@ -1068,6 +1070,7 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
     switch (kind) {
         case Tk::Invalid: return "invalid";
         case Tk::Eof: return "EOF";
+        case Tk::Apply: return "apply";
         case Tk::Ident: return "identifier";
         case Tk::Number: return "number";
         case Tk::String: return "string";
@@ -1180,6 +1183,7 @@ auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::s
             );
 
         case Tk::Eof: return {""};
+        case Tk::Apply: return {"apply"};
         case Tk::LParen: return {"("};
         case Tk::RParen: return {")"};
         case Tk::LBrack: return {"["};

@@ -16,6 +16,7 @@
 
 namespace {
 /// Get the binary precedence of a token.
+/// -1 returned if given token is not a binary or unary postfix operator.
 constexpr inline lcc::isz CallPrecedence = 90;
 constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
     using Tk = lcc::glint::TokenKind;
@@ -142,6 +143,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Ampersand:
         case Tk::Pipe:
         case Tk::Caret:
+        case Tk::Apply:
             return -1;
     }
     LCC_UNREACHABLE();
@@ -248,6 +250,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::Enum:
         case Tk::Union:
         case Tk::Sum:
+        case Tk::Apply:
             return true;
 
         case Tk::Invalid:
@@ -630,6 +633,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
     const auto start_token = tok.kind;
 
     /// Parse the LHS.
+    const auto start_location = tok.location;
     switch (tok.kind) {
         case Tk::Gensym:
             LCC_ASSERT(false, "Gensym token in parser: there is a bug in the lexer");
@@ -673,19 +677,48 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             NextToken();
             break;
 
+        case Tk::Apply: {
+            // Yeet 'apply'.
+            NextToken();
+
+            // Parse function expression
+            auto function_expression = ParseExpr();
+            ConsumeExpressionSeparator(ExpressionSeparator::Soft);
+
+            // Parse argument lists
+            auto argument_lists = ParseExpressionList();
+
+            if (IsError(function_expression, argument_lists))
+                return GetDiag(function_expression, argument_lists).diag();
+
+            lhs = new (*mod) ApplyExpr(
+                *function_expression,
+                *argument_lists,
+                {start_location, tok.location}
+            );
+        } break;
+
         case Tk::Template: {
-            auto loc = tok.location;
             // Yeet 'template'
             NextToken();
 
             if (not Consume(Tk::LParen))
-                return Error(loc, "Expected template parameter list (beginning with `(`) following `template`");
+                return Error(
+                    tok.location,
+                    "Expected template parameter list (beginning with `(`) following `template`"
+                );
 
             std::vector<TemplateExpr::Param> parameters{};
             while (not At(Tk::RParen)) {
                 // We have a (maybe comma-separated) list of names followed by a type.
                 usz idx = parameters.size();
-                if (not At(Tk::Ident)) return Error(loc, "Expected identifier in template parameter declaration");
+                if (not At(Tk::Ident)) {
+                    return Error(
+                        tok.location,
+                        "Expected identifier in template parameter declaration"
+                    );
+                }
+
                 do {
                     parameters.emplace_back(tok.text, nullptr, tok.location);
                     NextToken();
@@ -693,7 +726,8 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 } while (At(Tk::Ident));
 
                 /// Parse the parameter type.
-                if (not Consume(Tk::Colon)) return Error("Expected ':' in template parameter declaration");
+                if (not Consume(Tk::Colon))
+                    return Error("Expected ':' in template parameter declaration");
                 auto type = ParseType();
                 if (not type) return type.diag();
 
@@ -705,16 +739,17 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             }
 
             /// Yeet ')'.
-            if (not Consume(Tk::RParen)) return Error("Expected ')' closing template parameter list");
+            if (not Consume(Tk::RParen))
+                return Error("Expected ')' closing template parameter list");
 
             lhs = ParseExpr(current_precedence);
             if (not lhs) return lhs.diag();
 
-            lhs = new (*mod) TemplateExpr(*lhs, parameters, {loc, lhs->location()});
+            lhs = new (*mod) TemplateExpr(*lhs, parameters, {start_location, lhs->location()});
         } break;
 
         case Tk::Print: {
-            auto loc = tok.location;
+            auto print_kw_location = tok.location;
             // Yeet `print`
             NextToken();
 
@@ -725,15 +760,18 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             // FIXME: We currently don't have "expression list" implemented, so we use
             // a call to store everything until Sema.
             lhs = new (*mod) CallExpr(
-                new (*mod) NameRefExpr("__glintprint", GlobalScope(), loc),
+                new (*mod) NameRefExpr(
+                    "__glintprint",
+                    GlobalScope(),
+                    print_kw_location
+                ),
                 e,
-                {loc, tok.location}
+                {start_location, tok.location}
             );
 
         } break;
 
         case Tk::Match: {
-            auto loc = tok.location;
             // Yeet `match`
             NextToken();
 
@@ -759,16 +797,26 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 }
             }
 
-            lhs = new (*mod) MatchExpr(*object, {loc, object->location()});
+            lhs = new (*mod) MatchExpr(*object, {start_location, object->location()});
 
-            if (not Consume(Tk::LBrace))
-                return Error(loc, "Expected block expression for match body following match object expression.");
+            if (not Consume(Tk::LBrace)) {
+                return Error(
+                    start_location,
+                    "Expected block expression for match body following match object expression."
+                );
+            }
 
             while (not At(Tk::RBrace)) {
-                if (not Consume(Tk::Dot))
-                    return Error(tok.location, "Expected `.` followed by sum type member identifier (or `}}`)");
+                if (not Consume(Tk::Dot)) {
+                    return Error(
+                        tok.location,
+                        "Expected `.` followed by sum type member identifier (or `}}`)"
+                    );
+                }
 
-                if (not At(Tk::Ident)) return Error("Expected identifier after .");
+                if (not At(Tk::Ident))
+                    return Error("Expected identifier after .");
+
                 auto name = tok.text;
                 // Yeet name
                 Consume(Tk::Ident);
@@ -784,44 +832,49 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 as<MatchExpr>(*lhs)->add_match(name, *body);
             }
 
-            if (not Consume(Tk::RBrace))
-                return Error(loc, "Expected end brace for match body block expression.");
+            if (not Consume(Tk::RBrace)) {
+                return Error(
+                    tok.location,
+                    "Expected end brace for match body block expression."
+                );
+            }
         } break;
 
         case Tk::Sizeof: {
-            auto loc = tok.location;
             // Yeet `sizeof`
             NextToken();
             lhs = ParseExpr();
             if (not lhs) return lhs.diag();
-            lhs = new (*mod) SizeofExpr(*lhs, {loc, lhs->location()});
+            lhs = new (*mod) SizeofExpr(*lhs, {start_location, lhs->location()});
         } break;
 
         case Tk::Alignof: {
-            auto loc = tok.location;
             // Yeet `alignof`
             NextToken();
             lhs = ParseExpr();
             if (not lhs) return lhs.diag();
-            lhs = new (*mod) AlignofExpr(*lhs, {loc, lhs->location()});
+            lhs = new (*mod) AlignofExpr(*lhs, {start_location, lhs->location()});
         } break;
 
         case Tk::Has: {
-            auto loc = tok.location;
             // Yeet `has`
             NextToken();
             lhs = ParseExpr();
             if (not lhs) return lhs.diag();
-            lhs = new (*mod) UnaryExpr(Tk::Has, *lhs, false, {loc, lhs->location()});
+            lhs = new (*mod) UnaryExpr(
+                Tk::Has,
+                *lhs,
+                false,
+                {start_location, lhs->location()}
+            );
         } break;
 
         case Tk::Typeof: {
-            auto loc = tok.location;
             auto ty = ParseType();
             if (not ty) return ty.diag();
             lhs = new (*mod) TypeExpr(
                 *ty,
-                {loc, ty->location()}
+                {start_location, ty->location()}
             );
         } break;
 
@@ -908,36 +961,27 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             auto exprs = ParseExpressionsUntil(Tk::RParen);
             if (not exprs) return exprs.diag();
 
-            // FIXME: This is an issue; basically, we are doing semantic analysis
-            // within syntactic analysis, and it's making things /messy/.
-            // This is obviously semantics and has nothing to do with parsing
-            // syntactically; we /should/ have an expression list node that is invalid
-            // if it shows up in the final program but may be converted by semantic
-            // analysis into valid code. i.e. expression list containing all integers
-            // would multiply all of them together, but an expression list containing
-            // a function followed by integers would be a call to that functions with
-            // the integers as arguments.
-            {
-                auto& e = *exprs;
-                if (e.size() == 1) {
-                    lhs = e.at(0);
-                } else if (e.size() > 1) {
-                    // expression list becomes call
-                    // (foo x y) -> foo(x,y)
-                    lhs = new (*mod) CallExpr(
-                        e.at(0),
-                        {e.begin() + 1, e.end()},
-                        {e.at(0)->location(), tok.location}
-                    );
-                } else {
-                    // non-empty empty ()
-                    // Basically, we only ever get here if we have a paren expression with
-                    // hard separators or other empty paren expressions inside.
-                    return Error("Empty parenthetical expression probably has unintended consequences.");
-                }
+            if (exprs->empty()) {
+                // non-empty empty ()
+                // Basically, we only ever get here if we have a paren expression with
+                // hard separators or other empty paren expressions inside.
+                return Error("Empty parenthetical expression probably has unintended consequences.");
+            }
+
+            if (exprs->size() == 1) {
+                // Just an expression wrapped in parentheses; no change in parsing other
+                // than grouping, so we just use the inner expression.
+                lhs = exprs->at(0);
+            } else {
+                // Multiple expressions within parentheses; grouped expressions.
+                lhs = new (*mod) GroupExpr(
+                    *exprs,
+                    {start_location, tok.location}
+                );
             }
 
             if (not Consume(Tk::RParen)) return Error("Expected )");
+            lhs->location() = {lhs->location(), tok.location};
         } break;
 
         /// Unary operators.
@@ -2040,7 +2084,11 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                 NextToken();
 
                 if (tok.kind != Tk::Ident)
-                    return Error("Expected IDENTIFIER after . following type {}, not {}", *ty, ToString(tok.kind));
+                    return Error(
+                        "Expected IDENTIFIER after . following type {}, not {}",
+                        *ty,
+                        ToString(tok.kind)
+                    );
 
                 location = {location, tok.location};
                 if (tok.text == "pptr") {
@@ -2063,7 +2111,11 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                     NextToken();
                     break;
                 }
-                return Error("Unrecognized type member access {}.{}. Did you mean .ptr or .ref?", *ty, tok.text);
+                return Error(
+                    "Unrecognized type member access {}.{}. Did you mean .ptr or .ref?",
+                    *ty,
+                    tok.text
+                );
             } break;
 
             /// Function type.
@@ -2158,9 +2210,14 @@ void lcc::glint::Parser::ParseTopLevel() {
         auto expr = ParseExpr();
         if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (At(Tk::Eof)) {
-                Warning("Expected hard expression separator but got end of file");
+                Warning(
+                    "Expected hard expression separator but got end of file"
+                );
             } else if (expr) {
-                Warning(GetRightmostLocation(*expr), "Expected hard expression separator")
+                Warning(
+                    GetRightmostLocation(*expr),
+                    "Expected hard expression separator"
+                )
                     .attach(Note("Before this"));
             }
         }
@@ -2225,7 +2282,10 @@ auto lcc::glint::Parser::ParseFreestanding(
     parser.curr_func = m.top_level_function();
     // Construct scope stack
     for (auto s = starting_scope; s; s = s->parent())
-        parser.scope_stack.emplace(parser.scope_stack.begin(), s);
+        parser.scope_stack.emplace(
+            parser.scope_stack.begin(),
+            s
+        );
 
     /// Parse the file.
     std::vector<Expr*> exprs{};
@@ -2239,9 +2299,14 @@ auto lcc::glint::Parser::ParseFreestanding(
         auto expr = parser.ParseExpr();
         if (not +parser.ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (parser.At(Tk::Eof)) {
-                parser.Warning("Expected hard expression separator but got end of file");
+                parser.Warning(
+                    "Expected hard expression separator but got end of file"
+                );
             } else if (expr) {
-                parser.Warning(GetRightmostLocation(*expr), "Expected hard expression separator")
+                parser.Warning(
+                          GetRightmostLocation(*expr),
+                          "Expected hard expression separator"
+                )
                     .attach(parser.Note("Before this"));
             }
         }

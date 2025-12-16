@@ -483,6 +483,7 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
         case Expr::Kind::VarDecl:
         case Expr::Kind::FuncDecl:
         case Expr::Kind::EnumeratorDecl:
+        case Expr::Kind::Apply:
             return true;
 
         /// These never have side effects.
@@ -514,6 +515,9 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
 
         case Expr::Kind::Block:
             return rgs::any_of(as<BlockExpr>(expr)->children(), HasSideEffects);
+
+        case Expr::Kind::Group:
+            return rgs::any_of(as<GroupExpr>(expr)->expressions(), HasSideEffects);
 
         case Expr::Kind::EvaluatedConstant: {
             auto* c = as<ConstantExpr>(expr);
@@ -1480,6 +1484,73 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             }
         } break;
 
+        case Expr::Kind::Apply: {
+            auto* apply = as<ApplyExpr>(expr);
+
+            if (not IsCallable(apply->function())) {
+                Error(
+                    apply->function()->location(),
+                    "Expression given to 'apply' expression must be callable!"
+                );
+                return false;
+            }
+
+            // Ensure that all argument lists are the same length.
+            usz encountered_size{0};
+            bool have_encountered_size{false};
+            for (auto arglist : apply->argument_lists()) {
+                if (auto g = cast<GroupExpr>(arglist)) {
+                    LCC_ASSERT(not g->expressions().empty());
+                    if (have_encountered_size and g->expressions().size() != encountered_size) {
+                        Error(
+                            g->location(),
+                            "Mismatched lengths of argument lists given to 'apply'."
+                        );
+                        return false;
+                    }
+                    have_encountered_size = true;
+                    encountered_size = g->expressions().size();
+                } else {
+                    if (have_encountered_size and encountered_size != 1) {
+                        Error(
+                            arglist->location(),
+                            "Expected a list of {} arguments in each argument list given to 'apply', but got a single expression.",
+                            encountered_size
+                        );
+                        return false;
+                    } else {
+                        have_encountered_size = true;
+                        encountered_size = 1;
+                    }
+                }
+            }
+
+            std::vector<Expr*> generated_calls{};
+            for (usz index = 0; index < encountered_size; ++index) {
+                std::vector<Expr*> call_arguments{};
+
+                // Fetch 'index'th expression from argument list.
+                for (auto arglist : apply->argument_lists()) {
+                    if (not is<GroupExpr>(arglist)) {
+                        LCC_ASSERT(encountered_size == 1);
+                        call_arguments.emplace_back(arglist);
+                    }
+                    call_arguments.emplace_back(
+                        as<GroupExpr>(arglist)->expressions().at(index)
+                    );
+                }
+
+                auto generated_call_for_apply = new (mod) CallExpr(
+                    apply->function(),
+                    call_arguments,
+                    apply->location()
+                );
+                generated_calls.emplace_back(generated_call_for_apply);
+            }
+
+            *expr_ptr = new (mod) GroupExpr(generated_calls, apply->location());
+        } break;
+
         case Expr::Kind::Match: {
             auto* match = as<MatchExpr>(expr);
 
@@ -1671,6 +1742,34 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             if (i->type()->is_void()) {
                 Discard(&i->then());
                 if (i->otherwise()) Discard(&i->otherwise());
+            }
+        } break;
+
+        /// The type of a group is the type of its last expression. Type
+        /// inference is only used for the last expression in the group.
+        case Expr::Kind::Group: {
+            auto* group = as<GroupExpr>(expr);
+            if (group->expressions().empty()) {
+                group->type(Type::Void);
+                break;
+            }
+
+            for (auto& child : group->expressions()) {
+                const bool last = child == group->expressions().back();
+                if (not Analyse(&child, last ? expected_type : nullptr)) {
+                    group->set_sema_errored();
+                    return false;
+                }
+                // NOTE: We do NOT discard the child expression here, since a group
+                // expression is thought to return all of it's expression's results.
+                //
+                // (4, 20) -(evaluated)-> !{4, 20}
+            }
+
+            if (not group->sema_errored()) {
+                auto e_last = group->expressions().back();
+                group->set_lvalue(e_last->is_lvalue());
+                group->type(e_last->type());
             }
         } break;
 
@@ -2142,8 +2241,10 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             }
 
             /// Accessing ‘members’ of modules.
-            if (is<NameRefExpr>(m->object())
-                and is<ModuleExpr>(as<NameRefExpr>(m->object())->target())) {
+            if (
+                is<NameRefExpr>(m->object())
+                and is<ModuleExpr>(as<NameRefExpr>(m->object())->target())
+            ) {
                 // m->name() == name of member we are accessing
                 // m->object() == NameRef to module we are accessing
                 auto* name_ref = as<NameRefExpr>(m->object());
@@ -2157,17 +2258,11 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             }
 
             /// ‘object’ is actually a type name.
-            if (is<NameRefExpr>(m->object())
-                and is<TypeDecl>(as<NameRefExpr>(m->object())->target())) {
+            if (
+                is<NameRefExpr>(m->object())
+                and is<TypeDecl>(as<NameRefExpr>(m->object())->target())
+            ) {
                 auto* t = as<TypeDecl>(as<NameRefExpr>(m->object())->target());
-
-                if (is<StructType>(t->type())) {
-                    LCC_TODO(
-                        "Type introspection for {}; what type do we want to actually return here?\n"
-                        "Some sort of struct with type info probably, but only compile-time constants like integer or string literals for now, I'd guess.",
-                        *t->type()
-                    );
-                }
 
                 /// Handle accessing enumerators.
                 if (auto* e = cast<EnumType>(t->type())) {
@@ -2214,7 +2309,14 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     break;
                 }
 
-                LCC_UNREACHABLE();
+                Error(
+                    m->location(),
+                    "Type '{}' does not have member '{}'",
+                    *t->type(),
+                    m->name()
+                );
+                m->set_sema_errored();
+                return false;
             }
 
             /// Type must be a struct type (or something that represents one, like a
@@ -2222,7 +2324,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             auto* stripped_object_type = m->object()->type()->strip_pointers_and_references();
 
             // Access to union member
-            if (auto* union_type = cast<UnionType>(stripped_object_type)) {
+            if (
+                auto* union_type = cast<UnionType>(stripped_object_type)
+            ) {
                 auto& members = union_type->members();
                 auto it = rgs::find_if(
                     members,
@@ -2367,8 +2471,18 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
                 // Member access to supplanted member
                 // (m->object) . (m->name)  ->  (m->object) . (supplanted_member) . (m->name)
-                auto* supplanted_member_access = new (mod) MemberAccessExpr(m->object(), it->name, m->location());
-                auto* new_member_access = new (mod) MemberAccessExpr(supplanted_member_access, m->name(), m->location());
+                auto* supplanted_member_access
+                    = new (mod) MemberAccessExpr(
+                        m->object(),
+                        it->name,
+                        m->location()
+                    );
+                auto* new_member_access
+                    = new (mod) MemberAccessExpr(
+                        supplanted_member_access,
+                        m->name(),
+                        m->location()
+                    );
                 *expr_ptr = new_member_access;
                 if (not Analyse(expr_ptr)) {
                     m->set_sema_errored();
@@ -3191,6 +3305,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Ampersand:
         case TokenKind::Pipe:
         case TokenKind::Caret:
+        case TokenKind::Apply:
         case TokenKind::BitNOT:
             Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
             LCC_UNREACHABLE();
@@ -4317,7 +4432,8 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             auto distance = optimal_string_alignment_distance(expr->name(), decl->name());
             LCC_ASSERT(
                 distance,
-                "If distance from '{}' to '{}' was zero, then symbol would have been found. Likely error in distance calculation OR you passed a different name to declare() than the given declaration had.\n",
+                "If distance from '{}' to '{}' was zero, then symbol would have been found."
+                " Likely error in distance calculation OR you passed a different name to declare() than the given declaration had.\n",
                 expr->name(),
                 decl->name()
             );
@@ -4395,8 +4511,11 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         // It is unlikely the programmer mistyped multiple extra characters in a
         // name /on accident/, so we ensure the lengths are within some distance
         // of each other.
-        bool length_close = least_distance_decl
-                        and std::abs(i64(least_distance_decl->name().size() - expr->name().size())) < 3;
+        bool length_close
+            = least_distance_decl
+          and std::abs(
+                  i64(least_distance_decl->name().size() - expr->name().size())
+              ) < 3;
 
         // If there is a short name, ensure it's distance is below or equal to the
         // maximum distance. Without this, things like `bar` get suggested to be
@@ -4687,6 +4806,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
 
         case TokenKind::Invalid:
         case TokenKind::Eof:
+        case TokenKind::Apply:
         case TokenKind::LParen:
         case TokenKind::RParen:
         case TokenKind::LBrack:

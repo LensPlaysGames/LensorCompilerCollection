@@ -34,6 +34,8 @@ void lcc::glint::Module::scope_walk(lcc::Context* ctx, Expr* e, Scope* current_s
         case Expr::Kind::StringLiteral:
         case Expr::Kind::Type:
         case Expr::Kind::Unary:
+        case Expr::Kind::Apply:
+        case Expr::Kind::Group:
             break;
 
         case Expr::Kind::NameRef: {
@@ -257,12 +259,14 @@ auto lcc::glint::Module::deserialise(
                 case Expr::Kind::If:
                 case Expr::Kind::While:
                 case Expr::Kind::For:
+                case Expr::Kind::Apply:
                     LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));
 
                 case Expr::Kind::Call:
                 case Expr::Kind::IntrinsicCall:
                 case Expr::Kind::CompoundLiteral:
                 case Expr::Kind::Block:
+                case Expr::Kind::Group:
                 case Expr::Kind::Match:
                     LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));
 

@@ -45,6 +45,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
         case Kind::Return:
         case Kind::While:
         case Kind::Match:
+        case Kind::Apply:
             return unhandled_constant_expr();
 
         case Kind::IntegerLiteral:
@@ -103,6 +104,12 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
 
         case Kind::Block:
             for (auto* expr : as<BlockExpr>(this)->children())
+                if (not expr->evaluate(ctx, out, required))
+                    return false;
+            return true;
+
+        case Kind::Group:
+            for (auto* expr : as<GroupExpr>(this)->expressions())
                 if (not expr->evaluate(ctx, out, required))
                     return false;
             return true;
@@ -248,6 +255,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::BitAND:
                 case TokenKind::BitOR:
                 case TokenKind::BitXOR:
+                case TokenKind::Apply:
                     Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
                     LCC_UNREACHABLE();
             }
@@ -441,6 +449,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::Ampersand:
                 case TokenKind::Pipe:
                 case TokenKind::Caret:
+                case TokenKind::Apply:
                     Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
                     LCC_UNREACHABLE();
             }

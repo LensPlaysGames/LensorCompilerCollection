@@ -40,7 +40,7 @@ Multiple Separated Expressions Doesn't Become Call, Even Within Parentheses
 
 ---
 
-(block (name) (integer_literal))
+(block (group (name) (integer_literal)))
 
 ================
 Multiple Expressions w/ Soft Separated Arguments Becomes Call

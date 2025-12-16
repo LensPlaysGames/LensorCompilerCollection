@@ -257,6 +257,13 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
         } break;
 
         // Expressions that have a variable amount of children.
+        case Expr::Kind::Apply: {
+            auto a = as<ApplyExpr>(expr);
+            recurse(a->function());
+            for (auto e : a->argument_lists())
+                recurse(e);
+        } break;
+
         case Expr::Kind::Call: {
             auto c = as<CallExpr>(expr);
             recurse(c->callee());
@@ -278,6 +285,12 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
         case Expr::Kind::Block: {
             auto b = as<BlockExpr>(expr);
             for (auto e : b->children())
+                recurse(e);
+        } break;
+
+        case Expr::Kind::Group: {
+            auto g = as<GroupExpr>(expr);
+            for (auto e : g->children())
                 recurse(e);
         } break;
 

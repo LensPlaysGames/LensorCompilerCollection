@@ -178,6 +178,13 @@ auto Module::serialise_expr(
             }
         } break;
 
+        case Expr::Kind::Apply: {
+            auto a = as<ApplyExpr>(expr);
+            recurse(a->function());
+            for (auto e : a->argument_lists())
+                recurse(e);
+        } break;
+
         case Expr::Kind::MemberAccess: {
             auto m = as<MemberAccessExpr>(expr);
             recurse(m->object());
@@ -254,6 +261,12 @@ auto Module::serialise_expr(
         case Expr::Kind::Block: {
             auto b = as<BlockExpr>(expr);
             for (auto e : b->children())
+                recurse(e);
+        } break;
+
+        case Expr::Kind::Group: {
+            auto g = as<GroupExpr>(expr);
+            for (auto e : g->expressions())
                 recurse(e);
         } break;
 

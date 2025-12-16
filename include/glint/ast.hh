@@ -147,6 +147,7 @@ enum struct TokenKind {
     String,
     ByteLiteral,
 
+    Apply,
     If,
     Else,
     While,
@@ -1543,12 +1544,14 @@ public:
         Type,
         MemberAccess,
         Module,
+        Group,
 
         // replaced during sema
         Match,
         Sizeof,
         Alignof,
         Template,
+        Apply,
     };
 
 private:
@@ -1647,6 +1650,28 @@ public:
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {
         return expr->kind() >= Kind::TypeDecl and expr->kind() <= Kind::MemberAccess;
+    }
+};
+
+// A group of expressions that is to be treated as if it is one
+// expression; the "result" of an expression group is the result of it's
+// last expression (if the expression group isn't being used some other
+// way by semantic analysis, like for 'apply').
+class GroupExpr : public TypedExpr {
+    std::vector<Expr*> _expressions;
+
+public:
+    GroupExpr(std::vector<Expr*> exprs, Location location)
+        : TypedExpr(Kind::Group, location), _expressions(exprs) {}
+
+    [[nodiscard]]
+    auto expressions() const { return _expressions; }
+    [[nodiscard]]
+    auto expressions() -> decltype(_expressions)& { return _expressions; }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::Group;
     }
 };
 
@@ -1979,6 +2004,25 @@ public:
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {
         return expr->kind() == Kind::OverloadSet;
+    }
+};
+
+class ApplyExpr : public Expr {
+    Expr* _function{nullptr};
+    std::vector<Expr*> _argument_lists{};
+
+public:
+    ApplyExpr(Expr* function, std::vector<Expr*> argument_lists, Location location)
+        : Expr(Kind::Apply, location), _function(function), _argument_lists(argument_lists) {}
+
+    Expr*& function() { return _function; }
+    Expr* function() const { return _function; }
+
+    std::vector<Expr*>& argument_lists() { return _argument_lists; }
+    std::vector<Expr*> argument_lists() const { return _argument_lists; }
+
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::Apply;
     }
 };
 
@@ -2525,14 +2569,18 @@ bool IsCallable(Expr* expr);
 /// most-advanced character position that still lies within the given
 /// expression's location.
 /// Given identifier node "foo", return location referring to second "o".
+///                          ^
 /// Given declaration node "foo : int", return location referring to "t".
+///                                 ^
 auto GetRightmostLocation(lcc::glint::Expr* expr) -> lcc::Location;
+
 /// Given an expression, get a location of length one that refers to the
 /// position directly after the expression.
 /// NOTE: This location may not be seekable, or it may point to EOF.
 /// Given identifier node "foo", return location one past the second "o".
 ///                           ^
-/// Given declaration node "foo : int", return location referring to "t".
+/// Given declaration node "foo : int", return location one past "t".
+///                                  ^
 auto GetPastLocation(lcc::glint::Expr* expr) -> lcc::Location;
 
 } // namespace lcc::glint

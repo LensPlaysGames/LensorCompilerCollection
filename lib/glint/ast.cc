@@ -501,6 +501,13 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
     };
 
     switch (expr->kind()) {
+        case Kind::Group: {
+            auto g = as<GroupExpr>(expr);
+            return new (mod) GroupExpr(
+                CloneAll(g->expressions()),
+                g->location()
+            );
+        }
         case Kind::While: {
             auto w = as<WhileExpr>(expr);
             return new (mod) WhileExpr(
@@ -529,6 +536,14 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
                 Clone(i->then()),
                 Clone(i->otherwise()),
                 i->location()
+            );
+        }
+        case Kind::Apply: {
+            auto a = as<ApplyExpr>(expr);
+            return new (mod) ApplyExpr(
+                Clone(a->function()),
+                CloneAll(a->argument_lists()),
+                a->location()
             );
         }
         case Kind::Return: {
@@ -851,6 +866,8 @@ std::string lcc::glint::Expr::name() const {
         case Kind::Cast:
         case Kind::Match:
         case Kind::Template:
+        case Kind::Apply:
+        case Kind::Group:
             return ToString(kind());
 
         case Kind::NameRef:
@@ -987,6 +1004,23 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
         case Kind::Module:
             return {};
 
+        case Kind::Group: {
+            auto* g = as<GroupExpr>(this);
+            std::vector<Expr**> out{};
+            for (auto& c : g->expressions())
+                out.emplace_back(&c);
+
+            return out;
+        }
+
+        case Kind::Apply: {
+            auto* a = as<ApplyExpr>(this);
+            auto out = std::vector<Expr**>{&a->function()};
+            for (auto& arg_list : a->argument_lists())
+                out.emplace_back(&arg_list);
+            return out;
+        }
+
         case Kind::Type:
             // TODO: Structs with initialised members?
             if (auto* t_dynarray = cast<DynamicArrayType>(type())) {
@@ -1106,6 +1140,23 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
         case Kind::IntrinsicCall:
         case Kind::Module:
             return {};
+
+        case Kind::Group: {
+            auto* g = as<GroupExpr>(this);
+            std::vector<Expr*> out{};
+            for (auto& c : g->expressions())
+                out.emplace_back(c);
+
+            return out;
+        }
+
+        case Kind::Apply: {
+            auto* a = as<ApplyExpr>(this);
+            auto out = std::vector<Expr*>{a->function()};
+            for (auto& arg_list : a->argument_lists())
+                out.emplace_back(arg_list);
+            return out;
+        }
 
         case Kind::Type:
             if (auto* t_dynarray = cast<DynamicArrayType>(type())) {
@@ -1238,6 +1289,8 @@ auto lcc::glint::Expr::langtest_name() const -> std::string {
         case Kind::VarDecl:
         case Kind::FuncDecl:
         case Kind::NameRef:
+        case Kind::Apply:
+        case Kind::Group:
             return ToString(kind());
 
         case Kind::Unary:
@@ -1435,7 +1488,9 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
 
 auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
     switch (k) {
+        case lcc::glint::Expr::Kind::Group: return "group";
         case lcc::glint::Expr::Kind::Template: return "template";
+        case lcc::glint::Expr::Kind::Apply: return "apply";
         case lcc::glint::Expr::Kind::While: return "while";
         case lcc::glint::Expr::Kind::For: return "for";
         case lcc::glint::Expr::Kind::Return: return "return";
@@ -1469,6 +1524,33 @@ auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
 
 auto lcc::glint::Module::ToSource(const Expr& e) -> Result<std::string> {
     switch (e.kind()) {
+        case Expr::Kind::Group: {
+            auto e_group = as<GroupExpr>(&e);
+            std::vector<std::string> expression_sources{};
+            for (auto element : e_group->expressions()) {
+                auto e_element = ToSource(*element);
+                expression_sources.emplace_back(*e_element);
+            }
+            return fmt::format(
+                "({})",
+                fmt::join(expression_sources, ", ")
+            );
+        }
+
+        case Expr::Kind::Apply: {
+            auto e_apply = as<ApplyExpr>(&e);
+            auto e_function = ToSource(*e_apply->function());
+            if (not e_function) return e_function;
+            std::string arglists{};
+            for (auto arglist : e_apply->argument_lists()) {
+                LCC_ASSERT(arglist);
+                auto e_arglist = ToSource(*arglist);
+                if (not e_arglist) return e_arglist;
+                arglists += *e_arglist;
+            }
+            return fmt::format("apply {}, {}", *e_function, arglists);
+        }
+
         case Expr::Kind::While: {
             auto e_while = as<WhileExpr>(&e);
             auto e_condition = ToSource(*e_while->condition());
@@ -1843,6 +1925,13 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                 return;
             }
 
+            case K::Apply: {
+                // auto* a = as<lcc::glint::ApplyExpr>(e);
+                PrintBasicHeader("ApplyExpr", e);
+                out += '\n';
+                return;
+            }
+
             case K::IntegerLiteral: {
                 auto* i = as<lcc::glint::IntegerLiteral>(e);
                 PrintBasicHeader("IntegerLiteral", e);
@@ -1956,6 +2045,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
 
                 out += '\n';
                 return;
+            case K::Group: PrintBasicGlintNode("GroupExpr", e, nullptr); return;
             case K::While: PrintBasicGlintNode("WhileExpr", e, nullptr); return;
             case K::For: PrintBasicGlintNode("ForExpr", e, nullptr); return;
             case K::Block: PrintBasicGlintNode("BlockExpr", e, e->type()); return;

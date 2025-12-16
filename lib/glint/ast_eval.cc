@@ -18,6 +18,20 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
     // once, and return value from some sort of cache if it is present.
 
     switch (expr->kind()) {
+        case Expr::Kind::Apply: {
+            const auto* a = as<ApplyExpr>(expr);
+
+            (void) a;
+            LCC_TODO("GlintEval: {}", ToString(expr->kind()));
+        }
+
+        case Expr::Kind::Group: {
+            const auto* g = as<GroupExpr>(expr);
+
+            (void) g;
+            LCC_TODO("GlintEval: {}", ToString(expr->kind()));
+        }
+
         case Expr::Kind::Return: {
             const auto r = as<ReturnExpr>(expr);
             // If we are not within a function, return means we are done evaluating.
@@ -208,6 +222,7 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
 
                 case TokenKind::Invalid:
                 case TokenKind::Eof:
+                case TokenKind::Apply:
                 case TokenKind::LParen:
                 case TokenKind::RParen:
                 case TokenKind::LBrack:
@@ -342,6 +357,7 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 // Handled elsewhere
                 case TokenKind::ColonColon:
                 // NOT a binary operator
+                case TokenKind::Apply:
                 case TokenKind::Invalid:
                 case TokenKind::Eof:
                 case TokenKind::LParen:

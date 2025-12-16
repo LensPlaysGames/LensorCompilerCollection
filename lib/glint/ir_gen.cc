@@ -308,7 +308,18 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             if (b->children().empty()) return;
             for (auto* e : b->children())
                 generate_expression(e);
+
+            LCC_ASSERT(b->last_expr());
             generated_ir[expr] = generated_ir[*b->last_expr()];
+        } break;
+
+        case K::Group: {
+            auto* g = as<GroupExpr>(expr);
+            if (g->expressions().empty()) return;
+            for (auto* e : g->expressions())
+                generate_expression(e);
+            LCC_ASSERT(not g->expressions().empty());
+            generated_ir[expr] = generated_ir[g->expressions().back()];
         } break;
 
         case K::IntegerLiteral: {
@@ -669,6 +680,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::BitAND:
                 case TokenKind::BitOR:
                 case TokenKind::BitXOR:
+                case TokenKind::Apply:
                     LCC_ASSERT(false, "Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
             }
         } break;
@@ -964,6 +976,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Ampersand:
                 case TokenKind::Pipe:
                 case TokenKind::Caret:
+                case TokenKind::Apply:
                     Diag::ICE(
                         ctx,
                         expr->location(),
@@ -1685,6 +1698,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         case K::FuncDecl:
         case K::OverloadSet:
         case K::Template:
+        case K::Apply:
             break;
     }
 }
