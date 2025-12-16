@@ -1,8 +1,18 @@
 ================
+Alignof -> Integer Literal
+================
+
+alignof u32;
+
+---
+
+(block (return (integer_literal)))
+
+================
 Sizeof -> Integer Literal
 ================
 
-sizeof :u32;
+sizeof u32;
 
 ---
 
