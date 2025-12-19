@@ -1,6 +1,6 @@
 ================
 Out-of-Order Variable Declaration
-:fail-sema
+:fail_sema
 ================
 
 foo : int x;
