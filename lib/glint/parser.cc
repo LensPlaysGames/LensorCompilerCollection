@@ -1730,17 +1730,47 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
 
     while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
 
-    // Parse imports.
-    while (At(Tk::Ident) and tok.text == "import" and not tok.artificial) {
-        Location loc = tok.location;
-        NextToken(); /// Yeet "import".
-        if (not At(Tk::Ident, Tk::String)) return Error("Expected module name after import");
+    // Parse module imports.
+    // ENTRY := "export" [ "import" ] IDENTIFIER
+    //        | "import" IDENTIFIER
+    //        .
+    while (At(Tk::Ident)) {
+        if (tok.artificial) break;
 
-        // Add the module to be loaded later.
-        mod->add_import(tok.text, {loc, tok.location});
-        NextToken(); // Yeet module name.
+        if (tok.text == "export") {
+            NextToken(); /// Yeet "export".
 
-        while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
+            if (not At(Tk::Ident, Tk::String))
+                return Error("Expected 'import' or a module name after 'export'");
+
+            if (tok.text != "import") {
+                // At a module name
+                // TODO: Export module by name of tok.text
+            }
+
+            // TODO: We currently don't have a way to export anything other than
+            // declarations, and we also currently have no way to refer to a module
+            // via a declaration. So, yeah.
+            //     mod->add_export(module_by_name);
+        }
+
+        if (tok.text == "import") {
+            Location loc = tok.location;
+            NextToken(); /// Yeet "import".
+
+            if (not At(Tk::Ident, Tk::String))
+                return Error("Expected a module name after 'import'");
+
+            // Add the module to be loaded later.
+            mod->add_import(tok.text, {loc, tok.location});
+            NextToken(); // Yeet module name.
+
+            while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
+
+            continue;
+        }
+
+        break;
     }
 
     return m;
