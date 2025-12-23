@@ -94,6 +94,21 @@ int main(int argc, char** argv) {
     lcc::utils::Colours C{true};
     using lcc::utils::Colour;
 
+    auto context = lcc::Context{
+        default_target,
+        default_format,
+        lcc::Context::Options{
+            lcc::Context::DoNotUseColour,
+            lcc::Context::DoNotPrintStats,
+            lcc::Context::DoNotPrintAST,
+            lcc::Context::DoNotStopatLex,
+            lcc::Context::DoNotStopatSyntax,
+            lcc::Context::DoNotStopatSema,
+            lcc::Context::DoNotPrintMIR,
+            lcc::Context::DoNotStopatMIR
+        }
+    };
+
     if (options.input_paths.empty()) {
         lcc::Diag::Fatal("{}no input files", C(Colour::Red));
     }
@@ -134,21 +149,6 @@ int main(int argc, char** argv) {
         return std::filesystem::path{path_string}
             .replace_extension(replacement)
             .string();
-    };
-
-    auto context = lcc::Context{
-        default_target,
-        default_format,
-        lcc::Context::Options{
-            lcc::Context::DoNotUseColour,
-            lcc::Context::DoNotPrintStats,
-            lcc::Context::DoNotPrintAST,
-            lcc::Context::DoNotStopatLex,
-            lcc::Context::DoNotStopatSyntax,
-            lcc::Context::DoNotStopatSema,
-            lcc::Context::DoNotPrintMIR,
-            lcc::Context::DoNotStopatMIR
-        }
     };
 
     for (auto p : options.input_paths) {
