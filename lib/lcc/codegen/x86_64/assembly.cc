@@ -285,6 +285,7 @@ void emit_gnu_att_assembly(
                 // ================================
                 // INSTRUCTION PROLOGUE (some insts have preceding instructions)
                 // ================================
+                usz registers_saved{0};
                 if (instruction.opcode() == +x86_64::Opcode::Return) {
                     // Function Footer
                     // TODO: Different stack frame kinds.
@@ -304,7 +305,11 @@ void emit_gnu_att_assembly(
                         // writing to it).
                         if (r == instruction.reg()) continue;
                         out += fmt::format("    push %{}\n", ToString(x86_64::RegisterId{r}));
+                        ++registers_saved;
                     }
+                    // If uneven, keep stack alignment...
+                    if (registers_saved % 2 != 0)
+                        out += "    sub $8, %rsp\n";
 
                     // Save return register, if necessary.
                     // TODO: CFA `.cfi_offset`
@@ -320,6 +325,13 @@ void emit_gnu_att_assembly(
                     auto loc = instruction.location();
                     if (loc.seekable(module->context()) and not loc.equal_position(last_location)) {
                         auto l = loc.seek_line_column(module->context());
+                        out += fmt::format(
+                            "# FILE {} ({}), LINE {}, COLUMN {}",
+                            loc.file_id,
+                            fs::absolute(module->context()->files().at(loc.file_id)->path()).string(),
+                            l.line,
+                            l.col
+                        );
                         out += fmt::format(
                             "    .loc {} {} {}\n",
                             loc.file_id,
@@ -384,6 +396,7 @@ void emit_gnu_att_assembly(
                     else out += fmt::format(" ({}), {}\n", ToString(function, lhs), ToString(function, rhs));
                     continue;
                 }
+
                 // ================================
                 // CUSTOM INSTRUCTION SUFFIX HANDLING
                 // ================================
@@ -401,11 +414,13 @@ void emit_gnu_att_assembly(
 
                             auto bitwidth = std::get<MOperandImmediate>(lhs).size;
                             switch (bitwidth) {
+                                default: LCC_ASSERT(false, "Invalid move (bitwidth {})", bitwidth);
+
                                 case 64: out += 'q'; break;
                                 case 32: out += 'l'; break;
                                 case 16: out += 'w'; break;
+                                case 1:
                                 case 8: out += 'b'; break;
-                                default: LCC_ASSERT(false, "Invalid move");
                             }
                         }
                     }
@@ -443,6 +458,10 @@ void emit_gnu_att_assembly(
                         );
                         out += fmt::format("    pop %{}\n", ToString(x86_64::RegisterId(desc.return_register)));
                     }
+
+                    // If uneven, keep stack alignment...
+                    if (registers_saved % 2 != 0)
+                        out += "    add $8, %rsp\n";
 
                     // TODO: FIXME We probably shouldn't emit machine instructions that aren't in the MIR...
                     // Restore caller-saved registers, if necessary.
