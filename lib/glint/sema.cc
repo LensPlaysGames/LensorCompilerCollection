@@ -980,10 +980,7 @@ void lcc::glint::Sema::AnalyseModule() {
         "    memcpy newmem, dynarray.data, dynarray.size;\n"
         //   De-allocate old memory
         "    free dynarray.data;\n"
-        //   Assign dynarray.data to newly-allocated memo\ry
-        // FIXME: byte.ptr cast is incorrect. It needs to be a cast to the dynamic
-        // array's element type. We need typeof, or something similar
-        //   dynarray.data := (typeof dynarray.data) newmem;
+        //   Assign dynarray.data to newly-allocated memory
         //   dynarray.data <- newmem;
         "    dynarray.data := (typeof dynarray.data) newmem;\n"
         //   Assign dynarray.capacity to dynarray.capacity * 2
@@ -1104,6 +1101,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     if (not decl->body()) return;
 
     /// Create variable declarations for the parameters.
+    bool params_failed{false};
     for (auto& param : ty->params()) {
         if (param.name.empty()) continue;
 
@@ -1127,11 +1125,18 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         );
         Expr* dd{d};
 
-        LCC_ASSERT(decl->scope()->declare(context, auto(param.name), as<VarDecl>(d)).is_value());
+        LCC_ASSERT(
+            decl->scope()
+                ->declare(
+                    context,
+                    auto(param.name),
+                    as<VarDecl>(d)
+                )
+                .is_value()
+        );
         if (not Analyse(&d)) {
             // Continue to analyse the rest of the parameters
-            if (not decl->sema_errored())
-                decl->set_sema_errored();
+            params_failed = true;
         }
         // NOTE: `dd` copy important, since Analyse() clobbers parameter.
         decl->param_decls().push_back(as<VarDecl>(dd));
@@ -1140,14 +1145,16 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     // Gets rid of parameter dynamic array declarations that were falsely
     // recorded as dangling (parameters owned by caller).
     // TODO: Probably should disallow dynamic array parameters entirely? I
-    // don't really see when it would be needed.
+    // don't really see when it would be needed. I can see a reference to one
+    // making sense, but receiving a copy of a dynamic array for you to mess
+    // about with just seems weird to me.
     decl->dangling_dynarrays().clear();
 
     // If any of the parameters failed to type-check, the body will likely be
     // full of uses of the parameters, and those will all cause a whole bunch
     // of errors that won't be relevant once the programmer fixes the error in
     // the parameter declaration(s).
-    if (not decl->ok()) return;
+    if (params_failed) return;
 
     /// Analyse the body.
     // If we fail to analyse the function body, then the function is ill-
@@ -1287,7 +1294,8 @@ void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
     LCC_ASSERT(decl);
 
     /// Set a name for the decl if it’s empty.
-    if (decl->name().empty()) decl->name(mod.unique_name("emptydecl_"));
+    if (decl->name().empty())
+        decl->name(mod.unique_name("emptydecl_"));
 
     /// Typecheck the function type.
     if (not Analyse(decl->type_ref())) {
@@ -1993,7 +2001,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 // of an array, then it can be converted to an array of the same size (or
                 // a dynamic array, or array view).
 
-                // TODO: I know the compound literal is *supposed* to be v>type() up
+                // TODO: I know the compound literal is *supposed* to be v->type() up
                 // above, and that's why we set it. But, what if it isn't? What if the
                 // compound's literal's expressions do not actually make the type that it
                 // is expected to make?
