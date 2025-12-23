@@ -1552,6 +1552,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     if (not is<GroupExpr>(arglist)) {
                         LCC_ASSERT(encountered_size == 1);
                         call_arguments.emplace_back(arglist);
+                        continue;
                     }
                     call_arguments.emplace_back(
                         as<GroupExpr>(arglist)->expressions().at(index)
