@@ -8,11 +8,7 @@ lambda void() {};
 ---
 
 (block
-
- (function_declaration
-  (block (return)))
-
- (return (integer_literal)))
+ (function_declaration (block)))
 
 ================
 Simple Lambda Invocation
@@ -24,10 +20,7 @@ lambda void() {}();
 ---
 
 (block
-
  (call
   (function_declaration
-   (block (return))))
-
- (return (integer_literal)))
+   (block))))
 
