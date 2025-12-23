@@ -1,0 +1,33 @@
+================
+Simple Lambda
+:syntax
+================
+
+lambda void() {};
+
+---
+
+(block
+
+ (function_declaration
+  (block (return)))
+
+ (return (integer_literal)))
+
+================
+Simple Lambda Invocation
+:syntax
+================
+
+lambda void() {}();
+
+---
+
+(block
+
+ (call
+  (function_declaration
+   (block (return))))
+
+ (return (integer_literal)))
+

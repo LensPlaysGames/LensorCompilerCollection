@@ -9,7 +9,8 @@ apply identity, 69;
 ---
 
 (block
- (function_declaration)
+ (function_declaration
+  (return (cast (name))))
  (call (name) (integer_literal)))
 
 ================
@@ -24,7 +25,8 @@ apply identity, 27, 42;
 ---
 
 (block
- (function_declaration)
+ (function_declaration
+  (return (binary_add (cast (name)) (cast (name)))))
  (call (name) (integer_literal) (integer_literal)))
 
 ================
@@ -38,6 +40,7 @@ apply identity, (420, 69);
 ---
 
 (block
- (function_declaration)
+ (function_declaration
+  (return (cast (name))))
  (call (name) (integer_literal))
  (call (name) (integer_literal)))
