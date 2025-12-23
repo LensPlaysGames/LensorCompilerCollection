@@ -43,9 +43,13 @@ syn keyword glintKeywords
   \ return
   \ sizeof
   \ match
+  \ print
+  \ in
+  \ mapf
 
 syn keyword glintRepeat
   \ for
+  \ cfor
   \ while
 
 syn keyword glintConditional
@@ -69,7 +73,26 @@ syn keyword glintFunctionAttributes
 
 syn keyword glintTypeAttributes alignas
 
-syn match glintOperators "?\|+\|-\|\*\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\)\@!"
+" syn match glintOperators "?\|+\|-\|\*\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\)\@!"
+syn match glintOperators "[/*+-\%~&|^<>]="
+syn keyword glintOperators
+  \ @
+  \ !
+  \ +
+  \ -
+  \ *
+  \ /
+  \ &
+  \ =
+  \ <
+  \ >
+  \ bitand
+  \ bitor
+  \ bitxor
+  \ ::
+  \ :
+  \ ++
+  \ --
 
 syn match glintNumber "\v<\d+>"
 
@@ -107,3 +130,5 @@ hi def link glintDataTypes          Structure
 hi def link glintSupplant           StorageClass
 
 let b:current_syntax = 'glint'
+
+" vim:sw=2 ts=2:
