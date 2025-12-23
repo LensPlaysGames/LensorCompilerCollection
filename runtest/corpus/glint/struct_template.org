@@ -1,0 +1,17 @@
+* Struct Template, Simple
+
+#+NAME: source
+#+begin_src glint
+x : (struct(t : type) { v : t } int);
+x.v := 69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+
