@@ -14,6 +14,8 @@ syn region glintString start="\"" skip="\\\"" end="\"" contains=glintSpecial
 syn keyword glintFFITypes
   \ cshort
   \ cushort
+  \ csize
+  \ cusize
   \ cint
   \ cuint
   \ clong
