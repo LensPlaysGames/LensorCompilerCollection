@@ -4006,6 +4006,10 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             (void) Analyse(expr_ptr);
             return;
         }
+
+        // Otherwise, resolve the NameRefExpr to it's target.
+        // Notably, this does NOT analyse the target; it just finds it.
+        AnalyseNameRef(name);
     }
 
     // If the callee is a struct template, this is a struct template
@@ -4072,7 +4076,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             expr->location()
         );
         *expr_ptr = generated_call;
-        (void) Analyse(expr_ptr);
+        LCC_ASSERT(Analyse(expr_ptr));
 
         return;
     }
