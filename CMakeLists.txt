@@ -9,6 +9,13 @@ set(
   should be true *unless* you are making distributed binaries."
 )
 
+set(
+  USE_COLOUR TRUE
+  CACHE BOOL
+  "Whether or not to tell the compiler to use color for emitting
+  diagnostics (i.e. via '-fdiagnostics-color=always')."
+)
+
 # ============================================================================
 #  Global CMake Variables
 # ============================================================================
@@ -27,10 +34,12 @@ if (CCACHE_PROGRAM)
 endif()
 
 # Turn on diagnostics colours.
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+if (USE_COLOUR)
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-fdiagnostics-color=always)
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-fcolor-diagnostics)
+  endif()
 endif()
 
 # Use mold as the default linker, if it exists.
