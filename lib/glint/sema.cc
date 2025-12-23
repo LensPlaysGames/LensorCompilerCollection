@@ -1567,7 +1567,15 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 generated_calls.emplace_back(generated_call_for_apply);
             }
 
-            *expr_ptr = new (mod) GroupExpr(generated_calls, apply->location());
+            if (generated_calls.size() == 1)
+                *expr_ptr = generated_calls.at(0);
+            else {
+                *expr_ptr = new (mod) GroupExpr(
+                    generated_calls,
+                    apply->location()
+                );
+                LCC_ASSERT(Analyse(expr_ptr));
+            }
         } break;
 
         case Expr::Kind::Match: {
