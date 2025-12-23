@@ -159,8 +159,10 @@ lcc::Type* Convert(Context* ctx, Type* in) {
         case Type::Kind::Integer:
             return lcc::IntegerType::Get(ctx, in->size(ctx));
 
+        // A templated struct is an incomplete type; the closest thing to an
+        // incomplete type in the IR is void, I'd say.
         case Type::Kind::TemplatedStruct:
-            Diag::ICE("Sema should replace TemplatedStructType");
+            return lcc::Type::VoidTy;
 
         case Type::Kind::Typeof:
             Diag::ICE("Sema should replace TypeofType with the type of it's containing expression");
@@ -338,6 +340,11 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             // Named template is a no-op
             if (decl->init() and is<TemplateExpr>(decl->init())) {
+                return;
+            }
+
+            // Named struct template is a no-op
+            if (decl->init() and is<TemplatedStructType>(decl->init()->type())) {
                 return;
             }
 
