@@ -77,6 +77,7 @@ syn keyword glintTypeAttributes alignas
 
 " syn match glintOperators "?\|+\|-\|\*\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\)\@!"
 syn match glintOperators "[/*+-\%~&|^<>]="
+syn match glintOperators ":"
 syn keyword glintOperators
   \ @
   \ !
@@ -91,8 +92,6 @@ syn keyword glintOperators
   \ bitand
   \ bitor
   \ bitxor
-  \ ::
-  \ :
   \ ++
   \ --
 
