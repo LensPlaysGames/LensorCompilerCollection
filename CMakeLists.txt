@@ -256,6 +256,7 @@ add_library(
   include/lcc/syntax/lexer.hh
   include/lcc/syntax/token.hh
   include/lcc/target.hh
+  include/lcc/typedefs.hh
   include/lcc/utils.hh
   include/lcc/utils/aint.hh
   include/lcc/utils/ast_printer.hh

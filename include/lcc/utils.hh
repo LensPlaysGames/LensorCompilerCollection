@@ -1,24 +1,20 @@
 #ifndef LCC_UTILS_HH
 #define LCC_UTILS_HH
 
+#include <lcc/typedefs.hh>
+
 #include <fmt/color.h>
 #include <fmt/compile.h>
 #include <fmt/format.h>
 
 #include <algorithm>
 #include <array>
-#include <chrono>
-#include <coroutine>
 #include <cstdio>
 #include <cstring>
 #include <deque>
-#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <memory>
-#include <new>
-#include <numeric>
-#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -27,34 +23,9 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <variant>
 #include <vector>
 
 namespace lcc {
-using namespace std::literals;
-
-namespace fs = std::filesystem;
-namespace chr = std::chrono;
-namespace rgs = std::ranges;
-namespace vws = std::ranges::views;
-
-using u8 = uint8_t;
-using u16 = uint16_t;
-using u32 = uint32_t;
-using u64 = uint64_t;
-using usz = size_t;
-using uptr = uintptr_t;
-using uint = unsigned int;
-
-using i8 = int8_t;
-using i16 = int16_t;
-using i32 = int32_t;
-using i64 = int64_t;
-using isz = ptrdiff_t;
-using iptr = intptr_t;
-
-using f32 = float;
-using f64 = double;
 
 #define LCC_STR_(X) #X
 #define LCC_STR(X)  LCC_STR_(X)
@@ -97,16 +68,25 @@ namespace lcc::detail {
 struct StringHash {
     using is_transparent = void;
 
-    [[nodiscard]] usz operator()(std::string_view txt) const { return std::hash<std::string_view>{}(txt); }
-    [[nodiscard]] usz operator()(const std::string& txt) const { return std::hash<std::string>{}(txt); }
+    [[nodiscard]]
+    usz operator()(std::string_view txt) const {
+        return std::hash<std::string_view>{}(txt);
+    }
+    [[nodiscard]]
+    usz operator()(const std::string& txt) const {
+        return std::hash<std::string>{}(txt);
+    }
 
     template <typename Type>
     requires requires (const Type& t) {
         { t.size() } -> std::convertible_to<usz>;
         { t.data() } -> std::convertible_to<const char*>;
     }
-    [[nodiscard]] usz operator()(const Type& txt) const {
-        return std::hash<std::string_view>{}(std::string_view{txt.data(), txt.size()});
+    [[nodiscard]]
+    usz operator()(const Type& txt) const {
+        return std::hash<std::string_view>{}(
+            std::string_view{txt.data(), txt.size()}
+        );
     }
 };
 
