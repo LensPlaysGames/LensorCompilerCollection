@@ -157,7 +157,13 @@ void lcc::glint::Lexer::NextToken() {
                 // Yeet escape character
                 NextChar();
                 switch (lastc) {
-                    default: LCC_ASSERT(false, "Unhandled escaped character in byte literal: '{}' (U+{:x})\n", lastc, (unsigned int) lastc);
+                    default:
+                        Diag::ICE(
+                            "Unhandled escaped character in byte literal: '{}' (U+{:x})\n",
+                            lastc,
+                            (unsigned int) lastc
+                        );
+
                     case '`':
                         Error(
                             "Expected character following escape character '{}'. For byte literal '{}', use two in a row (i.e. '`{}{}`')",

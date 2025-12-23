@@ -45,7 +45,10 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             return lcc::IntegerType::Get(ctx, in->size(ctx));
 
         case Type::Kind::Named:
-            Diag::ICE("Sema failed to resolve named type {}", as<NamedType>(in)->name());
+            Diag::ICE(
+                "Sema failed to resolve named type {}",
+                as<NamedType>(in)->name()
+            );
 
         case Type::Kind::Pointer:
         case Type::Kind::Reference:
@@ -53,7 +56,11 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 
         case Type::Kind::Array: {
             const auto& t_array = as<ArrayType>(in);
-            return lcc::ArrayType::Get(ctx, t_array->dimension(), Convert(ctx, t_array->element_type()));
+            return lcc::ArrayType::Get(
+                ctx,
+                t_array->dimension(),
+                Convert(ctx, t_array->element_type())
+            );
         }
 
         case Type::Kind::Function: {
@@ -63,7 +70,11 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             for (const auto& p : t_function->params())
                 param_types.push_back(Convert(ctx, p.type));
 
-            return lcc::FunctionType::Get(ctx, Convert(ctx, t_function->return_type()), std::move(param_types));
+            return lcc::FunctionType::Get(
+                ctx,
+                Convert(ctx, t_function->return_type()),
+                std::move(param_types)
+            );
         }
 
         case Type::Kind::DynamicArray: {
