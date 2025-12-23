@@ -551,41 +551,41 @@ public:
 
     // Get the state of semantic analysis for this node.
     // \see SemaNode::State
-    auto sema() const -> State { return _state; }
+    constexpr auto sema() const -> State { return _state; }
 
     // Check if sema has errored.
-    bool sema_errored() const { return _state == State::Errored; }
+    constexpr bool sema_errored() const { return _state == State::Errored; }
 
     // \see SemaNode::State
-    bool sema_done_or_errored() const {
+    constexpr bool sema_done_or_errored() const {
         return _state == State::Done or _state == State::Errored;
     }
 
     // \see SemaNode::State
-    bool sema_no_longer_viable() const {
+    constexpr bool sema_no_longer_viable() const {
         return _state == State::NoLongerViable;
     }
 
     // \see SemaNode::State
-    void set_sema_in_progress() {
+    constexpr void set_sema_in_progress() {
         LCC_ASSERT(not sema_done_or_errored());
         _state = State::InProgress;
     }
 
     // \see SemaNode::State
-    void set_sema_no_longer_viable() {
+    constexpr void set_sema_no_longer_viable() {
         LCC_ASSERT(ok(), "Cannot mark non-checked node as no longer viable");
         _state = State::NoLongerViable;
     }
 
     // \see SemaNode::State
     constexpr void set_sema_done() {
-        LCC_ASSERT(_state != State::Errored);
+        LCC_ASSERT(not sema_errored());
         _state = State::Done;
     }
 
     // \see SemaNode::State
-    void set_sema_errored() {
+    constexpr void set_sema_errored() {
         LCC_ASSERT(_state != State::Done);
         _state = State::Errored;
     }
