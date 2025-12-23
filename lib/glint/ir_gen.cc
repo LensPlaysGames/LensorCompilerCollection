@@ -175,8 +175,12 @@ lcc::Type* Convert(Context* ctx, Type* in) {
         case Type::Kind::TemplatedStruct:
             return lcc::Type::VoidTy;
 
-        case Type::Kind::Typeof:
+        case Type::Kind::Typeof: {
+            {
+                Diag::Note(ctx, in->location(), "Here");
+            }
             Diag::ICE("Sema should replace TypeofType with the type of it's containing expression");
+        }
     }
     LCC_UNREACHABLE();
 }
