@@ -1,0 +1,43 @@
+================
+Simple Apply
+================
+
+identity : int(x : int) x;
+
+apply identity, 69;
+
+---
+
+(block
+ (function_declaration)
+ (call (name) (integer_literal)))
+
+================
+Simple Apply, 2 Parameters
+================
+
+identity : int(x : int, y : int)
+  x + y;
+
+apply identity, 27, 42;
+
+---
+
+(block
+ (function_declaration)
+ (call (name) (integer_literal) (integer_literal)))
+
+================
+Apply, 1 Parameter, 2 Calls
+================
+
+identity : int(x : int) x;
+
+apply identity, (420, 69);
+
+---
+
+(block
+ (function_declaration)
+ (call (name) (integer_literal))
+ (call (name) (integer_literal)))
