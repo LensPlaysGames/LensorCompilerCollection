@@ -46,6 +46,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
         case Kind::While:
         case Kind::Match:
         case Kind::Apply:
+        case Kind::FunctionTemplate:
             return unhandled_constant_expr();
 
         case Kind::IntegerLiteral:

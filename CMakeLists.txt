@@ -327,6 +327,7 @@ add_library(
   lib/glint/lexer.cc
   lib/glint/parser.cc
   lib/glint/sema.cc
+  lib/glint/sema_type.cc
 )
 target_include_directories(glint PUBLIC include)
 target_link_libraries(glint PRIVATE options)

@@ -157,6 +157,12 @@ void calculate_indices(
                 recurse(m.type);
         } break;
 
+        case glint::Type::Kind::TemplatedStruct: {
+            auto s_ty = as<glint::TemplatedStructType>(ty);
+            for (auto m : s_ty->members())
+                recurse(m.type);
+        } break;
+
         case glint::Type::Kind::Typeof: LCC_ASSERT(false);
     };
 
@@ -254,6 +260,12 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
             recurse(f->condition());
             recurse(f->increment());
             recurse(f->body());
+        } break;
+
+        case Expr::Kind::FunctionTemplate: {
+            auto f = as<FunctionTemplateExpr>(expr);
+            (void) f;
+            LCC_TODO();
         } break;
 
         // Expressions that have a variable amount of children.

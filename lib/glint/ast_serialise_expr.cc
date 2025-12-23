@@ -286,6 +286,7 @@ auto Module::serialise_expr(
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::TypeDecl:
         case Expr::Kind::VarDecl:
+        case Expr::Kind::FunctionTemplate:
             expr->print(true);
             LCC_TODO("Implement serialisation of preceding expression AST\n");
     }

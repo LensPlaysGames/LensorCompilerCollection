@@ -33,8 +33,10 @@ class Sema {
     // AnalyseCall_Template((Expr**) &t_call, t_call);
     [[nodiscard]]
     auto named_template(std::string_view name) {
+        auto underscored_name
+            = std::string{"__"} += name;
         for (auto t : sema_templates) {
-            if (t.name == name)
+            if (t.name == name or t.name == underscored_name)
                 return t.template_expr;
         }
         Diag::ICE("GlintSema could not find named template {}\n", name);

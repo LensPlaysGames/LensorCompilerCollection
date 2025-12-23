@@ -218,10 +218,11 @@ private:
 
     // Use this when you need a bunch of expressions until you get a closing
     // delimiter (like a bunch of expressions before a rbrace, or a rparen).
+    // Does not care if the expressions are separated by hard separators.
     auto ParseExpressionsUntil(TokenKind until) -> Result<std::vector<Expr*>>;
 
     // Use this when you need a bunch of expressions until you get a hard
-    // expression separator (like for parsing arguments).
+    // expression separator (like for parsing call arguments).
     auto ParseExpressionList() -> Result<std::vector<Expr*>>;
 
     auto ParseBlock() -> Result<BlockExpr*>;
@@ -239,13 +240,15 @@ private:
     auto ParseIdentExpr() -> Result<Expr*>;
     auto ParseIfExpr() -> Result<IfExpr*>;
     auto ParsePreamble(File* f) -> Result<std::unique_ptr<Module>>;
-    auto ParseStructType() -> Result<StructType*>;
+    auto ParseStructType() -> Result<std::variant<StructType*, TemplatedStructType*>>;
+    auto ParseStructMembers() -> Result<std::vector<StructType::Member>>;
     auto ParseEnumType() -> Result<EnumType*>;
     auto ParseUnionType() -> Result<UnionType*>;
     auto ParseSumType() -> Result<SumType*>;
     void ParseTopLevel();
     auto ParseType(isz current_precedence = 0) -> Result<Type*>;
     auto ParseWhileExpr() -> Result<WhileExpr*>;
+    auto ParseTemplateParameters() -> Result<std::vector<TemplateExpr::Param>>;
 
     // Synchronise is normally used when a syntax error occurs, and attempts
     // to get to a position that is known to be a good enough place to start

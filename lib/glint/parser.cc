@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -617,9 +618,56 @@ auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
         );
 }
 
+auto lcc::glint::Parser::ParseTemplateParameters() -> Result<std::vector<TemplateExpr::Param>> {
+    LCC_ASSERT(Consume(Tk::LParen), "ParseTemplateParameters called while not at `(`");
+
+    std::vector<TemplateExpr::Param> parameters{};
+    while (not At(Tk::RParen)) {
+        // We have a (maybe comma-separated) list of names followed by a type.
+        usz idx = parameters.size();
+        if (not At(Tk::Ident))
+            return Error(
+                tok.location,
+                "Expected identifier in template parameter declaration"
+            );
+
+        // This collects comma-separated identifiers, creating a parameter for
+        // each one encountered, setting the type to nullptr (to be filled in
+        // later, after we actually parse it).
+        do {
+            parameters.emplace_back(tok.text, nullptr, tok.location);
+            NextToken();
+            ConsumeExpressionSeparator(ExpressionSeparator::Soft);
+        } while (At(Tk::Ident));
+
+        /// Parse the parameter type.
+        if (not Consume(Tk::Colon))
+            return Error("Expected ':' in template parameter declaration");
+
+        auto type = ParseType();
+        if (not type) return type.diag();
+
+        /// Fixup the type for all the parameters not yet handled.
+        for (; idx < parameters.size(); ++idx) parameters.at(idx).type = *type;
+
+        /// Discard trailing comma.
+        ConsumeExpressionSeparator(ExpressionSeparator::Soft);
+    }
+
+    /// Yeet ')'.
+    if (not Consume(Tk::RParen))
+        return Error("Expected ')' closing template parameter list");
+
+    return parameters;
+}
+
 auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
-    if (+ConsumeExpressionSeparator())
-        return Error(tok.location, "Empty expression probably has unintended consequences.");
+    if (+ConsumeExpressionSeparator()) {
+        return Error(
+            tok.location,
+            "Empty expression probably has unintended consequences."
+        );
+    }
 
     // NOTE: Using Null result is dangerous because if we return lhs without
     // first assigning /something/ to it, then it completely breaks.
@@ -702,50 +750,23 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             // Yeet 'template'
             NextToken();
 
-            if (not Consume(Tk::LParen))
+            if (not At(Tk::LParen))
                 return Error(
                     tok.location,
                     "Expected template parameter list (beginning with `(`) following `template`"
                 );
 
-            std::vector<TemplateExpr::Param> parameters{};
-            while (not At(Tk::RParen)) {
-                // We have a (maybe comma-separated) list of names followed by a type.
-                usz idx = parameters.size();
-                if (not At(Tk::Ident)) {
-                    return Error(
-                        tok.location,
-                        "Expected identifier in template parameter declaration"
-                    );
-                }
-
-                do {
-                    parameters.emplace_back(tok.text, nullptr, tok.location);
-                    NextToken();
-                    ConsumeExpressionSeparator(ExpressionSeparator::Soft);
-                } while (At(Tk::Ident));
-
-                /// Parse the parameter type.
-                if (not Consume(Tk::Colon))
-                    return Error("Expected ':' in template parameter declaration");
-                auto type = ParseType();
-                if (not type) return type.diag();
-
-                /// Fixup the type for all the parameters.
-                for (; idx < parameters.size(); ++idx) parameters[idx].type = *type;
-
-                /// Discard trailing comma.
-                ConsumeExpressionSeparator(ExpressionSeparator::Soft);
-            }
-
-            /// Yeet ')'.
-            if (not Consume(Tk::RParen))
-                return Error("Expected ')' closing template parameter list");
+            auto parameters = ParseTemplateParameters();
+            if (not parameters) return parameters.diag();
 
             lhs = ParseExpr(current_precedence);
             if (not lhs) return lhs.diag();
 
-            lhs = new (*mod) TemplateExpr(*lhs, parameters, {start_location, lhs->location()});
+            lhs = new (*mod) TemplateExpr(
+                *lhs,
+                *parameters,
+                {start_location, lhs->location()}
+            );
         } break;
 
         case Tk::Print: {
@@ -1776,40 +1797,49 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
     return m;
 }
 
-auto lcc::glint::Parser::ParseStructType() -> Result<StructType*> {
-    auto loc = tok.location;
-    LCC_ASSERT(Consume(Tk::Struct), "ParseStructType called while not at 'struct'");
-    if (not Consume(Tk::LBrace)) return Error("Expected '{{' after 'struct' in struct declaration");
+auto lcc::glint::Parser::ParseStructMembers() -> Result<std::vector<StructType::Member>> {
+    LCC_ASSERT(Consume(Tk::LBrace), "ParseStructMembers called while not at '{{'");
 
     /// Parse the struct body.
-    ScopeRAII sc{this};
-    std::vector<StructType::Member> members;
+    std::vector<StructType::Member> members{};
     while (not At(Tk::RBrace)) {
         auto start = tok.location;
 
-        // Supplanted Declaration
         if (Consume(Tk::Supplant)) {
+            // Supplanted Declaration
+
             auto type = ParseType();
             if (not type) return type.diag();
 
             // Make up unique name with supplant marker prefix
             auto name = std::string("__sup") + std::to_string(members.size());
-            members.emplace_back(std::move(name), *type, Location{start, type->location()});
+            members.emplace_back(
+                std::move(name),
+                *type,
+                Location{start, type->location()}
+            );
             members.back().supplanted = true;
         } else {
             // Regular Declaration
 
             /// Name.
             auto name = tok.text;
-            if (not Consume(Tk::Ident)) return Error("Expected member name in struct declaration");
+            if (not Consume(Tk::Ident))
+                return Error("Expected member name in struct declaration");
 
             /// Type.
-            if (not Consume(Tk::Colon)) return Error("Expected ':' in struct declaration");
+            if (not Consume(Tk::Colon))
+                return Error("Expected ':' in struct declaration");
+
             auto type = ParseType();
             if (not type) return type.diag();
 
             /// Add the member to the list.
-            members.emplace_back(std::move(name), *type, Location{start, type->location()});
+            members.emplace_back(
+                std::move(name),
+                *type,
+                Location{start, type->location()}
+            );
         }
 
         // Optionally eat expression separator
@@ -1817,10 +1847,51 @@ auto lcc::glint::Parser::ParseStructType() -> Result<StructType*> {
     }
 
     /// Yeet '}'.
-    if (not Consume(Tk::RBrace)) return Error("Expected '}}' in struct declaration");
+    if (not Consume(Tk::RBrace))
+        return Error("Expected '}}' in struct declaration");
+
+    return members;
+}
+
+auto lcc::glint::Parser::ParseStructType() -> Result<std::variant<StructType*, TemplatedStructType*>> {
+    auto loc = tok.location;
+    LCC_ASSERT(Consume(Tk::Struct), "ParseStructType called while not at 'struct'");
+
+    if (At(Tk::LParen)) {
+        // Parse struct template parameters
+        auto parameters = ParseTemplateParameters();
+        if (not parameters) return parameters.diag();
+
+        ScopeRAII sc{this};
+        auto members = ParseStructMembers();
+        if (not members) return members.diag();
+
+        // Return this
+        return {
+            new (*mod) TemplatedStructType(
+                sc.scope,
+                *parameters,
+                *members,
+                {loc, tok.location}
+            )
+        };
+    }
+
+    if (not At(Tk::LBrace))
+        return Error("Expected '{{' after 'struct' in struct declaration");
+
+    ScopeRAII sc{this};
+    auto members = ParseStructMembers();
+    if (not members) return members.diag();
 
     /// Create the struct type.
-    return new (*mod) StructType(sc.scope, std::move(members), Location{loc, tok.location});
+    return {
+        new (*mod) StructType(
+            sc.scope,
+            std::move(*members),
+            Location{loc, tok.location}
+        )
+    };
 }
 
 auto lcc::glint::Parser::ParseUnionType() -> Result<UnionType*> {
@@ -2013,12 +2084,14 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
             break;
 
         /// Parenthesised type.
-        case Tk::LParen:
+        case Tk::LParen: {
             NextToken();
-            if (auto type = ParseType(); not type) return type.diag();
-            else ty = *type;
-            if (not Consume(Tk::RParen)) return Error("Expected )");
-            break;
+            auto expr = ParseExpr();
+            if (not expr) return expr.diag();
+            ty = new (*mod) TypeofType(*expr, expr->location());
+            if (not Consume(Tk::RParen))
+                return Error("Expected )");
+        } break;
 
         case Tk::Typeof: {
             auto loc = tok.location;
@@ -2041,9 +2114,11 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
 
         /// Structure type.
         case Tk::Struct:
-            if (auto type = ParseStructType())
-                ty = *type;
-            else return type.diag();
+            if (auto type = ParseStructType()) {
+                if (std::holds_alternative<StructType*>(*type))
+                    ty = std::get<StructType*>(*type);
+                else ty = std::get<TemplatedStructType*>(*type);
+            } else return type.diag();
             break;
 
         /// Enumeration type.
@@ -2108,7 +2183,18 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
     /// all left associative.
     while (TypeQualifierPrecedence(tok.kind) > current_precedence) {
         switch (tok.kind) {
-            default: LCC_ASSERT(false, "Unhandled trailing type qualifier");
+            default: Diag::ICE("Unhandled trailing type qualifier `{}`", ToString(tok.kind));
+
+            case Tk::LBrack:
+                return Error(
+                    "Unhandled trailing type qualifier `{}`;"
+                    " you probably meant to make an array of {},"
+                    " which is done like [{}] in Glint (vs {}[] in C-style languages)",
+                    ToString(tok.kind),
+                    *ty,
+                    *ty,
+                    *ty
+                );
 
             case Tk::Dot: {
                 NextToken();

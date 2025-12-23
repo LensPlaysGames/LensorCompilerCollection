@@ -159,8 +159,11 @@ lcc::Type* Convert(Context* ctx, Type* in) {
         case Type::Kind::Integer:
             return lcc::IntegerType::Get(ctx, in->size(ctx));
 
+        case Type::Kind::TemplatedStruct:
+            Diag::ICE("Sema should replace TemplatedStructType");
+
         case Type::Kind::Typeof:
-            LCC_ASSERT(false, "Sema should replace TypeofType with the type of it's containing expression");
+            Diag::ICE("Sema should replace TypeofType with the type of it's containing expression");
     }
     LCC_UNREACHABLE();
 }
@@ -1698,6 +1701,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         case K::FuncDecl:
         case K::OverloadSet:
         case K::Template:
+        case K::FunctionTemplate:
         case K::Apply:
             break;
     }

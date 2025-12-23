@@ -1,0 +1,11 @@
+================
+Struct Template Invocation, Single Templated 'int' Member
+================
+
+struct(t : type) { v : t } int;
+
+---
+
+(block
+ (t_struct)
+ (return (integer_literal)))

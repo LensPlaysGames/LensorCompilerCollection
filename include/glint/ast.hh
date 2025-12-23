@@ -623,6 +623,7 @@ public:
         Enum,
         // A structure composed of other types.
         Struct,
+        TemplatedStruct,
         // Regular-old integer type; what you get when you type int.
         Integer,
         // A type that corresponds to the type of the expression inside; used to
@@ -836,6 +837,7 @@ static constexpr auto ToString(Type::Kind k) {
         case Type::Kind::Union: return "union";
         case Type::Kind::Enum: return "enum";
         case Type::Kind::Struct: return "struct";
+        case Type::Kind::TemplatedStruct: return "templated_struct";
         case Type::Kind::Integer: return "integer";
         case Type::Kind::Typeof: return "typeof";
     }
@@ -1171,7 +1173,8 @@ public:
         return type->kind() == Kind::Enum
             or type->kind() == Kind::Union
             or type->kind() == Kind::Sum
-            or type->kind() == Kind::Struct;
+            or type->kind() == Kind::Struct
+            or type->kind() == Kind::TemplatedStruct;
     }
 };
 
@@ -1250,7 +1253,7 @@ public:
     /// Caller should check return value is not nullptr.
     [[nodiscard]]
     auto member_index_by_name(std::string_view name) const -> const Member* {
-        return member_index_by_name(name);
+        return member_by_name(name);
     }
 
     [[nodiscard]]
@@ -1552,6 +1555,7 @@ public:
         Alignof,
         Template,
         Apply,
+        FunctionTemplate,
     };
 
 private:
@@ -2537,30 +2541,156 @@ private:
 
 public:
     TemplateExpr(Expr* body, std::vector<Param> params, Location location)
-        : Expr(Kind::Template, location), _body(body), _params(std::move(params)) {}
+        : Expr(Kind::Template, location),
+          _body(body),
+          _params(std::move(params)) {}
 
     [[nodiscard]]
-    auto body() const -> Expr* {
-        return _body;
+    auto body() const -> Expr* { return _body; }
+
+    [[nodiscard]]
+    auto body_ref() -> Expr** { return &_body; }
+
+    [[nodiscard]]
+    auto params() const -> const std::vector<Param>& { return _params; }
+
+    [[nodiscard]]
+    auto params_ref() -> std::vector<Param>& { return _params; }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::Template;
+    }
+};
+
+class TemplatedStructType : public DeclaredType {
+    using Param = TemplateExpr::Param;
+    using Member = StructType::Member;
+
+    std::vector<Param> _params;
+    std::vector<Member> _members;
+
+public:
+    TemplatedStructType(
+        Scope* scope,
+        std::vector<Param> params,
+        std::vector<Member> members,
+        Location location
+    ) : DeclaredType(Kind::TemplatedStruct, scope, location),
+        _params(std::move(params)),
+        _members(std::move(members)) {}
+
+    [[nodiscard]]
+    auto params() -> std::vector<Param>& { return _params; }
+    [[nodiscard]]
+    auto params() const -> const std::vector<Param>& { return _params; }
+
+    [[nodiscard]]
+    auto members() -> std::vector<Member>& { return _members; }
+    [[nodiscard]]
+    auto members() const -> const std::vector<Member>& { return _members; }
+
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto param_by_name(std::string_view name) -> Param* {
+        auto found = rgs::find_if(_params, [name](const Param& m) {
+            return m.name == name;
+        });
+        if (found == _params.end()) return nullptr;
+        return &*found;
+    }
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto param_by_name(std::string_view name) const -> const Param* {
+        return param_by_name(name);
+    }
+
+    /// Caller should check return value is not negative.
+    [[nodiscard]]
+    auto param_index_by_name(std::string_view name) -> isz {
+        auto found = rgs::find_if(_params, [name](const Param& m) {
+            return m.name == name;
+        });
+        if (found == _params.end()) return -1;
+        return std::abs(std::distance(_params.begin(), found));
+    }
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto param_index_by_name(std::string_view name) const -> const Param* {
+        return param_by_name(name);
+    }
+
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto member_by_name(std::string_view name) -> Member* {
+        auto found = rgs::find_if(_members, [name](const Member& m) {
+            return m.name == name;
+        });
+        if (found == _members.end()) return nullptr;
+        return &*found;
+    }
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto member_by_name(std::string_view name) const -> const Member* {
+        return member_by_name(name);
+    }
+
+    /// Caller should check return value is not negative.
+    [[nodiscard]]
+    auto member_index_by_name(std::string_view name) -> isz {
+        auto found = rgs::find_if(_members, [name](const Member& m) {
+            return m.name == name;
+        });
+        if (found == _members.end()) return -1;
+        return std::abs(std::distance(_members.begin(), found));
+    }
+    /// Caller should check return value is not nullptr.
+    [[nodiscard]]
+    auto member_index_by_name(std::string_view name) const -> const Member* {
+        return member_by_name(name);
     }
 
     [[nodiscard]]
-    auto body_ref() -> Expr** {
-        return &_body;
-    }
+    static auto classof(const Type* type) -> bool { return type->kind() == Kind::TemplatedStruct; }
+};
+
+class FunctionTemplateExpr : public Expr {
+    std::string _name;
+    TemplateExpr* _body{};
+    Type* _return_type;
+
+public:
+    FunctionTemplateExpr(
+        std::string_view name,
+        TemplateExpr* body,
+        Location location
+    )
+        : Expr(Kind::FunctionTemplate, location),
+          _name(name),
+          _body(body) {};
 
     [[nodiscard]]
-    auto params() const -> const std::vector<Param>& {
-        return _params;
-    }
+    auto name() -> std::string& { return _name; }
+    [[nodiscard]]
+    auto name() const { return _name; }
 
     [[nodiscard]]
-    auto params_ref() -> std::vector<Param>& {
-        return _params;
-    }
+    auto body() -> TemplateExpr*& { return _body; }
+    [[nodiscard]]
+    auto body() const { return _body; }
 
     [[nodiscard]]
-    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Template; }
+    auto return_type() -> Type*& { return _return_type; }
+    [[nodiscard]]
+    auto return_type() const { return _return_type; }
+
+    [[nodiscard]]
+    auto body_ref() { return &_body; }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::FunctionTemplate;
+    }
 };
 
 bool IsCallable(Expr* expr);

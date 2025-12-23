@@ -158,8 +158,11 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
         case Kind::Sum: return as<SumType>(this)->alignment() * 8;
         case Kind::Integer: return std::bit_ceil(as<IntegerType>(this)->bit_width());
 
+        case Kind::TemplatedStruct:
+            Diag::ICE("Cannot get align of TemplatedStructType; sema should replace TemplatedStructType.");
+
         case Kind::Typeof:
-            LCC_ASSERT(false, "Cannot get align of TypeofType; sema should replace TypeofType with the type of it's contained expression.");
+            Diag::ICE("Cannot get align of TypeofType; sema should replace TypeofType with the type of it's contained expression.");
     }
 
     LCC_UNREACHABLE();
@@ -188,6 +191,7 @@ auto lcc::glint::Type::elem() const -> Type* {
         case Kind::Sum:
         case Kind::Integer:
         case Kind::Typeof:
+        case Kind::TemplatedStruct:
             Diag::ICE("Type has no element type");
     }
     LCC_UNREACHABLE();
@@ -347,8 +351,11 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
         case Kind::Union: return as<UnionType>(this)->byte_size() * byte_bitwidth;
         case Kind::Integer: return as<IntegerType>(this)->bit_width();
 
+        case Kind::TemplatedStruct:
+            Diag::ICE("Cannot get size of TemplatedStructType; sema should replace TemplatedStructType.");
+
         case Kind::Typeof:
-            LCC_ASSERT(false, "Cannot get size of TypeofType; sema should replace TypeofType with the type of it's contained expression.");
+            Diag::ICE("Cannot get size of TypeofType; sema should replace TypeofType with the type of it's contained expression.");
     }
 
     LCC_UNREACHABLE();
@@ -387,6 +394,7 @@ auto lcc::glint::Type::Equal(const Type* a, const Type* b) -> bool {
         /// These are never equal unless they’re the exact same instance.
         case Kind::Named:
         case Kind::Enum:
+        case Kind::TemplatedStruct: // TODO: think about this
             return a == b;
 
         case Kind::Pointer:
@@ -761,11 +769,11 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
                     {}
                 );
             }
-            if (auto t_dynarray = cast<ArrayType>(expr->type()); t_dynarray) {
+            if (auto t_dynarray = cast<DynamicArrayType>(expr->type()); t_dynarray) {
                 return new (mod) TypeExpr(
                     new (mod) DynamicArrayType(
                         t_dynarray->elem(),
-                        Clone(t_dynarray->size()),
+                        Clone(t_dynarray->initial_size()),
                         {}
                     ),
                     {}
@@ -807,6 +815,15 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
                 Clone(t->body()),
                 t->params(),
                 t->location()
+            );
+        }
+
+        case Kind::FunctionTemplate: {
+            auto f = as<FunctionTemplateExpr>(expr);
+            return new (mod) FunctionTemplateExpr(
+                f->name(),
+                as<TemplateExpr>(Clone(f->body())),
+                f->location()
             );
         }
 
@@ -872,6 +889,9 @@ std::string lcc::glint::Expr::name() const {
 
         case Kind::NameRef:
             return as<NameRefExpr>(this)->name();
+
+        case Kind::FunctionTemplate:
+            return as<FunctionTemplateExpr>(this)->name();
 
         case Kind::TypeDecl:
         case Kind::TypeAliasDecl:
@@ -980,6 +1000,7 @@ std::string lcc::glint::Expr::name() const {
                 case Type::Kind::Union: return "t_union";
                 case Type::Kind::Enum: return "t_enum";
                 case Type::Kind::Struct: return "t_struct";
+                case Type::Kind::TemplatedStruct: return "t_templated_struct";
                 case Type::Kind::Integer: return "t_int";
                 case Type::Kind::Typeof: return "t_typeof";
             }
@@ -1093,6 +1114,11 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
         case Kind::Template: {
             auto* t = as<lcc::glint::TemplateExpr>(this);
             return {t->body_ref()};
+        }
+
+        case Kind::FunctionTemplate: {
+            auto* f = as<lcc::glint::FunctionTemplateExpr>(this);
+            return {(Expr**) f->body_ref()};
         }
 
         case Kind::VarDecl: {
@@ -1231,6 +1257,11 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
             return {t->body()};
         }
 
+        case Kind::FunctionTemplate: {
+            auto* f = as<lcc::glint::FunctionTemplateExpr>(this);
+            return {(Expr*) f->body()};
+        }
+
         case Kind::VarDecl: {
             const auto* v = as<lcc::glint::VarDecl>(this);
             if (v->init()) return {v->init()};
@@ -1283,6 +1314,7 @@ auto lcc::glint::Expr::langtest_name() const -> std::string {
         case Kind::Cast:
         case Kind::Match:
         case Kind::Template:
+        case Kind::FunctionTemplate:
         case Kind::TypeDecl:
         case Kind::TypeAliasDecl:
         case Kind::EnumeratorDecl:
@@ -1449,6 +1481,29 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
             return fmt::format("union {{{}}}", members_string);
         }
 
+        case lcc::glint::Type::Kind::TemplatedStruct: {
+            auto tstruct_t = lcc::as<lcc::glint::TemplatedStructType>(&t);
+
+            std::vector<std::string> params_strings{};
+            for (auto p : tstruct_t->params()) {
+                params_strings.emplace_back(fmt::format(
+                    "{}:{}",
+                    p.name,
+                    *p.type
+                ));
+            }
+
+            std::string members_string{};
+            for (auto m : tstruct_t->members()) {
+                auto member_t = ToSource(*m.type);
+                if (not member_t) return member_t;
+
+                members_string += fmt::format("{}:{};", m.name, *member_t);
+            }
+
+            return fmt::format("struct({}) {{{}}}", fmt::join(params_strings, ","), members_string);
+        };
+
         case lcc::glint::Type::Kind::Struct: {
             auto struct_t = lcc::as<lcc::glint::StructType>(&t);
             std::string members_string{};
@@ -1490,6 +1545,7 @@ auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
     switch (k) {
         case lcc::glint::Expr::Kind::Group: return "group";
         case lcc::glint::Expr::Kind::Template: return "template";
+        case lcc::glint::Expr::Kind::FunctionTemplate: return "function_template";
         case lcc::glint::Expr::Kind::Apply: return "apply";
         case lcc::glint::Expr::Kind::While: return "while";
         case lcc::glint::Expr::Kind::For: return "for";
@@ -1612,6 +1668,30 @@ auto lcc::glint::Module::ToSource(const Expr& e) -> Result<std::string> {
                 )
             );
             return fmt::format("template({}) {}", params_string, *e_body);
+        }
+
+        case Expr::Kind::FunctionTemplate: {
+            auto e_t = as<FunctionTemplateExpr>(&e);
+            auto e_body = ToSource(*e_t->body());
+            auto ret_string = e_t->return_type()->string();
+            auto params_string = fmt::format(
+                "{}",
+                fmt::join(
+                    vws::transform(e_t->body()->params(), [this](const auto& p) {
+                        auto e_ptype = ToSource(*p.type);
+                        if (not e_ptype) return std::string{"ERROR"};
+                        return fmt::format("{}:{}", p.name, *e_ptype);
+                    }),
+                    ", "
+                )
+            );
+            return fmt::format(
+                "{} : {}({}) {}",
+                e_t->name(),
+                ret_string,
+                params_string,
+                *e_body
+            );
         }
 
         case Expr::Kind::Sizeof: {
@@ -2045,6 +2125,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
 
                 out += '\n';
                 return;
+            case K::FunctionTemplate: PrintBasicGlintNode("FunctionTemplateExpr", e, nullptr); return;
             case K::Group: PrintBasicGlintNode("GroupExpr", e, nullptr); return;
             case K::While: PrintBasicGlintNode("WhileExpr", e, nullptr); return;
             case K::For: PrintBasicGlintNode("ForExpr", e, nullptr); return;
@@ -2202,8 +2283,11 @@ auto lcc::glint::Type::representation(std::unordered_set<const Type*> containing
             return fmt::format("INT{}", as<IntegerType>(this)->size({}));
         }
 
+        case Kind::TemplatedStruct:
+            Diag::ICE("Cannot get representation of TemplatedStructType; sema should replace TemplatedStructType.");
+
         case Kind::Typeof:
-            LCC_ASSERT(false, "Cannot get representation of TypeofType; sema should replace TypeofType with the type of it's contained expression.");
+            Diag::ICE("Cannot get representation of TypeofType; sema should replace TypeofType.");
     }
     LCC_UNREACHABLE();
 }
@@ -2292,6 +2376,16 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
             auto* decl = as<StructType>(this)->decl();
             return fmt::format(
                 "{}struct {}{}",
+                C(type_colour),
+                not decl or decl->name().empty() ? "<anonymous>" : decl->name(),
+                C(Reset)
+            );
+        }
+
+        case Kind::TemplatedStruct: {
+            auto* decl = as<TemplatedStructType>(this)->decl();
+            return fmt::format(
+                "{}templated_struct {}{}",
                 C(type_colour),
                 not decl or decl->name().empty() ? "<anonymous>" : decl->name(),
                 C(Reset)
@@ -2547,6 +2641,7 @@ bool lcc::glint::Type::is_compound_type() const {
     switch (kind()) {
         case Kind::Union:
         case Kind::Struct:
+        case Kind::TemplatedStruct:
         case Kind::Sum:
         case Kind::Function:
         case Kind::ArrayView:
@@ -2574,6 +2669,16 @@ auto lcc::glint::Type::types() const -> std::vector<Type*> {
     switch (kind()) {
         case Kind::Struct: {
             auto s = as<lcc::glint::StructType>(this);
+            std::vector<Type*> out{};
+            out.reserve(s->members().size());
+            for (auto& m : s->members())
+                out.emplace_back(m.type);
+
+            return out;
+        }
+
+        case Kind::TemplatedStruct: {
+            auto s = as<lcc::glint::TemplatedStructType>(this);
             std::vector<Type*> out{};
             out.reserve(s->members().size());
             for (auto& m : s->members())
@@ -2639,6 +2744,7 @@ bool lcc::glint::IsCallable(Expr* expr) {
         or is<TypeExpr>(expr)
         or is<IntegerLiteral>(expr)
         or is<TemplateExpr>(expr)
+        or is<FunctionTemplateExpr>(expr)
         // Terrible way to check for a lambda
         or (is<FuncDecl>(expr)
             and as<FuncDecl>(expr)->name().empty())

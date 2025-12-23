@@ -338,6 +338,10 @@ auto lcc::glint::Module::serialise(
             }
         } break;
 
+        case Type::Kind::TemplatedStruct: {
+            LCC_TODO("Serialise templated struct type...");
+        } break;
+
         // serialise()
         // SumType:
         //     member_count :u16

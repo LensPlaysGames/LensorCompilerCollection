@@ -490,6 +490,16 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
             LCC_TODO("GlintEval: {}", ToString(expr->kind()));
         } break;
 
+        case Expr::Kind::FunctionTemplate: {
+            const auto f = as<FunctionTemplateExpr>(expr);
+
+            // Possibly no-op or UNREACHABLE, since sema is supposed to lower these
+            // out.
+
+            (void) f;
+            LCC_TODO("GlintEval: {}", ToString(expr->kind()));
+        } break;
+
         case Expr::Kind::Template: {
             const auto t = as<TemplateExpr>(expr);
 
