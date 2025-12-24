@@ -118,6 +118,10 @@ syn keyword glintSupplant supplant
 " NOTE: Include semicolon at the end of line?
 syn match glintModuleName "\<[a-zA-Z0-9_]*" contained skipwhite
 
+syn keyword glintBooleans
+  \ true
+  \ false
+
 hi def link glintFFITypes           Type
 hi def link glintPrimitiveTypes     Type
 hi def link glintKeywords           Keyword
@@ -140,6 +144,7 @@ hi def link glintModuleName         Function
 hi def link glintBuiltinFunc        Identifier
 hi def link glintDataTypes          Structure
 hi def link glintSupplant           StorageClass
+hi def link glintBooleans           Boolean
 
 let b:current_syntax = 'glint'
 
