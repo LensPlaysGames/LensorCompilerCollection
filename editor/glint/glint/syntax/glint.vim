@@ -10,6 +10,7 @@ syn region glintRawString start="'" end="'" display
 
 syn match glintSpecial contained "\\[nr\\\"\'t]" display
 syn region glintString start="\"" skip="\\\"" end="\"" contains=glintSpecial
+syn region glintByte start="`" skip="\\`" end="`" contains=glintSpecial
 
 syn keyword glintFFITypes
   \ cshort
@@ -145,6 +146,7 @@ hi def link glintBuiltinFunc        Identifier
 hi def link glintDataTypes          Structure
 hi def link glintSupplant           StorageClass
 hi def link glintBooleans           Boolean
+hi def link glintByte               Character
 
 let b:current_syntax = 'glint'
 
