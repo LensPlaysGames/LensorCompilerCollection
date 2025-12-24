@@ -53,6 +53,11 @@ syn keyword glintKeywords
   \ print
   \ in
   \ mapf
+  \ lambda
+  \ has
+  \ apply
+  \ typeof
+  \ template
 
 syn keyword glintRepeat
   \ for
