@@ -25,14 +25,19 @@ syn keyword glintFFITypes
   \ void
 
 syn keyword glintPrimitiveTypes
-  \ Bool
-  \ Boolean
-  \ Byte
+  \ byte
   \ bool
   \ boolean
   \ int
   \ uint
   \ void
+
+if exists("glint_use_uppercase_primitives")
+  syn keyword glintPrimitiveTypes
+    \ Bool
+    \ Boolean
+    \ Byte
+endif
 
 syn keyword glintDataTypes
   \ struct
