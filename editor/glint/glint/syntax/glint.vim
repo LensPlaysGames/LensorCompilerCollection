@@ -102,6 +102,7 @@ syn keyword glintOperators
   \ bitand
   \ bitor
   \ bitxor
+  \ bitnot
   \ ++
   \ --
 
