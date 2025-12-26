@@ -1,6 +1,9 @@
 #include <lcc/codegen/mir.hh>
 #include <lcc/ir/module.hh>
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+
 namespace lcc {
 
 [[nodiscard]]

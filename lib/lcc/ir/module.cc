@@ -1,4 +1,5 @@
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <lcc/calling_conventions/ms_x64.hh>
 #include <lcc/calling_conventions/sysv_x86_64.hh>

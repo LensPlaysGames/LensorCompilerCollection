@@ -1,7 +1,9 @@
-#include <fmt/format.h>
 #include <lcc/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils/ir_printer.hh>
+
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <ranges>
 #include <string>

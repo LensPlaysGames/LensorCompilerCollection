@@ -1,5 +1,3 @@
-#include <fmt/format.h>
-
 #include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/utils.hh>
@@ -12,6 +10,9 @@
 #include <glint/module_description.hh>
 #include <glint/parser.hh>
 #include <glint/sema.hh>
+
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <algorithm>
 #include <filesystem>

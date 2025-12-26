@@ -1,6 +1,9 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/platform.hh>
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+
 #include <cstdio>
 #include <filesystem>
 #include <iostream>

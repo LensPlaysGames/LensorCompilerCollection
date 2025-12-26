@@ -3,6 +3,9 @@
 #include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/utils.hh>
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+
 #include <algorithm>
 #include <memory>
 #include <ranges>

@@ -8,6 +8,9 @@
 #include <lcc/ir/ir.hh>
 #include <lcc/utils.hh>
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+
 #include <filesystem>
 #include <functional>
 #include <ranges>

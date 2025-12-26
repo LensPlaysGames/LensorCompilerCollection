@@ -1,4 +1,3 @@
-#include <fmt/format.h>
 #include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/diags.hh>
@@ -10,6 +9,9 @@
 #include <lcc/utils/generator.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/utils/rtti.hh>
+
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <algorithm>
 #include <cctype>

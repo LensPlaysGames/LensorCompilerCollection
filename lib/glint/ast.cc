@@ -4,6 +4,9 @@
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+
 #include <glint/ast.hh>
 #include <glint/eval.hh>
 #include <glint/module_description.hh>

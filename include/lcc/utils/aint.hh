@@ -125,7 +125,7 @@ public:
 template <>
 struct fmt::formatter<lcc::aint> : fmt::formatter<lcc::aint::Word> {
     template <typename FormatContext>
-    auto format(lcc::aint a, FormatContext& ctx) {
+    auto format(lcc::aint a, FormatContext& ctx) const {
         return formatter<lcc::aint::Word>::format(a.value(), ctx);
     }
 };

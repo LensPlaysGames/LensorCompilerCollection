@@ -4,6 +4,8 @@
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
 
+#include <fmt/format.h>
+
 #include <glint/ast.hh>
 #include <glint/lexer.hh>
 #include <glint/parser.hh>

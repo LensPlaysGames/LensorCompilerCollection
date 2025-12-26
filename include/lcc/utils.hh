@@ -5,7 +5,10 @@
 
 #include <fmt/color.h>
 #include <fmt/compile.h>
+#include <fmt/core.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
+#include <fmt/std.h>
 
 #include <algorithm>
 #include <array>
@@ -447,7 +450,7 @@ struct fmt::formatter<T> {
     constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
     template <typename FormatContext>
-    auto format(T t, FormatContext& ctx) {
+    auto format(T t, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "{}", StringifyEnum(t));
     }
 };

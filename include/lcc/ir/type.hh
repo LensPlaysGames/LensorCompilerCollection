@@ -234,7 +234,7 @@ public:
 template <>
 struct fmt::formatter<lcc::Type> : formatter<string_view> {
     template <typename FormatContext>
-    auto format(const lcc::Type& t, FormatContext& ctx) {
+    auto format(const lcc::Type& t, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "{}", t.string());
     }
 };
