@@ -469,7 +469,7 @@ auto lcc::glint::Type::Equal(const Type* a, const Type* b) -> bool {
 
 auto lcc::glint::ArrayType::dimension() const -> usz {
     LCC_ASSERT(ok(), "Can only call dimension() if type has been type checked successfully");
-    return usz(as<ConstantExpr>(size())->value().as_int());
+    return usz(as<ConstantExpr>(size())->value().as_int().value());
 }
 
 // NOTE: DO NOT CALL FOR (T v) COMPOUND LITERALS!
