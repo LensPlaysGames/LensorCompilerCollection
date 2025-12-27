@@ -42,16 +42,6 @@ public:
 
     struct {
         usz size_of_bool;
-        usz size_of_byte;
-        usz size_of_int;
-
-        usz align_of_bool;
-        usz align_of_byte;
-        usz align_of_int;
-    } intercept;
-
-    struct {
-        usz size_of_bool;
         usz size_of_char;
         usz size_of_short;
         usz size_of_int;
@@ -105,16 +95,6 @@ struct Targets {
     static constexpr Target x86_64_linux = [] {
         Target t{};
         t.glint = {
-            .size_of_bool = 8,
-            .size_of_byte = 8,
-            .size_of_int = 64,
-
-            .align_of_bool = 8,
-            .align_of_byte = 8,
-            .align_of_int = 64,
-        };
-
-        t.intercept = {
             .size_of_bool = 8,
             .size_of_byte = 8,
             .size_of_int = 64,
