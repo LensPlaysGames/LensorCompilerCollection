@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <ranges>
 #include <string>
 
 namespace lcc {
