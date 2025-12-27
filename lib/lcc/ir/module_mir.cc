@@ -386,7 +386,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
             case Value::Kind::IntegerConstant:
                 return MOperandImmediate{
-                    *as<IntegerConstant>(v)->value(),
+                    (usz) *as<IntegerConstant>(v)->value(),
                     uint(v->type()->bits()) //
                 };
 
