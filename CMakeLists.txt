@@ -44,10 +44,10 @@ endif()
 
 # Use mold as the default linker, if it exists.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    find_program(MOLD_LINKER "mold")
-    if (MOLD_LINKER)
-        add_link_options(-fuse-ld=mold)
-    endif()
+  find_program(MOLD_LINKER "mold")
+  if (MOLD_LINKER)
+    add_link_options(-fuse-ld=mold)
+  endif()
 endif()
 
 # ============================================================================
@@ -57,122 +57,123 @@ add_library(options INTERFACE)
 
 # Flags for Clang and GCC.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  target_compile_options(options INTERFACE
+    # Warnings.
+    -Wall -Wextra     # Enable ‘all’ warnings.
+    -Wundef           # Invalid #undef or undefined macro in #if.
+    -Wcast-align      # Casting that changes alignment.
+    -Wconversion      # Implicit conversions.
+    -Wsign-conversion # Implicit sign conversions.
+    -Werror=shadow    # No shadowing!
+    -Wformat=2        # Stricter format checking.
+
+    # Disabled warnings.
+    -Wno-unused-function
+    -Wno-unused-local-typedefs
+    -Wno-unused-parameter
+
+
+    # NULL Errors.
+    -Werror=nonnull # Passing NULL to nonnull parameter.
+
+    # Memory Errors.
+    -Werror=address              # Suspicious use of addresses.
+    -Werror=init-self            # Initialization of a variable with itself.
+    -Werror=uninitialized
+
+    # Return type.
+    -Werror=return-type
+
+    # C/C++.
+    -Werror=implicit-fallthrough
+    -Werror=missing-include-dirs # User-specified include dir does not exist.
+    -Werror=pointer-arith        # Disallow void* and function pointer arithmetic.
+    -Werror=string-compare       # Nonsensical string comparisons.
+    -Werror=switch               # Missing switch cases.
+    # -Werror=switch-enum          # Switch on enum (even if there is a default case).
+    -Werror=write-strings        # Strings in C should be const char*.
+
+    # C++.
+    -Werror=missing-field-initializers
+    -Werror=non-virtual-dtor
+    -Werror=pessimizing-move
+  )
+
+  # -march=native only makes sense when compiling for the compiled system.
+  if (NATIVE_OPT)
     target_compile_options(options INTERFACE
-        # Warnings.
-        -Wall -Wextra     # Enable ‘all’ warnings.
-        -Wundef           # Invalid #undef or undefined macro in #if.
-        -Wcast-align      # Casting that changes alignment.
-        -Wconversion      # Implicit conversions.
-        -Wsign-conversion # Implicit sign conversions.
-        -Werror=shadow    # No shadowing!
-        -Wformat=2        # Stricter format checking.
-
-        # Disabled warnings.
-        -Wno-unused-function
-        -Wno-unused-local-typedefs
-        -Wno-unused-parameter
-
-        # NULL Errors.
-        -Werror=nonnull # Passing NULL to nonnull parameter.
-
-        # Memory Errors.
-        -Werror=address              # Suspicious use of addresses.
-        -Werror=init-self            # Initialization of a variable with itself.
-        -Werror=uninitialized
-
-        # Return type.
-        -Werror=return-type
-
-        # C/C++.
-        -Werror=implicit-fallthrough
-        -Werror=missing-include-dirs # User-specified include dir does not exist.
-        -Werror=pointer-arith        # Disallow void* and function pointer arithmetic.
-        -Werror=string-compare       # Nonsensical string comparisons.
-        -Werror=switch               # Missing switch cases.
-        # -Werror=switch-enum          # Switch on enum (even if there is a default case).
-        -Werror=write-strings        # Strings in C should be const char*.
-
-        # C++.
-        -Werror=missing-field-initializers
-        -Werror=non-virtual-dtor
-        -Werror=pessimizing-move
+      $<$<CONFIG:RELEASE>:-march=native>
     )
-
-    # -march=native only makes sense when compiling for the compiled system.
-    if (NATIVE_OPT)
-        target_compile_options(options INTERFACE
-            $<$<CONFIG:RELEASE>:-march=native>
-        )
-    endif()
+  endif()
 endif()
 
 # Additional flags for GCC.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(options INTERFACE
-        -Wlogical-op      # Duplicate or unintended logical operators.
-        -Werror=invalid-memory-model # For atomics.
-        -Werror=maybe-uninitialized
-        -Werror=missing-requires
-        -Werror=return-local-addr
-    )
+  target_compile_options(options INTERFACE
+    -Wlogical-op      # Duplicate or unintended logical operators.
+    -Werror=invalid-memory-model # For atomics.
+    -Werror=maybe-uninitialized
+    -Werror=missing-requires
+    -Werror=return-local-addr
+  )
 endif()
 
 # Additional flags for Clang.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(options INTERFACE
-        -Werror=dangling
-        -Werror=return-stack-address
-    )
+  target_compile_options(options INTERFACE
+    -Werror=dangling
+    -Werror=return-stack-address
+  )
 endif()
 
 # Flags for MSVC/clang-cl.
 if (MSVC)
-    target_compile_options(options INTERFACE
-        # Enable ‘all’ warnings.
-        /W4
+  target_compile_options(options INTERFACE
+    # Enable ‘all’ warnings.
+    /W4
 
-        # Source character set is UTF-8
-        /utf-8
+    # Source character set is UTF-8
+    /utf-8
 
-        # Allow unnamed structs/unions.
-        /wd4201
+    # Allow unnamed structs/unions.
+    /wd4201
 
-        # Don't warn about unused functions.
-        /wd4505
-    )
+    # Don't warn about unused functions.
+    /wd4505
+  )
 endif()
 
 # On Windows, don’t suggest the _s nonsense functions.
 if (WIN32)
-    target_compile_definitions(options INTERFACE
-        _CRT_SECURE_NO_WARNINGS
-        _CRT_SECURE_NO_WARNINGS_GLOBALS
-        _CRT_NONSTDC_NO_WARNINGS
-    )
+  target_compile_definitions(options INTERFACE
+    _CRT_SECURE_NO_WARNINGS
+    _CRT_SECURE_NO_WARNINGS_GLOBALS
+    _CRT_NONSTDC_NO_WARNINGS
+  )
 endif()
 
 # Debug/Release flags.
 if (NOT MSVC)
-    if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        target_compile_options(options INTERFACE $<$<CONFIG:DEBUG>:-rdynamic>)
-    else()
-        target_compile_options(options INTERFACE -Wno-unused-private-field)
-    endif()
+  if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(options INTERFACE $<$<CONFIG:DEBUG>:-rdynamic>)
+  else()
+    target_compile_options(options INTERFACE -Wno-unused-private-field)
+  endif()
 
-    target_compile_options(options INTERFACE
-        $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
-        $<$<CONFIG:RELEASE>:-O3 -march=native>
-    )
+  target_compile_options(options INTERFACE
+    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
+    $<$<CONFIG:RELEASE>:-O3 -march=native>
+  )
 
-    target_link_options(options INTERFACE
-        $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
-        $<$<CONFIG:RELEASE>:-O3 -march=native>
-    )
+  target_link_options(options INTERFACE
+    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
+    $<$<CONFIG:RELEASE>:-O3 -march=native>
+  )
 else()
-    target_compile_options(options INTERFACE
-        $<$<CONFIG:DEBUG>:/Od>
-        $<$<CONFIG:RELEASE>:/O2>
-    )
+  target_compile_options(options INTERFACE
+    $<$<CONFIG:DEBUG>:/Od>
+    $<$<CONFIG:RELEASE>:/O2>
+  )
 endif()
 
 # Enable AddressSanitizer if requested
@@ -194,10 +195,10 @@ message(STATUS "Checking dependencies ...")
 # tree, you can specify `fmtlib_SOURCE_DIR` as pointing to the cloned
 # repo.
 FetchContent_Declare(
-    fmtlib
-    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-    GIT_TAG 12.1.0
-    SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
+  fmtlib
+  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+  GIT_TAG 12.1.0
+  SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
 )
 FetchContent_MakeAvailable(fmtlib)
 target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
@@ -358,9 +359,9 @@ target_link_libraries(lcc PRIVATE options liblcc)
 
 # Make project version accessible from source code
 configure_file(
-    src/version.hh.in
-    ${CMAKE_CURRENT_BINARY_DIR}/version.hh
-    @ONLY
+  src/version.hh.in
+  ${CMAKE_CURRENT_BINARY_DIR}/version.hh
+  @ONLY
 )
 target_include_directories(lcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
