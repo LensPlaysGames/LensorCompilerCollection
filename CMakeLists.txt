@@ -50,6 +50,16 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
   endif()
 endif()
 
+# Output HTML as well as JS if compiling with emscripten (for wasm)
+if (EMSCRIPTEN)
+  set(CMAKE_EXECUTABLE_SUFFIX ".html")
+  add_link_options(--shell-file ${CMAKE_CURRENT_LIST_DIR}/lcc.in.html)
+  add_link_options(-sSTACK_SIZE=1048576)
+  add_link_options(-sINVOKE_RUN=0)
+  add_link_options(-sEXIT_RUNTIME=0)
+  add_link_options(-sEXPORTED_RUNTIME_METHODS=callMain)
+endif()
+
 # ============================================================================
 #  Compiler options.
 # ============================================================================

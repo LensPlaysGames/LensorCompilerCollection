@@ -455,4 +455,19 @@ struct fmt::formatter<T> {
     }
 };
 
+#ifdef __EMSCRIPTEN__
+#    ifndef __cpp_lib_ranges_enumerate
+#        warning "LCC providing implementation of std::ranges::views::enumerate for Emscripten toolchain"
+
+namespace std::ranges::views {
+template <typename T>
+auto enumerate(T&& v) {
+    return std::views::zip(std::views::iota(0), v);
+};
+}
+
+#    endif // __cpp_lib_ranges_enumerate
+
+#endif // __EMSCRIPTEN__
+
 #endif // LCC_UTILS_HH

@@ -44,12 +44,15 @@ const lcc::Target* const default_target =
     lcc::Target::x86_64_windows;
 #elif defined(__APPLE__) or defined(__linux__)
     lcc::Target::x86_64_linux;
+#elif defined(__wasm)
+    lcc::Target::x86_64_linux;
 #else
-#    error "Unsupported target"
+#    error "Unsupported target; this is just for a silly default target, so feel free to update this"
 #endif
 
 /// Default format
-const lcc::Format* const default_format = lcc::Format::gnu_as_att_assembly;
+const lcc::Format* const default_format
+    = lcc::Format::gnu_as_att_assembly;
 
 [[nodiscard]] auto read_file_contents(
     lcc::Context* context,

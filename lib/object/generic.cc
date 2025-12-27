@@ -1,10 +1,12 @@
 #include <lcc/utils.hh>
+
 #include <object/elf.h>
 #include <object/generic.hh>
 
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <ranges>
 #include <vector>
 
 namespace lcc {
@@ -86,7 +88,7 @@ void GenericObject::as_elf(FILE* f) {
     // after all section headers).
     // AKA Number of bytes to skip until after the section header table.
     // Used in loop just below.
-    usz data_offset = hdr.e_shoff + (sizeof(elf64_shdr) * hdr.e_shnum);
+    auto data_offset = hdr.e_shoff + (sizeof(elf64_shdr) * hdr.e_shnum);
 
     // Build section headers from sections in this generic object file.
     // NOTE: If you add other sections first or otherwise change the fact that
@@ -260,7 +262,7 @@ void GenericObject::as_elf(FILE* f) {
             "Could not find symbol {} referenced by relocation",
             reloc.symbol.name
         );
-        usz sym_index = usz(found - syms.begin());
+        u64 sym_index = u64(found - syms.begin());
 
         elf64_rela elf_reloc{};
         elf_reloc.r_offset = reloc.symbol.byte_offset;
@@ -269,10 +271,12 @@ void GenericObject::as_elf(FILE* f) {
                 auto found_symbol = std::find_if(symbols.begin(), symbols.end(), [&](Symbol& symbol) {
                     return symbol.name == reloc.symbol.name;
                 });
-                if (found_symbol == symbols.end()) Diag::ICE(
-                    "Could not find symbol {} referenced by relocation",
-                    reloc.symbol.name
-                );
+                if (found_symbol == symbols.end()) {
+                    Diag::ICE(
+                        "Could not find symbol {} referenced by relocation",
+                        reloc.symbol.name
+                    );
+                }
 
                 if (reloc.symbol.kind == Symbol::Kind::FUNCTION)
                     elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_PLT32);

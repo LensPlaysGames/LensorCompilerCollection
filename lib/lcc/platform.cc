@@ -23,9 +23,12 @@
 #    include <unistd.h>
 #endif
 
-namespace {
-
-}
+#ifdef __EMSCRIPTEN__
+#    ifndef isatty
+#        define isatty(...) false
+#        warning "LCC providing definition of isatty for Emscripten toolchain"
+#    endif
+#endif // __EMSCRIPTEN__
 
 static constexpr bool backtrace_addr2line = true;
 // -p  pretty print
