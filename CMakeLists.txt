@@ -52,6 +52,8 @@ endif()
 
 # Output HTML as well as JS if compiling with emscripten (for wasm)
 if (EMSCRIPTEN)
+  # Disable "native" optimisation
+  set(NATIVE_OPT FALSE)
   # Ask Emscripten to please generate HTML.
   set(CMAKE_EXECUTABLE_SUFFIX ".html")
   # Custom HTML template file.
@@ -181,13 +183,21 @@ if (NOT MSVC)
 
   target_compile_options(options INTERFACE
     $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
-    $<$<CONFIG:RELEASE>:-O3 -march=native>
+    $<$<CONFIG:RELEASE>:-O3>
   )
-
   target_link_options(options INTERFACE
     $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
-    $<$<CONFIG:RELEASE>:-O3 -march=native>
+    $<$<CONFIG:RELEASE>:-O3>
   )
+
+  if (NATIVE_OPT)
+    target_compile_options(options INTERFACE
+      $<$<CONFIG:RELEASE>:-march=native>
+    )
+    target_link_options(options INTERFACE
+      $<$<CONFIG:RELEASE>:-march=native>
+    )
+  endif()
 else()
   target_compile_options(options INTERFACE
     $<$<CONFIG:DEBUG>:/Od>
