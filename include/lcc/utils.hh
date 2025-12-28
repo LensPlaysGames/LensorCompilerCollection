@@ -234,8 +234,14 @@ private:
 };
 
 /// Compile time fmt::format.
+// Emscripten doesn't like this for some reason so we don't make it
+// consteval for emscripten
 template <detail::static_string format, auto... Args>
-consteval auto ConstexprFormat() -> std::string_view {
+#ifndef __EMSCRIPTEN__
+consteval
+#endif
+    auto
+    ConstexprFormat() -> std::string_view {
     static constexpr usz size = fmt::formatted_size(FMT_COMPILE(format.view()), Args...);
     static constexpr std::array<char, size> data = [] {
         std::array<char, size> d{};
