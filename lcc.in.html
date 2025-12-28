@@ -16,8 +16,6 @@
           color: var(--text-color);
       }
 
-      .noselect { user-select: none; }
-
       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
       textarea.emscripten { font-family: monospace; width: 80%; }
       div.emscripten { text-align: center; }
@@ -67,12 +65,20 @@
 
     <div display="flex" style="flex-direction: column;">
       <!-- TODO: Filesystem tree display (Module.FS.readdir()) -->
-      <button id="build">Build</button>
+
+      <div>
+        <button id="build">Build</button>
+        <!-- TODO: Compiler Flag/Option Inputs -->
+        <!-- Dropdown for stage to stop at: None, Tokens, AST, SSA IR, Lowered IR, Generic MIR, Lowered MIR -->
+        <!-- Dropdown for input language: glint, ir -->
+        <!-- Dropdown for output format: asm-x86_64, wasm-textual -->
+        <!-- Dropdown for optimisation level: 0, 1, 2, 3 -->
+      </div>
 
       <div display="flex">
         <textarea class="emscripten" id="input" rows="8"></textarea>
         <div>
-          <textarea class="emscripten noselect" id="command-line" rows="1" readonly></textarea>
+          <textarea class="emscripten" id="command-line" rows="1" readonly disabled></textarea>
           <textarea class="emscripten" id="output" rows="16" readonly></textarea>
         </div>
       </div>
