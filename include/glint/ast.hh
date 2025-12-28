@@ -1238,7 +1238,7 @@ public:
     /// Caller should check return value is not nullptr.
     [[nodiscard]]
     auto member_by_name(std::string_view name) const -> const Member* {
-        return member_by_name(name);
+        return const_cast<StructType*>(this)->member_by_name(name);
     }
 
     /// Caller should check return value is not negative.
@@ -1250,10 +1250,10 @@ public:
         if (found == _members.end()) return -1;
         return std::abs(std::distance(_members.begin(), found));
     }
-    /// Caller should check return value is not nullptr.
+    /// Caller should check return value is not negative.
     [[nodiscard]]
-    auto member_index_by_name(std::string_view name) const -> const Member* {
-        return member_by_name(name);
+    auto member_index_by_name(std::string_view name) const {
+        return const_cast<StructType*>(this)->member_index_by_name(name);
     }
 
     [[nodiscard]]
@@ -1420,7 +1420,7 @@ public:
     /// Caller should check return value is not nullptr.
     [[nodiscard]]
     auto member_by_name(std::string_view name) const -> const Member* {
-        return member_by_name(name);
+        return const_cast<SumType*>(this)->member_by_name(name);
     }
 
     [[nodiscard]]
@@ -2602,7 +2602,7 @@ public:
     /// Caller should check return value is not nullptr.
     [[nodiscard]]
     auto param_by_name(std::string_view name) const -> const Param* {
-        return param_by_name(name);
+        return const_cast<TemplatedStructType*>(this)->param_by_name(name);
     }
 
     /// Caller should check return value is not negative.
@@ -2614,10 +2614,10 @@ public:
         if (found == _params.end()) return -1;
         return std::abs(std::distance(_params.begin(), found));
     }
-    /// Caller should check return value is not nullptr.
+    /// Caller should check return value is not negative.
     [[nodiscard]]
-    auto param_index_by_name(std::string_view name) const -> const Param* {
-        return param_by_name(name);
+    auto param_index_by_name(std::string_view name) const {
+        return const_cast<TemplatedStructType*>(this)->param_index_by_name(name);
     }
 
     /// Caller should check return value is not nullptr.
@@ -2632,7 +2632,8 @@ public:
     /// Caller should check return value is not nullptr.
     [[nodiscard]]
     auto member_by_name(std::string_view name) const -> const Member* {
-        return member_by_name(name);
+        // Call the non-const version of the function (and cast everything to const).
+        return const_cast<TemplatedStructType*>(this)->member_by_name(name);
     }
 
     /// Caller should check return value is not negative.
@@ -2644,10 +2645,11 @@ public:
         if (found == _members.end()) return -1;
         return std::abs(std::distance(_members.begin(), found));
     }
-    /// Caller should check return value is not nullptr.
+    /// Caller should check return value is not negative.
     [[nodiscard]]
-    auto member_index_by_name(std::string_view name) const -> const Member* {
-        return member_by_name(name);
+    auto member_index_by_name(std::string_view name) const {
+        // Call the non-const version of the function (and cast everything to const).
+        return const_cast<TemplatedStructType*>(this)->member_index_by_name(name);
     }
 
     [[nodiscard]]

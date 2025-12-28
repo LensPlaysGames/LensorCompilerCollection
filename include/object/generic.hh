@@ -262,8 +262,9 @@ struct GenericObject {
         LCC_ASSERT(found != sections.end(), "Could not find section with name {}", name);
         return *found;
     }
-    const Section& section(std::string_view name) const {
-        return section(name);
+    auto section(std::string_view name) const -> const Section& {
+        // Call the non-const version of this function, and cast to const.
+        return const_cast<GenericObject*>(this)->section(name);
     }
 
     // Creates symbols representing all names of the given global.
