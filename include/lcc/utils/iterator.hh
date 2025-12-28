@@ -10,7 +10,7 @@
 #include <vector>
 
 namespace lcc::utils {
-#if !defined(NDEBUG) || defined(LCC_DEBUG_ITERATORS)
+#if defined(__EMSCRIPTEN__) || ! defined(NDEBUG) || defined(LCC_DEBUG_ITERATORS)
 
 /// An iterator that checks for errors.
 template <typename ContainerType, typename IterType>
