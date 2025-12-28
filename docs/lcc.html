@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>LCC Playground</title>
+    <style>
+      :root {
+          /* Default (dark) theme colors */
+          --bg-color: rgb(14, 16, 17);
+          --text-color: #ffffff;
+          color-scheme: light dark; /* Informs browser the site supports both modes */
+      }
+      body {
+          background: var(--bg-color);
+          color: var(--text-color);
+      }
+
+      .lcc-svg { margin: auto; padding: 8px 16px; background-color: #779095; border-radius: 16px; max-height: min(10vh, 10vw); }
+
+      .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+      textarea.emscripten { font-family: monospace; width: 80%; }
+      div.emscripten { text-align: center; }
+      div.emscripten_border { border: 1px solid black; }
+
+      .spinner {
+          height: 50px;
+          width: 50px;
+          margin: 0px auto;
+          -webkit-animation: rotation .8s linear infinite;
+          -moz-animation: rotation .8s linear infinite;
+          -o-animation: rotation .8s linear infinite;
+          animation: rotation 0.8s linear infinite;
+          border-left: 10px solid rgb(0,150,240);
+          border-right: 10px solid rgb(0,150,240);
+          border-bottom: 10px solid rgb(0,150,240);
+          border-top: 10px solid rgb(100,0,200);
+          border-radius: 100%;
+          background-color: rgb(200,100,250);
+      }
+      @-webkit-keyframes rotation {
+          from {-webkit-transform: rotate(0deg);}
+          to {-webkit-transform: rotate(360deg);}
+      }
+      @-moz-keyframes rotation {
+          from {-moz-transform: rotate(0deg);}
+          to {-moz-transform: rotate(360deg);}
+      }
+      @-o-keyframes rotation {
+          from {-o-transform: rotate(0deg);}
+          to {-o-transform: rotate(360deg);}
+      }
+      @keyframes rotation {
+          from {transform: rotate(0deg);}
+          to {transform: rotate(360deg);}
+      }
+
+    </style>
+  </head>
+  <body>
+    <header>
+      <img class="lcc-svg" src="lcc.svg"/>
+    </header>
+    <main>
+      <hr/>
+
+      <figure style="overflow:visible;" id="spinner"><div class="spinner"></div>
+        <center style="margin-top:0.5em">
+          <strong>Lensor Compiler Collection</strong>
+        </center>
+      </figure>
+      <div class="emscripten" id="status">Downloading...</div>
+      <div class="emscripten">
+        <progress value="0" max="100" id="progress" hidden=1></progress>
+      </div>
+
+      <div display="flex" style="flex-direction: column;">
+        <!-- TODO: Filesystem tree display (Module.FS.readdir()) -->
+
+        <div>
+          <button id="build">Build</button>
+          <label for="build-on-change">
+            <input type="checkbox" id="build-on-change" name="build-on-change-checkbox" value="build-on-change" checked>
+            Build On Change
+          </label>
+          <label for="print-ast">
+            <input type="checkbox" id="print-ast" name="print-ast-checkbox" value="print-ast">
+            Print AST
+          </label>
+          <label for="print-ir">
+            <input type="checkbox" id="print-ir" name="print-ir-checkbox" value="print-ir">
+            Print IR
+          </label>
+          <label for="print-mir">
+            <input type="checkbox" id="print-mir" name="print-mir-checkbox" value="print-mir">
+            Print MIR
+          </label>
+          <!-- TODO: Compiler Flag/Option Inputs -->
+          <!-- Dropdown for stage to stop at: None, Tokens, AST, SSA IR, Lowered IR, Generic MIR, Lowered MIR -->
+          <!-- Dropdown for input language: glint, ir -->
+          <!-- Dropdown for output format: asm-x86_64, wasm-textual -->
+          <!-- Dropdown for optimisation level: 0, 1, 2, 3 -->
+        </div>
+
+        <div display="flex">
+          <div>
+            <h3>foo.g</h3>
+            <textarea class="emscripten" id="input" rows="8">69;</textarea>
+          </div>
+          <div>
+            <code id="command-line">lcc foo.g</code>
+            <textarea class="emscripten" id="output" rows="16" readonly></textarea>
+          </div>
+        </div>
+      </div>
+
+      <hr>
+    </main>
+
+    <script type='text/javascript'>
+      var Module = {};
+
+      var statusElement = document.getElementById('status');
+      var progressElement = document.getElementById('progress');
+      var spinnerElement = document.getElementById('spinner');
+      var outputElement = document.getElementById('output');
+      if (outputElement) outputElement.value = ''; // clear browser cache
+      var inputElement = document.getElementById('input');
+      var commandLineElement = document.getElementById('command-line');
+
+      var shouldPrintAST = false;
+      var shouldPrintIR = false;
+      var shouldPrintMIR = false;
+    </script>
+
+    <script type="module">
+      import LCC from "./lcc.js";
+
+      function webPrint(...args) {
+          // These replacements are necessary if you render to raw HTML
+          //text = text.replace(/&/g, "&amp;");
+          //text = text.replace(/</g, "&lt;");
+          //text = text.replace(/>/g, "&gt;");
+          //text = text.replace('\n', '<br>', 'g');
+          if (outputElement) {
+              var text = args.join(' ');
+              outputElement.value += text + "\n";
+              outputElement.scrollTop = outputElement.scrollHeight; // focus on bottom
+          } else console.log(...args);
+      };
+
+      var Module = {
+          onRuntimeInitialized: ()=>{},
+          setStatus: (text) => {
+              if (!Module.setStatus.last)
+                  Module.setStatus.last = { time: Date.now(), text: '' };
+              if (text === Module.setStatus.last.text)
+                  return;
+              // matches something like:
+              //   foo(0.0/0)
+              //   ^^^   ^ ^
+              //       ^^^
+              var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+              var now = Date.now();
+              // if this is a progress update, skip it if too soon
+              if (m && now - Module.setStatus.last.time < 30) return;
+              Module.setStatus.last.time = now;
+              Module.setStatus.last.text = text;
+              if (m) {
+                  text = m[1];
+                  progressElement.value = parseInt(m[2])*100;
+                  progressElement.max = parseInt(m[4])*100;
+                  progressElement.hidden = false;
+                  spinnerElement.hidden = false;
+              } else {
+                  progressElement.value = null;
+                  progressElement.max = null;
+                  progressElement.hidden = true;
+                  if (!text) spinnerElement.hidden = true;
+              }
+              statusElement.innerHTML = text;
+          },
+          print: webPrint,
+          printErr: webPrint,
+          noExitRuntime: null,
+          preloadPlugins: null,
+          STACK_SIZE: undefined,
+          wasmMemory: undefined
+      };
+
+      Module.setStatus("Ready");
+
+      // Register window event handler
+      window.onerror = () => {
+          Module.setStatus('Exception thrown, see JavaScript console');
+          spinnerElement.style.display = 'none';
+          Module.setStatus = (text) => {
+              if (text)
+                  console.error('[post-exception status] ' + text);
+          };
+      };
+
+      function eventBuildOnChange(should) {
+          if (!inputElement) return;
+          if (should)
+              inputElement.addEventListener('change', doBuild);
+          else inputElement.removeEventListener('change', doBuild);
+      }
+      // Register change event.
+      document.getElementById('build-on-change').addEventListener('change', function() { eventBuildOnChange(this.checked); });
+      // Invoke manually for initial state.
+      eventBuildOnChange(document.getElementById('build-on-change').checked);
+
+      // Register change event.
+      document.getElementById('print-ast').addEventListener('change', function() { shouldPrintAST = this.checked; doBuild(); });
+      // Invoke manually for initial state.
+      shouldPrintAST = document.getElementById('print-ast').checked;
+
+      // Register change event.
+      document.getElementById('print-ir').addEventListener('change', function() { shouldPrintIR = this.checked; doBuild(); });
+      // Invoke manually for initial state.
+      shouldPrintIR = document.getElementById('print-ir').checked;
+
+      // Register change event.
+      document.getElementById('print-mir').addEventListener('change', function() { shouldPrintMIR = this.checked; doBuild(); });
+      // Invoke manually for initial state.
+      shouldPrintMIR = document.getElementById('print-mir').checked;
+
+      async function doBuild() {
+          // Clear output
+          outputElement.value = "";
+
+          var lccArguments = [
+              "foo.g", // input file
+              "-o", "-", // write emitted code to stdout
+              "--color", "never" // don't emit terminal color codes
+          ];
+          // TODO: It may be more useful to the end user to have these be entirely
+          // separate (duplicated) invocations, and have each invocation's output be
+          // available in a tabbed sort of view.
+          if (shouldPrintAST) lccArguments.push("--ast");
+          if (shouldPrintIR) lccArguments.push("--ir");
+          if (shouldPrintMIR) lccArguments.push("--mir");
+
+          commandLineElement.innerHTML = "lcc " + lccArguments.join(" ");
+
+          Module = await LCC(Module);
+          Module.setStatus("Ready to run");
+          Module.FS.writeFile("foo.g", inputElement.value);
+          console.log("foo.g updated to", inputElement.value);
+          Module.callMain(lccArguments);
+          Module.setStatus("Ran");
+      };
+      // Connect build button click event to doBuild function.
+      document.getElementById('build').addEventListener('click', doBuild);
+      // Invoke build manually to populate output and stuff.
+      doBuild();
+    </script>
+
+    
+        <script type="module">
+          import initModule from "./lcc.js";
+          initModule(Module);
+        </script>
+        
+  </body>
+</html>
