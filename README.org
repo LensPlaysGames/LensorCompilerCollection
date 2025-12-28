@@ -26,7 +26,7 @@ Dependencies:
 
 - Any C++ Compiler (We like [[https://gcc.gnu.org/][GCC]])
 
-NOTE: If on Windows *and* using Visual Studio, see [[file:docs/VISUAL_STUDIO.org][this document]] instead. Also, switch to Linux :^).
+NOTE: If on Windows *and* using Visual Studio, see [[file:documentation/lcc/VISUAL_STUDIO.org][this document]] instead. Also, switch to Linux :^).
 
 First, generate a build tree using CMake.
 #+begin_src shell
@@ -52,7 +52,7 @@ In the future, we hope to support
 
 *** Glint | Low Level, Higher Order
 
-See [[file:docs/glint/][relevant documentation]].
+See [[file:documentation/glint/][relevant documentation]].
 
 - Separate Compilation (via Modules system)
 
