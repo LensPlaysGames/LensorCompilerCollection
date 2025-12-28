@@ -56,7 +56,7 @@ There is also a more permanent form of memory known as /storage/. A computer's s
 
 Now that you know what a computer is, and a little bit about how a computer functions, we can now learn some basic conventions about how all modern computers use that hardware to do useful things.
 
-Most computers come with code in their memory that may not ever be changed; it is locked into the hardware (physical parts of the computer machine). This code is called /firmware/, since it is not physical, yet it is still unchanging. A computer's firmware usually handles doing initialisation procedures when the computer turns on, getting the computer to a known state. It does this so that the user of the computer may write software with a known starting state (it'd be quite difficult to guess where the computer has started executing code at, if the program counter's value was random every time the computer was started).
+Most computers come with code in their memory that may not ever be changed; it is locked into the hardware (physical parts of the computer machine). This code is called /firmware/, since it is bound to the physical hardware, yet it is still able to be changed without building a new physical chip. A computer's firmware usually handles doing initialisation procedures when the computer turns on, getting the computer to a known state. It does this so that the user of the computer may write software with a known starting state (it'd be quite difficult to guess where the computer has started executing code at, if the program counter's value was random every time the computer was started).
 
 That code that the user runs on their computer is known as /software/. Most computers these days come with a conventional piece of software known as an /operating system/ (often abbreviated /OS/). An /OS/ is software that deals with the specifics of the particular hardware, such that /it/ may provide a /more/ known starting state to /other/ software. An OS usually consists of a kernel program that "talks" to the hardware; in reality, it does whatever is needed to make hardware do a given operation whenever software requests that operation be completed (no actual "talking" involved).
 
@@ -83,6 +83,8 @@ An object file must be turned into an executable file via a /linker/ program bef
 NOTE: Glint is a language, Lensor is the specification of the language described by this book.
 
 RECOMMENDATION TO READERS: It is my belief that you will learn faster, and better understand the concepts presented, if you have a computer with /some/ implementation of a Glint compiler present on the system. As you read, test yourself by trying to write Glint programs that you believe to follow the rules as you currently understand them. The feedback the compiler gives you when trying to build the programs you write is invaluable in quickly correcting small errors in your current mental model.
+
+I recommend GNU Emacs (or Vim) as an editor, but you may use whatever editor tooling you find the most comfortable.
 
 ** Introduction, Overview
 
@@ -631,7 +633,12 @@ A view is compatible with a ranged for loop expression (more on that later).
 
 # structs, unions, enums, and sums.
 
+# TODO
 # Using compound initializer
+
+# TODO
+# named expressions in compound literal for out-of-member-order struct
+# value assignment.
 
 *** Structs
 

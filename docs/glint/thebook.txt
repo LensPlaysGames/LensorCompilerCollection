@@ -187,14 +187,15 @@ _________________
 
   Most computers come with code in their memory that may not ever be
   changed; it is locked into the hardware (physical parts of the
-  computer machine). This code is called /firmware/, since it is not
-  physical, yet it is still unchanging. A computer's firmware usually
-  handles doing initialisation procedures when the computer turns on,
-  getting the computer to a known state. It does this so that the user
-  of the computer may write software with a known starting state (it'd
-  be quite difficult to guess where the computer has started executing
-  code at, if the program counter's value was random every time the
-  computer was started).
+  computer machine). This code is called /firmware/, since it is bound
+  to the physical hardware, yet it is still able to be changed without
+  building a new physical chip. A computer's firmware usually handles
+  doing initialisation procedures when the computer turns on, getting
+  the computer to a known state. It does this so that the user of the
+  computer may write software with a known starting state (it'd be quite
+  difficult to guess where the computer has started executing code at,
+  if the program counter's value was random every time the computer was
+  started).
 
   That code that the user runs on their computer is known as
   /software/. Most computers these days come with a conventional piece
@@ -268,6 +269,9 @@ _________________
   them. The feedback the compiler gives you when trying to build the
   programs you write is invaluable in quickly correcting small errors in
   your current mental model.
+
+  I recommend GNU Emacs (or Vim) as an editor, but you may use whatever
+  editor tooling you find the most comfortable.
 
 
 2.1 Introduction, Overview
