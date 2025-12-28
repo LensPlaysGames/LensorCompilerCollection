@@ -329,7 +329,7 @@ void emit_gnu_att_assembly(
                     if (loc.seekable(module->context()) and not loc.equal_position(last_location)) {
                         auto l = loc.seek_line_column(module->context());
                         out += fmt::format(
-                            "# FILE {} ({}), LINE {}, COLUMN {}",
+                            "# FILE {} ({}), LINE {}, COLUMN {}\n",
                             loc.file_id,
                             fs::absolute(module->context()->files().at(loc.file_id)->path()).string(),
                             l.line,
