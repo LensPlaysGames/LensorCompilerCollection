@@ -16,6 +16,8 @@
           color: var(--text-color);
       }
 
+      .noselect { user-select: none; }
+
       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
       textarea.emscripten { font-family: monospace; width: 80%; }
       div.emscripten { text-align: center; }
@@ -64,51 +66,70 @@
     </div>
 
     <div display="flex" style="flex-direction: column;">
-      <button onclick="doBuild()">Build</button>
+      <!-- TODO: Filesystem tree display (Module.FS.readdir()) -->
+      <button id="build">Build</button>
 
       <div display="flex">
         <textarea class="emscripten" id="input" rows="8"></textarea>
-        <textarea class="emscripten" id="output" rows="16" readonly></textarea>
+        <div>
+          <textarea class="emscripten noselect" id="command-line" rows="1" readonly></textarea>
+          <textarea class="emscripten" id="output" rows="16" readonly></textarea>
+        </div>
       </div>
     </div>
 
     <hr>
     <script type='text/javascript'>
+      var Module = {};
+
       var statusElement = document.getElementById('status');
       var progressElement = document.getElementById('progress');
       var spinnerElement = document.getElementById('spinner');
       var outputElement = document.getElementById('output');
-      var inputElement = document.getElementById('input');
       if (outputElement) outputElement.value = ''; // clear browser cache
+      var inputElement = document.getElementById('input');
+      var commandLineElement = document.getElementById('command-line');
+
+      if (Module.FS) {
+          if (inputElement) {
+              const inputContents = Module.FS.readFile("foo.g");
+              const decoder = new TextDecoder('utf-8');
+              inputElement.value = decoder.decode(inputContents);
+          }
+      }
+    </script>
+
+    <script type="module">
+      import LCC from "./lcc.js";
+
+      function webPrint(...args) {
+          // These replacements are necessary if you render to raw HTML
+          //text = text.replace(/&/g, "&amp;");
+          //text = text.replace(/</g, "&lt;");
+          //text = text.replace(/>/g, "&gt;");
+          //text = text.replace('\n', '<br>', 'g');
+          if (outputElement) {
+              var text = args.join(' ');
+              outputElement.value += text + "\n";
+              outputElement.scrollTop = outputElement.scrollHeight; // focus on bottom
+          } else console.log(...args);
+      };
 
       var Module = {
-          onRuntimeInitialized: () => {
-              FS.writeFile("foo.g", "69;");
-              if (inputElement) {
-                  const inputContents = FS.readFile("foo.g");
-                  const decoder = new TextDecoder('utf-8');
-                  inputElement.value = decoder.decode(inputContents);
-              }
-          },
-          print(...args) {
-              // These replacements are necessary if you render to raw HTML
-              //text = text.replace(/&/g, "&amp;");
-              //text = text.replace(/</g, "&lt;");
-              //text = text.replace(/>/g, "&gt;");
-              //text = text.replace('\n', '<br>', 'g');
-              console.log(...args);
-              if (outputElement) {
-                  var text = args.join(' ');
-                  outputElement.value += text + "\n";
-                  outputElement.scrollTop = outputElement.scrollHeight; // focus on bottom
-              }
-          },
-          setStatus(text) {
-              if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
-              if (text === Module.setStatus.last.text) return;
+          onRuntimeInitialized: ()=>{},
+          setStatus: (text) => {
+              if (!Module.setStatus.last)
+                  Module.setStatus.last = { time: Date.now(), text: '' };
+              if (text === Module.setStatus.last.text)
+                  return;
+              // matches something like:
+              //   foo(0.0/0)
+              //   ^^^   ^ ^
+              //       ^^^
               var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
               var now = Date.now();
-              if (m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
+              // if this is a progress update, skip it if too soon
+              if (m && now - Module.setStatus.last.time < 30) return;
               Module.setStatus.last.time = now;
               Module.setStatus.last.text = text;
               if (m) {
@@ -125,32 +146,48 @@
               }
               statusElement.innerHTML = text;
           },
-          totalDependencies: 0,
-          monitorRunDependencies(left) {
-              this.totalDependencies = Math.max(this.totalDependencies, left);
-              Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
-          }
+          print: webPrint,
+          printErr: webPrint,
+          noExitRuntime: null,
+          preloadPlugins: null,
+          STACK_SIZE: undefined,
+          wasmMemory: undefined
       };
-      Module.arguments = [
-          "foo.g", // input file
-          "-o", "-" // write emitted code to stdout
-      ];
 
-      Module.setStatus('Downloading...');
+      Module.setStatus("Ready to build...");
+
+      // Register window event handler
       window.onerror = () => {
           Module.setStatus('Exception thrown, see JavaScript console');
           spinnerElement.style.display = 'none';
           Module.setStatus = (text) => {
-              if (text) console.error('[post-exception status] ' + text);
+              if (text)
+                  console.error('[post-exception status] ' + text);
           };
       };
 
-      function doBuild() {
-          FS.writeFile("foo.g", inputElement.value);
+      async function doBuild() {
+          // Clear output
+          outputElement.value = "";
+
+          var lccArguments = [
+              "foo.g", // input file
+              "-o", "-" // write emitted code to stdout
+          ];
+
+          commandLineElement.value = "lcc " + lccArguments.join(" ");
+
+          Module = await LCC(Module);
+          Module.setStatus("Ready to run");
+          Module.FS.writeFile("foo.g", inputElement.value);
           console.log("foo.g updated to", inputElement.value);
-          Module.callMain(["foo.g", "-o", "-"]);
+          Module.callMain(lccArguments);
+          Module.setStatus("Ran");
       };
+
+      document.getElementById('build').addEventListener('click', doBuild);
     </script>
+
     {{{ SCRIPT }}}
   </body>
 </html>

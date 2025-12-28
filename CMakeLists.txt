@@ -52,12 +52,21 @@ endif()
 
 # Output HTML as well as JS if compiling with emscripten (for wasm)
 if (EMSCRIPTEN)
+  # Ask Emscripten to please generate HTML.
   set(CMAKE_EXECUTABLE_SUFFIX ".html")
+  # Custom HTML template file.
   add_link_options(--shell-file ${CMAKE_CURRENT_LIST_DIR}/lcc.in.html)
+  # Increase the stack size; some languages use a recursive descent parsing
+  # algorithm that means the stack isn't always necessarily small.
   add_link_options(-sSTACK_SIZE=1048576)
+  # Do not automatically run LCC when the script is loaded; without
+  # arguments, it's not all that useful, anyway.
   add_link_options(-sINVOKE_RUN=0)
-  add_link_options(-sEXIT_RUNTIME=0)
-  add_link_options(-sEXPORTED_RUNTIME_METHODS=callMain)
+  # Exports used from JavaScript.
+  add_link_options("-sEXPORTED_RUNTIME_METHODS=[\"callMain\", \"FS\"]")
+  # Create an async factory function to run the generated module, vs doing
+  # things in the global scope.
+  add_link_options(-sEXPORT_NAME="LCC" -sMODULARIZE=1 -sEXPORT_ES6=1)
 endif()
 
 # ============================================================================
