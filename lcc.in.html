@@ -7,7 +7,7 @@
     <style>
       :root {
           /* Default (dark) theme colors */
-          --bg-color: rgb(14, 17, 16);
+          --bg-color: rgb(14, 16, 17);
           --text-color: #ffffff;
           color-scheme: light dark; /* Informs browser the site supports both modes */
       }
@@ -15,6 +15,8 @@
           background: var(--bg-color);
           color: var(--text-color);
       }
+
+      .lcc-svg { margin: auto; padding: 8px 16px; background-color: #779095; border-radius: 16px; max-height: min(10vh, 10vw); }
 
       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
       textarea.emscripten { font-family: monospace; width: 80%; }
@@ -56,35 +58,52 @@
     </style>
   </head>
   <body>
-    <hr/>
-    <figure style="overflow:visible;" id="spinner"><div class="spinner"></div><center style="margin-top:0.5em"><strong>emscripten</strong></center></figure>
-    <div class="emscripten" id="status">Downloading...</div>
-    <div class="emscripten">
-      <progress value="0" max="100" id="progress" hidden=1></progress>
-    </div>
+    <header>
+      <img class="lcc-svg" src="lcc.svg"/>
+    </header>
+    <main>
+      <hr/>
 
-    <div display="flex" style="flex-direction: column;">
-      <!-- TODO: Filesystem tree display (Module.FS.readdir()) -->
-
-      <div>
-        <button id="build">Build</button>
-        <!-- TODO: Compiler Flag/Option Inputs -->
-        <!-- Dropdown for stage to stop at: None, Tokens, AST, SSA IR, Lowered IR, Generic MIR, Lowered MIR -->
-        <!-- Dropdown for input language: glint, ir -->
-        <!-- Dropdown for output format: asm-x86_64, wasm-textual -->
-        <!-- Dropdown for optimisation level: 0, 1, 2, 3 -->
+      <figure style="overflow:visible;" id="spinner"><div class="spinner"></div>
+        <center style="margin-top:0.5em">
+          <strong>Lensor Compiler Collection</strong>
+        </center>
+      </figure>
+      <div class="emscripten" id="status">Downloading...</div>
+      <div class="emscripten">
+        <progress value="0" max="100" id="progress" hidden=1></progress>
       </div>
 
-      <div display="flex">
-        <textarea class="emscripten" id="input" rows="8"></textarea>
+      <div display="flex" style="flex-direction: column;">
+        <!-- TODO: Filesystem tree display (Module.FS.readdir()) -->
+
         <div>
-          <textarea class="emscripten" id="command-line" rows="1" readonly disabled></textarea>
-          <textarea class="emscripten" id="output" rows="16" readonly></textarea>
+          <button id="build">Build</button>
+          <label for="build-on-change">
+            <input type="checkbox" id="build-on-change" name="build-on-change-checkbox" value="build-on-change"> Build On Change
+          </label>
+          <!-- TODO: Compiler Flag/Option Inputs -->
+          <!-- Dropdown for stage to stop at: None, Tokens, AST, SSA IR, Lowered IR, Generic MIR, Lowered MIR -->
+          <!-- Dropdown for input language: glint, ir -->
+          <!-- Dropdown for output format: asm-x86_64, wasm-textual -->
+          <!-- Dropdown for optimisation level: 0, 1, 2, 3 -->
+        </div>
+
+        <div display="flex">
+          <div>
+            <h3>foo.g</h3>
+            <textarea class="emscripten" id="input" rows="8">69;</textarea>
+          </div>
+          <div>
+            <code id="command-line">lcc foo.g</code>
+            <textarea class="emscripten" id="output" rows="16" readonly></textarea>
+          </div>
         </div>
       </div>
-    </div>
 
-    <hr>
+      <hr>
+    </main>
+
     <script type='text/javascript'>
       var Module = {};
 
@@ -98,9 +117,6 @@
 
       if (Module.FS) {
           if (inputElement) {
-              const inputContents = Module.FS.readFile("foo.g");
-              const decoder = new TextDecoder('utf-8');
-              inputElement.value = decoder.decode(inputContents);
           }
       }
     </script>
@@ -160,7 +176,7 @@
           wasmMemory: undefined
       };
 
-      Module.setStatus("Ready to build...");
+      Module.setStatus("Ready");
 
       // Register window event handler
       window.onerror = () => {
@@ -172,6 +188,19 @@
           };
       };
 
+
+      function eventBuildOnChange(should) {
+          if (!inputElement) return;
+          if (should)
+              inputElement.addEventListener('change', doBuild);
+          else inputElement.removeEventListener('change', doBuild);
+      }
+      // Register change event.
+      document.getElementById('build-on-change').addEventListener('change', function() { eventBuildOnChange(this.checked); });
+      // Invoke manually for initial state.
+      eventBuildOnChange(document.getElementById('build-on-change').checked);
+
+
       async function doBuild() {
           // Clear output
           outputElement.value = "";
@@ -181,7 +210,7 @@
               "-o", "-" // write emitted code to stdout
           ];
 
-          commandLineElement.value = "lcc " + lccArguments.join(" ");
+          commandLineElement.innerHTML = "lcc " + lccArguments.join(" ");
 
           Module = await LCC(Module);
           Module.setStatus("Ready to run");
@@ -190,8 +219,10 @@
           Module.callMain(lccArguments);
           Module.setStatus("Ran");
       };
-
+      // Connect build button click event to doBuild function.
       document.getElementById('build').addEventListener('click', doBuild);
+      // Invoke build manually to populate output and stuff.
+      doBuild();
     </script>
 
     {{{ SCRIPT }}}
