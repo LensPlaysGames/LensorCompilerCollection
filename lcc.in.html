@@ -300,8 +300,13 @@
 
           Module = await LCC(Module);
           Module.setStatus("Ready to run");
-          Module.FS.writeFile("foo.g", inputElement.value);
-          console.log("foo.g updated to", inputElement.value);
+
+          var contents = inputElement.value;
+          console.log("updating foo.g to", contents);
+          Module.FS.writeFile("foo.g", contents);
+          console.log("foo.g updated to", contents);
+
+          Module.setStatus("Running lcc ", lccArguments);
           Module.callMain(lccArguments);
           Module.setStatus("Ran lcc ", lccArguments);
       };

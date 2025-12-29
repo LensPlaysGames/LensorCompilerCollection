@@ -608,7 +608,12 @@ void lcc::glint::Lexer::NextString() {
 
     if (delim == '\'') {
         while (lastc != delim) {
-            if (lastc == 0) Error("Unterminated string literal");
+            if (lastc == 0) {
+                // An unterminated string literal is NOT a valid token.
+                Error("Unterminated string literal");
+                tok.kind = TokenKind::Eof;
+                return;
+            }
             if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in string literal");
             tok.text += char(lastc);
             NextChar();
@@ -616,7 +621,12 @@ void lcc::glint::Lexer::NextString() {
     } else {
         LCC_ASSERT(delim == '"');
         while (lastc != delim) {
-            if (lastc == 0) Error("Unterminated string literal");
+            if (lastc == 0) {
+                // An unterminated string literal is NOT a valid token.
+                Error("Unterminated string literal");
+                tok.kind = TokenKind::Eof;
+                return;
+            }
             if (lastc == '\\') {
                 NextChar();
                 switch (lastc) {
@@ -642,7 +652,12 @@ void lcc::glint::Lexer::NextString() {
         }
     }
 
-    if (lastc != delim) Error("Unterminated string literal");
+    if (lastc != delim) {
+        // An unterminated string literal is NOT a valid token.
+        Error("Unterminated string literal");
+        tok.kind = TokenKind::Eof;
+        return;
+    }
     tok.kind = TokenKind::String;
     NextChar();
 }
