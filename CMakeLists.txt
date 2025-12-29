@@ -69,6 +69,8 @@ if (EMSCRIPTEN)
   # Create an async factory function to run the generated module, vs doing
   # things in the global scope.
   add_link_options(-sEXPORT_NAME="LCC" -sMODULARIZE=1 -sEXPORT_ES6=1)
+  # Do exit/cleanup things.
+  add_link_options(-sEXIT_RUNTIME=1)
 endif()
 
 # ============================================================================

@@ -95,6 +95,27 @@
             <input type="checkbox" id="print-mir" name="print-mir-checkbox" value="print-mir">
             Print MIR
           </label>
+          <label>
+            Format
+            <select id="format" name="format" aria-label="Format" autocomplete="nothanks" required>
+              <option selected value="">None</option>
+              <option value="GNUASM">GNU x86_64 Assembly</option>
+              <option value="WAT">Textual WebAssembly (WAT)</option>
+              <option value="LLVM">LLVM IR</option>
+              <option value="LCCIR">LCC IR</option>
+              <option value="LCCSSA">LCC IR (SSA Form)</option>
+            </select>
+          </label>
+          <label>
+            Optimisation
+            <select id="optimisation" name="optimisation" aria-label="Optimisation" autocomplete="nothanks" required>
+              <option selected value="0">None</option>
+              <option value="1">Minimal</option>
+              <option value="2">Some</option>
+              <option value="3">Most</option>
+              <!-- <option value="s">Size</option> -->
+            </select>
+          </label>
           <!-- TODO: Compiler Flag/Option Inputs -->
           <!-- Dropdown for stage to stop at: None, Tokens, AST, SSA IR, Lowered IR, Generic MIR, Lowered MIR -->
           <!-- Dropdown for input language: glint, ir -->
@@ -131,6 +152,8 @@
       var shouldPrintAST = false;
       var shouldPrintIR = false;
       var shouldPrintMIR = false;
+      var shouldUseFormat = undefined;
+      var shouldOptimise = undefined;
     </script>
 
     <script type="module">
@@ -227,6 +250,27 @@
       // Invoke manually for initial state.
       shouldPrintMIR = document.getElementById('print-mir').checked;
 
+      // Format dropdown
+      function lccFormatFromSelection(selection) {
+          switch (selection) {
+          default: window.Error("Unexpected format selection");
+          case "": return "asm";
+          case "GNUASM": return "gnu-as-att";
+          case "LLVM": return "llvm";
+          case "LCCSSA": return "ssa_ir";
+          case "LCCIR": return "ir";
+          case "WAT": return "wat";
+          }
+      };
+      document.getElementById('format').addEventListener('change', function(event) {
+          shouldUseFormat = event.target.value;
+          doBuild();
+      });
+
+      document.getElementById('optimisation').addEventListener('change', function(event) {
+          shouldOptimise = event.target.value;
+          doBuild();
+      });
 
       async function doBuild() {
           // Clear output
@@ -243,6 +287,14 @@
           if (shouldPrintAST) lccArguments.push("--ast");
           if (shouldPrintIR) lccArguments.push("--ir");
           if (shouldPrintMIR) lccArguments.push("--mir");
+          if (shouldUseFormat) {
+              lccArguments.push("-f");
+              lccArguments.push(lccFormatFromSelection(shouldUseFormat))
+          }
+          if (shouldOptimise) {
+              lccArguments.push("-O");
+              lccArguments.push(shouldOptimise)
+          }
 
           commandLineElement.innerHTML = "lcc " + lccArguments.join(" ");
 
@@ -251,7 +303,7 @@
           Module.FS.writeFile("foo.g", inputElement.value);
           console.log("foo.g updated to", inputElement.value);
           Module.callMain(lccArguments);
-          Module.setStatus("Ran");
+          Module.setStatus("Ran lcc ", lccArguments);
       };
       // Connect build button click event to doBuild function.
       document.getElementById('build').addEventListener('click', doBuild);
