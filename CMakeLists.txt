@@ -402,6 +402,24 @@ target_link_libraries(lcc PRIVATE liblcc)
 # Link lcc driver with language libraries.
 target_link_libraries(lcc PUBLIC glint)
 
+# Copy lcc.html, lcc.js, and lcc.wasm to `docs/` when emscripten.
+if (EMSCRIPTEN AND (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel"))
+  add_custom_command(
+    TARGET lcc
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+    ${CMAKE_CURRENT_BINARY_DIR}/lcc.html
+    ${CMAKE_CURRENT_LIST_DIR}/docs/lcc.html
+    COMMAND ${CMAKE_COMMAND} -E copy
+    ${CMAKE_CURRENT_BINARY_DIR}/lcc.js
+    ${CMAKE_CURRENT_LIST_DIR}/docs/lcc.js
+    COMMAND ${CMAKE_COMMAND} -E copy
+    ${CMAKE_CURRENT_BINARY_DIR}/lcc.wasm
+    ${CMAKE_CURRENT_LIST_DIR}/docs/lcc.wasm
+    COMMENT "Copying generated files for gh-pages..."
+  )
+endif()
+
 if (BUILD_TESTING)
   # TODO Write a test driver or something
   # add_test()
