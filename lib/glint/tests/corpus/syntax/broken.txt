@@ -1,0 +1,45 @@
+================
+Open Paren, No Close
+:fail_parse
+================
+
+(
+
+---
+
+()
+
+================
+Unterminated String Literal
+:fail_parse
+================
+
+"
+
+---
+
+()
+
+================
+Unterminated String Literal (Raw)
+:fail_parse
+================
+
+'
+
+---
+
+()
+
+================
+Unterminated paren+string
+:fail_parse
+================
+
+print("
+
+---
+
+()
+
+
