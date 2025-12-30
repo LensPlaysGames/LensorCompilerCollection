@@ -1,5 +1,5 @@
 ================
-Open Paren, No Close
+Unterminated Paren
 :fail_parse
 ================
 
@@ -32,11 +32,23 @@ Unterminated String Literal (Raw)
 ()
 
 ================
-Unterminated paren+string
+Unterminated print+paren+string
 :fail_parse
 ================
 
 print("
+
+---
+
+()
+
+
+================
+Unterminated Block
+:fail_parse
+================
+
+{
 
 ---
 
