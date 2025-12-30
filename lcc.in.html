@@ -95,6 +95,10 @@
             <input type="checkbox" id="print-mir" name="print-mir-checkbox" value="print-mir">
             Print MIR
           </label>
+          <label for="print-output">
+            <input type="checkbox" id="print-output" name="print-output-checkbox" value="print-output" checked>
+            Print Output
+          </label>
           <label>
             Format
             <select id="format" name="format" aria-label="Format" autocomplete="nothanks" required>
@@ -149,10 +153,17 @@
       var inputElement = document.getElementById('input');
       var commandLineElement = document.getElementById('command-line');
 
+      // "--ast"
       var shouldPrintAST = false;
+      // "--ir"
       var shouldPrintIR = false;
+      // "--mir"
       var shouldPrintMIR = false;
+      // "-o -"
+      var shouldPrintOutput = true;
+      // "-f {}"
       var shouldUseFormat = undefined;
+      // "-O {}"
       var shouldOptimise = undefined;
     </script>
 
@@ -250,6 +261,11 @@
       // Invoke manually for initial state.
       shouldPrintMIR = document.getElementById('print-mir').checked;
 
+      // Register change event.
+      document.getElementById('print-output').addEventListener('change', function() { shouldPrintOutput = this.checked; doBuild(); });
+      // Invoke manually for initial state.
+      shouldPrintOutput = document.getElementById('print-output').checked;
+
       // Format dropdown
       function lccFormatFromSelection(selection) {
           switch (selection) {
@@ -278,8 +294,7 @@
 
           var lccArguments = [
               "foo.g", // input file
-              "-o", "-", // write emitted code to stdout
-              "--color", "never" // don't emit terminal color codes
+              "--color", "never" // don't emit terminal color codes for browser
           ];
           // TODO: It may be more useful to the end user to have these be entirely
           // separate (duplicated) invocations, and have each invocation's output be
@@ -294,6 +309,11 @@
           if (shouldOptimise) {
               lccArguments.push("-O");
               lccArguments.push(shouldOptimise)
+          }
+          if (shouldPrintOutput) {
+              // write emitted code to stdout
+              lccArguments.push("-o");
+              lccArguments.push("-");
           }
 
           commandLineElement.innerHTML = "lcc " + lccArguments.join(" ");
