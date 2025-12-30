@@ -109,6 +109,44 @@ auto file_link(const lcc::fs::path& path) -> std::string {
     );
 }
 
+namespace lcc::detail {
+struct LineRanges {
+    std::string before{};
+    std::string range{};
+    std::string after{};
+};
+auto LocationLineRange(const Context& context, Location where) -> LineRanges {
+    // FIXME: Should this bubble the error up? Be an assert?
+    if (not where.seekable(&context)) return {};
+
+    // Get the line number, column number, and line data.
+    const auto [line, col, start, end] = where.seek(&context);
+
+    // Confidence Boost
+    LCC_ASSERT(start and end and (end >= start));
+
+    // Split the line into everything before the range, the range itself, and
+    // everything after.
+    std::string before(start, col);
+    std::string range(start + col, where.len);
+    std::string after(
+        std::min(
+            start + col + where.len,
+            end
+        ),
+        end
+    );
+
+    // Replace tabs with spaces. We need to do this *after* splitting because
+    // this invalidates the offsets.
+    utils::ReplaceAll(before, "\t", "    ");
+    utils::ReplaceAll(range, "\t", "    ");
+    utils::ReplaceAll(after, "\t", "    ");
+
+    return LineRanges{before, range, after};
+};
+} // namespace lcc::detail
+
 void lcc::Diag::print() {
     using enum utils::Colour;
 
@@ -178,17 +216,8 @@ void lcc::Diag::print() {
         }
     }
 
-    // Split the line into everything before the range, the range itself, and
-    // everything after.
-    std::string before(line_start, col);
-    std::string range(line_start + col, where.len);
-    std::string after(std::min(line_start + col + where.len, line_end), line_end);
-
-    // Replace tabs with spaces. We need to do this *after* splitting because
-    // this invalidates the offsets.
-    utils::ReplaceAll(before, "\t", "    ");
-    utils::ReplaceAll(range, "\t", "    ");
-    utils::ReplaceAll(after, "\t", "    ");
+    const auto [before, range, after]
+        = detail::LocationLineRange(*context, where);
 
     // TODO: If diagnostic points to the end of a line, insert a space to highlight.
 
@@ -198,7 +227,8 @@ void lcc::Diag::print() {
     // fmt::print(stderr, "{}{}:{}:{}: ", C(Bold), file_link(file.path()), line, col);
 
     // Print the diagnostic name and message.
-    // TODO: If message is multiple lines, format it a little differently to be a little more understandable.
+    // TODO: If message is multiple lines, format it a little differently to
+    // be a little more understandable.
     std::vector<usz> message_newline_offsets{};
     for (usz i = 0; i < message.size(); ++i)
         if (message.at(i) == '\n') message_newline_offsets.push_back(i);
@@ -258,6 +288,61 @@ void lcc::Diag::print() {
         fmt::print(stderr, "{}{}", C(Bold), C(Colour(kind)));
         for (usz i = 0; i < range.size(); ++i) fmt::print(stderr, "~");
         fmt::print(stderr, "{}\n", C(Reset));
+    }
+
+    // Print fixes
+    // TODO: It may be cool to emit a .diff file that could be applied with
+    // `patch` by the user such that the diagnostic is removed.
+    if (fixes.size()) {
+        fmt::print(stderr, "To get rid of this diagnostic, you could apply the following edits\n");
+        for (auto fix : fixes) {
+            if (not fix.location.seekable(context)) continue;
+            switch (fix.kind) {
+                case Fix::Kind::INVALID:
+                case Fix::Kind::COUNT:
+                    continue;
+                // foo.g:1:0:
+                //  1 | return 69: (: in red)
+                //               ; (; in green)
+                case Fix::Kind::REPLACE: {
+                    const auto [replace_line, replace_col] = fix.location.seek_line_column(context);
+                    const auto [replace_before, replace_range, replace_after]
+                        = detail::LocationLineRange(*context, fix.location);
+
+                    // Print the source text that should be replaced.
+
+                    // Print the line up to the start of the location, the range in the right
+                    // colour, and the rest of the line.
+                    fmt::print(stderr, " {} | {}", replace_line, replace_before);
+                    fmt::print(stderr, "{}{}{}", C(utils::Colour::BoldRed), replace_range, C(Reset));
+                    fmt::print(stderr, "{}\n", replace_after);
+
+                    // Print the replacement text.
+
+                    // We first pad the line based on the number of digits in the line number
+                    // and append more spaces to line us up with the range.
+                    for (usz i = 0; i < digits + before.size() + sizeof("  | ") - 1; ++i)
+                        fmt::print(stderr, " ");
+
+                    // Finally, print the replacement text itself.
+                    fmt::print(stderr, "{}{}{}\n", C(utils::Colour::BoldGreen), fix.text, C(Reset));
+                } break;
+                // foo.g:1:0:
+                //  1 | return 69; (; in green)
+                case Fix::Kind::INSERT: {
+                    // Get the line number, column number, and line data.
+                    const auto [insert_line, insert_col]
+                        = fix.location.seek_line_column(context);
+                    const auto [insert_before, insert_range, insert_after]
+                        = detail::LocationLineRange(*context, fix.location);
+
+                    // Print the line before the inserted text
+                    fmt::print(stderr, " {} | {}", insert_line, insert_before);
+                    fmt::print(stderr, "{}{}{}", C(BoldGreen), fix.text, C(Reset));
+                    fmt::print(stderr, "{}{}\n", insert_range, insert_after);
+                } break;
+            }
+        }
     }
 
     // Handle fatal errors.

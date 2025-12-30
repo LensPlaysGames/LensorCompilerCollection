@@ -19,10 +19,6 @@ namespace lcc {
 struct Diag {
     friend Context;
 
-    // TODO: "Fix" diagnostic type for suggested overwrites/fixes to the
-    // source, and eventually the ability to actually commit the fix to the
-    // file.
-
     /// Diagnostic severity.
     enum struct Kind {
         None,    ///< Not an error. Do not emit this diagnostic.
@@ -33,6 +29,25 @@ struct Diag {
         ICError, ///< Internal Compiler error (bug in compiler).
     };
 
+    struct Fix {
+        enum struct Kind {
+            // Do not perform any operation on the source on behalf of this fix.
+            INVALID,
+
+            // Replace text at fix.location with fix.text.
+            REPLACE,
+
+            // Insert fix.text at start of fix.location.
+            INSERT,
+
+            // Do not perform any operation on the source on behalf of this fix.
+            COUNT
+        } kind{Diag::Fix::Kind::INVALID};
+
+        std::string text{};
+        Location location{};
+    };
+
 private:
     Kind kind;
     const Context* context{};
@@ -40,7 +55,17 @@ private:
     std::string message{};
 
     /// Attached diagnostics.
-    std::vector<std::pair<Diag, bool>> attached;
+    struct ShouldPrintBefore {
+        bool v;
+
+        operator bool() { return v; }
+    };
+    std::vector<std::pair<Diag, ShouldPrintBefore>> attached{};
+
+    // A list of objects that dictate how to change the source in such a way
+    // that this diagnostic would no longer be emitted (and ideally no others
+    // would, either). Optional.
+    std::vector<Fix> fixes{};
 
     /// Handle fatal error codes.
     void HandleFatalErrors();
@@ -133,6 +158,30 @@ public:
     void suppress(bool issue_attached_diagnostics = false) {
         if (issue_attached_diagnostics) print_attached();
         kind = Kind::None;
+    }
+
+    void fix_by(Fix fix) { fixes.emplace_back(fix); }
+
+    void fix_by_replacing_with(
+        Location where_to_replace,
+        std::string text_to_replace_with
+    ) {
+        fix_by(
+            {Diag::Fix::Kind::REPLACE,
+             text_to_replace_with,
+             where_to_replace}
+        );
+    }
+
+    void fix_by_inserting_at(
+        Location where_to_insert,
+        std::string text_to_insert
+    ) {
+        fix_by(
+            {Diag::Fix::Kind::INSERT,
+             text_to_insert,
+             where_to_insert}
+        );
     }
 
     /// Emit a note.
