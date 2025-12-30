@@ -976,7 +976,7 @@ auto lcc::parser::Parser::ParseType() -> Result<Type*> {
     else if (Kw("void"))
         base = Type::VoidTy;
     else if (At(Tk::IntegerType))
-        base = IntegerType::Get(mod->context(), tok.integer_value);
+        base = IntegerType::Get(mod->context(), (usz) tok.integer_value);
     else if (Kw("struct")) {
         // Eat struct keyword
         NextToken();
@@ -1050,7 +1050,7 @@ auto lcc::parser::Parser::ParseType() -> Result<Type*> {
         if (not Consume(Tk::RBrack))
             return Error("Expected ']'");
 
-        base = ArrayType::Get(mod->context(), size, base);
+        base = ArrayType::Get(mod->context(), (usz) size, base);
     }
 
     if (not name.empty())

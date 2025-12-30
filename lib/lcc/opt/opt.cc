@@ -31,7 +31,7 @@ protected:
     [[nodiscard]]
     auto MakeInt(aint value) const -> IntegerConstant* {
         return new (*mod) IntegerConstant(
-            IntegerType::Get(mod->context(), value.bits()),
+            IntegerType::Get(mod->context(), (usz) value.bits()),
             value
         );
     }
@@ -579,7 +579,7 @@ private:
                 }
 
                 /// Replace inbounds GEPs with the corresponding alloca.
-                gep->replace_with(insts[*idx->value()]);
+                gep->replace_with(insts[(usz) *idx->value()]);
                 continue;
             }
 

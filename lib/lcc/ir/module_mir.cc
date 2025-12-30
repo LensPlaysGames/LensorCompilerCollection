@@ -894,7 +894,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         Register reg{virts[instruction], uint(gep_ir->type()->bits())};
 
                         if (auto* idx = cast<IntegerConstant>(gep_ir->idx())) {
-                            usz offset = gep_ir->base_type()->bytes() * idx->value().value();
+                            usz offset = gep_ir->base_type()->bytes() * (usz) idx->value().value();
 
                             if (not offset) {
                                 auto copy = MInst(MInst::Kind::Copy, reg);
@@ -944,7 +944,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto member_index = as<IntegerConstant>(gmp_ir->idx())->value().value();
 
-                        auto maybe_offset = gmp_ir->struct_type()->member_offset(member_index);
+                        auto maybe_offset = gmp_ir->struct_type()->member_offset((usz) member_index);
                         LCC_ASSERT(maybe_offset);
                         auto offset = maybe_offset.value();
 

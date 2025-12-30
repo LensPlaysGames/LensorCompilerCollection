@@ -315,7 +315,7 @@ struct Inst {
                     "Unhandled operand kind in Sizeof handling, sorry"
                 );
 
-                return MOperandImmediate(size);
+                return MOperandImmediate((usz) size);
             }
 
             case OperandKind::Register: {
