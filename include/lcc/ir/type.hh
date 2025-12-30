@@ -168,8 +168,14 @@ class StructType : public Type {
     usz _align{AlignNotSet};
 
 private:
-    StructType(std::vector<Type*> members, std::string name) : Type(Kind::Struct), _members(std::move(members)), _id(std::move(name)) {}
-    StructType(std::vector<Type*> members, long int index) : Type(Kind::Struct), _members(std::move(members)), _id(index) {}
+    StructType(std::vector<Type*> members, std::string name)
+        : Type(Kind::Struct),
+          _members(std::move(members)),
+          _id(std::move(name)) {}
+    StructType(std::vector<Type*> members, long int index)
+        : Type(Kind::Struct),
+          _members(std::move(members)),
+          _id(index) {}
 
 public:
     static constexpr usz AlignNotSet = (usz) -1;
@@ -204,7 +210,10 @@ public:
         usz offset{};
         for (usz i = 1; i <= member_index; ++i) {
             offset += members().at(i - 1)->bytes();
-            offset = utils::AlignTo(offset, members().at(i)->align_bytes());
+            offset = utils::AlignTo(
+                offset,
+                members().at(i)->align_bytes()
+            );
         }
 
         return offset;
@@ -235,6 +244,7 @@ template <>
 struct fmt::formatter<lcc::Type> : formatter<string_view> {
     template <typename FormatContext>
     auto format(const lcc::Type& t, FormatContext& ctx) const {
+        // FIXME: Don't emit colors if LCC context doesn't ask us to...
         return fmt::format_to(ctx.out(), "{}", t.string());
     }
 };

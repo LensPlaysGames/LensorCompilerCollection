@@ -158,6 +158,7 @@ auto PrintMIR(std::vector<GlobalVariable*>& vars, std::vector<MFunction>& mcode)
                 out += ", ";
             out += fmt::format("{}", n.name);
         }
+        // FIXME: Don't emit colors if LCC context doesn't ask us to...
         return fmt::format("{}", *global->type());
     };
     return fmt::format(
