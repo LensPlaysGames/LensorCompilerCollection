@@ -2326,9 +2326,9 @@ void lcc::glint::Parser::ParseTopLevel() {
         auto expr = ParseExpr();
         if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (At(Tk::Eof)) {
-                Warning(
-                    "Expected hard expression separator but got end of file"
-                );
+                auto l = GetLastLocation(*context->files().at(tok.location.file_id));
+                auto w = Warning(l, "Expected hard expression separator but got end of file");
+                w.fix_by_inserting_at(l, ";");
             } else if (expr) {
                 Warning(
                     GetRightmostLocation(*expr),
@@ -2415,9 +2415,14 @@ auto lcc::glint::Parser::ParseFreestanding(
         auto expr = parser.ParseExpr();
         if (not +parser.ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (parser.At(Tk::Eof)) {
-                parser.Warning(
+                auto l = GetLastLocation(
+                    *context->files().at(parser.tok.location.file_id)
+                );
+                auto w = parser.Warning(
+                    l,
                     "Expected hard expression separator but got end of file"
                 );
+                w.fix_by_inserting_at(l, ";");
             } else if (expr) {
                 parser.Warning(
                           GetRightmostLocation(*expr),
