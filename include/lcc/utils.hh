@@ -473,7 +473,7 @@ struct fmt::formatter<T> {
 
 #ifdef __EMSCRIPTEN__
 #    ifndef __cpp_lib_ranges_enumerate
-#        warning "LCC providing implementation of std::ranges::views::enumerate for Emscripten toolchain"
+// #        warning "LCC providing implementation of std::ranges::views::enumerate for Emscripten toolchain"
 
 namespace std::ranges::views {
 template <typename T>

@@ -21,14 +21,6 @@
 #ifdef __linux__
 #    include <execinfo.h>
 #    include <unistd.h>
-#endif
-
-#ifdef __EMSCRIPTEN__
-#    ifndef isatty
-#        define isatty(...) false
-#        warning "LCC providing definition of isatty for Emscripten toolchain"
-#    endif
-#endif // __EMSCRIPTEN__
 
 static constexpr bool backtrace_addr2line = true;
 // -p  pretty print
@@ -38,6 +30,14 @@ static constexpr std::string_view backtrace_addr2line_options = "-p -C -f";
 
 static constexpr bool backtrace_llvm_symbolizer = false;
 static constexpr std::string_view backtrace_llvm_symbolizer_options = "-s -p -C -i --color --output-style=GNU";
+#endif
+
+#ifdef __EMSCRIPTEN__
+#    ifndef isatty
+#        define isatty(...) false
+// #        warning "LCC providing definition of isatty for Emscripten toolchain"
+#    endif
+#endif // __EMSCRIPTEN__
 
 void lcc::platform::PrintBacktrace() {
 #ifdef __linux__
