@@ -145,7 +145,7 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                     return false;
                 }
 
-                size = res.as_int().value();
+                size = (usz) res.as_int().value();
                 a->size() = new (mod) ConstantExpr(a->size(), EvalResult(size));
             } else {
                 // Should be an ICE

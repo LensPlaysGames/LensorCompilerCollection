@@ -980,7 +980,8 @@ auto lcc::glint::Module::deserialise(
     }
 
     std::string module_name{};
-    for (auto i = module_metadata_blob.begin() + hdr.name_offset; *i; ++i)
+    const auto name_begin = module_metadata_blob.begin() + (decltype(module_metadata_blob)::difference_type) hdr.name_offset;
+    for (auto i = name_begin; *i; ++i)
         module_name += (char) *i;
 
     auto init_function_decl = global_scope()->declare(

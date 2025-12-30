@@ -986,7 +986,7 @@ auto lcc::glint::Lexer::MacroExpansion::operator++() -> Token {
     /// If the token is a gensym, get its value.
     if (ret.kind == Tk::Gensym) {
         ret.kind = Tk::Ident;
-        ret.text = gensyms[ret.integer_value];
+        ret.text = gensyms[(usz) ret.integer_value];
     }
 
     // Mark the token as non-artificial, because, for example, if we are

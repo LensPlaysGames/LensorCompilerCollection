@@ -2104,7 +2104,7 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
         /// Integer type.
         case Tk::ArbitraryInt:
             ty = new (*mod) IntegerType(
-                tok.integer_value,
+                (usz) tok.integer_value,
                 tok.text[0] != 'u',
                 tok.location
             );
