@@ -343,6 +343,18 @@ void lcc::Diag::print() {
                     fmt::print(stderr, " {} | {}", insert_line, insert_before);
                     fmt::print(stderr, "{}{}{}", C(BoldGreen), fix.text, C(Reset));
                     fmt::print(stderr, "{}{}\n", insert_range, insert_after);
+
+                    // We first pad the line based on the number of digits in the line number
+                    // and append more spaces to line us up with the range.
+                    for (usz i = 0; i < digits + before.size() + sizeof("  | ") - 1; ++i)
+                        fmt::print(stderr, " ");
+
+                    // Finally, print the underline itself.
+                    fmt::print(stderr, "{}", C(Bold));
+                    for (usz i = 0; i < insert_range.size(); ++i)
+                        fmt::print(stderr, "~");
+                    fmt::print(stderr, "{}\n", C(Reset));
+
                 } break;
             }
         }
