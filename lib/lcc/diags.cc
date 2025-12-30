@@ -143,6 +143,10 @@ auto LocationLineRange(const Context& context, Location where) -> LineRanges {
     utils::ReplaceAll(range, "\t", "    ");
     utils::ReplaceAll(after, "\t", "    ");
 
+    // If diagnostic points to the end of a line, insert a space to highlight.
+    if (range.back() == '\n') range.back() = ' ';
+    lcc::utils::remove_trailing_newlines_from(after);
+
     return LineRanges{before, range, after};
 };
 } // namespace lcc::detail
@@ -219,10 +223,6 @@ void lcc::Diag::print() {
 
     auto [before, range, after]
         = detail::LocationLineRange(*context, where);
-
-    // If diagnostic points to the end of a line, insert a space to highlight.
-    if (range.back() == '\n') range.back() = ' ';
-    lcc::utils::remove_trailing_newlines_from(after);
 
     // Print the file name, line number, and column number.
     const auto& file = *fs[where.file_id].get();
