@@ -2715,6 +2715,9 @@ auto GetRightmostLocation(lcc::glint::Expr* expr) -> lcc::Location;
 ///                                  ^
 auto GetPastLocation(lcc::glint::Expr* expr) -> lcc::Location;
 
+// Get last valid location in a given file, of length one.
+auto GetLastLocation(File& file) -> lcc::Location;
+
 } // namespace lcc::glint
 
 /// Formatter for types.
