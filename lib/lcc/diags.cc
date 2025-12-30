@@ -209,17 +209,20 @@ void lcc::Diag::print() {
     const auto [line, col, line_start, line_end] = where.seek(context);
 
     bool location_is_multiline{false};
-    for (auto* it = line_start; it < line_end; ++it) {
+
+    for (auto* it = line_start; it < line_end - 1; ++it) {
         if (*it == '\n') {
             location_is_multiline = true;
             break;
         }
     }
 
-    const auto [before, range, after]
+    auto [before, range, after]
         = detail::LocationLineRange(*context, where);
 
-    // TODO: If diagnostic points to the end of a line, insert a space to highlight.
+    // If diagnostic points to the end of a line, insert a space to highlight.
+    if (range.back() == '\n') range.back() = ' ';
+    lcc::utils::remove_trailing_newlines_from(after);
 
     // Print the file name, line number, and column number.
     const auto& file = *fs[where.file_id].get();

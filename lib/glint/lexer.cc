@@ -139,6 +139,8 @@ void lcc::glint::Lexer::NextToken() {
     while (IsSpace(lastc)) NextChar();
     tok.location.pos = CurrentOffset();
 
+    auto start_location = tok.location;
+
     switch (lastc) {
         /// EOF.
         case 0: {
@@ -541,7 +543,14 @@ void lcc::glint::Lexer::NextToken() {
     // location is already set, and would be severely mucked up if we tried to
     // adjust the length all the way from the macro definition until after the
     // macro invocation.
-    if (not tok.from_macro) tok.location.len = (u16) (CurrentOffset() - tok.location.pos);
+    if (not tok.from_macro) {
+        tok.location.len = (u16) Location::length_from_two_offsets_exclusive(
+            start_location.pos,
+            CurrentOffset()
+        );
+        if (lastc == 0)
+            tok.location.len += 1;
+    }
 }
 
 void lcc::glint::Lexer::NextIdentifier() {
@@ -665,6 +674,8 @@ void lcc::glint::Lexer::NextString() {
 }
 
 void lcc::glint::Lexer::NextNumber() {
+    auto start_location = tok.location;
+
     static const auto IsBinary = [](u32 c) { return c == '0' || c == '1'; };
     static const auto IsOctal = [](u32 c) { return IsDigit(c) and c < '8'; };
 
@@ -691,7 +702,14 @@ void lcc::glint::Lexer::NextNumber() {
         // We need at least one digit.
         if (tok.text.empty()) Error("Expected at least one {} digit", name);
 
-        tok.location.len = (u16) (CurrentOffset() - tok.location.pos);
+        tok.location.len = (u16) Location::length_from_two_offsets_exclusive(
+            start_location.pos,
+            CurrentOffset()
+        );
+        // CurrentOffset() can only ever be equal to the end, but the length of
+        // the final token in a file will be one longer.
+        if (lastc == 0)
+            tok.location.len += 1;
 
         // Actually parse the number.
         const char* cstr = tok.text.c_str();
@@ -741,7 +759,7 @@ void lcc::glint::Lexer::NextNumber() {
 
 void lcc::glint::Lexer::ExpandMacro(Macro& m) {
     bool error_reported = false;
-    auto loc = tok.location;
+    auto start_location = tok.location;
     raw_mode = true;
 
     /// Match the parameters against the input stream.
@@ -797,7 +815,7 @@ void lcc::glint::Lexer::ExpandMacro(Macro& m) {
         }
     }
 
-    macro_expansion_stack.emplace_back(*this, m, std::move(bound_toks), loc);
+    macro_expansion_stack.emplace_back(*this, m, std::move(bound_toks), start_location);
     raw_mode = false;
     NextToken();
 }

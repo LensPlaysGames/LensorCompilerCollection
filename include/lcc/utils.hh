@@ -448,6 +448,16 @@ auto from_bytes(std::array<lcc::u8, sizeof(T)> bytes) -> T {
     return out;
 }
 
+// "foo\nbar" -> "foo\nbar"
+// "foo\r\n\r\rbar" -> "foo\r\n\r\rbar"
+// "foo\r\n\r\r" -> "foo"
+// "foo\r\n\r\n" -> "foo"
+// "foo\n\n\n" -> "foo"
+constexpr auto remove_trailing_newlines_from(std::string& s) {
+    while (s.back() == '\n' or s.back() == '\r')
+        s.pop_back();
+}
+
 } // namespace lcc::utils
 
 template <lcc::detail::FormattableEnum T>

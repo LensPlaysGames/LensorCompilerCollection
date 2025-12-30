@@ -6,7 +6,7 @@ bool lcc::Location::seekable(const lcc::Context* ctx) const {
     auto& files = ctx->files();
     if (file_id >= files.size()) return false;
     const auto* f = files[file_id].get();
-    return pos + len <= f->size() and is_valid();
+    return is_valid() and ((pos + len <= f->size()) or pos == f->size());
 }
 
 /// Seek to a source location. The location must be valid.

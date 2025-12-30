@@ -70,6 +70,28 @@ struct Location {
 
     [[nodiscard]]
     auto is_valid() const -> bool { return len != 0; }
+
+    // Get the length between two positions (offsets).
+    //   "foo\nbar"
+    // a: ^
+    // b:      ^
+    // result: "foo\n"
+    // Note the later position points to a location that does not get included
+    // in the final calculation.
+    static auto length_from_two_offsets_exclusive(decltype(pos) a, decltype(pos) b) {
+        if (a > b)
+            std::swap(a, b);
+        return b - a;
+    }
+
+    // Get the length between two positions (offsets).
+    //   "foo\nbar"
+    // a: ^
+    // b:      ^
+    // result: "foo\nb"
+    static auto length_from_two_offsets_inclusive(decltype(pos) a, decltype(pos) b) {
+        return 1 + length_from_two_offsets_exclusive(a, b);
+    }
 };
 } // namespace lcc
 

@@ -2639,13 +2639,6 @@ auto lcc::glint::GetPastLocation(lcc::glint::Expr* expr) -> lcc::Location {
     return location;
 }
 
-auto lcc::glint::GetLastLocation(File& file) -> lcc::Location {
-    decltype(Location::pos) pos = 0;
-    if (file.size() >= 1)
-        pos = (u32) file.size() - 1;
-    return lcc::Location{pos, 1, (u16) file.file_id()};
-}
-
 [[nodiscard]]
 bool lcc::glint::Type::is_compound_type() const {
     switch (kind()) {

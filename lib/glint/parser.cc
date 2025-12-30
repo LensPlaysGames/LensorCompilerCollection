@@ -2326,7 +2326,18 @@ void lcc::glint::Parser::ParseTopLevel() {
         auto expr = ParseExpr();
         if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (At(Tk::Eof)) {
-                auto l = GetLastLocation(*context->files().at(tok.location.file_id));
+                /*
+                // I'm just going to leave this here, since EOF locations tend to be a sore point.
+                Note((*expr)->location(), "(*expr)->location()");
+                auto l_past = GetPastLocation(*expr);
+                Note(l_past, "GetPastLocation(*expr)");
+                Note(l_past, "GetPastLocation(*expr).pos: {}", l_past.pos);
+                Note(l_past, "GetPastLocation(*expr).file_id size: {}", context->files().at(l_past.file_id)->size());
+                Note(l_past, "GetPastLocation(*expr).is_valid(): {}", l_past.is_valid());
+                Note(l_past, "GetPastLocation(*expr).seekable(): {}", l_past.seekable(context));
+                Note(GetRightmostLocation(*expr), "GetRightmostLocation(*expr)");
+                */
+                auto l = GetPastLocation(*expr);
                 auto w = Warning(l, "Expected hard expression separator but got end of file");
                 w.fix_by_inserting_at(l, ";");
             } else if (expr) {
@@ -2415,9 +2426,7 @@ auto lcc::glint::Parser::ParseFreestanding(
         auto expr = parser.ParseExpr();
         if (not +parser.ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (parser.At(Tk::Eof)) {
-                auto l = GetLastLocation(
-                    *context->files().at(parser.tok.location.file_id)
-                );
+                auto l = GetPastLocation(*expr);
                 auto w = parser.Warning(
                     l,
                     "Expected hard expression separator but got end of file"
