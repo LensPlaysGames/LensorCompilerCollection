@@ -32,7 +32,7 @@ void aluminium_handler() {
 #elif defined(__APPLE__)
     // Apple
     std::system("open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
-#elif __linux__ || __unix__
+#elif defined(__linux__) || defined(__unix__)
     // Linux-ish
     std::system("xdg-open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #endif
