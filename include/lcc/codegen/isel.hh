@@ -649,7 +649,7 @@ struct PatternList {
                         // Pop instruction from front of instruction window.
                         instructions.erase(instructions.begin());
                         // If instruction was a temporary allocation, free it.
-                        if (auto found = rgs::find(pool, inst) != pool.end()) {
+                        if (rgs::find(pool, inst) != pool.end()) {
                             std::erase(pool, inst);
                             delete inst;
                         }
