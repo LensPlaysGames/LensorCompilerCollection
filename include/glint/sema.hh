@@ -342,7 +342,17 @@ private:
     /// \return 0 if the conversion is (logically) a no-op.
     /// \return A number greater than 0 that indicates how ‘bad’ the conversion is.
     /// \see Convert().
-    [[nodiscard]] int TryConvert(Expr** expr, Type* type);
+    struct ConversionStatus {
+        int score{0};
+
+        bool errored() { return score == -2; }
+        bool noop() { return score == 0; }
+        bool possible() { return score >= 0; }
+
+        operator bool() = delete;
+    };
+    [[nodiscard]]
+    ConversionStatus TryConvert(Expr** expr, Type* type);
 
     /// Wrap an expression with a cast.
     ///

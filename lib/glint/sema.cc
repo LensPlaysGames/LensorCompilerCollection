@@ -347,8 +347,8 @@ auto lcc::glint::Sema::ConvertToCommonType(Expr** a, Expr** b) -> bool {
     return Convert(a, (*b)->type()) or Convert(b, (*a)->type());
 }
 
-auto lcc::glint::Sema::TryConvert(Expr** expr, Type* type) -> int {
-    return ConvertImpl<false>(expr, type);
+auto lcc::glint::Sema::TryConvert(Expr** expr, Type* type) -> ConversionStatus {
+    return {.score = ConvertImpl<false>(expr, type)};
 }
 
 auto lcc::glint::Sema::Convert(Expr** expr, Type* type) -> bool {
@@ -1202,7 +1202,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         // We have a return expression, hurray!
         if (auto* ret = cast<ReturnExpr>(*last)) {
             LCC_ASSERT(
-                TryConvert(&ret->value(), ty->return_type()) == 0,
+                TryConvert(&ret->value(), ty->return_type()).noop(),
                 "Last expression may be a return expression, sure, but the expression it's returning is not convertible to the return type!"
             );
             return;
@@ -1213,14 +1213,23 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         // expression that returns the converted last expression.
         // FIXME: Probably a bug elsewhere, but last type can be void after
         // conversion if deproceduring happens to a function that returns void.
-        if (Convert(last, ty->return_type()) and not (*last)->type()->is_void()) {
+        if (TryConvert(last, ty->return_type()).possible() and not (*last)->type()->is_void()) {
+            // If it works, apply it.
+            LCC_ASSERT(Convert(last, ty->return_type()));
+
             if (is<BlockExpr>(decl->body()))
                 *last = new (mod) ReturnExpr(*last, {});
             else decl->body() = new (mod) ReturnExpr(*last, {});
 
             // Analyse inserted return
             if (not Analyse(last)) {
-                Error((*last)->location(), "Inserted return failed semantic analysis (probably a compiler error)");
+                {
+                    Error(
+                        (*last)->location(),
+                        "Inserted return failed semantic analysis (probably a compiler error)"
+                    );
+                }
+                Diag::ICE("Inserted return failed semantic analysis (probably a compiler error)");
             }
 
             return;
@@ -3683,7 +3692,7 @@ auto lcc::glint::Sema::AnalyseOverload(OverloadSet* expr, std::vector<Expr*> arg
                 auto conversion_score = TryConvert(&A, P);
                 // TODO: Record score to choose lowest if multiple in overload set at the
                 // end. Currently approximated via type equal check.
-                if (conversion_score < 0) {
+                if (not conversion_score.possible()) {
                     // Note(
                     //     A->location(),
                     //     "Argument type {} is not convertible to parameter type {}\n",
