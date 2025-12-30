@@ -591,8 +591,10 @@ void lcc::glint::Lexer::HandleIdentifier() {
         /// Convert the number.
         char* end;
         errno = 0;
-        tok.integer_value = (u64) std::strtoull(cstr + 1, &end, 10);
-        if (errno == ERANGE) Error("Bit width of integer is too large.");
+        tok.integer_value
+            = (u64) std::strtoull(cstr + 1, &end, 10);
+        if (errno == ERANGE)
+            Error("Bit width of integer is too large.");
 
         /// If the identifier is something like `s64iam`, it's simply an identifier.
         if (end != cstr + tok.text.size()) return;
@@ -714,10 +716,17 @@ void lcc::glint::Lexer::NextNumber() {
         NextChar();
 
         // Another zero is an error.
-        if (lastc == '0') Error("Leading zeroes are not allowed in decimal literals. Use 0o/0O for octal literals.");
-        else if (lastc == 'b' or lastc == 'B') ParseNumber("binary", IsBinary, 2);
-        else if (lastc == 'o' or lastc == 'O') ParseNumber("octal", IsOctal, 8);
-        else if (lastc == 'x' or lastc == 'X') ParseNumber("hexadecimal", IsHexDigit, 16);
+        if (lastc == '0') {
+            Error("Leading zeroes are not allowed in decimal literals. Use 0o/0O for octal literals.");
+            // TODO: Two possible fixes; either replace second zero (currently lastc)
+            // with `o` to make it an octal literal, or remove all leading zeroes
+            // (unless the literal is all zeroes, in which case, all but one).
+        } else if (lastc == 'b' or lastc == 'B')
+            ParseNumber("binary", IsBinary, 2);
+        else if (lastc == 'o' or lastc == 'O')
+            ParseNumber("octal", IsOctal, 8);
+        else if (lastc == 'x' or lastc == 'X')
+            ParseNumber("hexadecimal", IsHexDigit, 16);
 
         // If the next character is a space or delimiter, then this is a literal 0.
         if (IsSpace(lastc) or not IsAlpha(lastc)) return;
