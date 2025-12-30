@@ -1,0 +1,110 @@
+================
+Alpha Character
+:syntax
+================
+
+a;
+
+---
+
+(block (name))
+
+================
+Alpha Characters
+:syntax
+================
+
+abcdef;
+
+---
+
+(block (name))
+
+================
+Alphanumeric Characters, Trailing Numeral
+:syntax
+================
+
+a0b1c2;
+
+---
+
+(block (name))
+
+================
+Alphanumeric Characters, Trailing Letter
+:syntax
+================
+
+a0b1c2d;
+
+---
+
+(block (name))
+
+================
+_ Continuation
+:syntax
+================
+
+a0_b1;
+
+---
+
+(block (name))
+
+================
+$ Continuation
+:syntax
+================
+
+a0$b1;
+
+---
+
+(block (name))
+
+
+================
+! Continuation
+:syntax
+================
+
+a0!b1;
+
+---
+
+(block (name))
+
+================
+@ Continuation
+:syntax
+================
+
+a0@b1;
+
+---
+
+(block (name))
+
+================
+- Continuation
+:syntax
+================
+
+a0-b1;
+
+---
+
+(block (name))
+
+================
+/ Continuation
+:syntax
+================
+
+a0/b1;
+
+---
+
+(block (name))
