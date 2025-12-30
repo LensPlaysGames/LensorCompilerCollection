@@ -2639,6 +2639,19 @@ auto lcc::glint::GetPastLocation(lcc::glint::Expr* expr) -> lcc::Location {
     return location;
 }
 
+/// Get a location of length one referring to the very end of the file;
+/// just past the last character in the file.
+/// Only call this for valid `file_id`s, this function does assert
+/// validity.
+auto lcc::glint::GetLastLocation(const Context& context, u16 file_id) -> lcc::Location {
+    LCC_ASSERT(file_id < context.files().size());
+    auto& file = context.files().at(file_id);
+    decltype(Location::pos) pos = 0;
+    if (file->size() >= 1)
+        pos = (u32) file->size() - 1;
+    return lcc::Location{pos, 1, (u16) file->file_id()};
+}
+
 [[nodiscard]]
 bool lcc::glint::Type::is_compound_type() const {
     switch (kind()) {

@@ -2337,7 +2337,17 @@ void lcc::glint::Parser::ParseTopLevel() {
                 Note(l_past, "GetPastLocation(*expr).seekable(): {}", l_past.seekable(context));
                 Note(GetRightmostLocation(*expr), "GetRightmostLocation(*expr)");
                 */
-                auto l = GetPastLocation(*expr);
+                Location l{};
+                // If we parsed an expression, it results in better context given to the
+                // user if we give the location just past the expression, rather than the
+                // start of the next token.
+                if (expr)
+                    l = GetPastLocation(*expr);
+                // Without a valid parsed expression, since we are at EOF, just point to
+                // the very end of the file (iff the file_id we have is valid).
+                else if (context and tok.location.file_id < context->files().size())
+                    l = GetLastLocation(*context, tok.location.file_id);
+
                 auto w = Warning(l, "Expected hard expression separator but got end of file");
                 w.fix_by_inserting_at(l, ";");
             } else if (expr) {
@@ -2426,7 +2436,17 @@ auto lcc::glint::Parser::ParseFreestanding(
         auto expr = parser.ParseExpr();
         if (not +parser.ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (parser.At(Tk::Eof)) {
-                auto l = GetPastLocation(*expr);
+                Location l{};
+                // If we parsed an expression, it results in better context given to the
+                // user if we give the location just past the expression, rather than the
+                // start of the next token.
+                if (expr)
+                    l = GetPastLocation(*expr);
+                // Without a valid parsed expression, since we are at EOF, just point to
+                // the very end of the file (iff the file_id we have is valid).
+                else if (context and parser.tok.location.file_id < context->files().size())
+                    l = GetLastLocation(*context, parser.tok.location.file_id);
+
                 auto w = parser.Warning(
                     l,
                     "Expected hard expression separator but got end of file"

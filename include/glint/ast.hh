@@ -2715,6 +2715,10 @@ auto GetRightmostLocation(lcc::glint::Expr* expr) -> lcc::Location;
 ///                                  ^
 auto GetPastLocation(lcc::glint::Expr* expr) -> lcc::Location;
 
+/// Get a location of length one referring to the very end of the file;
+/// just past the last character in the file.
+auto GetLastLocation(const Context& context, u16 file_id) -> lcc::Location;
+
 } // namespace lcc::glint
 
 /// Formatter for types.
