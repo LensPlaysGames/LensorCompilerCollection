@@ -1,5 +1,7 @@
 * LCC End-to-End Testing Framework
 
+RunTest requires =Emacs=. We prefer [[https://www.gnu.org/software/emacs/][GNU Emacs]].
+
 Written in Emacs Lisp, RunTest is a framework for compiling programs using LCC, running them, and asserting their output (status and stdout).
 
 ** Writing Tests
