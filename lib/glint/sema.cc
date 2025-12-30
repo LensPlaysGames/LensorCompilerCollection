@@ -151,7 +151,7 @@ auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type
     }
 
     // Strip reference from `from` if need be.
-    if (auto* ref = cast<ReferenceType>(from)) {
+    if (cast<ReferenceType>(from)) {
         score += 1;
         if constexpr (PerformConversion)
             LValueToRValue(expr_ptr);
