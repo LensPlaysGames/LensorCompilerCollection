@@ -1,0 +1,124 @@
+#+title: LCC TODO [DEPRECATED]
+#+author: Lens_r
+
+* [DEPRECATED] ~lcc~, Codegen
+
+** IR Parameters and Register Allocation
+
+Basically, the current issue is this: when we lower to MIR, we also lower out all IR Parameter instructions to instead reference the location where the parameter may be found per calling convention. That isn't an issue in-and-of-itself, but it creates an issue where hardware registers may be accessed directly, and register allocation has no idea if/when those hardware registers became live in the first place (defining use). Plus, even if we were to look for a "defining use" of, say, register RDI, what if there is an unrelated use of RDI that defines it, and we find that defining use instead of the parameter's...
+
+It's almost like we need to keep a virtual register around that is already pre-mapped to a hardware register, that way it can have it's defining use and liveness and everything like that tracked properly while still having the value of a hardware register...
+
+** ~opt~
+
+*** TODO BUG
+[2024-07-08 Mon 13:28]
+
+Instruction combine (icmb) and ssa passes cause the following to change the signature of fopen and pass a struct instead of the ptr that it is supposed to. There is some issue with not updating the type of a replaced/altered instruction, or something. It could also be the IR we are generating is just wrong for this particular case but it works unoptimised so it'd be an edge case, if it were.
+
+#+begin_src sh
+lcc examples/glint/SimpleFile.g --passes icmb,ssa
+#+end_src
+
+#+begin_example
+NO OPTIMISATIONS:
+read : glintcc @__struct_0(@__struct_0 %0):
+  bb0:
+    %1 = alloca @__struct_0
+    store @__struct_0 %0 into %1
+    %2 = alloca ptr
+    %3 = gmp @__struct_0 from %1 at i64 0
+    %4 = load ptr from %3
+    %5 = gep i8 from @.str.0 at i64 0
+    %6 = call @fopen (ptr %4, ptr %5) -> ptr
+    ...
+
+SSA CONSTRUCTION:
+read : glintcc @__struct_0(@__struct_0 %0):
+  bb0:
+    %1 = alloca @__struct_0
+    store @__struct_0 %0 into %1
+    %2 = gmp @__struct_0 from %1 at i64 0
+    %3 = load ptr from %2
+    %4 = gep i8 from @.str.0 at i64 0
+    %5 = call @fopen (ptr %3, ptr %4) -> ptr
+    ...
+
+INSTRUCTION COMBINE:
+read : glintcc @__struct_0(@__struct_0 %0):
+  bb0:
+    %1 = alloca @__struct_0
+    store @__struct_0 %0 into %1
+    %2 = alloca ptr
+    %3 = load ptr from %1
+    %4 = call @fopen (ptr %3, ptr @.str.0) -> ptr
+    ...
+
+ICMB, SSA:
+read : glintcc @__struct_0(@__struct_0 %0):
+  bb0:
+    %1 = call @fopen (@__struct_0 %0, ptr @.str.0) -> ptr
+    ...
+#+end_example
+
+Probably from this portion of code from the SSA Construction pass running on the simplified "alloca -> store -> load", in which it is replacing the load instruction with it's reaching definition, past the optimised-out alloca.
+
+#+begin_src c++
+  /// If this instruction uses a load of an optimisable
+  /// alloca, replace the load with the reaching definition
+  /// of that alloca.
+  i->replace_children<LoadInst>([&](LoadInst* l) -> Value* {
+      auto a = rgs::find(optimisable, l->ptr());
+      if (a == optimisable.end()) return nullptr;
+      return ReachingDef(*a, l);
+   });
+#+end_src
+
+NOTE: Running icmb pass /after/ ssa pass works, but I don't think that's reliable since multiple runs of all passes are possible. It also has the same affect as just removing the ssa pass.
+
+** TODO [ISel] Add ~Where~ type to template of ~Pattern~
+[2023-12-14 Thu 17:06]
+
+We want this to contain a list of types that begin with ~Require*~.
+For example, ~RequireOperandSizeLessThan<operand_index, declared_size>~.
+
+* [DEPRECATED] Misc
+
+** TODO Link to Documentation from Error Messages
+
+** TODO LCC IR TreeSitter Parser and Emacs mode
+
+** TODO S-assembly
+
+Just for fun.
+
+#+begin_src lisp
+  (machine
+   x86_64-att
+
+   (section ".custom-section" list-of-byte-values)
+
+   (label "main" exported)
+
+   ;; imm -> reg
+   (mov 0 rdx)
+
+   ;; reg -> reg
+   (mov rdi rdx)
+
+   ;; reg -> mem
+   ;; dereference rhs
+   (mov rax (into rdx))
+
+   ;; mem -> reg
+   ;; dereference lhs
+   (mov (from rdx) rax)
+
+   ;; div and friends should be forced to list result registers, so no
+   ;; "hidden" clobbers other than flags/rip/rsp register. Repetition is
+   ;; better than hidden semantics, imo.
+
+   (return)
+
+   )
+#+end_src
