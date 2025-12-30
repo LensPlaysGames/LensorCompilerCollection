@@ -322,18 +322,18 @@ struct GenericObject {
                     Section& uninitialized_data = section(".bss");
 
                     // Align uninitialized data to variable type's alignment requirements.
-                    uninitialized_data.length() = u32(align_to(
-                        uninitialized_data.length(),
-                        isz(var->type()->align_bytes())
-                    ));
+                    uninitialized_data.length() = (u32) align_to(
+                        (isz) uninitialized_data.length(),
+                        (isz) var->type()->align_bytes()
+                    );
 
                     // The symbol will now begin at an aligned address.
-                    s.byte_offset = uninitialized_data.length();
+                    s.byte_offset = (usz) uninitialized_data.length();
 
                     symbols.push_back(s);
 
                     // Write uninitialized bytes for this variable.
-                    uninitialized_data.length() += u32(var->type()->bytes());
+                    uninitialized_data.length() += (u32) var->type()->bytes();
                 }
             }
         }
