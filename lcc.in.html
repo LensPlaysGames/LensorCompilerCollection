@@ -74,10 +74,10 @@
         <progress value="0" max="100" id="progress" hidden=1></progress>
       </div>
 
-      <div display="flex" style="flex-direction: column;">
+      <div style="display: flex; flex-direction: column;">
         <!-- TODO: Filesystem tree display (Module.FS.readdir()) -->
 
-        <div>
+        <div style="display: flex; flex-direction: column;">
           <button id="build">Build</button>
           <label for="build-on-change">
             <input type="checkbox" id="build-on-change" name="build-on-change-checkbox" value="build-on-change" checked>
@@ -140,6 +140,31 @@
       </div>
 
       <hr>
+
+      <details>
+        <summary>Resources</summary>
+        <p>
+          Learn Glint via
+          <a
+            href="thebook.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            >
+            The Book (HTML)
+          </a>
+        </p>
+        <p>
+          <a
+            href="github.com/LensPlaysGames/LensorCompilerCollection"
+            target="_blank"
+            rel="noopener noreferrer"
+            >
+            LCC Source Code
+          </a>
+        </p>
+      </details>
+
+      <small>Write the Glint programming language in <code>foo.g</code>, and see the output of compilation via LCC.</small>
     </main>
 
     <script type='text/javascript'>

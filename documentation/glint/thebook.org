@@ -12,6 +12,17 @@
   (defun lens/export-the-book ()
     "Export the book when it is your current buffer"
     (interactive)
+    (let
+        ((org-html-htmlize-output-type 'css)
+         (org-html-head
+          (concat
+           org-html-head
+           "<style>"
+           ".dark-mode,pre{color:var(--fg)}:root{--light-fg:#333333;--light-bg:#ffffff;--light-strong-fg:#161718;--dark-fg:#e8e8e8;--dark-bg:#161718;--dark-strong-fg:#f4f4f4;--fg:var(--light-fg);--bg:var(--light-bg);--strong-fg:var(--light-strong-fg)}.dark-mode{--fg:var(--dark-fg);--bg:var(--dark-bg);--strong-fg:var(--dark-strong-fg);background-color:var(--bg)}.dark-mode a{color:#3ce}.dark-mode a:visited{color:#9f85ff}.small{font-size:max(1.6vh, 6pt);color:#2a2e33}.dark-mode .small{color:#716f70}pre{background-color:#f8f8f8}.dark-mode pre{background-color:#212223;border-color:#bbb}.dark-mode .org-builtin,.dark-mode .org-keyword{color:#dd64f4}.dark-mode .org-function-name{color:#ffebbb}.dark-mode .org-type{color:#2cabff}.dark-mode .org-string{color:#ffee20}.dark-mode .org-comment,.dark-mode .org-comment-delimiter{color:#7f8388}.dark-mode code span.co,code span.co{color:#308093}.dark-mode code span.fu{color:#2963f5}.org-function-name{color:#c26d3b}.org-builtin,.org-keyword{color:#6f42c1}.org-type,code span.fu{color:#007bff}.org-string{color:#dc3545}.org-comment,.org-comment-delimiter{color:#444343}"
+           "</style>"
+           )))
+      (org-html-export-to-html)
+      (copy-file "thebook.html" "../../docs/thebook.html" t))
     (org-latex-export-to-pdf)
     (org-ascii-export-to-ascii))
 #+end_src
