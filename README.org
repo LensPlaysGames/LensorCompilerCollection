@@ -16,7 +16,7 @@ For convenience purposes, there is a single executable, ~lcc~, that can delegate
 
 Running the driver executable with the =--help= argument will display a usage message that contains compiler flags and options as well as command layout.
 
-The driver, by default, uses file extension to determine which language to treat the source as. ~lcc examples/glint/SimpleFile.g~ will treat the contents as ~Glint~ source, while ~lcc tst/ir/roundtrip.lcc~ will treat the contents as LCC IR, for example . You can use ~-x LANG~ to treat source files as a particular language, regardless of extension.
+The driver, by default, uses file extension to determine which language to treat the source as. ~lcc foo.g~ will treat the contents as ~Glint~ source, while ~lcc foo.lcc~ will treat the contents as LCC IR, for example . You can use ~-x LANG~ to treat source files as a particular language, regardless of extension.
 
 ** Building
 
