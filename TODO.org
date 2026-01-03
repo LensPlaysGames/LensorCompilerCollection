@@ -33,4 +33,3 @@
 - [Parser]: Block comments
 - [Parser/Sema]: Tokens in the AST
 - [Parser/Sema]: Switch on value
-- [Lexer/Parser]: Fix =bitand= -> =bit&= and friends
