@@ -225,9 +225,64 @@ struct Lexer {
         return Diag::Note(context, tok.location, fmt, std::forward<Args>(args)...);
     }
 
+    static auto IsNonCharacter(u32 c) -> bool {
+        // C0 Range
+        return c < ' ' or c == 0x7f
+            // Whitespace Characters
+            or IsSpace(c)
+            // C1 Range
+            or (c >= 0x80 and c <= 0x9f)
+            // "Soft Hyphen"
+            or c == 0xad
+            // ALM/LTR/RTL Marks
+            or c == 0x061c
+            or c == 0x200e or c == 0x200f
+            // Filler
+            or c == 0x115f or c == 0x1160
+            // Khmer Pronunciation
+            or c == 0x17b4 or c == 0x17b5
+            // Variation Selector
+            or c == 0x180b or c == 0x180c
+            or c == 0x180d or c == 0x180e
+            // Embeddings
+            or c == 0x202a or c == 0x202b
+            // Formatting
+            or c == 0x202c
+            // Overrides
+            or c == 0x202d or c == 0x202e
+            // Function Application
+            or c == 0x2061
+            // Invisible Times
+            or c == 0x2062
+            // Invisible Separator
+            or c == 0x2063
+            // Invisible Plus
+            or c == 0x2064
+            // Invisible ?
+            or c == 0x2065
+            // Isolates
+            or c == 0x2066 or c == 0x2067
+            or c == 0x2068 or c == 0x2069
+            // Inhibit/Activate Codepoints
+            or c == 0x206a or c == 0x206b
+            or c == 0x206c or c == 0x206d
+            // Digit Shapes
+            or c == 0x206e or c == 0x206f
+            // Filler
+            or c == 0x3164 or c == 0xffa0
+            // Annotation
+            or c == 0xfff9 or c == 0xfffa
+            or c == 0xfffb
+            // Object Replacement
+            or c == 0xfffc;
+    }
     static auto IsSpace(u32 c) -> bool {
         return c == ' ' or c == '\t' or c == '\n'
-            or c == '\r' or c == '\f' or c == '\v';
+            or c == '\r' or c == '\f' or c == '\v'
+            or c == 0xa0 or c == 0x1680
+            or (c >= 0x2000 and c <= 0x200b)
+            or c == 0x202f or c == 0x205f
+            or c == 0x3000 or c == 0xfeff;
     }
     static auto IsAlpha(u32 c) -> bool {
         return (c >= 'a' and c <= 'z')

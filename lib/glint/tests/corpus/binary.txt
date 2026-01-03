@@ -262,7 +262,7 @@ Bitwise, Right Shift
 Bitwise, Conjunction
 ================
 
-0xc5 bitand 0x45;
+0xc5 bit& 0x45;
 
 ---
 
@@ -277,7 +277,7 @@ Bitwise, Conjunction
 Bitwise, Disjunction
 ================
 
-0x40 bitor 5;
+0x40 bit| 5;
 
 ---
 
@@ -292,7 +292,7 @@ Bitwise, Disjunction
 Bitwise, Exclusive Disjunction
 ================
 
-0x45 bitxor 8;
+0x45 bit^ 8;
 
 ---
 

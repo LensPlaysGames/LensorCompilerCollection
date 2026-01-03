@@ -33,11 +33,11 @@ Unary -
 (block (unary_negation (name)))
 
 ================
-Unary bitnot
+Unary bit~
 :syntax
 ================
 
-bitnot 0;
+bit~ 0;
 
 ---
 

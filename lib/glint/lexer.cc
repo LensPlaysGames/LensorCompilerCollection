@@ -68,14 +68,10 @@ lcc::StringMap<Tk> keywords{
     {"csize", Tk::CLongLong},
     {"cusize", Tk::CULongLong},
     // Bitwise Operators
-    // TODO: Not happy with how these look, but I don't want these uncommon
-    // operators to take up such valuable binary operator symbols like & and |
-    // and ^ (in fact, I kind of don't want & to be a binary operator at all,
-    // that way we don't have to put parens around addressof expressions).
-    {"bitand", Tk::BitAND},
-    {"bitor", Tk::BitOR},
-    {"bitxor", Tk::BitXOR},
-    {"bitnot", Tk::BitNOT},
+    {"bit&", Tk::BitAND},
+    {"bit|", Tk::BitOR},
+    {"bit^", Tk::BitXOR},
+    {"bit~", Tk::BitNOT},
 };
 } // namespace
 

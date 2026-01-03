@@ -83,13 +83,32 @@ protected:
 
 public:
     [[nodiscard]]
-    static auto IsIdentStart(u32 c) -> bool { return IsAlpha(c) or c == '$' or c == '_'; }
+    static auto IsIdentStart(u32 c) -> bool {
+        if (IsSpace(c) or IsNonCharacter(c))
+            return false;
+
+        return c > 127 or IsAlpha(c)
+            or c == '$' or c == '_'
+            or c == '?';
+    }
     // Search Terms: delimiter
     [[nodiscard]]
     static auto IsIdentContinue(u32 c) -> bool {
         /// Note: '!' is *not* a start character so `!foo` still gets
         /// parsed as `!` + `foo`, but `foo!` gets parsed as one token.
-        return IsAlphaNumeric(c) or c == '_' or c == '!' or c == '$' or c == '@' or c == '-' or c == '/';
+
+        // What it isn't
+        if (IsSpace(c) or IsNonCharacter(c))
+            return false;
+
+        // What it is
+        return c > 127 or IsAlphaNumeric(c)
+            or c == '!' or c == '$'
+            or c == '&' or c == '+'
+            or c == '-' or c == '/'
+            or c == '?' or c == '@'
+            or c == '^' or c == '_'
+            or c == '|' or c == '~';
     }
 };
 } // namespace lcc::glint
