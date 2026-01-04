@@ -89,8 +89,18 @@ auto lcc::Diag::ShouldUseColour() const -> bool {
     return lcc::platform::StderrIsTerminal();
 }
 
-lcc::Diag::Diag(Context* context_, Kind kind_, Location where_, std::string message_)
-    : kind(kind_), context(context_), where(where_), message(std::move(message_)) {
+lcc::Diag::Diag(
+    Context* context_,
+    Kind kind_,
+    Location where_,
+    std::string id_,
+    std::string message_
+)
+    : kind(kind_),
+      context(context_),
+      where(where_),
+      id(std::move(id_)),
+      message(std::move(message_)) {
     LCC_ASSERT(context);
     // Keep track of diagnostic.
     context_->report_diagnostic(*this);
@@ -157,6 +167,8 @@ void lcc::Diag::print() {
     // If this diagnostic is suppressed, do nothing.
     if (kind == Kind::None)
         return;
+
+    // TODO: Check context for if id is suppressed
 
     // If the diagnostic is an error, set the error flag.
     if (context and kind == Kind::Error)
@@ -268,7 +280,19 @@ void lcc::Diag::print() {
                 )
             );
         }
-    } else fmt::print(stderr, "{}{}: {}{}\n", C(Colour(kind)), Name(kind), C(Reset), message);
+    } else {
+        fmt::print(
+            stderr,
+            "{}{}: {}{} [{}{}{}]\n",
+            C(Colour(kind)),
+            Name(kind),
+            C(Reset),
+            message,
+            C(Colour(kind)),
+            id,
+            C(Reset)
+        );
+    }
 
     // Print the line up to the start of the location, the range in the right
     // colour, and the rest of the line.
