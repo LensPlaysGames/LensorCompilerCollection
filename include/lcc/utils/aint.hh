@@ -43,7 +43,7 @@ public:
 
     [[nodiscard]] constexpr aint operator-() const { return {bit_width, -w}; }
     [[nodiscard]] constexpr aint operator~() const { return {bit_width, ~w}; }
-    [[nodiscard]] constexpr aint operator!() const { return {!w}; }
+    [[nodiscard]] constexpr aint operator!() const { return {not w}; }
 
     [[nodiscard]] constexpr aint operator+(aint rhs) const { return {bit_width, w + rhs.w}; }
     [[nodiscard]] constexpr aint operator-(aint rhs) const { return {bit_width, w - rhs.w}; }
