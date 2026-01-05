@@ -10,7 +10,7 @@ namespace lcc::glint {
 
 // NOTE: If you add an ID, please also add a mapping in
 //       @see error_id_strings
-enum struct ErrorId {
+enum struct ErrorId : unsigned {
     INVALID,
 
     InvalidByteLiteral,
