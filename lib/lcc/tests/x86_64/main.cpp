@@ -9,7 +9,7 @@
 #include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/format.hh>
-#include <lcc/ir/ir.hh>
+#include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/opt/opt.hh>
 #include <lcc/target.hh>

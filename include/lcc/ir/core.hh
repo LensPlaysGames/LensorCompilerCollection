@@ -1,5 +1,5 @@
-#ifndef LCC_IR_IR_HH
-#define LCC_IR_IR_HH
+#ifndef LCC_IR_CORE_HH
+#define LCC_IR_CORE_HH
 
 #include <lcc/core.hh>
 #include <lcc/forward.hh>
@@ -1793,7 +1793,7 @@ public:
 
     [[nodiscard]]
     static auto classof(Value* v) -> bool {
-        return +v->kind() >= +Kind::ZExt and +v->kind() <= +Kind::Compl;
+        return +v->kind() >= +Kind::ZExt and + v->kind() <= +Kind::Compl;
     }
 };
 
@@ -1991,4 +1991,4 @@ public:
 
 } // namespace lcc
 
-#endif // LCC_IR_IR_HH
+#endif // LCC_IR_CORE_HH

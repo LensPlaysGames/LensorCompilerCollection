@@ -1,7 +1,7 @@
 #ifndef LCC_IR_DOMTREE_HH
 #define LCC_IR_DOMTREE_HH
 
-#include <lcc/ir/ir.hh>
+#include <lcc/ir/core.hh>
 
 namespace lcc {
 class DomTree {

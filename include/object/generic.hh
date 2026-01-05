@@ -2,7 +2,7 @@
 #define LCC_GENERIC_OBJECT_HH
 
 #include <fmt/format.h>
-#include <lcc/ir/ir.hh>
+#include <lcc/ir/core.hh>
 #include <lcc/utils.hh>
 
 #include <string>

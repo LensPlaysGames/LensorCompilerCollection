@@ -1,7 +1,7 @@
 #ifndef LCC_CODEGEN_MIR_HH
 #define LCC_CODEGEN_MIR_HH
 
-#include <lcc/ir/ir.hh>
+#include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/location.hh>
 #include <lcc/utils.hh>

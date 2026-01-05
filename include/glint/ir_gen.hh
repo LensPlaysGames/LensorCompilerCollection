@@ -3,7 +3,7 @@
 
 #include <glint/ast.hh>
 #include <lcc/context.hh>
-#include <lcc/ir/ir.hh>
+#include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils/rtti.hh>
 #include <memory>

@@ -288,7 +288,7 @@ add_library(
   include/lcc/format.hh
   include/lcc/forward.hh
   include/lcc/ir/domtree.hh
-  include/lcc/ir/ir.hh
+  include/lcc/ir/core.hh
   include/lcc/ir/module.hh
   include/lcc/ir/type.hh
   include/lcc/lcc-c.h
@@ -323,7 +323,7 @@ add_library(
   lib/lcc/file.cc
   lib/lcc/init.cc
   lib/lcc/ir/domtree.cc
-  lib/lcc/ir/ir.cc
+  lib/lcc/ir/core.cc
   lib/lcc/ir/llvm.cc
   lib/lcc/ir/module.cc
   lib/lcc/ir/module_mir.cc
@@ -406,6 +406,8 @@ target_link_libraries(lcc PUBLIC glint)
 
 # Copy lcc.html, lcc.js, and lcc.wasm to `docs/` when emscripten.
 if (EMSCRIPTEN AND (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel"))
+  # TODO: Add file-level dependency to HTML template, so if it changes, we
+  # rebuild.
   add_custom_command(
     TARGET lcc
     POST_BUILD

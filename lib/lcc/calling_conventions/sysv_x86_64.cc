@@ -1,5 +1,5 @@
 #include <lcc/calling_conventions/sysv_x86_64.hh>
-#include <lcc/ir/ir.hh>
+#include <lcc/ir/core.hh>
 
 #include <algorithm>
 #include <ranges>

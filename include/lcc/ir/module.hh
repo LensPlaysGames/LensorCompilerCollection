@@ -3,7 +3,7 @@
 
 #include <lcc/diags.hh>
 #include <lcc/forward.hh>
-#include <lcc/ir/ir.hh>
+#include <lcc/ir/core.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/result.hh>
 #include <object/generic.hh>

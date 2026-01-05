@@ -1,4 +1,4 @@
-#include <lcc/ir/ir.hh>
+#include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/syntax/lexer.hh>

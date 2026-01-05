@@ -2,7 +2,7 @@
 
 #include <lcc/context.hh>
 #include <lcc/format.hh>
-#include <lcc/ir/ir.hh>
+#include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
