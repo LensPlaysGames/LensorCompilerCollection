@@ -33,6 +33,17 @@ Binary
 (block (integer_literal))
 
 ================
+Binary, Leading Zero
+:syntax
+================
+
+0b0001
+
+---
+
+(block (integer_literal))
+
+================
 Octal
 :syntax
 ================
@@ -44,11 +55,33 @@ Octal
 (block (integer_literal))
 
 ================
+Octal, Leading Zero
+:syntax
+================
+
+0o007
+
+---
+
+(block (integer_literal))
+
+================
 Hexadecimal
 :syntax
 ================
 
 0x0
+
+---
+
+(block (integer_literal))
+
+================
+Hexadecimal, Leading Zero
+:syntax
+================
+
+0x0d
 
 ---
 
