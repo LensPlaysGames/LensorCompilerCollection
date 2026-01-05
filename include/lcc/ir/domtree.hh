@@ -74,7 +74,7 @@ public:
     /// Walk the parents of a block in the dominator tree. If the
     /// block is the root, no values are returned.
     auto parents(Block* of) -> Generator<Block*> {
-        for (auto i = of->id(); i != RootId; ) {
+        for (auto i = of->id(); i != RootId;) {
             i = idoms[i];
             co_yield f->blocks()[i];
         }
