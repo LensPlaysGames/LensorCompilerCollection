@@ -1,6 +1,6 @@
-#include "lcc/core.hh"
 #include <lcc/context.hh>
 #include <lcc/ir/ir.hh>
+#include <lcc/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils.hh>
 

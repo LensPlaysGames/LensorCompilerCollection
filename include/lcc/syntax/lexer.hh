@@ -211,25 +211,23 @@ struct Lexer {
     }
 
     template <typename... Args>
-    auto Error(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
+    auto Error(std::string id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Error(context, tok.location, id, fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    auto Warning(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
+    auto Warning(std::string id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Warning(context, tok.location, id, fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    auto Note(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Note(context, tok.location, fmt, std::forward<Args>(args)...);
+    auto Note(std::string id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Note(context, tok.location, id, fmt, std::forward<Args>(args)...);
     }
 
     static auto IsNonCharacter(u32 c) -> bool {
         // C0 Range
         return c < ' ' or c == 0x7f
-            // Whitespace Characters
-            or IsSpace(c)
             // C1 Range
             or (c >= 0x80 and c <= 0x9f)
             // "Soft Hyphen"
@@ -288,7 +286,13 @@ struct Lexer {
         return (c >= 'a' and c <= 'z')
             or (c >= 'A' and c <= 'Z');
     }
-    static auto IsDigit(u32 c) -> bool {
+    static auto IsBinaryDigit(u32 c) -> bool {
+        return c == '0' or c == '1';
+    }
+    static auto IsOctalDigit(u32 c) -> bool {
+        return c >= '0' and c <= '7';
+    }
+    static auto IsDecimalDigit(u32 c) -> bool {
         return c >= '0' and c <= '9';
     }
     static auto IsHexDigit(u32 c) -> bool {
@@ -297,7 +301,7 @@ struct Lexer {
             or (c >= 'A' and c <= 'F');
     }
     static auto IsAlphaNumeric(u32 c) -> bool {
-        return IsAlpha(c) or IsDigit(c);
+        return IsAlpha(c) or IsDecimalDigit(c);
     }
 };
 

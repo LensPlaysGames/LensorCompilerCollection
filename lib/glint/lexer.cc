@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 
 #include <glint/ast.hh>
+#include <glint/error_ids.hh>
 #include <glint/lexer.hh>
 #include <glint/parser.hh>
 
@@ -149,8 +150,12 @@ void lcc::glint::Lexer::NextToken() {
             NextChar();
             tok.kind = TokenKind::ByteLiteral;
 
-            if (lastc > 0xff)
-                Error("Byte literal contains a character with a value greater than a byte may contain");
+            if (lastc > 0xff) {
+                Error(
+                    ErrorId::InvalidByteLiteral,
+                    "Byte literal contains a character with a value greater than a byte may contain"
+                );
+            }
 
             // Handle Escapes
             if (lastc == '\\') {
@@ -166,6 +171,7 @@ void lcc::glint::Lexer::NextToken() {
 
                     case '`':
                         Error(
+                            ErrorId::InvalidByteLiteral,
                             "Expected character following escape character '{}'. For byte literal '{}', use two in a row (i.e. '`{}{}`')",
                             '\\',
                             '\\',
@@ -191,8 +197,14 @@ void lcc::glint::Lexer::NextToken() {
             NextChar();
 
             // Yeet closing grave.
-            if (not (lastc == '`'))
-                Error("Expected '`' character to close byte literal, but got '{}', U+{:04x} instead", (char) lastc, lastc);
+            if (not (lastc == '`')) {
+                Error(
+                    ErrorId::InvalidByteLiteral,
+                    "Expected '`' character to close byte literal, but got '{}', U+{:04x} instead",
+                    (char) lastc,
+                    lastc
+                );
+            }
 
             NextChar();
         } break;
@@ -363,12 +375,17 @@ void lcc::glint::Lexer::NextToken() {
 
         case '-': {
             NextChar();
-            if (IsDigit(lastc)) {
+            if (IsDecimalDigit(lastc)) {
                 NextNumber();
                 tok.integer_value = -tok.integer_value;
 
                 /// The character after a number must be a whitespace or delimiter.
-                if (IsAlpha(lastc)) Error("Invalid integer literal");
+                if (IsAlpha(lastc)) {
+                    Error(
+                        ErrorId::InvalidIntegerLiteral,
+                        "Invalid integer literal"
+                    );
+                }
             } else if (lastc == '>') {
                 tok.kind = TokenKind::RightArrow;
             } else if (lastc == '=') {
@@ -506,10 +523,15 @@ void lcc::glint::Lexer::NextToken() {
                 break;
             }
 
-            if (IsDigit(lastc)) {
+            if (IsDecimalDigit(lastc)) {
                 NextNumber();
                 /// The character after a number must be a whitespace or delimiter.
-                if (IsAlpha(lastc)) Error("Invalid integer literal");
+                if (IsAlpha(lastc)) {
+                    Error(
+                        ErrorId::InvalidIntegerLiteral,
+                        "Invalid integer literal"
+                    );
+                }
                 break;
             }
 
@@ -590,7 +612,7 @@ void lcc::glint::Lexer::HandleIdentifier() {
     /// beginning of an identifier.
     if (tok.text.size() > 1
         and (tok.text[0] == 's' or tok.text[0] == 'i' or tok.text[0] == 'u')
-        and IsDigit(u32(tok.text[1]))) {
+        and IsDecimalDigit(u32(tok.text[1]))) {
         const char* cstr = tok.text.c_str();
 
         /// Convert the number.
@@ -598,8 +620,12 @@ void lcc::glint::Lexer::HandleIdentifier() {
         errno = 0;
         tok.integer_value
             = (u64) std::strtoull(cstr + 1, &end, 10);
-        if (errno == ERANGE)
-            Error("Bit width of integer is too large.");
+        if (errno == ERANGE) {
+            Error(
+                ErrorId::InvalidIntegerLiteral,
+                "Bit width of integer is too large."
+            );
+        }
 
         /// If the identifier is something like `s64iam`, it's simply an identifier.
         if (end != cstr + tok.text.size()) return;
@@ -617,7 +643,10 @@ void lcc::glint::Lexer::NextString() {
         while (lastc != delim) {
             if (lastc == 0) {
                 // An unterminated string literal is NOT a valid token.
-                Error("Unterminated string literal");
+                Error(
+                    ErrorId::InvalidStringLiteral,
+                    "Unterminated string literal"
+                );
                 tok.kind = TokenKind::Eof;
                 return;
             }
@@ -630,7 +659,10 @@ void lcc::glint::Lexer::NextString() {
         while (lastc != delim) {
             if (lastc == 0) {
                 // An unterminated string literal is NOT a valid token.
-                Error("Unterminated string literal");
+                Error(
+                    ErrorId::InvalidStringLiteral,
+                    "Unterminated string literal"
+                );
                 tok.kind = TokenKind::Eof;
                 return;
             }
@@ -661,7 +693,10 @@ void lcc::glint::Lexer::NextString() {
 
     if (lastc != delim) {
         // An unterminated string literal is NOT a valid token.
-        Error("Unterminated string literal");
+        Error(
+            ErrorId::InvalidStringLiteral,
+            "Unterminated string literal"
+        );
         tok.kind = TokenKind::Eof;
         return;
     }
@@ -671,9 +706,6 @@ void lcc::glint::Lexer::NextString() {
 
 void lcc::glint::Lexer::NextNumber() {
     auto start_location = tok.location;
-
-    static const auto IsBinary = [](u32 c) { return c == '0' || c == '1'; };
-    static const auto IsOctal = [](u32 c) { return IsDigit(c) and c < '8'; };
 
     LCC_ASSERT(
         lastc != DigitSeparator,
@@ -696,7 +728,13 @@ void lcc::glint::Lexer::NextNumber() {
         }
 
         // We need at least one digit.
-        if (tok.text.empty()) Error("Expected at least one {} digit", name);
+        if (tok.text.empty()) {
+            Error(
+                ErrorId::InvalidIntegerLiteral,
+                "Expected at least one {} digit",
+                name
+            );
+        }
 
         tok.location.len = (u16) Location::length_from_two_offsets_exclusive(
             start_location.pos,
@@ -714,8 +752,18 @@ void lcc::glint::Lexer::NextNumber() {
         char* end;
         errno = 0;
         tok.integer_value = (u64) std::strtoull(cstr, &end, base);
-        if (errno == ERANGE) Error("Bit width of integer is too large.");
-        if (end != cstr + tok.text.size()) Error("Invalid integer literal");
+        if (errno == ERANGE) {
+            Error(
+                ErrorId::InvalidIntegerLiteral,
+                "Bit width of integer is too large."
+            );
+        }
+        if (end != cstr + tok.text.size()) {
+            Error(
+                ErrorId::InvalidIntegerLiteral,
+                "Invalid integer literal"
+            );
+        }
     };
 
     // Record the start of the number.
@@ -729,28 +777,45 @@ void lcc::glint::Lexer::NextNumber() {
         // Discard the zero.
         NextChar();
 
-        // Another zero is an error.
-        if (lastc == '0') {
-            Error("Leading zeroes are not allowed in decimal literals. Use 0o/0O for octal literals.");
+        // Another digit is an error: no leading zeroes are allowed unless they
+        // lead to a number base specifier.
+        if (IsDecimalDigit(lastc)) {
+            Error(
+                ErrorId::InvalidIntegerLiteral,
+                "Leading zeroes are not allowed in number literals."
+            );
             // TODO: Two possible fixes; either replace second zero (currently lastc)
             // with `o` to make it an octal literal, or remove all leading zeroes
             // (unless the literal is all zeroes, in which case, all but one).
         } else if (lastc == 'b' or lastc == 'B')
-            ParseNumber("binary", IsBinary, 2);
+            ParseNumber("binary", IsBinaryDigit, 2);
         else if (lastc == 'o' or lastc == 'O')
-            ParseNumber("octal", IsOctal, 8);
+            ParseNumber("octal", IsOctalDigit, 8);
         else if (lastc == 'x' or lastc == 'X')
             ParseNumber("hexadecimal", IsHexDigit, 16);
 
-        // If the next character is a space or delimiter, then this is a literal 0.
-        if (IsSpace(lastc) or not IsAlpha(lastc)) return;
+        // If the next character is whitespace (or a delimiter), then this is just a zero.
+        if (
+            IsSpace(lastc)
+            or lastc == ',' or lastc == ';'
+            or lastc == '(' or lastc == ')'
+            or lastc == '[' or lastc == ']'
+            or lastc == '{' or lastc == '}'
+            or lastc == '<' or lastc == '>'
+            or lastc == '='
+        ) return;
 
         // Anything else is an error.
-        Error("Invalid integer literal");
+        Error(
+            ErrorId::InvalidIntegerLiteral,
+            "Invalid character in integer literal: U+{:04x} {}",
+            lastc,
+            (char) lastc
+        );
     }
 
     // Any other digit means we have a decimal number.
-    ParseNumber("decimal", IsDigit, 10);
+    ParseNumber("decimal", IsDecimalDigit, 10);
 }
 
 void lcc::glint::Lexer::ExpandMacro(Macro& m) {
@@ -805,9 +870,19 @@ void lcc::glint::Lexer::ExpandMacro(Macro& m) {
             error_reported = true;
             auto arg = ToSource(tok);
             auto param = ToSource(param_tok);
-            if (arg and param)
-                Error("Ill-formed macro invocation: got token '{}', but expected token '{}' (parameter of macro {})", *arg, *param, m.name);
-            else Error("Ill-formed macro invocation: argument token does not match fixed parameter token of macro {}", m.name);
+            if (arg and param) {
+                Error(
+                    "Ill-formed macro invocation: got token '{}', but expected token '{}' (parameter of macro {})",
+                    *arg,
+                    *param,
+                    m.name
+                );
+            } else {
+                Error(
+                    "Ill-formed macro invocation: argument token does not match fixed parameter token of macro {}",
+                    m.name
+                );
+            }
         }
     }
 
@@ -845,12 +920,6 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
     NextToken(); // eat "macro", plate macro name identifier
 
     /// Lex macro name.
-    // TODO: I think a macro should be able to be named other tokens as well.
-    // So, you should be able to name a macro `+`, `+=`, etc (to re-define
-    // those things).
-    // if (tok.kind != Tk::Ident) Error("Expected macro name after 'macro'");
-    // auto name = tok.text;
-
     auto name_result = ToSource(tok);
     if (not name_result) Error("Could not lex name of macro...");
     auto name = *name_result;
@@ -873,10 +942,14 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
         if (tok.kind == Tk::MacroArg) {
             auto it = rgs::find_if(
                 macro.parameters,
-                [&](auto&& t) { return t.kind == Tk::MacroArg and t.text == tok.text; }
+                [&](auto&& t) {
+                    return t.kind == Tk::MacroArg and t.text == tok.text;
+                }
             );
 
-            if (it != macro.parameters.end()) Error("Duplicate macro argument name '{}'", tok.text);
+            if (it != macro.parameters.end()) {
+                Error("Duplicate macro argument name '{}'", tok.text);
+            }
         }
 
         /// Add the token.
@@ -920,7 +993,9 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
         if (tok.kind == Tk::MacroArg) {
             auto arg = rgs::find_if(
                 macro.parameters,
-                [&](auto&& t) { return t.kind == Tk::MacroArg and t.text == tok.text; }
+                [&](auto&& t) {
+                    return t.kind == Tk::MacroArg and t.text == tok.text;
+                }
             );
 
             if (arg == macro.parameters.end())

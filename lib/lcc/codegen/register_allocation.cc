@@ -499,10 +499,12 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
 
         if (not reg_value) {
             Diag::Error(
+                "register-allocation",
                 "Can not color graph with {} colors until stack spilling is implemented!",
                 desc.registers.size()
             );
             Diag::Note(
+                "register-allocation",
                 "Allocating registers for function `{}`",
                 function.names().at(0).name
             );

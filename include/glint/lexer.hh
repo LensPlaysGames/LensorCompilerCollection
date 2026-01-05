@@ -6,6 +6,7 @@
 #include <lcc/utils.hh>
 
 #include <glint/ast.hh>
+#include <glint/error_ids.hh>
 
 #include <deque>
 #include <string>
@@ -15,6 +16,10 @@
 namespace lcc::glint {
 class Lexer : public syntax::Lexer<GlintToken> {
     using Token = GlintToken;
+
+    using syntax::Lexer<GlintToken>::Error;
+    using syntax::Lexer<GlintToken>::Warning;
+    using syntax::Lexer<GlintToken>::Note;
 
     enum struct MacroArgumentSelector {
         Token,
@@ -80,6 +85,39 @@ protected:
     auto LookAhead(usz n) -> Token*;
 
     void NextToken();
+
+    template <typename... Args>
+    [[deprecated("Please provide a diagnostic ID")]]
+    auto Error(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    [[deprecated("Please provide a diagnostic ID")]]
+    auto Warning(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    [[deprecated("Please provide a diagnostic ID")]]
+    auto Note(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Note(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto Error(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Error(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto Warning(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Warning(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto Note(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Note(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
+    }
 
 public:
     [[nodiscard]]

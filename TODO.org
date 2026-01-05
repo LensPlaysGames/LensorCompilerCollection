@@ -13,7 +13,7 @@
 * Glint
 
 - [Lexer]: Case Insensitivity
-- [Parser]: Number Parsing Bugfix: =069=
+  Behind =---case-insensitive= flag?
 - [Sema]: Variable Entanglement
 - [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
 - [Sema]: =out;= as first expression of function body becomes declaration of return type

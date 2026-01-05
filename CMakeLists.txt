@@ -350,6 +350,7 @@ add_library(
   include/glint/ast.hh
   include/glint/ast_eval.hh
   include/glint/driver.hh
+  include/glint/error_ids.hh
   include/glint/eval.hh
   include/glint/ir_gen.hh
   include/glint/lexer.hh
@@ -363,6 +364,7 @@ add_library(
   lib/glint/ast_serialise_expr.cc
   lib/glint/ast_serialise_type.cc
   lib/glint/driver.cc
+  lib/glint/error_ids.cc
   lib/glint/eval.cc
   lib/glint/init.cc
   lib/glint/ir_gen.cc

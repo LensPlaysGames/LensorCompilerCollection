@@ -10,6 +10,18 @@ Decimal
 (block (integer_literal))
 
 ================
+Decimal, Leading Zero
+:syntax
+:fail_parse
+================
+
+069
+
+---
+
+(block (integer_literal))
+
+================
 Binary
 :syntax
 ================

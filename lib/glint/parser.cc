@@ -25,11 +25,9 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Dot:
             return 1'000'000'000;
 
-        /// Call and subscript have higher precedence than unary operators.
-        /// Note: Unary operator precedence is 10'000.
+        /// Subscript has higher precedence than unary operators.
         case Tk::LBrack:
             return 100'001;
-            // return CallPrecedence + 1;
 
         case Tk::Star:
         case Tk::Slash:

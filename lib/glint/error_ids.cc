@@ -1,0 +1,27 @@
+#include <glint/error_ids.hh>
+
+#include <lcc/utils.hh>
+
+#include <array>
+#include <utility>
+
+namespace lcc::glint {
+
+const std::array<
+    std::pair<ErrorId, const char*>,
+    +ErrorId::COUNT + 1>
+    error_id_strings{
+        std::pair{ErrorId::InvalidByteLiteral, "invalid-literal/byte"},
+        {ErrorId::InvalidIntegerLiteral, "invalid-literal/integer"},
+        {ErrorId::InvalidStringLiteral, "invalid-literal/string"},
+
+        {ErrorId::INVALID, "ICE: INVALID ERROR ID"},
+        {ErrorId::COUNT, "ICE: INVALID ERROR ID"}
+    };
+
+static_assert(
+    error_id_strings.size() == +ErrorId::COUNT + 1,
+    "Exhaustive handling of ErrorId"
+);
+
+} // namespace lcc::glint

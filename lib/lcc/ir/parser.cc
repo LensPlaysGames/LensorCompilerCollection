@@ -6,6 +6,7 @@
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
 
+#include <array>
 #include <cstdlib>
 #include <deque>
 #include <memory>
@@ -18,6 +19,25 @@
 
 /// Namespace required for friend declarations in ir.hh.
 namespace lcc::parser {
+
+enum struct ErrorId : unsigned {
+    INVALID,
+
+    InvalidLiteral,
+
+    COUNT
+};
+std::array<std::pair<ErrorId, const char*>, +ErrorId::COUNT + 1> error_id_strings{
+    std::pair{ErrorId::InvalidLiteral, "invalid-literal"},
+
+    {ErrorId::INVALID, "ICE: INVALID ERROR ID"},
+    {ErrorId::COUNT, "ICE: INVALID ERROR ID"}
+};
+static_assert(
+    error_id_strings.size() == +ErrorId::COUNT + 1,
+    "Exhaustive handling of ErrorId"
+);
+
 enum struct TokenKind {
     Invalid,
     Eof,
@@ -72,6 +92,10 @@ std::unordered_map<std::string, IntrinsicKind> intrinsic_kinds{
 };
 
 class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
+    using syntax::Lexer<syntax::Token<TokenKind>>::Error;
+    using syntax::Lexer<syntax::Token<TokenKind>>::Warning;
+    using syntax::Lexer<syntax::Token<TokenKind>>::Note;
+
     using Tk = TokenKind;
     using Token = syntax::Token<Tk>;
 
@@ -131,7 +155,8 @@ private:
     }
 
     void AddTemporary(std::string name, Value* val) {
-        if (temporaries.contains(name)) Error("Duplicate temporary '{}'", name);
+        if (temporaries.contains(name))
+            Error("Duplicate temporary '{}'", name);
         temporaries[std::move(name)] = val;
     }
 
@@ -178,13 +203,47 @@ private:
     void SetBlock(Inst* parent, Block*& val, IRValue v);
     void SetValue(Inst* parent, Value*& val, IRValue v);
 
+    template <typename... Args>
+    [[deprecated("Please provide a diagnostic ID")]]
+    auto Error(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    [[deprecated("Please provide a diagnostic ID")]]
+    auto Warning(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    [[deprecated("Please provide a diagnostic ID")]]
+    auto Note(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Note(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto Error(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Error(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto Warning(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Warning(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto Note(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Note(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
+    }
+
     static auto IsIdentStart(u32 c) -> bool {
         return IsAlpha(c) or c == '_' or c == '.';
     }
     static auto IsIdentContinue(u32 c) -> bool {
-        return IsIdentStart(c) or IsDigit(c);
+        return IsIdentStart(c) or IsDecimalDigit(c);
     }
 };
+
 } // namespace lcc::parser
 
 void lcc::parser::Parser::NextIdentifier() {
@@ -197,35 +256,50 @@ void lcc::parser::Parser::NextIdentifier() {
 }
 
 void lcc::parser::Parser::NextNumber() {
-    static const auto IsBinary = [](u32 c) { return c == '0' || c == '1'; };
-    static const auto IsOctal = [](u32 c) { return IsDigit(c) and c < '8'; };
-
     /// Helper that actually parses the number.
-    const auto ParseNumber = [&](std::string_view name, auto&& IsValidDigit, int base) {
-        /// Yeet prefix.
-        if (base != 10) NextChar();
+    const auto ParseNumber =
+        [&](std::string_view name, auto&& IsValidDigit, int base) {
+            /// Yeet prefix.
+            if (base != 10) NextChar();
 
-        /// Lex digits.
-        while (IsValidDigit(lastc)) {
-            if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in number literal");
-            tok.text += char(lastc);
-            NextChar();
-        }
+            /// Lex digits.
+            while (IsValidDigit(lastc)) {
+                if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in number literal");
+                tok.text += char(lastc);
+                NextChar();
+            }
 
-        /// We need at least one digit.
-        tok.location.len = (u16) (CurrentOffset() - tok.location.pos);
-        if (tok.text.empty()) Error("Expected at least one {} digit", name);
+            /// We need at least one digit.
+            tok.location.len = (u16) (CurrentOffset() - tok.location.pos);
+            if (tok.text.empty()) {
+                Error(
+                    ErrorId::InvalidLiteral,
+                    "Expected at least one {} digit",
+                    name
+                );
+            }
 
-        /// Actually parse the number.
-        const char* cstr = tok.text.c_str();
+            /// Actually parse the number.
+            const char* cstr = tok.text.c_str();
 
-        /// Convert the number.
-        char* end;
-        errno = 0;
-        tok.integer_value = (u64) std::strtoull(cstr, &end, base);
-        if (errno == ERANGE) Error("Bit width of integer is too large.");
-        if (end != cstr + tok.text.size()) Error("Invalid integer literal");
-    };
+            /// Convert the number.
+            char* end;
+            errno = 0;
+            tok.integer_value = (u64) std::strtoull(cstr, &end, base);
+            if (errno == ERANGE) {
+                Error(
+                    ErrorId::InvalidLiteral,
+                    "Bit width of integer is too large."
+                );
+            }
+            // If there is "stuff" past the end of the number (like "64abc")
+            if (end != cstr + tok.text.size()) {
+                Error(
+                    ErrorId::InvalidLiteral,
+                    "Invalid integer literal"
+                );
+            }
+        };
 
     /// Record the start of the number.
     tok.text.clear();
@@ -239,20 +313,27 @@ void lcc::parser::Parser::NextNumber() {
         NextChar();
 
         /// Another zero is an error.
-        if (lastc == '0') Error("Leading zeroes are not allowed in decimal literals. Use 0o/0O for octal literals.");
-        else if (lastc == 'b' or lastc == 'B') ParseNumber("binary", IsBinary, 2);
-        else if (lastc == 'o' or lastc == 'O') ParseNumber("octal", IsOctal, 8);
-        else if (lastc == 'x' or lastc == 'X') ParseNumber("hexadecimal", IsHexDigit, 16);
+        if (IsDecimalDigit(lastc)) {
+            Error(
+                ErrorId::InvalidLiteral,
+                "Leading zeroes are not allowed in literals unless it leads to a base specifier."
+            );
+        } else if (lastc == 'b' or lastc == 'B')
+            ParseNumber("binary", IsBinaryDigit, 2);
+        else if (lastc == 'o' or lastc == 'O')
+            ParseNumber("octal", IsOctalDigit, 8);
+        else if (lastc == 'x' or lastc == 'X')
+            ParseNumber("hexadecimal", IsHexDigit, 16);
 
         /// If the next character is a space or delimiter, then this is a literal 0.
-        if (IsSpace(lastc) or not IsAlpha(lastc)) return;
+        if (IsSpace(lastc)) return;
 
         /// Anything else is an error.
-        Error("Invalid integer literal");
+        Error(ErrorId::InvalidLiteral, "Invalid integer literal");
     }
 
     /// Any other digit means we have a decimal number.
-    ParseNumber("decimal", IsDigit, 10);
+    ParseNumber("decimal", IsDecimalDigit, 10);
 }
 
 void lcc::parser::Parser::NextToken() {
@@ -380,7 +461,7 @@ void lcc::parser::Parser::NextToken() {
                 if (
                     tok.text.size() > 1
                     and tok.text[0] == 'i'
-                    and IsDigit(u32(tok.text[1]))
+                    and IsDecimalDigit(u32(tok.text[1]))
                 ) {
                     const char* cstr = tok.text.c_str();
 
@@ -388,13 +469,18 @@ void lcc::parser::Parser::NextToken() {
                     char* end;
                     errno = 0;
                     tok.integer_value = (u64) std::strtoull(cstr + 1, &end, 10);
-                    if (errno == ERANGE) Error("Bit width of integer is too large.");
+                    if (errno == ERANGE) {
+                        Error(
+                            ErrorId::InvalidLiteral,
+                            "Bit width of integer is too large."
+                        );
+                    }
 
                     /// If the identifier is something like `s64iam`, it's simply an identifier.
                     if (end != cstr + tok.text.size()) return;
                     tok.kind = TokenKind::IntegerType;
                 }
-            } else if (IsDigit(lastc)) {
+            } else if (IsDecimalDigit(lastc)) {
                 NextNumber();
             } else {
                 Error("Unexpected character '{}'", lastc);
