@@ -1,3 +1,4 @@
+#include <lcc/core.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
@@ -27,7 +28,7 @@ enum struct ErrorId : unsigned {
 
     COUNT
 };
-std::array<std::pair<ErrorId, const char*>, +ErrorId::COUNT + 1> error_id_strings{
+std::array<std::pair<ErrorId, const char*>, 3> error_id_strings{
     std::pair{ErrorId::INVALID, "ICE: INVALID ERROR ID"},
 
     {ErrorId::InvalidLiteral, "invalid-literal"},
@@ -90,6 +91,7 @@ constexpr auto StringifyEnum(TokenKind t) -> std::string_view {
 
 std::unordered_map<std::string, IntrinsicKind> intrinsic_kinds{
     {"@memcpy", IntrinsicKind::MemCopy}
+    // TODO: memset
 };
 
 class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
