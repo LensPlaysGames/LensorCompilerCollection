@@ -1276,11 +1276,16 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         /// If there are arguments, create a call expression.
         if (not args.empty()) {
             // Warning on multi-line call
-            if (lhs->location().seekable(context) and tok.location.seekable(context)) {
-                auto callee_location = lhs->location().seek_line_column(context);
-                auto current_location = tok.location.seek_line_column(context);
-                if (callee_location.line != current_location.line)
-                    Warning("Multi-line Call; Did you forget an expression separator?");
+            const auto callee_location = lhs->location();
+            if (callee_location.seekable(context) and tok.location.seekable(context)) {
+                auto callee_location_info = lhs->location().seek_line_column(context);
+                auto current_location_info = tok.location.seek_line_column(context);
+                if (callee_location_info.line != current_location_info.line) {
+                    Warning(
+                        callee_location,
+                        "Multi-line Call; Did you forget an expression separator?"
+                    );
+                }
             }
             lhs = new (*mod) CallExpr(
                 lhs.value(),
