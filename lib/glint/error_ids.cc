@@ -11,11 +11,12 @@ const std::array<
     std::pair<ErrorId, const char*>,
     +ErrorId::COUNT + 1>
     error_id_strings{
-        std::pair{ErrorId::InvalidByteLiteral, "invalid-literal/byte"},
+        std::pair{ErrorId::INVALID, "ICE: INVALID ERROR ID"},
+
+        {ErrorId::InvalidByteLiteral, "invalid-literal/byte"},
         {ErrorId::InvalidIntegerLiteral, "invalid-literal/integer"},
         {ErrorId::InvalidStringLiteral, "invalid-literal/string"},
 
-        {ErrorId::INVALID, "ICE: INVALID ERROR ID"},
         {ErrorId::COUNT, "ICE: INVALID ERROR ID"}
     };
 

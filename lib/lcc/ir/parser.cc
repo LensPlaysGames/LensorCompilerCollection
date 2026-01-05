@@ -28,9 +28,10 @@ enum struct ErrorId : unsigned {
     COUNT
 };
 std::array<std::pair<ErrorId, const char*>, +ErrorId::COUNT + 1> error_id_strings{
-    std::pair{ErrorId::InvalidLiteral, "invalid-literal"},
+    std::pair{ErrorId::INVALID, "ICE: INVALID ERROR ID"},
 
-    {ErrorId::INVALID, "ICE: INVALID ERROR ID"},
+    {ErrorId::InvalidLiteral, "invalid-literal"},
+
     {ErrorId::COUNT, "ICE: INVALID ERROR ID"}
 };
 static_assert(
