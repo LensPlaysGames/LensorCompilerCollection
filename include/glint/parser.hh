@@ -48,6 +48,21 @@ public:
     [[nodiscard]]
     static auto GetTokens(Context* context, File& file) -> std::vector<GlintToken>;
 
+    using Lexer::Error;
+    using Lexer::Note;
+    using Lexer::Warning;
+
+    // Note's are usually attached to other diagnostics vs emitted on
+    // their own; they often don't need an ID.
+    template <typename... Args>
+    Diag Note(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Note(context, where, "note", fmt, std::forward<Args>(args)...);
+    }
+    template <typename... Args>
+    Diag Note(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Note(tok.location, fmt, std::forward<Args>(args)...);
+    }
+
 private:
     static constexpr usz PrefixOperatorPrecedence = 10000;
 
@@ -182,38 +197,6 @@ private:
 
         /// Globals at the top-level go in the global scope.
         return CurrScope() == TopLevelScope() ? GlobalScope() : CurrScope();
-    }
-
-    /// Issue an error.
-    template <typename... Args>
-    Diag Error(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Error(context, where, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
-    }
-
-    /// Issue a warning.
-    template <typename... Args>
-    Diag Warning(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Warning(context, where, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    Diag Warning(fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    Diag Note(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Note(context, where, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    Diag Note(fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Note(context, tok.location, fmt, std::forward<Args>(args)...);
     }
 
     // Use this when you need a bunch of expressions until you get a closing

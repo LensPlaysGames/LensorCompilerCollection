@@ -17,6 +17,10 @@ enum struct ErrorId : unsigned {
     InvalidIntegerLiteral,
     InvalidStringLiteral,
 
+    Expected,
+
+    Miscellaneous,
+
     COUNT
 };
 

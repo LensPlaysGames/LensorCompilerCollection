@@ -17,10 +17,6 @@ namespace lcc::glint {
 class Lexer : public syntax::Lexer<GlintToken> {
     using Token = GlintToken;
 
-    using syntax::Lexer<GlintToken>::Error;
-    using syntax::Lexer<GlintToken>::Warning;
-    using syntax::Lexer<GlintToken>::Note;
-
     enum struct MacroArgumentSelector {
         Token,
         Expr,
@@ -86,40 +82,83 @@ protected:
 
     void NextToken();
 
-    template <typename... Args>
-    [[deprecated("Please provide a diagnostic ID")]]
-    auto Error(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    [[deprecated("Please provide a diagnostic ID")]]
-    auto Warning(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    [[deprecated("Please provide a diagnostic ID")]]
-    auto Note(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Note(context, tok.location, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    auto Error(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Error(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    auto Warning(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Warning(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    auto Note(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Note(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
-    }
-
 public:
+    using syntax::Lexer<GlintToken>::Error;
+    using syntax::Lexer<GlintToken>::Warning;
+    using syntax::Lexer<GlintToken>::Note;
+
+    template <typename... Args>
+    [[deprecated("Please provide a diagnostic ID")]]
+    Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
+        return syntax::Lexer<GlintToken>::Error("error", fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    Diag Error(Location location, enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) {
+        return syntax::Lexer<GlintToken>::Error(
+            location,
+            error_id_strings.at(+id).second,
+            fmt,
+            std::forward<Args>(args)...
+        );
+    }
+    template <typename... Args>
+    Diag Error(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) {
+        return syntax::Lexer<GlintToken>::Error(
+            error_id_strings.at(+id).second,
+            fmt,
+            std::forward<Args>(args)...
+        );
+    }
+
+    template <typename... Args>
+    [[deprecated("Please provide a diagnostic ID")]]
+    Diag Warning(fmt::format_string<Args...> fmt, Args&&... args) {
+        return syntax::Lexer<GlintToken>::Error("warning", fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    Diag Warning(Location location, enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) {
+        return syntax::Lexer<GlintToken>::Warning(
+            location,
+            error_id_strings.at(+id).second,
+            fmt,
+            std::forward<Args>(args)...
+        );
+    }
+    template <typename... Args>
+    Diag Warning(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) {
+        return syntax::Lexer<GlintToken>::Warning(
+            error_id_strings.at(+id).second,
+            fmt,
+            std::forward<Args>(args)...
+        );
+    }
+
+    template <typename... Args>
+    [[deprecated("Please provide a diagnostic ID")]]
+    Diag Note(fmt::format_string<Args...> fmt, Args&&... args) {
+        return syntax::Lexer<GlintToken>::Error("note", fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    Diag Note(Location location, enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) {
+        return syntax::Lexer<GlintToken>::Note(
+            location,
+            error_id_strings.at(+id).second,
+            fmt,
+            std::forward<Args>(args)...
+        );
+    }
+    template <typename... Args>
+    Diag Note(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) {
+        return syntax::Lexer<GlintToken>::Note(
+            error_id_strings.at(+id).second,
+            fmt,
+            std::forward<Args>(args)...
+        );
+    }
+
     [[nodiscard]]
     static auto IsIdentStart(u32 c) -> bool {
         if (IsSpace(c) or IsNonCharacter(c))

@@ -9,13 +9,17 @@ namespace lcc::glint {
 
 const std::array<
     std::pair<ErrorId, const char*>,
-    6>
+    7>
     error_id_strings{
         std::pair{ErrorId::INVALID, "ICE: INVALID ERROR ID"},
 
         {ErrorId::InvalidByteLiteral, "invalid-literal/byte"},
         {ErrorId::InvalidIntegerLiteral, "invalid-literal/integer"},
         {ErrorId::InvalidStringLiteral, "invalid-literal/string"},
+
+        {ErrorId::Expected, "expected"},
+
+        {ErrorId::Miscellaneous, "miscellaneous"},
 
         {ErrorId::COUNT, "ICE: INVALID ERROR ID"}
     };

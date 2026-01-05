@@ -211,18 +211,30 @@ struct Lexer {
     }
 
     template <typename... Args>
+    auto Error(Location where, std::string id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Error(context, where, std::move(id), fmt, std::forward<Args>(args)...);
+    }
+    template <typename... Args>
     auto Error(std::string id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Error(context, tok.location, id, fmt, std::forward<Args>(args)...);
+        return Error(tok.location, std::move(id), fmt, std::forward<Args>(args)...);
     }
 
+    template <typename... Args>
+    auto Warning(Location where, std::string id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Warning(context, where, std::move(id), fmt, std::forward<Args>(args)...);
+    }
     template <typename... Args>
     auto Warning(std::string id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Warning(context, tok.location, id, fmt, std::forward<Args>(args)...);
+        return Warning(tok.location, std::move(id), fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
+    auto Note(Location where, std::string id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+        return Diag::Note(context, where, std::move(id), fmt, std::forward<Args>(args)...);
+    }
+    template <typename... Args>
     auto Note(std::string id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Note(context, tok.location, id, fmt, std::forward<Args>(args)...);
+        return Note(tok.location, std::move(id), fmt, std::forward<Args>(args)...);
     }
 
     static auto IsNonCharacter(u32 c) -> bool {

@@ -254,7 +254,7 @@ void lcc::glint::Lexer::NextToken() {
                 NextToken();
 
                 if (tok.kind != TokenKind::Ident) {
-                    Error("Expected identifier following '$' to name macro argument");
+                    Error(ErrorId::Expected, "Expected identifier following '$' to name macro argument");
                 }
 
                 std::string name = tok.text;
@@ -266,7 +266,7 @@ void lcc::glint::Lexer::NextToken() {
                     // Get selector identifier.
                     NextToken();
                     if (tok.kind != TokenKind::Ident) {
-                        Error("Expected identifier following ':' in named macro argument");
+                        Error(ErrorId::Expected, "Expected identifier following ':' in named macro argument");
                     }
 
                     auto selector = MacroArgumentSelector::Token;
@@ -965,7 +965,7 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
 
             /// Definitions must be identifiers.
             if (tok.kind != Tk::Ident) {
-                Error("Expected identifier in macro definition list");
+                Error(ErrorId::Expected, "Expected identifier in macro definition list");
                 continue;
             }
 

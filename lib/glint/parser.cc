@@ -6,6 +6,7 @@
 #include <lcc/utils/rtti.hh>
 
 #include <glint/ast.hh>
+#include <glint/error_ids.hh>
 #include <glint/parser.hh>
 
 #include <memory>
@@ -377,11 +378,16 @@ auto lcc::glint::Parser::ParseExpressionsUntil(lcc::glint::TokenKind until) -> R
         auto expr = ParseExpr();
         if (not At(until) and not +ConsumeExpressionSeparator(ExpressionSeparator::Hard)) {
             if (At(Tk::Eof)) {
-                Warning("Expected ';' but got end of file");
+                Warning(ErrorId::Expected, "Expected ';' but got end of file");
             } else if (expr) {
-                // Error(location, "Expected ';'")
-                Warning(GetPastLocation(*expr), "Expected ';'")
-                    .attach(Diag::Note(context, tok.location, "Before this"));
+                Warning(
+                    GetPastLocation(*expr),
+                    ErrorId::Expected,
+                    "Expected ';'"
+                )
+                    .attach(
+                        Diag::Note(context, tok.location, "Before this")
+                    );
             }
         }
         if (not expr) return expr.diag();
@@ -420,7 +426,10 @@ auto lcc::glint::Parser::ParseBlock(
 
     /// Yeet "}".
     if (not Consume(Tk::RBrace))
-        Error("Expected }}");
+        Error(
+            ErrorId::Expected,
+            "Expected }}"
+        );
 
     loc = {loc, tok.location};
 
@@ -433,7 +442,12 @@ auto lcc::glint::Parser::ParseDecl() -> Result<Decl*> {
     auto is_external = Consume(Tk::External);
     auto loc = tok.location;
     auto text = tok.text;
-    if (not Consume(Tk::Ident)) return Error("Expected identifier to start declaration");
+    if (not Consume(Tk::Ident)) {
+        return Error(
+            ErrorId::Expected,
+            "Expected identifier to start declaration"
+        );
+    }
 
     // NOTE: The important bit.
     auto decl = ParseDeclRest(text, loc, is_external);
@@ -453,8 +467,12 @@ auto lcc::glint::Parser::ParseDecl() -> Result<Decl*> {
         // NOTE: Why? Why can't we export a function defined three nested levels
         // down? Unless it's a closure, I don't see why this would be an issue
         // (other than design choice).
-        if (CurrScope() != TopLevelScope())
-            Error("Exported declarations are only allowed at the top level");
+        if (CurrScope() != TopLevelScope()) {
+            return Error(
+                ErrorId::Miscellaneous,
+                "Exported declarations are only allowed at the top level"
+            );
+        }
 
         // Currying operator; calls Export(decl) iff decl is valid.
         decl = decl >>= Export;
@@ -471,7 +489,11 @@ auto lcc::glint::Parser::ParseDeclRest(
     bool is_external
 ) -> Result<Decl*> {
     switch (tok.kind) {
-        default: return Error("Expected : or :: after identifier in declaration");
+        default:
+            return Error(
+                ErrorId::Expected,
+                "Expected : or :: after identifier in declaration"
+            );
 
         /// Type or variable declaration
         case Tk::Colon: {
@@ -479,7 +501,12 @@ auto lcc::glint::Parser::ParseDeclRest(
 
             /// Type declaration
             if (At(Tk::Enum, Tk::Struct, Tk::Union, Tk::Sum)) {
-                if (is_external) Error("Type declarations cannot be made external; a linker does not know how to resolve Glint types.");
+                if (is_external) {
+                    return Error(
+                        ErrorId::Miscellaneous,
+                        "Type declarations cannot be made external; a linker does not know how to resolve Glint types."
+                    );
+                }
                 // Copy required due to `move(ident)` below.
                 auto decl_name = ident;
 
@@ -516,7 +543,13 @@ auto lcc::glint::Parser::ParseDeclRest(
 
                 /// This declaration is syntactically well formed, so
                 /// no need to synchronise. Keep parsing.
-                if (is_external) Error(location, "External declarations may not have an initialiser");
+                if (is_external) {
+                    return Error(
+                        location,
+                        ErrorId::Miscellaneous,
+                        "External declarations may not have an initialiser"
+                    );
+                }
             }
 
             /// Create the variable.
@@ -552,8 +585,16 @@ auto lcc::glint::Parser::ParseDeclRest(
 
             // Declarations that use type inference cannot have certain storage specifiers.
             // FIXME: Is this syntactic or semantic?
-            if (is_external) Error(cc_loc, "Type-inferred declarations cannot be made external");
-            return DeclScope(var->linkage() == Linkage::LocalVar)->declare(context, std::move(ident), var);
+            if (is_external) {
+                return Error(
+                    cc_loc,
+                    ErrorId::Miscellaneous,
+                    "Type-inferred declarations cannot be made external"
+                );
+            }
+
+            return DeclScope(var->linkage() == Linkage::LocalVar)
+                ->declare(context, std::move(ident), var);
         }
     }
 }
@@ -568,7 +609,9 @@ auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
     if (Consume(Tk::LParen)) {
         auto ty = ParseType();
         if (not ty) return ty.diag();
-        if (not Consume(Tk::RParen)) Error("Expected )");
+        if (not Consume(Tk::RParen)) {
+            return Error(ErrorId::Expected, "Expected )");
+        }
         underlying = *ty;
     }
 
@@ -604,8 +647,9 @@ auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
         while (+ConsumeExpressionSeparator());
     }
 
-    if (not Consume(Tk::RBrace))
-        Error("Expected }}");
+    if (not Consume(Tk::RBrace)) {
+        return Error(ErrorId::Expected, "Expected }}");
+    }
 
     return new (*mod)
         EnumType(
@@ -623,11 +667,13 @@ auto lcc::glint::Parser::ParseTemplateParameters() -> Result<std::vector<Templat
     while (not At(Tk::RParen)) {
         // We have a (maybe comma-separated) list of names followed by a type.
         usz idx = parameters.size();
-        if (not At(Tk::Ident))
+        if (not At(Tk::Ident)) {
             return Error(
                 tok.location,
+                ErrorId::Expected,
                 "Expected identifier in template parameter declaration"
             );
+        }
 
         // This collects comma-separated identifiers, creating a parameter for
         // each one encountered, setting the type to nullptr (to be filled in
@@ -639,8 +685,12 @@ auto lcc::glint::Parser::ParseTemplateParameters() -> Result<std::vector<Templat
         } while (At(Tk::Ident));
 
         /// Parse the parameter type.
-        if (not Consume(Tk::Colon))
-            return Error("Expected ':' in template parameter declaration");
+        if (not Consume(Tk::Colon)) {
+            return Error(
+                ErrorId::Expected,
+                "Expected ':' in template parameter declaration"
+            );
+        }
 
         auto type = ParseType();
         if (not type) return type.diag();
@@ -653,8 +703,12 @@ auto lcc::glint::Parser::ParseTemplateParameters() -> Result<std::vector<Templat
     }
 
     /// Yeet ')'.
-    if (not Consume(Tk::RParen))
-        return Error("Expected ')' closing template parameter list");
+    if (not Consume(Tk::RParen)) {
+        return Error(
+            ErrorId::Expected,
+            "Expected ')' closing template parameter list"
+        );
+    }
 
     return parameters;
 }
@@ -663,6 +717,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
     if (+ConsumeExpressionSeparator()) {
         return Error(
             tok.location,
+            ErrorId::Miscellaneous,
             "Empty expression probably has unintended consequences."
         );
     }
@@ -751,6 +806,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             if (not At(Tk::LParen))
                 return Error(
                     tok.location,
+                    ErrorId::Expected,
                     "Expected template parameter list (beginning with `(`) following `template`"
                 );
 
@@ -806,6 +862,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 if (call->args().size() == 1) {
                     auto e = Error(
                         call->location(),
+                        ErrorId::Miscellaneous,
                         "This matchee expression is a suspicious call, and there is no 'body' expression..."
                     );
                     e.attach(Note(
@@ -821,6 +878,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             if (not Consume(Tk::LBrace)) {
                 return Error(
                     start_location,
+                    ErrorId::Expected,
                     "Expected block expression for match body following match object expression."
                 );
             }
@@ -829,12 +887,17 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 if (not Consume(Tk::Dot)) {
                     return Error(
                         tok.location,
+                        ErrorId::Expected,
                         "Expected `.` followed by sum type member identifier (or `}}`)"
                     );
                 }
 
-                if (not At(Tk::Ident))
-                    return Error("Expected identifier after .");
+                if (not At(Tk::Ident)) {
+                    return Error(
+                        ErrorId::Expected,
+                        "Expected identifier after ."
+                    );
+                }
 
                 auto name = tok.text;
                 // Yeet name
@@ -854,6 +917,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             if (not Consume(Tk::RBrace)) {
                 return Error(
                     tok.location,
+                    ErrorId::Expected,
                     "Expected end brace for match body block expression."
                 );
             }
@@ -923,7 +987,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         } break;
 
         case Tk::Else:
-            return Error("Unexpected 'else' (no if).");
+            return Error(ErrorId::Miscellaneous, "Unexpected 'else' (no if).");
 
         /// Control expressions.
         case Tk::If: lhs = ParseIfExpr(); break;
@@ -974,8 +1038,12 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             // "(" ")" => ()
             // TODO: Should we return the empty expression if we get an empty
             // parenthetical expression? We currently have no way to do that.
-            if (Consume(Tk::RParen))
-                return Error("Empty parenthetical expression probably has unintended consequences: try `,` or `;`.");
+            if (Consume(Tk::RParen)) {
+                return Error(
+                    ErrorId::Miscellaneous,
+                    "Empty parenthetical expression probably has unintended consequences: try `,` or `;`."
+                );
+            }
 
             auto exprs = ParseExpressionsUntil(Tk::RParen);
             if (not exprs) return exprs.diag();
@@ -984,7 +1052,10 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 // non-empty empty ()
                 // Basically, we only ever get here if we have a paren expression with
                 // hard separators or other empty paren expressions inside.
-                return Error("Empty parenthetical expression probably has unintended consequences.");
+                return Error(
+                    ErrorId::Miscellaneous,
+                    "Empty parenthetical expression probably has unintended consequences."
+                );
             }
 
             if (exprs->size() == 1) {
@@ -999,7 +1070,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 );
             }
 
-            if (not Consume(Tk::RParen)) return Error("Expected )");
+            if (not Consume(Tk::RParen)) return Error(ErrorId::Expected, "Expected )");
             lhs->location() = {lhs->location(), tok.location};
         } break;
 
@@ -1029,8 +1100,12 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             if (not ty) return ty.diag();
 
             auto* func_ty = cast<FuncType>(*ty);
-            if (not func_ty)
-                return Error("Type of lambda must be a function type");
+            if (not func_ty) {
+                return Error(
+                    ErrorId::Miscellaneous,
+                    "Type of lambda must be a function type"
+                );
+            }
 
             lhs = ParseFuncDecl("", func_ty, false);
             lhs->location({loc, lhs->location()});
@@ -1057,6 +1132,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 if (Consume(Tk::Dot)) {
                     if (not At(Tk::Ident)) {
                         return Error(
+                            ErrorId::Miscellaneous,
                             "Recognized named expression in compound literal, but the following token was not an identifier as expected. It was {}",
                             ToString(tok.kind)
                         );
@@ -1074,7 +1150,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
 
             /// Yeet "}".
             if (not Consume(Tk::RBrace))
-                return Error("Expected }}");
+                return Error(ErrorId::Expected, "Expected }}");
 
             lhs = new (*mod) CompoundLiteral(std::move(elements), tok.location);
         } break;
@@ -1121,10 +1197,11 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         case TokenKind::BitOR:
         case TokenKind::BitXOR:
         case TokenKind::Tilde:
-            return Error("Expected expression, got {}", ToString(tok.kind));
+            return Error(ErrorId::Expected, "Expected expression, got {}", ToString(tok.kind));
 
         case TokenKind::Star:
             return Error(
+                ErrorId::Expected,
                 "Expected expression, got {}. You likely meant to use '{}' to dereference.",
                 ToString(tok.kind),
                 ToString(Tk::At)
@@ -1204,14 +1281,14 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                     auto index = ParseExpr();
                     if (not index) return index.diag();
                     lhs = new (*mod) BinaryExpr(Tk::LBrack, *lhs, *index, {lhs->location(), tok.location});
-                    if (not Consume(Tk::RBrack)) return Error("Expected ]");
+                    if (not Consume(Tk::RBrack)) return Error(ErrorId::Expected, "Expected ]");
                     continue;
                 }
 
                 /// The member access operator must be followed by an identifier.
                 case Tk::Dot: {
                     NextToken();
-                    if (not At(Tk::Ident)) return Error("Expected identifier after .");
+                    if (not At(Tk::Ident)) return Error(ErrorId::Expected, "Expected identifier after .");
                     auto member = tok.text;
                     auto loc = tok.location;
                     NextToken();
@@ -1283,6 +1360,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 if (callee_location_info.line != current_location_info.line) {
                     Warning(
                         callee_location,
+                        ErrorId::Miscellaneous,
                         "Multi-line Call; Did you forget an expression separator?"
                     );
                 }
@@ -1319,17 +1397,17 @@ auto lcc::glint::Parser::ParseForExpr() -> Result<ForExpr*> {
     auto init = ParseExpr();
     if (not init) return init.diag();
     if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard))
-        Error("Expected expression separator after 'for' initialisation expression");
+        Error(ErrorId::Expected, "Expected expression separator after 'for' initialisation expression");
 
     auto cond = ParseExpr();
     if (not cond) return cond.diag();
     if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard))
-        Error("Expected expression separator after 'for' condition expression");
+        Error(ErrorId::Expected, "Expected expression separator after 'for' condition expression");
 
     auto increment = ParseExpr();
     if (not increment) return increment.diag();
     if (not +ConsumeExpressionSeparator(ExpressionSeparator::Hard))
-        Error("Expected expression separator after 'for' increment expression");
+        Error(ErrorId::Expected, "Expected expression separator after 'for' increment expression");
 
     auto body = ParseExpr();
     if (not body) return body.diag();
@@ -1347,7 +1425,7 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
     auto scope = sc.scope;
 
     if (not At(Tk::Ident))
-        return Error("Expected identifier (name of loop variable) following 'for'");
+        return Error(ErrorId::Expected, "Expected identifier (name of loop variable) following 'for'");
 
     auto loop_var = tok.text;
     // Eat loop variable identifier.
@@ -1355,7 +1433,7 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
 
     // Expect "in" contextual keyword.
     if (not At(Tk::Ident) or tok.text != "in")
-        return Error("Expected contextual keyword 'in' following loop variable name in ranged 'for'");
+        return Error(ErrorId::Expected, "Expected contextual keyword 'in' following loop variable name in ranged 'for'");
     // Eat "in"
     NextToken();
 
@@ -1484,7 +1562,13 @@ auto lcc::glint::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
         if (not At(Tk::Ident)) return attrs;
         auto it = attrs_map.find(tok.text);
         if (it == attrs_map.end()) return attrs;
-        if (attrs[it->second]) Warning(tok.location, "Duplicate attribute ignored");
+        if (attrs[it->second]) {
+            Warning(
+                tok.location,
+                ErrorId::Miscellaneous,
+                "Duplicate attribute ignored"
+            );
+        }
         attrs[it->second] = true;
         NextToken();
     }
@@ -1500,6 +1584,7 @@ auto lcc::glint::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Exp
         if (At(Tk::Eq)) {
             return Error(
                 tok.location,
+                ErrorId::Miscellaneous,
                 "External functions cannot have a body."
             );
         }
@@ -1509,6 +1594,7 @@ auto lcc::glint::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Exp
         if (At(Tk::LBrace)) {
             return Warning(
                 tok.location,
+                ErrorId::Miscellaneous,
                 "External functions cannot have a body. If this '{{' is not supposed to "
                 "start a function body, consider adding a ';' after the function type"
             );
@@ -1562,7 +1648,12 @@ auto lcc::glint::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
         // a type.
         else {
             usz idx = parameters.size();
-            if (not At(Tk::Ident)) return Error("Expected identifier or ':' in parameter declaration");
+            if (not At(Tk::Ident)) {
+                return Error(
+                    ErrorId::Expected,
+                    "Expected identifier or ':' in parameter declaration"
+                );
+            }
             do {
                 parameters.emplace_back(tok.text, nullptr, tok.location);
                 NextToken();
@@ -1570,7 +1661,12 @@ auto lcc::glint::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
             } while (At(Tk::Ident));
 
             /// Parse the parameter type.
-            if (not Consume(Tk::Colon)) return Error("Expected ':' in parameter declaration");
+            if (not Consume(Tk::Colon)) {
+                return Error(
+                    ErrorId::Expected,
+                    "Expected ':' in parameter declaration"
+                );
+            }
             auto type = ParseType();
             if (not type) return type.diag();
 
@@ -1583,7 +1679,12 @@ auto lcc::glint::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
     }
 
     /// Yeet ')'.
-    if (not Consume(Tk::RParen)) return Error("Expected ')' in function signature");
+    if (not Consume(Tk::RParen)) {
+        return Error(
+            ErrorId::Expected,
+            "Expected ')' in function signature"
+        );
+    }
 
     /// Parse attributes.
     auto attrs = ParseFuncAttrs();
@@ -1609,6 +1710,7 @@ auto lcc::glint::Parser::ParseIdentExpr() -> Result<Expr*> {
             auto decl = found.at(0);
             auto err = Error(
                 loc,
+                ErrorId::Miscellaneous,
                 "Refusing to expand unhygienic expansion of macro due to emitted identifier ``{}'' matching that of a previously declared object.\n"
                 "Recommended solution is to add ``defines {}'' to the macro definition, before the emits keyword.",
                 text,
@@ -1646,6 +1748,7 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
             if (call->args().size() == 1) {
                 auto e = Error(
                     call->location(),
+                    ErrorId::Miscellaneous,
                     "This if condition is a suspicious call, and there is no 'then' expression..."
                 );
                 e.attach(Note(
@@ -1689,6 +1792,7 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     // ends it, like in this case).
     if (LookAhead(1)->kind == Tk::Else) {
         auto e = Error(
+            ErrorId::Miscellaneous,
             "Invalid token '{}' between if's then expression and else clause.",
             ToString(tok.kind)
         );
@@ -1740,7 +1844,13 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
         module_kind = Module::IsAModule;
         NextToken(); /// Yeet "module".
 
-        if (not At(Tk::Ident)) return Error("Expected module name");
+        if (not At(Tk::Ident)) {
+            return Error(
+                ErrorId::Expected,
+                "Expected module name"
+            );
+        }
+
         module_name = tok.text;
         NextToken(); /// Yeet module name.
     }
@@ -1764,8 +1874,12 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
         if (tok.text == "export") {
             NextToken(); /// Yeet "export".
 
-            if (not At(Tk::Ident, Tk::String))
-                return Error("Expected 'import' or a module name after 'export'");
+            if (not At(Tk::Ident, Tk::String)) {
+                return Error(
+                    ErrorId::Expected,
+                    "Expected 'import' or a module name after 'export'"
+                );
+            }
 
             if (tok.text != "import") {
                 // At a module name
@@ -1783,7 +1897,10 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
             NextToken(); /// Yeet "import".
 
             if (not At(Tk::Ident, Tk::String))
-                return Error("Expected a module name after 'import'");
+                return Error(
+                    ErrorId::Expected,
+                    "Expected a module name after 'import'"
+                );
 
             // Add the module to be loaded later.
             mod->add_import(tok.text, {loc, tok.location});
@@ -1827,12 +1944,20 @@ auto lcc::glint::Parser::ParseStructMembers() -> Result<std::vector<StructType::
 
             /// Name.
             auto name = tok.text;
-            if (not Consume(Tk::Ident))
-                return Error("Expected member name in struct declaration");
+            if (not Consume(Tk::Ident)) {
+                return Error(
+                    ErrorId::Expected,
+                    "Expected member name in struct declaration"
+                );
+            }
 
             /// Type.
-            if (not Consume(Tk::Colon))
-                return Error("Expected ':' in struct declaration");
+            if (not Consume(Tk::Colon)) {
+                return Error(
+                    ErrorId::Expected,
+                    "Expected ':' in struct declaration"
+                );
+            }
 
             auto type = ParseType();
             if (not type) return type.diag();
@@ -1850,8 +1975,12 @@ auto lcc::glint::Parser::ParseStructMembers() -> Result<std::vector<StructType::
     }
 
     /// Yeet '}'.
-    if (not Consume(Tk::RBrace))
-        return Error("Expected '}}' in struct declaration");
+    if (not Consume(Tk::RBrace)) {
+        return Error(
+            ErrorId::Expected,
+            "Expected '}}' in struct declaration"
+        );
+    }
 
     return members;
 }
@@ -1880,8 +2009,12 @@ auto lcc::glint::Parser::ParseStructType() -> Result<std::variant<StructType*, T
         };
     }
 
-    if (not At(Tk::LBrace))
-        return Error("Expected '{{' after 'struct' in struct declaration");
+    if (not At(Tk::LBrace)) {
+        return Error(
+            ErrorId::Expected,
+            "Expected '{{' after 'struct' in struct declaration"
+        );
+    }
 
     ScopeRAII sc{this};
     auto members = ParseStructMembers();
@@ -1902,6 +2035,7 @@ auto lcc::glint::Parser::ParseUnionType() -> Result<UnionType*> {
     LCC_ASSERT(Consume(Tk::Union), "ParseUnionType called while not at '{}'", ToString(Tk::Union));
     if (not Consume(Tk::LBrace)) {
         return Error(
+            ErrorId::Expected,
             "Expected '{}' after '{}' in union declaration",
             ToString(Tk::LBrace),
             ToString(Tk::Union)
@@ -1915,11 +2049,20 @@ auto lcc::glint::Parser::ParseUnionType() -> Result<UnionType*> {
         /// Name.
         auto name = tok.text;
         auto start = tok.location;
-        if (not Consume(Tk::Ident))
-            return Error("Expected member name in union declaration");
+        if (not Consume(Tk::Ident)) {
+            return Error(
+                ErrorId::Expected,
+                "Expected member name in union declaration"
+            );
+        }
 
         /// Type.
-        if (not Consume(Tk::Colon)) return Error("Expected ':' in union declaration");
+        if (not Consume(Tk::Colon)) {
+            return Error(
+                ErrorId::Expected,
+                "Expected ':' in union declaration"
+            );
+        }
         auto type = ParseType();
         if (not type) return type.diag();
 
@@ -1935,8 +2078,13 @@ auto lcc::glint::Parser::ParseUnionType() -> Result<UnionType*> {
     }
 
     /// Yeet '}'.
-    if (not Consume(Tk::RBrace))
-        return Error("Expected '' in union declaration", ToString(Tk::RBrace));
+    if (not Consume(Tk::RBrace)) {
+        return Error(
+            ErrorId::Expected,
+            "Expected '' in union declaration",
+            ToString(Tk::RBrace)
+        );
+    }
 
     /// Create the type.
     return new (*mod) UnionType(sc.scope, std::move(members), Location{loc, tok.location});
@@ -1945,7 +2093,12 @@ auto lcc::glint::Parser::ParseUnionType() -> Result<UnionType*> {
 auto lcc::glint::Parser::ParseSumType() -> Result<SumType*> {
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::Sum), "ParseSumType called while not at 'sum'");
-    if (not Consume(Tk::LBrace)) return Error("Expected '{{' after 'sum'");
+    if (not Consume(Tk::LBrace)) {
+        return Error(
+            ErrorId::Expected,
+            "Expected '{{' after 'sum'"
+        );
+    }
 
     /// Parse the struct body.
     ScopeRAII sc{this};
@@ -1954,10 +2107,20 @@ auto lcc::glint::Parser::ParseSumType() -> Result<SumType*> {
         // Name
         auto name = tok.text;
         auto start = tok.location;
-        if (not Consume(Tk::Ident)) return Error("Expected member name in sum type declaration");
+        if (not Consume(Tk::Ident)) {
+            return Error(
+                ErrorId::Expected,
+                "Expected member name in sum type declaration"
+            );
+        }
 
         // Type
-        if (not Consume(Tk::Colon)) return Error("Expected ':' in sum type declaration");
+        if (not Consume(Tk::Colon)) {
+            return Error(
+                ErrorId::Expected,
+                "Expected ':' in sum type declaration"
+            );
+        }
         auto type = ParseType();
         if (not type) return type.diag();
 
@@ -2000,7 +2163,12 @@ auto lcc::glint::Parser::ParseSumType() -> Result<SumType*> {
     }
 
     /// Yeet '}'.
-    if (not Consume(Tk::RBrace)) return Error("Expected '}}' in sum type declaration");
+    if (not Consume(Tk::RBrace)) {
+        return Error(
+            ErrorId::Expected,
+            "Expected '}}' in sum type declaration"
+        );
+    }
 
     /// Create the struct type.
     return new (*mod) SumType(sc.scope, std::move(members), Location{loc, tok.location});
@@ -2012,7 +2180,11 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
     Type* ty{};
     auto location = tok.location;
     switch (tok.kind) {
-        default: return Error("Expected type");
+        default:
+            return Error(
+                ErrorId::Expected,
+                "Expected type"
+            );
 
         /// Builtin types.
         case Tk::Int:
@@ -2092,8 +2264,12 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
             auto expr = ParseExpr();
             if (not expr) return expr.diag();
             ty = new (*mod) TypeofType(*expr, expr->location());
-            if (not Consume(Tk::RParen))
-                return Error("Expected )");
+            if (not Consume(Tk::RParen)) {
+                return Error(
+                    ErrorId::Expected,
+                    "Expected )"
+                );
+            }
         } break;
 
         case Tk::Typeof: {
@@ -2164,8 +2340,9 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                     }
                 }
 
-                if (not Consume(Tk::RBrack))
-                    return Error("Expected ]");
+                if (not Consume(Tk::RBrack)) {
+                    return Error(ErrorId::Expected, "Expected ]");
+                }
             }
         } break;
 
@@ -2190,6 +2367,7 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
 
             case Tk::LBrack:
                 return Error(
+                    ErrorId::Miscellaneous,
                     "Unhandled trailing type qualifier `{}`;"
                     " you probably meant to make an array of {},"
                     " which is done like [{}] in Glint (vs {}[] in C-style languages)",
@@ -2204,6 +2382,7 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
 
                 if (tok.kind != Tk::Ident)
                     return Error(
+                        ErrorId::Expected,
                         "Expected IDENTIFIER after . following type {}, not {}",
                         *ty,
                         ToString(tok.kind)
@@ -2231,6 +2410,7 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                     break;
                 }
                 return Error(
+                    ErrorId::Miscellaneous,
                     "Unrecognized type member access {}.{}. Did you mean .ptr or .ref?",
                     *ty,
                     tok.text
@@ -2351,11 +2531,16 @@ void lcc::glint::Parser::ParseTopLevel() {
                 else if (context and tok.location.file_id < context->files().size())
                     l = GetLastLocation(*context, tok.location.file_id);
 
-                auto w = Warning(l, "Expected hard expression separator but got end of file");
+                auto w = Warning(
+                    l,
+                    ErrorId::Expected,
+                    "Expected hard expression separator but got end of file"
+                );
                 w.fix_by_inserting_at(l, ";");
             } else if (expr) {
                 Warning(
                     GetRightmostLocation(*expr),
+                    ErrorId::Expected,
                     "Expected hard expression separator"
                 )
                     .attach(Note("Before this"));
@@ -2452,12 +2637,14 @@ auto lcc::glint::Parser::ParseFreestanding(
 
                 auto w = parser.Warning(
                     l,
+                    ErrorId::Expected,
                     "Expected hard expression separator but got end of file"
                 );
                 w.fix_by_inserting_at(l, ";");
             } else if (expr) {
                 parser.Warning(
                           GetRightmostLocation(*expr),
+                          ErrorId::Expected,
                           "Expected hard expression separator"
                 )
                     .attach(parser.Note("Before this"));
