@@ -1,0 +1,59 @@
+================
+Deprocedure Function Variable
+================
+
+foo : int() 69;
+
+foo;
+
+---
+
+(block
+ (function_declaration
+  (return (integer_literal)))
+ (return (call (name))))
+
+================
+Deprocedure Function Variable as LHS of Binary Operation
+================
+
+foo : int() 42;
+
+foo + 27;
+
+---
+
+(block
+ (function_declaration
+  (return (integer_literal)))
+ (return (binary_add (call (name)) (integer_literal))))
+
+================
+Deprocedure Function Variable as RHS of Binary Operation
+================
+
+foo : int() 42;
+
+27 + foo;
+
+---
+
+(block
+ (function_declaration
+  (return (integer_literal)))
+ (return (binary_add (call (name)) (integer_literal))))
+
+================
+Deprocedure Function Variable as Operand of Unary Operation
+================
+
+foo : int() 1;
+
+not foo;
+
+---
+
+(block
+ (function_declaration
+  (return (integer_literal)))
+ (return (unary_not (call (name)))))
