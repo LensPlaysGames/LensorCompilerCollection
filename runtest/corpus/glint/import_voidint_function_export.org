@@ -2,18 +2,18 @@
 
 #+NAME: source
 #+begin_src glint
-  import foo_voidintfun
+  import foo_voidintfun;
 
   (foo 69);
 #+end_src
 
 #+NAME: source
 #+begin_src glint
-  module foo_voidintfun
+  module foo_voidintfun;
 
   export foo : void(x : int) {
     print (byte x), `\n`;
-  }
+  };
 #+end_src
 
 #+NAME: status
