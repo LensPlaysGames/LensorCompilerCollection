@@ -10,7 +10,7 @@
     a : int;
     supplant foo;
     b : int;
-  }
+  };
 
   baz : bar;
   baz.x := 69;

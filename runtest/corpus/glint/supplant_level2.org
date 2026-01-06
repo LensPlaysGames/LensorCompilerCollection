@@ -10,12 +10,12 @@
     a : int;
     supplant foo;
     b : int;
-  }
+  };
 
   baz : struct {
     supplant bar;
     A : int;
-  }
+  };
 
   blah : baz;
   blah.x := 42;
