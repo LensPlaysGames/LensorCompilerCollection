@@ -2458,11 +2458,31 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 struct_type = as<ArrayViewType>(stripped_object_type)->struct_type(mod);
 
             if (not struct_type) {
-                Error(
+                auto e = Error(
                     m->object()->location(),
                     "LHS of member access must be a struct, but was {}",
                     m->object()->type()
                 );
+                // Special error for trying to access an enumerator off a value of an
+                // enum.
+                if (is<EnumType>(m->object()->type())) {
+                    e.attach(
+                        Note(
+                            m->object()->type()->location(),
+                            "If you meant to access an enumerator, access the type itself (not a value of the type)."
+                        )
+                    );
+                    if (
+                        is<NameRefExpr>(m->object())
+                        and is<Decl>(as<NameRefExpr>(m->object())->target())
+                    ) {
+                        // TODO: fixes
+                        e.attach(Note(
+                            as<NameRefExpr>(m->object())->target()->location(),
+                            "Did you mean to use `::` in this declaration?"
+                        ));
+                    }
+                }
 
                 m->set_sema_errored();
                 break;
