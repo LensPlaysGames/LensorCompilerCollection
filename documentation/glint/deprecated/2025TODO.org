@@ -1,18 +1,12 @@
-* Recursive Data
-
-A binary tree data structure. How to do this in Glint?
-
 * NULL, nil, or something like that.
 
 How can I both assign something to nothing, as well as check against the presence of something.
 
+HOW ABOUT WE FUCKING DON'T?! NOVEL, AIN'T IT?
+
 * Tests for =return=
 
 =return= lets the user close an IR block themselves, and there are lots of places where we assume that isn't the case in IR generation, afaik.
-
-* =-= as identifier continuation character?
-
-That way =foo-bar= would be a valid identifier. I just kind of like how it looks vs snake case. Modules could have fun with this and do =category-thing--detail= style naming.
 
 * Dependencies...
 
@@ -29,55 +23,13 @@ Given an identifer, only allow acessing the module's exports by accessing member
 
 Without =as bar=, the exports of the module are accessible in the top level scope.
 
-* Make Consistent the Type Declarations
-
-Currently, it's a bit confusing when something is a value vs when something is a type.
-
-#+begin_src glint
-  bar : struct { x : int; y : int; };
-
-  ;; Is this valid??
-  foo : bar;
-  ;; Or this??
-  bar.x := 69;
-#+end_src
-
-Basically, the syntax for type declarations is exactly the same as variable declarations, at the moment, and that kind of gets a bit confusing in my opinion.
-
-#+begin_src glint
-  ;; Verbose, yet clear that bar is a type.
-  bar : type = struct { x : int; y : int; };
-  ;; Shorter, still kind of messy with three colons (two for type inferred
-  ;; declaration, one to begin explicit type expression).
-  bar ::: struct { x : int; y : int };
-
-  foo : bar;
-#+end_src
-
-#+begin_src glint
-  bar ::: struct { x : int; y : int; };
-  blah ::: bar;
-#+end_src
-
-So, the triple colon doesn't SUPER bother me. It's "good enough", I guess.
-
-So, I think we are saying that =:= as a binary operator ONLY EVER declares a VARIABLE. It has an actual value that isn't the type it's declared as. So, =t : type = <type>= is valid because =t= has a value that is some type expression, but it's type is =type=. Whereas a named type/type alias would not be valid in that form (i.e. =t : <type>;=), since =t= would have no value that isn't the type it is declared as being.
-
-In conclusion:
-- =lhs : rhs= declares the lhs as being A VALUE named lhs of TYPE rhs. The (only) way to get =rhs= from =lhs= is via =typeof=. CURRENTLY STRUCT, ENUM, UNION, AND SUM DECLARATIONS BREAK THIS CONVENTION.
-- =lhs ﻿:: rhs= declares the lhs as being a VALUE named lhs EQUAL to rhs. The (only) way to get =rhs= from =lhs= is via referencing the name.
-
-And, what about aliases? We currently have NO syntax for type aliases...
-
 * =interface='s
 
 An =interface= expression will be a restriced form of a template expression.
 
 The main restriction regards enforcing the /un/-expanded expression to be a type expression. This allows the compiler to know at least /something/ about the expression the template produces, like the members defined on a composite type. This means for, say, a container sort of template, the compiler knows those members exist (and possibly their type, if not part of a template parameter thing). This would ensure that, as detailed as the =interface= is, is as correct as our type checking can be within the unexpanded template body. This means that more errors in templates are caught /before/ expansion.
 
-* =mapf=
-
-Apply each argument expression to a given function.
+TEMPLATED STRUCTS FTW.
 
 * =maps_arguments= function attribute
 
@@ -225,7 +177,7 @@ Can a lambda call itself?
 
 Have a big enum with lots of values? Want a function to operate on only a subset of those values? This is where enum subsets come in. Not for when you want to compose multiple enums, but for when you want to decompose a single into multiple.
 
-The idea is, an enum subset will give a list of identifiers that must be present in the enum it is a subset of, and initialisers are disallowed. It is purely so, for example, a function could convert only =*==, =+==, etc. into their non-assignment counterparts =*= and =+=, without having to handle every enum value as a possibility.
+The idea is, an enum subset will give a list of identifiers that must be present in the enum it is a subset of, and initialisers are disallowed. It is purely so, for example, a function could convert only =*==, =+==, etc. into their non-assignment counterparts =*= and =+=, without having to handle every enum value as a possibility (while still having compile-time guarantee that all /relevant/ values are handled).
 
 * <Development Aid> Tests Recall
 

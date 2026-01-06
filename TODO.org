@@ -22,13 +22,11 @@ i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expe
 - [Sema]: Use intrinsic memset for initialisation (optimisation)
 - [Meta]: glintlang website
 - [Parser]: Syntax for asserting compile time evaluation
-- [Sema]: =type= type
 - [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=
 - [Sema]: Dynamic array of =expr=. =for e in exprs, apply foo e;= type of thing.
 - [Sema]: =maps_arguments= function attribute
 - [Parser/Sema]: Compile-time Checked Interpolation: =printf "value: {}\n", 69;=
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
-- [Parser]: Disambiguate named type vs value declarations. =bar : struct ...= is a value, =bar ﻿:: struct ...= is a type.
 - [Parser/Sema]: Function templates via =auto= parameters
 - [Sema]: =print= handle enum value, print enum name
 - [Sema]: =import= namespacing
@@ -36,3 +34,4 @@ i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expe
 - [Parser/Sema]: Tokens in the AST
 - [Parser/Sema]: Switch on value
 - [Diags]: Get rid of "Miscellaneous" ErrorId
+- [Parser/Sema]: Recursive Lambda
