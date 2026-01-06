@@ -9,6 +9,8 @@
 - [Register Allocation]: Register classes (floats/scalar)
 - [Register Allocation]: Register (un)spilling
 - [Driver]: =--color-theme <file>= option to remap ANSI/VT100 emitted terminal codes to different colors (i.e. BoldRed -> Green) if you want green errors for some reason.
+- [LangTest]: fail test specifier given an expected error id in brackets
+i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expected/ diagnostic is emitted, not just a similar one.
 
 * Glint
 
@@ -33,3 +35,4 @@
 - [Parser]: Block comments
 - [Parser/Sema]: Tokens in the AST
 - [Parser/Sema]: Switch on value
+- [Diags]: Get rid of "Miscellaneous" ErrorId
