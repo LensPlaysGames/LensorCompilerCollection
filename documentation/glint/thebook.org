@@ -849,6 +849,8 @@ Remember =f(x)= from before? =x= is a /function parameter/. =f= is said to be a 
 
 - On Parameters vs Arguments :: Parameters appear in the function declaration and definition, while arguments appear in each function invocation. An argument is the value that a parameter takes on during a particular invocation of a function.
 
+NOTE: Function arguments are evaluated "in order"; that is, the order they appear /in the function's type declaration/.
+
 # returning values
 
 Functions do not /just/ execute an operation, or sequence of operations, though. They apply operations in order to form a result value, which is then said to be "returned from" the function, upon application. In Glint, the result of evaluating the last expression in a function is the return value, unless otherwise explicitly returning via =return=.

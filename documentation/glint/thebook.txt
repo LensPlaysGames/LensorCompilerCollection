@@ -1256,6 +1256,9 @@ _________________
         is the value that a parameter takes on during a particular
         invocation of a function.
 
+  NOTE: Function arguments are evaluated "in order"; that is, the order
+  they appear /in the function's type declaration/.
+
   Functions do not /just/ execute an operation, or sequence of
   operations, though. They apply operations in order to form a result
   value, which is then said to be "returned from" the function, upon
