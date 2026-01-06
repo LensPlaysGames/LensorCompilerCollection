@@ -12,7 +12,7 @@ foo[27]
 ---
 
 (block
- (block
+ (group
   (variable_declaration)
   (block (binary_assignment (member_access (name)) (evaluated_constant)) (binary_assignment (member_access (name)) (evaluated_constant)) (binary_assignment (member_access (name)) (cast (call (name) (evaluated_constant))))))
 
@@ -73,7 +73,7 @@ foo[2] += `4`;
 ---
 
 (block
- (block
+ (group
   (variable_declaration)
   (block
    (binary_assignment (member_access (name)) (evaluated_constant))

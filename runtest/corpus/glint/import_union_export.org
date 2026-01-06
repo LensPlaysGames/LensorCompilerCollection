@@ -11,7 +11,7 @@ baz.z;
 #+begin_src glint
   module foo_simpleunion;
 
-  bar : union {
+  bar :: union {
     x : int;
     y : bool;
     z : uint;

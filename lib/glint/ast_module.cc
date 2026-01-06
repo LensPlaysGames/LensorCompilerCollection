@@ -163,7 +163,11 @@ void calculate_indices(
                 recurse(m.type);
         } break;
 
-        case glint::Type::Kind::Typeof: LCC_ASSERT(false);
+        case glint::Type::Kind::Typeof:
+            Diag::ICE("Encountered TypeofType during serialisation. Bad sema, bad!");
+
+        case glint::Type::Kind::Type:
+            Diag::ICE("Encountered TypeType during serialisation. Bad sema, bad!");
     };
 
     // Finally, visit the type itself.

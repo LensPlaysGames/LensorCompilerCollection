@@ -171,6 +171,12 @@ lcc::Type* Convert(Context* ctx, Type* in) {
         case Type::Kind::Integer:
             return lcc::IntegerType::Get(ctx, in->size(ctx));
 
+        // A type isn't represented as anything in the final code (for now).
+        // Eventually, we /could/ have this be a struct with `bits`, `align`, etc.
+        // members.
+        case Type::Kind::Type:
+            return lcc::Type::VoidTy;
+
         // A templated struct is an incomplete type; the closest thing to an
         // incomplete type in the IR is void, I'd say.
         case Type::Kind::TemplatedStruct:
@@ -361,6 +367,14 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             // Named struct template is a no-op
             if (decl->init() and is<TemplatedStructType>(decl->init()->type())) {
+                return;
+            }
+
+            // Type is a no-op
+            if (
+                is<TypeType>(decl->type())
+                or (decl->init() and is<TypeType>(decl->init()->type()))
+            ) {
                 return;
             }
 

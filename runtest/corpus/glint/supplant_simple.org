@@ -2,11 +2,11 @@
 
 #+NAME: source
 #+begin_src glint
-  foo : struct {
+  foo :: struct {
     x : int;
   };
 
-  bar : struct {
+  bar :: struct {
     a : int;
     supplant foo;
     b : int;

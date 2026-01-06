@@ -495,39 +495,29 @@ auto lcc::glint::Parser::ParseDeclRest(
                 "Expected : or :: after identifier in declaration"
             );
 
-        /// Type or variable declaration
+        // Variable Declaration
+        //
+        //   `NAME ":" $`, expecting a type.
+        //
+        // The form `n : t` declares the name `n` as a variable with an instance
+        // of the given type, `t`, as it's value.
         case Tk::Colon: {
             NextToken();
 
-            /// Type declaration
-            if (At(Tk::Enum, Tk::Struct, Tk::Union, Tk::Sum)) {
-                if (is_external) {
-                    return Error(
-                        ErrorId::Miscellaneous,
-                        "Type declarations cannot be made external; a linker does not know how to resolve Glint types."
-                    );
-                }
-                // Copy required due to `move(ident)` below.
-                auto decl_name = ident;
-
-                // Struct or enum declaration
-                auto decl = ParseType();
-                if (not decl) return decl.diag();
-                return DeclScope()->declare(
-                    context,
-                    std::move(decl_name),
-                    new (*mod) TypeDecl(
-                        mod,
-                        std::move(ident),
-                        as<DeclaredType>(*decl),
-                        location
+            /// Variable or function declaration.
+            auto ty = ParseType();
+            if (not ty) {
+                auto d = ty.diag();
+                d.attach(
+                    Note(
+                        location,
+                        ErrorId::Expected,
+                        "Expected a type in variable declaration of '{}'",
+                        ident
                     )
                 );
+                return d;
             }
-
-            /// Otherwise, this is a variable or function declaration.
-            auto ty = ParseType();
-            if (not ty) return ty.diag();
 
             /// If the type is a function type, then this is
             /// a function declaration.
@@ -566,12 +556,47 @@ auto lcc::glint::Parser::ParseDeclRest(
             return DeclScope(var->linkage() == Linkage::LocalVar)->declare(context, std::move(ident), var);
         }
 
-        /// Variable declaration with required initializer (type inferenced).
+        // Variable declaration with required initializer (type inferenced).
+        //
+        // As well as "regular" variables with deduced types, this form is also
+        // used to name non-variables, like types, templates, and more.
         case Tk::ColonColon: {
             auto cc_loc = tok.location;
             NextToken();
             auto expr = ParseExpr();
             if (not expr) return expr.diag();
+
+            if (
+                auto e_type = cast<TypeExpr>(*expr)
+            ) {
+                // Copy required due to `move(ident)` below, and the fact that I don't
+                // want to get bit by order of execution of arguments in nested calls...
+                auto decl_name = ident;
+
+                Decl* decl{};
+                // Declared type
+                if (auto declared_type = cast<DeclaredType>(e_type->contained_type())) {
+                    decl = new (*mod) TypeDecl(
+                        mod,
+                        std::move(ident),
+                        declared_type,
+                        location
+                    );
+                } else {
+                    // Create an alias to the type.
+                    decl = new (*mod) TypeAliasDecl(
+                        std::move(ident),
+                        e_type->contained_type(),
+                        location
+                    );
+                }
+                LCC_ASSERT(decl, "You forgot to do the thing");
+                return DeclScope()->declare(
+                    context,
+                    std::move(decl_name),
+                    decl
+                );
+            }
 
             // Create the variable declaration.
             auto* var = new (*mod) VarDecl(
@@ -956,6 +981,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             auto ty = ParseType();
             if (not ty) return ty.diag();
             lhs = new (*mod) TypeExpr(
+                *mod,
                 *ty,
                 {start_location, ty->location()}
             );
@@ -983,7 +1009,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         case Tk::Void: {
             auto ty = ParseType();
             if (not ty) return ty.diag();
-            lhs = new (*mod) TypeExpr(*ty, ty->location());
+            lhs = new (*mod) TypeExpr(*mod, *ty, ty->location());
         } break;
 
         case Tk::Else:
@@ -1117,7 +1143,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             NextToken(); // yeet `:`
             auto ty = ParseType();
             if (not ty) return ty.diag();
-            lhs = new (*mod) TypeExpr(*ty, {loc, ty->location()});
+            lhs = new (*mod) TypeExpr(*mod, *ty, {loc, ty->location()});
         } break;
 
         // Compound literal.

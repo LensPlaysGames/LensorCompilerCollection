@@ -2,7 +2,7 @@
 
 #+NAME: source
 #+begin_src glint :tangle ""
-  t_foo : struct {
+  t_foo :: struct {
     x : int;
     y : [byte];
   };

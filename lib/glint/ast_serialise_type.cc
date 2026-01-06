@@ -410,7 +410,10 @@ auto lcc::glint::Module::serialise(
         } break;
 
         case Type::Kind::Typeof:
-            LCC_ASSERT(false, "Sema should have replaced TypeofType with the type of it's contained expression");
+            Diag::ICE("Encountered TypeofType during serialisation. Bad sema, bad!");
+
+        case Type::Kind::Type:
+            Diag::ICE("Encountered TypeType during serialisation. Bad sema, bad!");
     }
 
     LCC_ASSERT(

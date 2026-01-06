@@ -19,7 +19,7 @@
 #+begin_src glint
   module foo_simplesum;
 
-  bar : sum {
+  bar :: sum {
     x : int;
     y : bool;
     z : uint;

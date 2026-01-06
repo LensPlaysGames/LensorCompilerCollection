@@ -162,10 +162,13 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
         case Kind::Integer: return std::bit_ceil(as<IntegerType>(this)->bit_width());
 
         case Kind::TemplatedStruct:
-            Diag::ICE("Cannot get align of TemplatedStructType; sema should replace TemplatedStructType.");
+            Diag::ICE("Cannot get align of TemplatedStructType; sema should replace TemplatedStructType");
 
         case Kind::Typeof:
-            Diag::ICE("Cannot get align of TypeofType; sema should replace TypeofType with the type of it's contained expression.");
+            Diag::ICE("Cannot get align of TypeofType; sema should replace TypeofType with the type of it's contained expression");
+
+        case Kind::Type:
+            Diag::ICE("Cannot get align of TypeType");
     }
 
     LCC_UNREACHABLE();
@@ -185,6 +188,37 @@ auto lcc::glint::Type::elem() const -> Type* {
         case Kind::Enum:
             return as<EnumType>(this)->underlying_type();
 
+        case Kind::Type:
+        case Kind::Builtin:
+        case Kind::FFIType:
+        case Kind::Named:
+        case Kind::Function:
+        case Kind::Struct:
+        case Kind::Union:
+        case Kind::Sum:
+        case Kind::Integer:
+        case Kind::Typeof:
+        case Kind::TemplatedStruct:
+            Diag::ICE("Type has no element type");
+    }
+    LCC_UNREACHABLE();
+}
+
+auto lcc::glint::Type::elem_ref() -> Type** {
+    switch (kind()) {
+        case Kind::Pointer: return &as<PointerType>(this)->element_type();
+        case Kind::Reference: return &as<ReferenceType>(this)->element_type();
+        case Kind::Array: return &as<ArrayType>(this)->element_type();
+        case Kind::DynamicArray:
+            return &as<DynamicArrayType>(this)->element_type();
+
+        case Kind::ArrayView:
+            return &as<ArrayViewType>(this)->element_type();
+
+        case Kind::Enum:
+            return &as<EnumType>(this)->underlying_type();
+
+        case Kind::Type:
         case Kind::Builtin:
         case Kind::FFIType:
         case Kind::Named:
@@ -332,6 +366,7 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
 
         case Kind::Named: return 0;
         case Kind::Function: return 0;
+        case Kind::Type: return 0;
 
         case Kind::Pointer:
         case Kind::Reference:
@@ -387,6 +422,9 @@ auto lcc::glint::Type::Equal(const Type* a, const Type* b) -> bool {
             auto bb = as<BuiltinType>(b);
             return ba->builtin_kind() == bb->builtin_kind();
         }
+
+        // A type is a type
+        case Kind::Type: return true;
 
         case Kind::FFIType: {
             auto fa = as<FFIType>(a);
@@ -759,11 +797,15 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
             );
         }
 
-        case Kind::Type:
+        case Kind::Type: {
+            auto e_type = as<TypeExpr>(expr);
+            auto contained_type = e_type->contained_type();
+
             // TODO: Handle structs with initialized members...
 
-            if (auto t_fixedarray = cast<ArrayType>(expr->type()); t_fixedarray) {
+            if (auto t_fixedarray = cast<ArrayType>(contained_type); t_fixedarray) {
                 return new (mod) TypeExpr(
+                    mod,
                     new (mod) ArrayType(
                         t_fixedarray->elem(),
                         Clone(t_fixedarray->size()),
@@ -772,8 +814,9 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
                     {}
                 );
             }
-            if (auto t_dynarray = cast<DynamicArrayType>(expr->type()); t_dynarray) {
+            if (auto t_dynarray = cast<DynamicArrayType>(contained_type); t_dynarray) {
                 return new (mod) TypeExpr(
+                    mod,
                     new (mod) DynamicArrayType(
                         t_dynarray->elem(),
                         Clone(t_dynarray->initial_size()),
@@ -782,8 +825,9 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
                     {}
                 );
             }
-            if (auto t_typeof = cast<TypeofType>(expr->type()); t_typeof) {
+            if (auto t_typeof = cast<TypeofType>(contained_type); t_typeof) {
                 return new (mod) TypeExpr(
+                    mod,
                     new (mod) TypeofType(Clone(t_typeof->expression()), {}),
                     {}
                 );
@@ -792,7 +836,8 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
                 expr->children().size() == 0,
                 "If a type has expressions within it, they need to be cloned properly"
             );
-            return new (mod) TypeExpr(expr->type(), expr->location());
+            return new (mod) TypeExpr(mod, contained_type, expr->location());
+        }
 
         case Kind::Module: {
             auto m = as<ModuleExpr>(expr);
@@ -977,7 +1022,7 @@ std::string lcc::glint::Expr::name() const {
             }
         }
         case Kind::Type: {
-            auto ty = type();
+            auto ty = as<TypeExpr>(this)->contained_type();
             switch (ty->kind()) {
                 case Type::Kind::Builtin: {
                     switch (as<BuiltinType>(ty)->builtin_kind()) {
@@ -992,6 +1037,7 @@ std::string lcc::glint::Expr::name() const {
                     LCC_UNREACHABLE();
                 }
                 case Type::Kind::FFIType: return "t_ffi";
+                case Type::Kind::Type: return "t_type";
                 case Type::Kind::Named: return "t_named";
                 case Type::Kind::Pointer: return "t_ptr";
                 case Type::Kind::Reference: return "t_ref";
@@ -1045,17 +1091,25 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
             return out;
         }
 
-        case Kind::Type:
+        case Kind::Type: {
+            auto e_type = as<TypeExpr>(this);
+            auto contained_type = e_type->contained_type();
+
             // TODO: Structs with initialised members?
-            if (auto* t_dynarray = cast<DynamicArrayType>(type())) {
+
+            if (auto* t_dynarray = cast<DynamicArrayType>(contained_type)) {
                 if (t_dynarray->initial_size())
                     return {&t_dynarray->initial_size()};
             }
-            if (auto* t_fixarray = cast<ArrayType>(type()))
+
+            if (auto* t_fixarray = cast<ArrayType>(contained_type))
                 return {&t_fixarray->size()};
-            if (auto* t_typeof = cast<TypeofType>(type()))
+
+            if (auto* t_typeof = cast<TypeofType>(contained_type))
                 return {&t_typeof->expression()};
+
             return {};
+        }
 
         case Kind::While: {
             auto* w = as<lcc::glint::WhileExpr>(this);
@@ -1187,19 +1241,22 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
             return out;
         }
 
-        case Kind::Type:
-            if (auto* t_dynarray = cast<DynamicArrayType>(type())) {
+        case Kind::Type: {
+            auto e_type = as<TypeExpr>(this);
+            auto contained_type = e_type->contained_type();
+
+            if (auto* t_dynarray = cast<DynamicArrayType>(contained_type)) {
                 if (t_dynarray->initial_size())
                     return {t_dynarray->initial_size()};
             }
-            if (auto* t_fixarray = cast<ArrayType>(type()))
+            if (auto* t_fixarray = cast<ArrayType>(contained_type))
                 return {t_fixarray->size()};
 
-            if (auto* t_typeof = cast<TypeofType>(type()))
+            if (auto* t_typeof = cast<TypeofType>(contained_type))
                 return {t_typeof->expression()};
 
             return {};
-
+        }
         case Kind::While: {
             const auto* w = as<lcc::glint::WhileExpr>(this);
             return {w->condition(), w->body()};
@@ -1355,13 +1412,19 @@ auto lcc::glint::EnumeratorDecl::value() const -> aint {
 
 auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std::string> {
     switch (t.kind()) {
+        case lcc::glint::Type::Kind::Type:
+            LCC_ASSERT(t.elem());
+            return ToSource(*t.elem());
+
         case lcc::glint::Type::Kind::Pointer: {
+            LCC_ASSERT(t.elem());
             auto elem_t = ToSource(*t.elem());
             if (not elem_t) return elem_t.diag();
             return fmt::format("{}.ptr", *elem_t);
         }
 
         case lcc::glint::Type::Kind::Reference: {
+            LCC_ASSERT(t.elem());
             auto elem_t = ToSource(*t.elem());
             if (not elem_t) return elem_t.diag();
             return fmt::format("{}.ref", *elem_t);
@@ -1404,6 +1467,7 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
             return lcc::as<lcc::glint::NamedType>(&t)->name();
 
         case lcc::glint::Type::Kind::DynamicArray: {
+            LCC_ASSERT(t.elem());
             auto elem_t = ToSource(*t.elem());
             if (not elem_t) return elem_t;
 
@@ -1418,6 +1482,7 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
 
         case lcc::glint::Type::Kind::Array: {
             auto array_t = lcc::as<lcc::glint::ArrayType>(&t);
+            LCC_ASSERT(t.elem());
             auto elem_t = ToSource(*array_t->elem());
             if (not elem_t) return elem_t;
             auto size = ToSource(*array_t->size());
@@ -1425,6 +1490,7 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
         }
 
         case lcc::glint::Type::Kind::ArrayView: {
+            LCC_ASSERT(t.elem());
             auto elem_t = ToSource(*t.elem());
             if (not elem_t) return elem_t;
             return fmt::format("[{} view]", *elem_t);
@@ -2107,7 +2173,9 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             }
 
             case K::OverloadSet: PrintBasicGlintNode("OverloadSet", e, e->type()); return;
-            case K::Type: PrintBasicGlintNode("TypeExpr", e, e->type()); return;
+            case K::Type:
+                PrintBasicGlintNode("TypeExpr", e, as<lcc::glint::TypeExpr>(e)->contained_type());
+                return;
             case K::TypeDecl: PrintBasicGlintNode("TypeDecl", e, e->type()); return;
             case K::TypeAliasDecl: PrintBasicGlintNode("TypeAliasDecl", e, e->type()); return;
             case K::StringLiteral: PrintBasicGlintNode("StringLiteral", e, e->type()); return;
@@ -2289,6 +2357,9 @@ auto lcc::glint::Type::representation(std::unordered_set<const Type*> containing
         case Kind::TemplatedStruct:
             Diag::ICE("Cannot get representation of TemplatedStructType; sema should replace TemplatedStructType.");
 
+        case Kind::Type:
+            Diag::ICE("Cannot get representation of TypeType; sema should replace TypeType.");
+
         case Kind::Typeof:
             Diag::ICE("Cannot get representation of TypeofType; sema should replace TypeofType.");
     }
@@ -2302,7 +2373,15 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
     using enum lcc::utils::Colour;
 
     switch (kind()) {
-        case Kind::Named: return fmt::format("{}{}", C(White), as<NamedType>(this)->name());
+        case Kind::Named:
+            return fmt::format(
+                "{}NamedType {}{}{}",
+                C(White),
+                C(type_colour),
+                as<NamedType>(this)->name(),
+                C(Reset)
+            );
+
         case Kind::Pointer: {
             /// If the element type of this pointer contains an array or
             /// function type, we need to use parentheses here to preserve
@@ -2377,20 +2456,52 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
 
         case Kind::Struct: {
             auto* decl = as<StructType>(this)->decl();
+            if (not decl or decl->name().empty()) {
+                auto members = as<StructType>(this)->members();
+                std::vector<std::string> members_strings{};
+                for (auto m : members) {
+                    members_strings.emplace_back(
+                        fmt::format("{}", *m.type)
+                    );
+                }
+                return fmt::format(
+                    "{}struct {}{{{}}}{}",
+                    C(type_colour),
+                    C(Reset),
+                    fmt::join(members_strings, ", "),
+                    C(Reset)
+                );
+            }
             return fmt::format(
                 "{}struct {}{}",
                 C(type_colour),
-                not decl or decl->name().empty() ? "<anonymous>" : decl->name(),
+                decl->name(),
                 C(Reset)
             );
         }
 
         case Kind::TemplatedStruct: {
             auto* decl = as<TemplatedStructType>(this)->decl();
+            if (not decl or decl->name().empty()) {
+                auto members = as<TemplatedStructType>(this)->members();
+                std::vector<std::string> members_strings{};
+                for (auto m : members) {
+                    members_strings.emplace_back(
+                        fmt::format("{}", *m.type)
+                    );
+                }
+                return fmt::format(
+                    "{}templated_struct {}{{{}}}{}",
+                    C(type_colour),
+                    C(Reset),
+                    fmt::join(members_strings, ", "),
+                    C(Reset)
+                );
+            }
             return fmt::format(
                 "{}templated_struct {}{}",
                 C(type_colour),
-                not decl or decl->name().empty() ? "<anonymous>" : decl->name(),
+                decl->name(),
                 C(Reset)
             );
         }
@@ -2500,9 +2611,21 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
             }
             LCC_UNREACHABLE();
 
+        case Kind::Type: {
+            return fmt::format("{}type{}", C(type_colour), C(Reset));
+        }
+
         case Kind::Typeof: {
-            // TODO: String-ize expression, or something...
-            return fmt::format("{}typeof{}", C(type_colour), C(Reset));
+            auto t_typeof = as<TypeofType>(this);
+            if (t_typeof->expression() and t_typeof->expression()->type()) {
+                return fmt::format(
+                    "{}typeof {}{}",
+                    C(type_colour),
+                    *t_typeof->expression()->type(),
+                    C(Reset)
+                );
+            }
+            return fmt::format("{}typeof ?{}", C(type_colour), C(Reset));
         }
 
         case Kind::Function: {
@@ -2673,6 +2796,7 @@ bool lcc::glint::Type::is_compound_type() const {
         case Kind::Integer:
             return false;
 
+        case Kind::Type:
         case Kind::Named:
         case Kind::Typeof:
             LCC_ASSERT(false, "Type {} should have been replaced!", *this);
@@ -2740,6 +2864,7 @@ auto lcc::glint::Type::types() const -> std::vector<Type*> {
         case Kind::Pointer:
             return {elem()};
 
+        case Kind::Type:
         case Kind::Builtin:
         case Kind::FFIType:
         case Kind::Enum:
@@ -2752,7 +2877,80 @@ auto lcc::glint::Type::types() const -> std::vector<Type*> {
     }
 
     LCC_UNREACHABLE();
-};
+}
+
+[[nodiscard]]
+auto lcc::glint::Type::types_ref() -> std::vector<Type**> {
+    switch (kind()) {
+        case Kind::Struct: {
+            auto s = as<lcc::glint::StructType>(this);
+            std::vector<Type**> out{};
+            out.reserve(s->members().size());
+            for (auto& m : s->members())
+                out.emplace_back(&m.type);
+
+            return out;
+        }
+
+        case Kind::TemplatedStruct: {
+            auto s = as<lcc::glint::TemplatedStructType>(this);
+            std::vector<Type**> out{};
+            out.reserve(s->members().size());
+            for (auto& m : s->members())
+                out.emplace_back(&m.type);
+
+            return out;
+        }
+
+        case Kind::Union: {
+            auto s = as<lcc::glint::UnionType>(this);
+            std::vector<Type**> out{};
+            out.reserve(s->members().size());
+            for (auto& m : s->members())
+                out.emplace_back(&m.type);
+
+            return out;
+        }
+
+        case Kind::Sum: {
+            auto s = as<lcc::glint::SumType>(this);
+            std::vector<Type**> out{};
+            out.reserve(s->members().size());
+            for (auto& m : s->members())
+                out.emplace_back(&m.type);
+
+            return out;
+        }
+
+        case Kind::Function: {
+            auto f = as<lcc::glint::FuncType>(this);
+            std::vector<Type**> out = {&f->return_type()};
+            out.reserve(f->params().size());
+            for (auto& p : f->params())
+                out.emplace_back(&p.type);
+
+            return out;
+        }
+
+        case Kind::ArrayView:
+        case Kind::Array:
+        case Kind::DynamicArray:
+        case Kind::Reference:
+        case Kind::Pointer:
+            return {elem_ref()};
+
+        case Kind::Type:
+        case Kind::Builtin:
+        case Kind::FFIType:
+        case Kind::Enum:
+        case Kind::Integer:
+        case Kind::Named:
+        case Kind::Typeof:
+            return {};
+    }
+
+    LCC_UNREACHABLE();
+}
 
 bool lcc::glint::IsCallable(Expr* expr) {
     return (

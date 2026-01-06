@@ -855,6 +855,9 @@ auto lcc::glint::Module::deserialise(
 
             case Type::Kind::Typeof:
                 Diag::ICE("Sema should have replaced TypeofType with the type of it's contained expression");
+
+            case Type::Kind::Type:
+                Diag::ICE("Sema should have replaced TypeType with it's contained type");
         }
     }
 

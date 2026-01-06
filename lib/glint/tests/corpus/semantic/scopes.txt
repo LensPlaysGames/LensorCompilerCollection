@@ -22,7 +22,7 @@ x;
 ---
 
 (block
- (block
+ (group
   (variable_declaration)
   (block (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))))
  (return (cast (name))))

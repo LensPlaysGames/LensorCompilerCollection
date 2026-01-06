@@ -2,7 +2,7 @@
 Match
 ================
 
-foo : sum {
+foo :: sum {
   x : int;
   y : int;
 };
@@ -22,9 +22,9 @@ out;
 
 (block
  (type_declaration)
- (block (variable_declaration) (block (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))))
+ (group (variable_declaration) (block (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))))
  (binary_assignment (member_access (name)) (integer_literal))
- (block (variable_declaration) (block (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))))
+ (group (variable_declaration) (block (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))))
  (if (unary_has (member_access (name))) (binary_assignment (name) (cast (member_access (name)))) (if (unary_has (member_access (name))) (binary_assignment (name) (integer_literal))))
  (return (cast (name))))
 
@@ -33,7 +33,7 @@ Error on Match Must Handle All Members of Composite Type
 :fail_sema
 ================
 
-foo : sum {
+foo :: sum {
   x : int;
   y : int;
 };

@@ -601,6 +601,11 @@ public:
         // "foreign function interface" types; types for interacting with other
         // languages (like C).
         FFIType,
+        // A type that represents another type.
+        // Basically, a TypeExpr is of `type` type, and contains a type of some
+        // other type. This allows unique operations on types as values vs values
+        // of those types.
+        Type,
         // Named types get resolved to the type the name is bound to.
         Named,
         // A (possibly null) memory address.
@@ -656,10 +661,15 @@ public:
     /// \return The alignment of this type, in bits.
     usz align(const Context* ctx) const;
 
-    /// Get the element type of this type. This will assert if this
-    /// type does not have an element type.
+    /// Get the element type of this type. This will assert that this type does
+    /// have an element type.
     [[nodiscard]]
     auto elem() const -> Type*;
+
+    /// Get a reference to the element type of this type. This will assert that
+    /// this type does have an element type.
+    [[nodiscard]]
+    auto elem_ref() -> Type**;
 
     /// Get the kind of this type.
     [[nodiscard]]
@@ -755,6 +765,11 @@ public:
     [[nodiscard]]
     auto types() const -> std::vector<Type*>;
 
+    /// Return referenced to types contained by this type, if any.
+    /// @see types()
+    [[nodiscard]]
+    auto types_ref() -> std::vector<Type**>;
+
     // Get the identifier-friendly encoding of this type.
     auto representation(
         std::unordered_set<const Type*> containing_types = {}
@@ -826,6 +841,7 @@ static constexpr auto ToString(Type::Kind k) {
     switch (k) {
         case Type::Kind::Builtin: return "builtin";
         case Type::Kind::FFIType: return "ffi";
+        case Type::Kind::Type: return "type";
         case Type::Kind::Named: return "named";
         case Type::Kind::Pointer: return "ptr";
         case Type::Kind::Reference: return "ref";
@@ -1052,6 +1068,19 @@ public:
             or type->kind() == Kind::Reference
             or type->kind() == Kind::DynamicArray
             or type->kind() == Kind::Array;
+    }
+};
+
+class TypeType : public Type {
+public:
+    constexpr TypeType(Location location)
+        : Type(Kind::Type, location) {
+        set_sema_done();
+    }
+
+    [[nodiscard]]
+    static auto classof(const Type* type) -> bool {
+        return type->kind() == Kind::Type;
     }
 };
 
@@ -2423,10 +2452,21 @@ public:
 };
 
 class TypeExpr : public TypedExpr {
+    Type* _contained_type;
 
 public:
-    TypeExpr(Type* _ty, Location location)
-        : TypedExpr(Kind::Type, location, _ty) {}
+    TypeExpr(Module& mod, Type* _ty, Location location)
+        : TypedExpr(
+              Kind::Type,
+              location,
+              new (mod) TypeType(location)
+          ),
+          _contained_type(_ty) {}
+
+    auto contained_type() { return _contained_type; }
+    auto contained_type_ref() { return &_contained_type; }
+    auto contained_type() const { return _contained_type; }
+    auto contained_type_ref() const { return &_contained_type; }
 
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {

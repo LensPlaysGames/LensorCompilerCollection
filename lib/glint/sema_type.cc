@@ -24,7 +24,8 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
         case Type::Kind::Builtin: LCC_UNREACHABLE();
 
         // These are no-ops.
-        case Type::Kind::FFIType: break;
+        case Type::Kind::FFIType:
+        case Type::Kind::Type: break;
 
         // Named types need to be resolved to a type.
         case Type::Kind::Named: {
@@ -406,6 +407,11 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                     continue;
                 }
 
+                // TODO: Should we allow type members?
+                // Type members don't actually store any information in the struct at runtime...
+                if (is<TypeType>(member.type))
+                    continue;
+
                 if (member.supplanted) {
                     // Check if this type has already been supplanted; if so, error.
                     if (rgs::any_of(supplanted_types, [&](Type* already_supplanted_type) {
@@ -591,7 +597,10 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                 t->set_sema_errored();
                 return false;
             }
-            *type_ptr = t->expression()->type();
+            if (is<TypeExpr>(t->expression()))
+                *type_ptr = as<TypeExpr>(t->expression())->contained_type();
+            else
+                *type_ptr = t->expression()->type();
         } break;
     }
 

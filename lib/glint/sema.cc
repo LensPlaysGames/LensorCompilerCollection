@@ -851,7 +851,12 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_assembly(
     return false;
 }
 
-void lcc::glint::Sema::DeclareImportedGlobalFunction(std::string name, Type* return_ty, std::vector<FuncType::Param> param_ty, bool no_return) {
+void lcc::glint::Sema::DeclareImportedGlobalFunction(
+    std::string name,
+    Type* return_ty,
+    std::vector<FuncType::Param> param_ty,
+    bool no_return
+) {
     LCC_ASSERT(return_ty);
     (void) mod.global_scope()->declare(
         context,
@@ -1411,6 +1416,7 @@ auto lcc::glint::Sema::DefaultInitializeImpl(Expr* accessor, ZeroInitializeOptio
         case Type::Kind::TemplatedStruct:
         case Type::Kind::Named:
         case Type::Kind::Typeof:
+        case Type::Kind::Type:
             LCC_ASSERT(false, "Type {} should have been replaced...", *accessor->type());
     }
     LCC_UNREACHABLE();
@@ -2097,7 +2103,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 if (not Analyse(&initializer))
                     return false;
 
-                *expr_ptr = new (mod) BlockExpr({v, initializer}, v->location());
+                *expr_ptr = new (mod) GroupExpr({v, initializer}, v->location());
                 LCC_ASSERT(Analyse(expr_ptr));
             }
         } break;
@@ -2548,7 +2554,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             (void) Analyse(sizeof_expr->expr_ref());
 
             aint value{};
-            if (auto* typed_expr = cast<TypedExpr>(sizeof_expr->expr()))
+            if (auto* e_type = cast<TypeExpr>(sizeof_expr->expr()))
+                value = e_type->contained_type()->size(context);
+            else if (auto* typed_expr = cast<TypedExpr>(sizeof_expr->expr()))
                 value = typed_expr->type()->size(context);
             else {
                 Error(sizeof_expr->location(), "Unhandled expression in sizeof");
@@ -2564,7 +2572,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             (void) Analyse(alignof_expr->expr_ref());
 
             aint value{};
-            if (auto* typed_expr = cast<TypedExpr>(alignof_expr->expr()))
+            if (auto* e_type = cast<TypeExpr>(alignof_expr->expr()))
+                value = e_type->contained_type()->size(context);
+            else if (auto* typed_expr = cast<TypedExpr>(alignof_expr->expr()))
                 value = typed_expr->type()->align(context);
             else Error(alignof_expr->location(), "Unhandled expression in alignof");
 
@@ -2630,8 +2640,15 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             LCC_ASSERT(expr->type()->is_function());
             break;
 
+        case Expr::Kind::Type: {
+            auto e_type = as<TypeExpr>(expr);
+            (void) Analyse(e_type->contained_type_ref());
+            if (not e_type->contained_type()->ok())
+                e_type->set_sema_errored();
+            break;
+        }
+
         /// The actual work here is analysing the type, so this is a no-op.
-        case Expr::Kind::Type:
         case Expr::Kind::TypeDecl:
         case Expr::Kind::TypeAliasDecl:
         /// There isn’t really a way these could be malformed.
@@ -3432,6 +3449,9 @@ void lcc::glint::Sema::AnalyseCall_Type(Expr** expr_ptr, CallExpr* expr) {
         ),
         "Invalid arguments of call to \"analyse type call\" function"
     );
+
+    auto called_type = as<TypeExpr>(expr->callee())->contained_type();
+
     // Calling a type expression with a single compound literal argument is a
     // declaration that the compound literal is expected to be of that type.
     if (
@@ -3443,7 +3463,7 @@ void lcc::glint::Sema::AnalyseCall_Type(Expr** expr_ptr, CallExpr* expr) {
         *expr_ptr = new (mod) CompoundLiteral(
             as<CompoundLiteral>(expr->args().at(0))->values(),
             expr->location(),
-            expr->callee()->type()
+            called_type
         );
         // Perform conversions (like a compound literal with a single unnamed
         // argument being converted to it's argument expression).
@@ -3451,7 +3471,9 @@ void lcc::glint::Sema::AnalyseCall_Type(Expr** expr_ptr, CallExpr* expr) {
         return;
     }
 
-    for (auto*& arg : expr->args()) (void) Analyse(&arg);
+    for (auto*& arg : expr->args())
+        (void) Analyse(&arg);
+
     /// If any of the arguments errored, we do too.
     if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
         expr->set_sema_errored();
@@ -3459,19 +3481,19 @@ void lcc::glint::Sema::AnalyseCall_Type(Expr** expr_ptr, CallExpr* expr) {
     }
 
     if (expr->args().size() == 1) {
-        // Calling a type expression with a single compound literal argument is a
-        // declaration that the compound literal is expected to be of that type.
+        // Calling a type expression with a single argument is a declaration that
+        // the expression is expected to be of that type.
         LCC_ASSERT(
             not is<CompoundLiteral>(expr->args().at(0)),
             "Call of type expression with single compound literal argument should have been handled above"
         );
 
         // Do conversions like lvalue to rvalue and stuffs.
-        (void) Convert(&expr->args().at(0), expr->callee()->type());
+        (void) Convert(&expr->args().at(0), called_type);
 
         *expr_ptr = new (mod) CastExpr(
             expr->args().at(0),
-            expr->callee()->type(),
+            called_type,
             CastKind::HardCast,
             expr->location()
         );
@@ -3479,11 +3501,64 @@ void lcc::glint::Sema::AnalyseCall_Type(Expr** expr_ptr, CallExpr* expr) {
         *expr_ptr = new (mod) CompoundLiteral(
             expr->args(),
             expr->location(),
-            expr->callee()->type()
+            called_type
         );
     }
     return;
 }
+
+namespace lcc::glint::detail {
+auto expand_template_parameter_references_type(const TemplateExpr* t, const std::vector<Expr*> args, Type** current_type) -> void {
+    // Update members of structs and such for type expressions.
+    if (auto t_name = cast<NamedType>(*current_type)) {
+        // The current type is the argument
+        auto found_it = rgs::find_if(
+            t->params(),
+            [&](auto p) { return t_name->name() == p.name; }
+        );
+        if (found_it != t->params().end()) {
+            auto parameter_index = std::distance(t->params().begin(), found_it);
+            // TODO?: Ensure template parameter's constraint type is "valid" (i.e.
+            // "expr" or "type" with argument being a type expression).
+            auto argument = args.at(usz(parameter_index));
+            *current_type = as<TypeExpr>(argument)->contained_type();
+        }
+    } else {
+        for (auto t_child : (*current_type)->types_ref())
+            expand_template_parameter_references_type(t, args, t_child);
+    }
+};
+auto expand_template_parameter_references(const TemplateExpr* t, const std::vector<Expr*> args, Expr** current_expr) -> void {
+    // Fixup expression's type, if necessary.
+    if (auto e = cast<TypedExpr>(*current_expr)) {
+        expand_template_parameter_references_type(t, args, e->type_ref());
+    }
+    // Fixup types within type expressions.
+    if (auto e_type = cast<TypeExpr>(*current_expr)) {
+        expand_template_parameter_references_type(t, args, e_type->contained_type_ref());
+    }
+
+    // Expand template using call arguments as template arguments.
+    // Replace reference to parameter with argument
+    if (auto e_name = cast<NameRefExpr>(*current_expr)) {
+        // The current expression is the argument
+        auto found_it = rgs::find_if(
+            t->params(),
+            [&](auto p) { return e_name->name() == p.name; }
+        );
+        if (found_it != t->params().end()) {
+            auto parameter_index = std::distance(t->params().begin(), found_it);
+            auto argument = args.at(usz(parameter_index));
+            *current_expr = argument;
+        }
+    } else {
+        // Search template body for template parameter references and fix them up
+        // into their actual argument.
+        for (auto e : (*current_expr)->children_ref())
+            expand_template_parameter_references(t, args, e);
+    }
+};
+} // namespace lcc::glint::detail
 
 void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
     LCC_ASSERT(
@@ -3497,32 +3572,6 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
     );
 
     // "Place" expr->args() within CLONE of template body
-    auto expand_template_parameter_references =
-        [](this auto&& self, const TemplateExpr* t, const std::vector<Expr*> args, Expr** current_expr) -> void {
-        // TODO: Update members of structs and such for type expressions.
-
-        // Expand template using call arguments as template arguments.
-        // Replace reference to parameter with argument
-        if (auto e_name = cast<NameRefExpr>(*current_expr)) {
-            // The current expression is the argument
-            auto found_it = rgs::find_if(
-                t->params(),
-                [&](auto p) { return e_name->name() == p.name; }
-            );
-            if (found_it != t->params().end()) {
-                auto parameter_index = std::distance(t->params().begin(), found_it);
-                auto argument = args.at(usz(parameter_index));
-                *current_expr = argument;
-            }
-        } else {
-            // Search template body for template parameter references and fix them up
-            // into their actual argument.
-            for (auto e : (*current_expr)->children_ref()) {
-                // C++23 recurse
-                self(t, args, e);
-            }
-        }
-    };
 
     TemplateExpr* t = cast<TemplateExpr>(expr->callee());
     if (not t)
@@ -3594,7 +3643,9 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
 
     // Clone template body...
     auto body = Expr::Clone(mod, context, t->body());
-    expand_template_parameter_references(t, expr->args(), &body);
+
+    // Replace template parameters with template arguments.
+    detail::expand_template_parameter_references(t, expr->args(), &body);
 
     // Now that the body has been expanded, it's location is actually the
     // location of the call expression that it expanded from (not the template
@@ -4036,7 +4087,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     if (
         (
             is<TypeExpr>(expr->callee())
-            and is<TemplatedStructType>(expr->callee()->type())
+            and is<TemplatedStructType>(as<TypeExpr>(expr->callee())->contained_type())
         )
         or ( //
             is<NameRefExpr>(expr->callee())
@@ -4046,7 +4097,9 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
             and is<TemplatedStructType>(as<VarDecl>(as<NameRefExpr>(expr->callee())->target())->init()->type())
         )
     ) {
-        auto t = cast<TemplatedStructType>(expr->callee()->type());
+        auto t = cast<TemplatedStructType>(
+            as<TypeExpr>(expr->callee())->contained_type()
+        );
         if (not t) {
             t = as<TemplatedStructType>(
                 as<VarDecl>(as<NameRefExpr>(expr->callee())->target())->init()->type()
@@ -4058,27 +4111,14 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         // via:
         // (template(t : type) struct { v : t }) int;
         //                     ^^^^^^^^^^^^^^^^
-        std::vector<StructType::Member> members{};
-        // FIXME: We should /probably/ just have regular templates reach into
-        // struct members (type members in general), rather than handling this
-        // specially here.
-        for (auto m : t->members()) {
-            // TODO: Visit all type's children recursively, as well (to catch t.ptr, for example).
-            if (is<NamedType>(m.type)) {
-                auto n = as<NamedType>(m.type)->name();
-                if (auto p = t->param_index_by_name(n); p >= 0) {
-                    auto m_copy = m;
-                    m_copy.type = expr->args().at((usz) p)->type();
-                    members.emplace_back(m_copy);
-                    continue;
-                }
-            }
-            members.emplace_back(m);
-        }
+
+        // Copy because StructType constructor moves members.
+        auto members = t->members();
+
         auto generated_struct
             = new (mod) StructType(t->scope(), members, {});
         auto generated_struct_expr
-            = new (mod) TypeExpr(generated_struct, {});
+            = new (mod) TypeExpr(mod, generated_struct, {});
 
         auto generated_template = new (mod) TemplateExpr(
             generated_struct_expr,

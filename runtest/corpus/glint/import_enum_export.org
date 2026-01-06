@@ -11,7 +11,7 @@ bar.A;
 #+begin_src glint
   module foo;
 
-  export bar : enum {
+  export bar :: enum {
     A :: 42
   };
 #+end_src
