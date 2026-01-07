@@ -1,6 +1,6 @@
-# Created 2025-11-05 Wed 03:15
+# Created 2026-01-07 Wed 14:22
 #+title: 
-#+author: Rylan Kellogg
+#+author: Lens_r
 * Preface
 
 This document is manually generated and may be a couple commits behind.
@@ -561,6 +561,27 @@ The TL;DR is that =defines= allows you to create a definitely-unused name within
 #+end_src
 
 This would emit an error: something like =Unknown symbol '__L0'=. The compiler generates a unique name, =__L0= in this case, to replace =x= with for each invocation. If we called =foo= again, we'd probably get =__L1= for that invocation, and so on and so forth.
+** =apply=
+
+=apply <function>, <arguments>=, read as "map the function <function> to arguments <arguments>", applies the given function to each expression in the list of expressions given. If multiple lists are given, multiple arguments are passed to the function. The arity of the function should match the amount of lists given to =apply=.
+
+#+begin_src glint
+  apply foo, ("bar", "baz", 69);
+  ;; EQUIVALENT
+  foo "bar";
+  foo "baz";
+  foo 69;
+#+end_src
+
+#+begin_src glint
+  apply foo, ("bar", "baz", 69), ("goo", `0`, 0x420);
+  ;; EQUIVALENT
+  foo "bar", "goo";
+  foo "baz", `0`;
+  foo 69, 0x420;
+#+end_src
+
+This allows you to write simpler functions and still use them as if they take variadic arguments.
 * Misc Notes
 
 If you are new to Glint, keep in mind that subscript doesn't dereference. =x[0]= is of pointer type, to get the value at that pointer you need to use =@x[0]=. The only way to achieve pointer arithmetic in Glint is through the subscript operator.
