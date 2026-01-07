@@ -2,8 +2,6 @@
 
 * LCC
 
-- [Driver]: Triple-dash =---= arguments passed to front-end (i.e. =---allow-unions= for Glint).
-- [Diags]: Error IDs
 - [Meta]: Flatten source structure, re-organize into folders as necessary
 - [Driver]: =-gcc= compatibility layer: args after are parsed as GCC arguments
 - [Register Allocation]: Register classes (floats/scalar)
@@ -14,24 +12,30 @@ i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expe
 
 * Glint
 
-- [Lexer]: Case Insensitivity
-  Behind =---case-insensitive= flag?
-- [Sema]: Variable Entanglement
+- [Parser/Sema]: Compile-time Checked Interpolation: =printf "value: {}\n", 69;=
+  This won't be different from =print=, I just like this style of doing
+  things (and a lot of people tend to prefer it over splitting strings).
+  This will lower into a =print= call, splitting the format string into
+  relevant string literals (split on `{}`).
+- [Parser/Sema]: Function templates via =auto= parameters
+- [Sema]: Better error when accessing member of a struct with no members
+  The current is kind of awkward...
+- [Sema]: =print= handle enum value, print enum name
+- [Parser/Sema]: Switch on value
 - [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
+- [Parser/Sema]: Recursive Lambda
 - [Sema]: =out;= as first expression of function body becomes declaration of return type
 - [Sema]: Use intrinsic memset for initialisation (optimisation)
-- [Meta]: glintlang website
 - [Parser]: Syntax for asserting compile time evaluation
+- [Meta]: glintlang website
+- [Sema]: Variable Entanglement
 - [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=
 - [Sema]: Dynamic array of =expr=. =for e in exprs, apply foo e;= type of thing.
 - [Sema]: =maps_arguments= function attribute
-- [Parser/Sema]: Compile-time Checked Interpolation: =printf "value: {}\n", 69;=
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
-- [Parser/Sema]: Function templates via =auto= parameters
-- [Sema]: =print= handle enum value, print enum name
 - [Sema]: =import= namespacing
 - [Parser]: Block comments
 - [Parser/Sema]: Tokens in the AST
-- [Parser/Sema]: Switch on value
 - [Diags]: Get rid of "Miscellaneous" ErrorId
-- [Parser/Sema]: Recursive Lambda
+- [Lexer]: Case Insensitivity
+  Behind =---case-insensitive= flag?
