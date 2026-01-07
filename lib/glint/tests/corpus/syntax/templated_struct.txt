@@ -1,0 +1,11 @@
+================
+Templated Struct
+:syntax
+================
+
+struct(x : type) { v : x; };
+
+---
+
+(block
+ (t_templated_struct))

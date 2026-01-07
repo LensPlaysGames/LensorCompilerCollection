@@ -30,3 +30,14 @@ template(x : type) x;
 ---
 
 (block (template (name)))
+
+================
+Template Expression w/ Expression Parameter
+:syntax
+================
+
+template(x : expr) x;
+
+---
+
+(block (template (name)))
