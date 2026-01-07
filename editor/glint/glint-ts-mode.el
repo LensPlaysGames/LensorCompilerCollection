@@ -2,7 +2,7 @@
 
 ;; Author: Lens_r
 ;; Maintainer: Lens_r
-;; Version: 0.2.2
+;; Version: 0.2.4
 ;; Package-Requires: ((emacs "29.1") (treesit))
 ;; Homepage: https://github.com/LensPlaysGames/LensorCompilerCollection
 ;; Keywords: glint, tree-sitter
@@ -41,7 +41,9 @@
 (unless glint-ts-mode-indent-offset (setq glint-ts-mode-indent-offset 2))
 
 (defvar glint-ts-mode--unary-node-names
-  '("addressof" "dereference" "increment" "decrement" "negate" "logical_negate"))
+  '("addressof" "dereference"
+    "increment" "decrement"
+    "negate" "logical_negate" "bitwise_negate"))
 
 (defvar glint-ts-mode--binary-node-names
   '("add" "subtract" "multiply" "divide" "remainder"
@@ -50,7 +52,6 @@
     "bitshl" "bitshr" "bitand" "bitor" "bitxor"
     "add_eq" "subtract_eq" "multiply_eq" "divide_eq" "remainder_eq"
     "tilde_eq" "ampersand_eq" "pipe_eq" "caret_eq" "lbrack_eq"))
-
 
 (defmacro glint-ts-mode--parent-is-unary ()
   "Returns a matcher meant to be used within 'treesit-simple-indent-rules'.
