@@ -1,0 +1,13 @@
+================
+Templated Function
+:syntax
+================
+
+foo : int(x : auto)
+  x + 42;
+
+---
+
+(block
+ (function_declaration
+  (binary_add (name) (integer_literal))))
