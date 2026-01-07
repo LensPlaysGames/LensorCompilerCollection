@@ -1,0 +1,15 @@
+* Glint's High Level Design
+
+*Glint is a general purpose programming language*.
+
+Glint is /simple/, but never /terse/.
+
+Glint is /mathematical/ in nature, extending mathematical concepts for computing use-cases (i.e. types, function parameters and return values, etc).
+
+Glint is /capable/ of low-level operations, including "unsafe" ones: how else would you write a driver for a piece of hardware which *requires* you to write to a specific address in memory?
+
+Glint is /capable/ of high-level operations, including "functional" ones: how else would you stay sane while writing complex software?
+
+Glint is /expressive/. If something is possible, Glint should be able to do it (one way or another), without being "ridiculous" to achieve (i.e. looking like Brainfuck).
+
+Glint /happens/ to be fast. Performance of current computer machines is never taken into consideration in design decisions of Glint. Optimising compilers (like LCC) deal with that.
