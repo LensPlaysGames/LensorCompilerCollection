@@ -19,13 +19,18 @@ struct AdjacencyMatrix {
     std::unique_ptr<bool[]> data;
     usz size;
 
-    explicit AdjacencyMatrix(usz sz) : data(std::make_unique<bool[]>(sz * sz)), size(sz) {}
+    explicit AdjacencyMatrix(usz sz)
+        : data(std::make_unique<bool[]>(sz * sz)),
+          size(sz) {}
 
     [[nodiscard]]
     auto coord(usz x, usz y) const -> usz {
         LCC_ASSERT(x < size, "AdjacencyMatrix: X out of bounds");
         LCC_ASSERT(y < size, "AdjacencyMatrix: Y out of bounds");
-        LCC_ASSERT(x != y, "AdjacencyMatrix: X and Y are equal; must not set adjacency with self");
+        LCC_ASSERT(
+            x != y,
+            "AdjacencyMatrix: X and Y are equal; must not set adjacency with self"
+        );
         return y * size + x;
     }
 
@@ -86,9 +91,12 @@ struct AdjacencyList {
         for (usz adj_i : adjacencies) {
             if (not first) out += ", ";
             else first = false;
-            auto found = std::find_if(lists.begin(), lists.end(), [&](const AdjacencyList& l) {
-                return adj_i == l.value;
-            });
+            auto found = rgs::find_if(
+                lists,
+                [&](const AdjacencyList& l) {
+                    return adj_i == l.value;
+                }
+            );
             out += lists.at(usz(found - lists.begin())).string_base();
         }
         return out;
@@ -97,9 +105,27 @@ struct AdjacencyList {
 
 namespace {
 
+usz live_idx_from_register_value(const std::vector<Register>& registers, usz value) {
+    auto found = rgs::find_if(
+        registers,
+        [&](const Register& r) {
+            return value == r.value;
+        }
+    );
+    LCC_ASSERT(
+        found != registers.end(),
+        "Did not find referenced register in register list"
+    );
+    return usz(found - registers.begin());
+}
+
+usz live_idx_from_register(const std::vector<Register>& registers, Register r) {
+    return live_idx_from_register_value(registers, r.value);
+}
+
 void collect_interferences_from_block(
     AdjacencyMatrix& matrix,
-    std::vector<Register>& registers,
+    const std::vector<Register>& registers,
     MFunction& function,
     std::vector<usz> live_values,
     std::vector<MBlock*> visited,
@@ -107,22 +133,11 @@ void collect_interferences_from_block(
     MBlock* block
 ) {
     /// Don't visit the same block thrice.
-    if (std::find(visited.begin(), visited.end(), block) != visited.end()) {
-        if (std::find(doubly_visited.begin(), doubly_visited.end(), block) != doubly_visited.end())
+    if (rgs::find(visited, block) != visited.end()) {
+        if (rgs::find(doubly_visited, block) != doubly_visited.end())
             return;
         doubly_visited.push_back(block);
     } else visited.push_back(block);
-
-    const auto live_idx_from_register_value = [&](usz value) -> usz {
-        auto found = std::find_if(registers.begin(), registers.end(), [&](const Register& r) {
-            return value == r.value;
-        });
-        LCC_ASSERT(found != registers.end(), "Did not find referenced register in register list");
-        return usz(found - registers.begin());
-    };
-    const auto live_idx_from_register = [&](Register reg) -> usz {
-        return live_idx_from_register_value(reg.value);
-    };
 
     // Basically, walk over the instructions of the block backwards, keeping
     // track of all virtual registers that have been encountered but not
@@ -133,11 +148,13 @@ void collect_interferences_from_block(
 
         // If the defining use of a virtual register is an operand of this
         // instruction, remove it from vector of live vals.
-        if (inst.is_defining()) std::erase(live_values, inst.reg());
+        if (inst.is_defining())
+            std::erase(live_values, inst.reg());
         for (auto& op : inst.all_operands()) {
             if (std::holds_alternative<MOperandRegister>(op)) {
                 auto reg = std::get<MOperandRegister>(op);
-                if (reg.defining_use) std::erase(live_values, reg.value);
+                if (reg.defining_use)
+                    std::erase(live_values, reg.value);
             }
         }
 
@@ -150,18 +167,24 @@ void collect_interferences_from_block(
             auto op = inst.get_operand(index);
             if (std::holds_alternative<MOperandRegister>(op)) {
                 auto reg = std::get<MOperandRegister>(op);
-                auto live_idx = live_idx_from_register(reg);
+                auto live_idx = live_idx_from_register(registers, reg);
                 for (auto live : live_values) {
-                    matrix.set(live_idx_from_register_value(live), live_idx);
+                    matrix.set(
+                        live_idx_from_register_value(registers, live),
+                        live_idx
+                    );
                     // fmt::print("Clobber r{} interferes with live value r{}\n", reg.value, live);
                 }
             }
         }
 
         for (auto r_id : inst.register_clobbers()) {
-            auto live_idx = live_idx_from_register_value(r_id);
+            auto live_idx = live_idx_from_register_value(registers, r_id);
             for (auto live : live_values) {
-                matrix.set(live_idx_from_register_value(live), live_idx);
+                matrix.set(
+                    live_idx_from_register_value(registers, live),
+                    live_idx
+                );
                 // fmt::print("Clobber r{} interferes with live value r{}\n", reg.value, live);
             }
         }
@@ -174,16 +197,18 @@ void collect_interferences_from_block(
             Register reg;
             usz idx;
         } MIROperandPlusLiveValIndex;
+
         std::vector<MIROperandPlusLiveValIndex> vreg_operands{};
+
         if (inst.reg() >= +MInst::Kind::ArchStart) {
             auto reg = Register{inst.reg(), uint(inst.regsize())};
-            vreg_operands.push_back({reg, live_idx_from_register(reg)});
+            vreg_operands.push_back({reg, live_idx_from_register(registers, reg)});
         }
         for (auto& op : inst.all_operands()) {
             if (std::holds_alternative<MOperandRegister>(op)) {
                 auto reg = std::get<MOperandRegister>(op);
                 if (reg.value >= +MInst::Kind::ArchStart)
-                    vreg_operands.push_back({reg, live_idx_from_register(reg)});
+                    vreg_operands.push_back({reg, live_idx_from_register(registers, reg)});
             }
         }
 
@@ -217,7 +242,11 @@ void collect_interferences_from_block(
                     and rgs::find(clobbered_regs, B.reg.value) == clobbered_regs.end()
                 ) {
                     matrix.set(A.idx, B.idx);
-                    // fmt::print("Non-clobbered register operands r{} and r{} interfere\n", A.reg.value, B.reg.value);
+                    // fmt::print(
+                    //     "Non-clobbered register operands r{} and r{} interfere\n",
+                    //     A.reg.value,
+                    //     B.reg.value
+                    // );
                 }
             }
         }
@@ -232,7 +261,7 @@ void collect_interferences_from_block(
         //     Both v0 and v1 interfere with both v3 and v7.
         for (auto r : vreg_operands) {
             for (auto live : live_values)
-                matrix.set(r.idx, live_idx_from_register_value(live));
+                matrix.set(r.idx, live_idx_from_register_value(registers, live));
         }
 
         // If a virtual register is not live and is seen as an operand, it is
@@ -240,14 +269,13 @@ void collect_interferences_from_block(
         for (auto r : vreg_operands) {
             if (
                 not r.reg.defining_use
-                and std::find(live_values.begin(), live_values.end(), r.reg.value) == live_values.end()
-            ) {
-                live_values.push_back(r.reg.value);
-            }
+                and rgs::find(live_values, r.reg.value) == live_values.end()
+            ) live_values.push_back(r.reg.value);
         }
         // Handle the case of a non-defining register operand in use of the
         // instruction that defines that register.
-        if (inst.is_defining()) std::erase(live_values, inst.reg());
+        if (inst.is_defining())
+            std::erase(live_values, inst.reg());
 
         // fmt::print("live before: {}\n", fmt::join(live_values, ", "));
 
@@ -263,18 +291,34 @@ void collect_interferences_from_block(
     for (const auto& parent_name : block->predecessors()) {
         auto* parent = function.block_by_name(parent_name);
         auto live_values_copy{live_values};
-        collect_interferences_from_block(matrix, registers, function, live_values_copy, visited, doubly_visited, parent);
+        collect_interferences_from_block(
+            matrix,
+            registers,
+            function,
+            live_values_copy,
+            visited,
+            doubly_visited,
+            parent
+        );
     }
 }
 
-void collect_interferences(AdjacencyMatrix& matrix, std::vector<Register>& registers, MFunction& function) {
+void collect_interferences(
+    AdjacencyMatrix& matrix,
+    const std::vector<Register>& registers,
+    MFunction& function
+) {
     std::vector<MBlock*> exits{};
     for (auto& block : function.blocks()) {
         if (block.successors().empty())
             exits.push_back(&block);
     }
 
-    LCC_ASSERT(not exits.empty(), "Cannot walk CFG as function {} has no exit blocks", function.names().at(0).name);
+    LCC_ASSERT(
+        not exits.empty(),
+        "Cannot walk CFG as function {} has no exit blocks",
+        function.names().at(0).name
+    );
 
     // fmt::print(
     //     "Collected following exit blocks for function {}: {}\n",
@@ -284,8 +328,17 @@ void collect_interferences(AdjacencyMatrix& matrix, std::vector<Register>& regis
 
     // From each exit block (collected above), follow control flow to the
     // root of the function (entry block), or to a block already visited.
-    for (auto* exit : exits)
-        collect_interferences_from_block(matrix, registers, function, {}, {}, {}, exit);
+    for (auto* exit : exits) {
+        collect_interferences_from_block(
+            matrix,
+            registers,
+            function,
+            {},
+            {},
+            {},
+            exit
+        );
+    }
 }
 
 } // namespace
@@ -309,6 +362,12 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
 
     // STEP -1
     // Replace explicit return registers with the actual return register...
+    //
+    // EXPLAINER: For ease of writing instruction selection patterns, there is
+    // a reserved register value that means "the general purpose return
+    // register according to the current calling convention"; this avoids
+    // having to write different instruction selection patterns for every
+    // single calling convention.
     for (auto& block : function.blocks()) {
         for (auto& inst : block.instructions()) {
             if (inst.reg() == desc.return_register_to_replace)
@@ -333,19 +392,33 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
     //);
 
     // STEP ONE
-    // Populate list of registers, first using hardware registers, then using virtual registers.
+    // Populate list of registers, first using hardware registers, then using
+    // virtual registers.
     std::vector<Register> registers{};
-    // Helper function that handles not adding duplicates.
+
+    // Helper function that ensures no duplicate registers show up in the
+    // register list.
     auto add_reg = [&](usz id, usz size) {
-        auto found = std::find_if(registers.begin(), registers.end(), [&](Register& r) {
-            return r.value == id;
-        });
+        auto found = rgs::find_if(
+            registers,
+            [&](Register& r) {
+                return r.value == id;
+            }
+        );
         if (found == registers.end())
             registers.push_back(Register{id, uint(size)});
     };
+
+    // Hardware registers are passed in through the machine description.
+    // Add all (relevant) hardware registers to the list of all registers.
     for (auto [index, reg] : vws::enumerate(desc.registers))
         add_reg(reg, 0);
 
+    // Walk the MIR, and,
+    //   A: for every instruction, add the result register to the list of
+    //      registers, and,
+    //   B: for every register operand of each instruction, add the referenced
+    //      register to the list of registers.
     for (auto& block : function.blocks()) {
         for (auto& inst : block.instructions()) {
             add_reg(inst.reg(), inst.regsize());
@@ -357,16 +430,6 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             }
         }
     }
-
-    // Error if zero registers collected.
-    // NOTE: We could technically just return but for the most part this
-    // usually means we have accidentally ended up codegenning a function with
-    // no body. So, because this never happens normally, it is a fatal error,
-    // even though it doesn't have to be.
-    LCC_ASSERT(
-        not registers.empty(),
-        "Cannot allocate registers when there are no registers to allocate"
-    );
 
     // STEP TWO
     // Walk control flow in reverse, build adjacency matrix as you go.
@@ -448,7 +511,8 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
 
             for (auto& list : lists) {
                 if (should_skip_list(list)) continue;
-                list.spill_cost = list.degree() ? (list.spill_cost / list.degree()) : 0;
+                list.spill_cost
+                    = list.degree() ? (list.spill_cost / list.degree()) : 0;
                 if (list.degree() and list.spill_cost <= min_cost) {
                     min_cost = list.spill_cost;
                     node_to_spill = list.index;
@@ -469,13 +533,18 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
     // registers, ensuring no overlap (interferences/adjacencies).
     for (usz i : coloring_stack) {
         auto& list = lists.at(i);
+
         // Skip hardware registers (no need to color them).
         if (list.value < +MInst::Kind::ArchStart) continue;
+
         usz register_interferences = list.regmask;
         for (usz i_adj : list.adjacencies) {
-            auto adj_list = std::find_if(lists.begin(), lists.end(), [&](AdjacencyList& l) {
-                return l.value == i_adj;
-            });
+            auto adj_list = rgs::find_if(
+                lists,
+                [&](AdjacencyList& l) {
+                    return l.value == i_adj;
+                }
+            );
             LCC_ASSERT(
                 adj_list != lists.end(),
                 "Could not find adjacency list corresponding to vreg {}",
