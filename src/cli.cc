@@ -78,9 +78,11 @@ auto parse(int argc, const char** argv) -> Options {
             return std::string_view{argv[++i]};
         };
         const auto arg = std::string_view{argv[i]};
-        if (arg.substr(0, 3) == "--h" or arg.substr(0, 2) == "-h") {
-            help();
-        }
+        if (
+            arg.substr(0, 3) == "--h"
+            or arg.substr(0, 2) == "-h"
+            or arg.ends_with("help")
+        ) help();
 
         if (arg == "--version") {
             fmt::print("lcc (LCC) {}\n", LCC_VERSION_STRING);
@@ -180,6 +182,10 @@ auto parse(int argc, const char** argv) -> Options {
                 std::exit(1);
             }
             o.format = format;
+        } else if (arg.starts_with("---")) {
+            o.frontend_options.emplace_back(
+                arg.substr(3)
+            );
         } else if (arg.starts_with("-")) {
             fmt::print(
                 "CLI ERROR: Unrecognized command line option or flag {}\n"

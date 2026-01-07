@@ -191,9 +191,14 @@ auto main(int argc, const char** argv) -> int {
     };
 
     context.add_include_directory(".");
-    for (const auto& dir : options.include_directories) {
-        if (options.verbose) fmt::print("Added input directory: {}\n", dir);
-        context.add_include_directory(dir);
+    for (const auto& directory : options.include_directories) {
+        if (options.verbose) fmt::print("Added input directory: {}\n", directory);
+        context.add_include_directory(directory);
+    }
+
+    for (const auto& option : options.frontend_options) {
+        if (options.verbose) fmt::print("Added frontend option: {}\n", option);
+        context.add_frontend_option(option);
     }
 
     auto ConvertFileExtensionToOutputFormat = [&](const std::string& path_string) {

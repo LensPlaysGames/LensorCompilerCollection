@@ -7,6 +7,13 @@
 #include <lcc/location.hh>
 #include <lcc/utils.hh>
 
+#include <algorithm>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 #    define LCC_PLATFORM_WINDOWS 1
 #endif
@@ -87,6 +94,10 @@ private:
     const Format* _format{};
 
     std::vector<std::string> _include_directories{};
+
+    // Options passed to the frontend
+    // (conventionally with prefixed triple dash `---`)
+    std::vector<std::string> _frontend_options{};
 
     /// Called once the first time a context is created.
     static void InitialiseLCCData();
@@ -228,6 +239,22 @@ public:
 
     void add_include_directory(std::string dir) {
         _include_directories.push_back(std::move(dir));
+    }
+
+    auto frontend_options() const -> const decltype(_frontend_options)& {
+        return _frontend_options;
+    }
+
+    void add_frontend_option(std::string_view option) {
+        if (option.starts_with("---"))
+            option.remove_prefix(3);
+        _frontend_options.emplace_back(option);
+    }
+
+    bool has_frontend_option(std::string_view option) {
+        if (option.starts_with("---"))
+            option.remove_prefix(3);
+        return rgs::contains(_frontend_options, option);
     }
 
 private:
