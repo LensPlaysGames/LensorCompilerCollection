@@ -535,7 +535,8 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
         auto& list = lists.at(i);
 
         // Skip hardware registers (no need to color them).
-        if (list.value < +MInst::Kind::ArchStart) continue;
+        if (list.value < +MInst::Kind::ArchStart)
+            continue;
 
         usz register_interferences = list.regmask;
         for (usz i_adj : list.adjacencies) {
@@ -558,6 +559,8 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             }
         }
 
+        // Attempt to find a hardware register that is NOT marked as interfering
+        // with the register associated with the current adjacency list.
         usz reg_value = 0;
         for (auto reg : desc.registers) {
             if (not (register_interferences & (usz(1) << reg))) {
@@ -566,16 +569,36 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             }
         }
 
+        // If we were not able to assign a register value, that means there are
+        // zero registers in the machine description that don't interfere with the
+        // current virtual register; that is, there is no hardware register for
+        // this virtual register to be assigned to. As such, in this case, we are
+        // not able to allocate registers for the function (in it's current
+        // state).
         if (not reg_value) {
-            Diag::Error(
+            // TODO: There are zero hardware registers that don't interfere with the
+            // current virtual register we are trying to color; we need to pick one of
+            // the virtual registers that has already been allocated a hardware
+            // register, go back and insert a "save to stack" instruction (spill), and
+            // then insert "load from stack" (unspill) instructions at every use.
+            // We also need to insert an Alloca instruction at the beginning of the
+            // function, so that we actually have a place to load/store the register
+            // from/to.
+            // NOTE: We cannot use "regular" alloca, store, load, etc. because the MIR
+            // has already been lowered and instructions selected for a particular
+            // instruction set architecture; the MIR has these "spill" pseudo-codes
+            // that are implemented directly in each backend.
+            auto e = Diag::Error(
                 "register-allocation",
                 "Can not color graph with {} colors until stack spilling is implemented!",
                 desc.registers.size()
             );
-            Diag::Note(
-                "register-allocation",
-                "Allocating registers for function `{}`",
-                function.names().at(0).name
+            e.attach(
+                Diag::Note(
+                    "register-allocation",
+                    "Allocating registers for function `{}`",
+                    function.names().at(0).name
+                )
             );
             return;
         }
