@@ -53,7 +53,7 @@ syn keyword glintKeywords
   \ match
   \ print
   \ in
-  \ mapf
+  \ apply
   \ lambda
   \ has
   \ apply
