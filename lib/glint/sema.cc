@@ -29,8 +29,14 @@
 /// For an explanation of the return value of this function, see
 /// the comment on the declaration of TryConvert().
 template <bool PerformConversion>
-auto lcc::glint::Sema::ConvertImpl(lcc::glint::Expr** expr_ptr, lcc::glint::Type* to) -> int {
-    LCC_ASSERT(expr_ptr and *expr_ptr and to, "Pointers mustn't be null");
+auto lcc::glint::Sema::ConvertImpl(
+    lcc::glint::Expr** expr_ptr,
+    lcc::glint::Type* to
+) -> int {
+    LCC_ASSERT(
+        expr_ptr and *expr_ptr and to,
+        "Pointers mustn't be null"
+    );
 
     enum : int {
         TypesContainErrors = -2,
@@ -967,6 +973,10 @@ void lcc::glint::Sema::AnalyseModule() {
     // (that way we don't have to create large, branching AST structures in
     // code).
     // TODO: Once we use C++26, just use #embed
+    // TODO: It'd be really convenient to have a way to tell the Glint parser
+    // to "obfuscate" all identifiers encountered in a source file (such that
+    // you can write a standard library without having to riddle everything
+    // with double underscores).
     std::string_view templates_source =
         // Initialise a dynamic array expression with the given capacity.
         "__dynarray_init :: template(dynarray : expr, capacity : expr) {\n"
@@ -995,9 +1005,9 @@ void lcc::glint::Sema::AnalyseModule() {
         "};\n"
         "__print__putchar_each :: template(container : expr)\n"
         "  cfor\n"
-        "      i :: 0;\n"
-        "      i < container.size;\n"
-        "      i += 1;\n"
+        "      __i_ii :: 0;\n"
+        "      __i_ii < container.size;\n"
+        "      __i_ii += 1;\n"
         "    putchar @container[i];\n";
 
     auto& f = context->create_file(
@@ -1086,15 +1096,17 @@ void lcc::glint::Sema::AnalyseModule() {
         }
     );
 
-    /// Analyse the signatures of all functions. This must be done
-    /// before analysing bodies since, in order to perform overload
-    /// resolution properly, we first need to apply decltype decay
-    /// to all parameters (e.g. convert parameters of function type
-    /// to function pointers etc.).
+    // Analyse the signatures of all functions. This must be done
+    // before analysing bodies since, in order to perform overload
+    // resolution properly, we first need to apply decltype decay
+    // to all parameters (e.g. convert parameters of function type
+    // to function pointers etc.).
     for (auto& func : mod.functions()) AnalyseFunctionSignature(func);
 
-    /// Analyse function bodies.
+    // Analyse function bodies.
     for (auto& func : mod.functions()) AnalyseFunctionBody(func);
+
+    // TODO: Remove unused, _external_ functions.
 }
 
 void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
@@ -1103,10 +1115,10 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     tempset curr_func = decl;
     auto* ty = as<FuncType>(decl->type());
 
-    /// If the function has no body, then we’re done.
+    // If the function has no body, then we’re done.
     if (not decl->body()) return;
 
-    /// Create variable declarations for the parameters.
+    // Create variable declarations for the parameters.
     bool params_failed{false};
     for (auto& param : ty->params()) {
         if (param.name.empty()) continue;
@@ -1115,8 +1127,15 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         // name in the function scope.
         auto decls = decl->scope()->find(param.name);
         if (not decls.empty()) {
-            Error(decls.at(0)->location(), "Declaration conflicts with parameter name");
-            Diag::Note(context, param.location, "Parameter declared here");
+            Error(
+                decls.at(0)->location(),
+                "Declaration conflicts with parameter name"
+            );
+            Diag::Note(
+                context,
+                param.location,
+                "Parameter declared here"
+            );
             continue;
         }
 
