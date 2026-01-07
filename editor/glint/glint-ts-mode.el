@@ -2,7 +2,7 @@
 
 ;; Author: Lens_r
 ;; Maintainer: Lens_r
-;; Version: 0.0.0
+;; Version: 0.2.2
 ;; Package-Requires: ((emacs "29.1") (treesit))
 ;; Homepage: https://github.com/LensPlaysGames/LensorCompilerCollection
 ;; Keywords: glint, tree-sitter
@@ -340,7 +340,7 @@ with the braces' contents having the same indentation.
       "external" "export"
       "return"
       "supplant" "match" "print"
-      "mapf"
+      "apply"
       ]
      @font-lock-keyword-face)
 
