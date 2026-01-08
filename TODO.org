@@ -6,9 +6,11 @@
 - [Driver]: =-gcc= compatibility layer: args after are parsed as GCC arguments
 - [Register Allocation]: Register classes (floats/scalar)
 - [Register Allocation]: Register (un)spilling
+  I need to create an LCC IR source that will cause spilling to happen; I currently can't really figure out how to get Glint to generate code that needs it...
 - [Driver]: =--color-theme <file>= option to remap ANSI/VT100 emitted terminal codes to different colors (i.e. BoldRed -> Green) if you want green errors for some reason.
 - [LangTest]: fail test specifier given an expected error id in brackets
-i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expected/ diagnostic is emitted, not just a similar one.
+  i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expected/ diagnostic is emitted, not just a similar one.
+- [Register Allocation]: ISel should mark call instructions as clobbering a unique "volatile registers" register (similar to return register), such that RA knows whats up, and could even insert spills before and after the call if necessary.
 
 * Glint
 
@@ -39,3 +41,5 @@ i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expe
 - [Diags]: Get rid of "Miscellaneous" ErrorId
 - [Lexer]: Case Insensitivity
   Behind =---case-insensitive= flag?
+- [Parser/Sema]: Recursive Lambda
+- [Parser/Sema]: Named scopes
