@@ -19,13 +19,11 @@
   things (and a lot of people tend to prefer it over splitting strings).
   This will lower into a =print= call, splitting the format string into
   relevant string literals (split on `{}`).
-- [Parser/Sema]: Function templates via =auto= parameters
 - [Sema]: Better error when accessing member of a struct with no members
   The current is kind of awkward...
 - [Sema]: =print= handle enum value, print enum name
 - [Parser/Sema]: Switch on value
 - [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
-- [Parser/Sema]: Recursive Lambda
 - [Sema]: =out;= as first expression of function body becomes declaration of return type
 - [Sema]: Use intrinsic memset for initialisation (optimisation)
 - [Parser]: Syntax for asserting compile time evaluation
@@ -43,3 +41,16 @@
   Behind =---case-insensitive= flag?
 - [Parser/Sema]: Recursive Lambda
 - [Parser/Sema]: Named scopes
+- [Module]: =---ast-binary= to emit binary representation of AST
+
+  My thought is that a build system could hash the AST instead of the source, so that trivial changes in whitespace or formatting would not actually cause an invalidation.
+
+  In this same vein, =---ast-langtest= to get the LISP-like AST output used in LangTest.
+- [Meta]: Fix abuse of =ast.hh=
+
+  It's just far too far-reaching, all-encompassing.
+- [Sema]: =---no-default-handlers=
+  If passed, do not include definitions for the functionality that Sema generates calls to, for example (i.e. =__dynarray_grow=).
+- [Glint]: Zeal docset
+  See [[https://kapeli.com/docsets#setUpFolderStructure][Dash's documentation]].
+  Really just need a way to properly create the SQL database.

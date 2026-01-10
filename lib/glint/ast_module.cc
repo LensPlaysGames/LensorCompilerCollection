@@ -266,12 +266,6 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
             recurse(f->body());
         } break;
 
-        case Expr::Kind::FunctionTemplate: {
-            auto f = as<FunctionTemplateExpr>(expr);
-            (void) f;
-            LCC_TODO();
-        } break;
-
         // Expressions that have a variable amount of children.
         case Expr::Kind::Apply: {
             auto a = as<ApplyExpr>(expr);
@@ -322,6 +316,7 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
         case Expr::Kind::Module:
         case Expr::Kind::EnumeratorDecl:
         case Expr::Kind::FuncDecl:
+        case Expr::Kind::TemplatedFuncDecl:
         case Expr::Kind::OverloadSet:
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::TypeDecl:

@@ -518,7 +518,12 @@ auto lcc::glint::CallExpr::callee_type() const -> FuncType* {
     return as<FuncType>(ty);
 }
 
-auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std::unordered_map<Scope*, Scope*>& scope_fixups) -> Expr* {
+auto lcc::glint::Expr::CloneImpl(
+    Module& mod,
+    Context* context,
+    Expr* expr,
+    std::unordered_map<Scope*, Scope*>& scope_fixups
+) -> Expr* {
     LCC_ASSERT(context);
 
     // Don't pass me nullptr, I won't return it.
@@ -639,6 +644,13 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
             Scope* s = n->scope();
             // Only fixup scope if we need to. NOTE: This might cause errors if a
             // namerefexpr appears before a declaration...
+            // The reason we are doing this at all is because NameRefExpr's may
+            // reference an actual scope that is not being cloned, outside of the
+            // current clone's view.
+            // FIXME: Hey, so, future me here, and, turns out this /does/ cause errors
+            // when cloning NameRefExpr's that reference parameters, since the
+            // parameters' declarations are not actually present until during
+            // analysis.
             if (scope_fixups.contains(s))
                 s = fixup_scope(mod, scope_fixups, n->scope());
 
@@ -789,6 +801,19 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
             );
         }
 
+        case Kind::TemplatedFuncDecl: {
+            auto f = as<TemplatedFuncDecl>(expr);
+            return new (mod) TemplatedFuncDecl(
+                f->name(),
+                f->function_type(),
+                Clone(f->body()),
+                f->scope(),
+                f->module(),
+                f->linkage(),
+                f->location()
+            );
+        }
+
         case Kind::IntrinsicCall: {
             auto i = as<IntrinsicCallExpr>(expr);
             return new (mod) IntrinsicCallExpr(
@@ -866,15 +891,6 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
             );
         }
 
-        case Kind::FunctionTemplate: {
-            auto f = as<FunctionTemplateExpr>(expr);
-            return new (mod) FunctionTemplateExpr(
-                f->name(),
-                as<TemplateExpr>(Clone(f->body())),
-                f->location()
-            );
-        }
-
         case Kind::OverloadSet: {
             auto o = as<OverloadSet>(expr);
             std::vector<FuncDecl*> overloads{};
@@ -893,7 +909,7 @@ auto lcc::glint::Expr::CloneImpl(Module& mod, Context* context, Expr* expr, std:
 auto lcc::glint::Expr::Clone(Module& mod, Context* context, Expr* expr) -> Expr* {
     LCC_ASSERT(context);
     // Don't pass me nullptr, I won't return it.
-    if (not expr) return nullptr;
+    if (not expr) return {};
 
     // If we encounter a declaration, we create a new scope, and map the
     // scope it was originally declared in into a new scope Clone() creates.
@@ -938,14 +954,12 @@ std::string lcc::glint::Expr::name() const {
         case Kind::NameRef:
             return as<NameRefExpr>(this)->name();
 
-        case Kind::FunctionTemplate:
-            return as<FunctionTemplateExpr>(this)->name();
-
         case Kind::TypeDecl:
         case Kind::TypeAliasDecl:
         case Kind::EnumeratorDecl:
         case Kind::VarDecl:
         case Kind::FuncDecl:
+        case Kind::TemplatedFuncDecl:
             return as<Decl>(this)->name();
 
         case Kind::Unary: {
@@ -1066,6 +1080,7 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
         case Kind::EvaluatedConstant:
         case Kind::TypeDecl:
         case Kind::FuncDecl:
+        case Kind::TemplatedFuncDecl:
         case Kind::TypeAliasDecl:
         case Kind::EnumeratorDecl:
         case Kind::IntegerLiteral:
@@ -1173,11 +1188,6 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
             return {t->body_ref()};
         }
 
-        case Kind::FunctionTemplate: {
-            auto* f = as<lcc::glint::FunctionTemplateExpr>(this);
-            return {(Expr**) f->body_ref()};
-        }
-
         case Kind::VarDecl: {
             auto* v = as<lcc::glint::VarDecl>(this);
             if (v->init()) return {&v->init()};
@@ -1213,6 +1223,7 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
 auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
     switch (kind()) {
         case Kind::FuncDecl:
+        case Kind::TemplatedFuncDecl:
         case Kind::OverloadSet:
         case Kind::EvaluatedConstant:
         case Kind::TypeDecl:
@@ -1317,11 +1328,6 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
             return {t->body()};
         }
 
-        case Kind::FunctionTemplate: {
-            auto* f = as<lcc::glint::FunctionTemplateExpr>(this);
-            return {(Expr*) f->body()};
-        }
-
         case Kind::VarDecl: {
             const auto* v = as<lcc::glint::VarDecl>(this);
             if (v->init()) return {v->init()};
@@ -1374,12 +1380,12 @@ auto lcc::glint::Expr::langtest_name() const -> std::string {
         case Kind::Cast:
         case Kind::Match:
         case Kind::Template:
-        case Kind::FunctionTemplate:
         case Kind::TypeDecl:
         case Kind::TypeAliasDecl:
         case Kind::EnumeratorDecl:
         case Kind::VarDecl:
         case Kind::FuncDecl:
+        case Kind::TemplatedFuncDecl:
         case Kind::NameRef:
         case Kind::Apply:
         case Kind::Group:
@@ -1555,11 +1561,7 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
 
             std::vector<std::string> params_strings{};
             for (auto p : tstruct_t->params()) {
-                params_strings.emplace_back(fmt::format(
-                    "{}:{}",
-                    p.name,
-                    *p.type
-                ));
+                params_strings.emplace_back(fmt::format("{}:{}", p.name, *p.type));
             }
 
             std::string members_string{};
@@ -1611,38 +1613,39 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
 }
 
 auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
+    using K = lcc::glint::Expr::Kind;
     switch (k) {
-        case lcc::glint::Expr::Kind::Group: return "group";
-        case lcc::glint::Expr::Kind::Template: return "template";
-        case lcc::glint::Expr::Kind::FunctionTemplate: return "function_template";
-        case lcc::glint::Expr::Kind::Apply: return "apply";
-        case lcc::glint::Expr::Kind::While: return "while";
-        case lcc::glint::Expr::Kind::For: return "for";
-        case lcc::glint::Expr::Kind::Return: return "return";
-        case lcc::glint::Expr::Kind::TypeDecl: return "type_declaration";
-        case lcc::glint::Expr::Kind::TypeAliasDecl: return "type_alias_declaration";
-        case lcc::glint::Expr::Kind::EnumeratorDecl: return "enum_declaration";
-        case lcc::glint::Expr::Kind::VarDecl: return "variable_declaration";
-        case lcc::glint::Expr::Kind::FuncDecl: return "function_declaration";
-        case lcc::glint::Expr::Kind::IntegerLiteral: return "integer_literal";
-        case lcc::glint::Expr::Kind::StringLiteral: return "string_literal";
-        case lcc::glint::Expr::Kind::CompoundLiteral: return "compound_literal";
-        case lcc::glint::Expr::Kind::OverloadSet: return "overload_set";
-        case lcc::glint::Expr::Kind::EvaluatedConstant: return "evaluated_constant";
-        case lcc::glint::Expr::Kind::If: return "if";
-        case lcc::glint::Expr::Kind::Block: return "block";
-        case lcc::glint::Expr::Kind::Call: return "call";
-        case lcc::glint::Expr::Kind::IntrinsicCall: return "intrinsic";
-        case lcc::glint::Expr::Kind::Cast: return "cast";
-        case lcc::glint::Expr::Kind::Unary: return "unary";
-        case lcc::glint::Expr::Kind::Binary: return "binary";
-        case lcc::glint::Expr::Kind::NameRef: return "name";
-        case lcc::glint::Expr::Kind::Type: return "type";
-        case lcc::glint::Expr::Kind::MemberAccess: return "member_access";
-        case lcc::glint::Expr::Kind::Module: return "module";
-        case lcc::glint::Expr::Kind::Sizeof: return "sizeof";
-        case lcc::glint::Expr::Kind::Alignof: return "alignof";
-        case lcc::glint::Expr::Kind::Match: return "match";
+        case K::Group: return "group";
+        case K::Template: return "template";
+        case K::Apply: return "apply";
+        case K::While: return "while";
+        case K::For: return "for";
+        case K::Return: return "return";
+        case K::TypeDecl: return "type_declaration";
+        case K::TypeAliasDecl: return "type_alias_declaration";
+        case K::EnumeratorDecl: return "enum_declaration";
+        case K::VarDecl: return "variable_declaration";
+        case K::FuncDecl: return "function_declaration";
+        case K::TemplatedFuncDecl: return "templated_function_declaration";
+        case K::IntegerLiteral: return "integer_literal";
+        case K::StringLiteral: return "string_literal";
+        case K::CompoundLiteral: return "compound_literal";
+        case K::OverloadSet: return "overload_set";
+        case K::EvaluatedConstant: return "evaluated_constant";
+        case K::If: return "if";
+        case K::Block: return "block";
+        case K::Call: return "call";
+        case K::IntrinsicCall: return "intrinsic";
+        case K::Cast: return "cast";
+        case K::Unary: return "unary";
+        case K::Binary: return "binary";
+        case K::NameRef: return "name";
+        case K::Type: return "type";
+        case K::MemberAccess: return "member_access";
+        case K::Module: return "module";
+        case K::Sizeof: return "sizeof";
+        case K::Alignof: return "alignof";
+        case K::Match: return "match";
     }
     LCC_UNREACHABLE();
 }
@@ -1737,30 +1740,6 @@ auto lcc::glint::Module::ToSource(const Expr& e) -> Result<std::string> {
                 )
             );
             return fmt::format("template({}) {}", params_string, *e_body);
-        }
-
-        case Expr::Kind::FunctionTemplate: {
-            auto e_t = as<FunctionTemplateExpr>(&e);
-            auto e_body = ToSource(*e_t->body());
-            auto ret_string = e_t->return_type()->string();
-            auto params_string = fmt::format(
-                "{}",
-                fmt::join(
-                    vws::transform(e_t->body()->params(), [this](const auto& p) {
-                        auto e_ptype = ToSource(*p.type);
-                        if (not e_ptype) return std::string{"ERROR"};
-                        return fmt::format("{}:{}", p.name, *e_ptype);
-                    }),
-                    ", "
-                )
-            );
-            return fmt::format(
-                "{} : {}({}) {}",
-                e_t->name(),
-                ret_string,
-                params_string,
-                *e_body
-            );
         }
 
         case Expr::Kind::Sizeof: {
@@ -1914,6 +1893,7 @@ auto lcc::glint::Module::ToSource(const Expr& e) -> Result<std::string> {
             return fmt::format("{}:{}", e_decl->name(), *e_decltype);
         }
 
+        case Expr::Kind::TemplatedFuncDecl:
         case Expr::Kind::FuncDecl: {
             auto e_fdecl = as<FuncDecl>(&e);
 
@@ -2015,6 +1995,19 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                     C(name_colour),
                     f->name(),
                     f->type()->string(use_colour)
+                );
+                return;
+            }
+
+            case K::TemplatedFuncDecl: {
+                auto* t = as<lcc::glint::TemplatedFuncDecl>(e);
+                PrintLinkage(t->linkage());
+                PrintBasicHeader("TemplatedFuncDecl", e);
+                out += fmt::format(
+                    " {}{} {}\n",
+                    C(name_colour),
+                    t->name(),
+                    t->type()->string(use_colour)
                 );
                 return;
             }
@@ -2196,7 +2189,6 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
 
                 out += '\n';
                 return;
-            case K::FunctionTemplate: PrintBasicGlintNode("FunctionTemplateExpr", e, nullptr); return;
             case K::Group: PrintBasicGlintNode("GroupExpr", e, nullptr); return;
             case K::While: PrintBasicGlintNode("WhileExpr", e, nullptr); return;
             case K::For: PrintBasicGlintNode("ForExpr", e, nullptr); return;
@@ -2958,9 +2950,141 @@ bool lcc::glint::IsCallable(Expr* expr) {
         or is<TypeExpr>(expr)
         or is<IntegerLiteral>(expr)
         or is<TemplateExpr>(expr)
-        or is<FunctionTemplateExpr>(expr)
+        or is<TemplatedFuncDecl>(expr)
         // Terrible way to check for a lambda
         or (is<FuncDecl>(expr)
             and as<FuncDecl>(expr)->name().empty())
     );
+}
+
+static bool has_auto_impl(const lcc::glint::Type* t) {
+    LCC_ASSERT(t);
+
+    if (lcc::glint::TemplatedFuncDecl::is_auto(*t))
+        return true;
+
+    for (auto t_child : t->types()) {
+        if (has_auto_impl(t_child))
+            return true;
+    }
+
+    return false;
+}
+
+bool lcc::glint::FuncType::has_auto() {
+    if (has_auto_impl(return_type()))
+        return true;
+
+    for (const auto& p : params()) {
+        if (has_auto_impl(p.type))
+            return true;
+    }
+
+    return false;
+}
+
+[[nodiscard]]
+auto lcc::glint::TemplatedFuncDecl::find_instantiation(FuncType* signature) -> FuncDecl* {
+    auto found = _instantiation_cache.find(signature);
+    if (found != _instantiation_cache.end())
+        return _instantiation_cache[signature];
+    return nullptr;
+}
+
+[[nodiscard]]
+auto lcc::glint::TemplatedFuncDecl::make_instantiation(
+    Module& mod,
+    Context& context,
+    FuncType* signature
+) -> FuncDecl* {
+    LCC_ASSERT(signature);
+    // Create new decl with template-expanded body
+    // We map the function scope to a new, empty scope; this ensures that any
+    // NameRefExpr's to parameters will have their scope fixed up to the newly
+    // generated function's actual, unique scope.
+    std::unordered_map<Scope*, Scope*> scope_fixups{
+        {scope(), new (mod) Scope{scope()->parent()}}
+    };
+    auto expanded_body = Expr::CloneImpl(
+        mod,
+        &context,
+        body(),
+        scope_fixups
+    );
+    LCC_ASSERT(expanded_body);
+
+    auto instantiation = new (mod) FuncDecl(
+        name(),
+        signature,
+        expanded_body,
+        scope_fixups.at(scope()),
+        &mod,
+        linkage(),
+        location(),
+        call_conv()
+    );
+
+    // Push new decl to instantiation cache
+    _instantiation_cache[signature] = instantiation;
+
+    const bool debug_templates
+        = context.has_frontend_option("debug-templates");
+
+    if (debug_templates) {
+        fmt::print(
+            "Templated Function Instantiated:\n"
+            "    {} -> {}\n",
+            *type(),
+            *((Type*) signature)
+        );
+        instantiation->print(context.option_use_colour());
+    }
+
+    return find_instantiation(signature);
+}
+
+auto lcc::glint::TemplatedFuncDecl::is_auto(const Type& t) -> bool {
+    auto t_name = cast<NamedType>(&t);
+    return t_name and t_name->name() == "auto";
+}
+
+void lcc::glint::TemplatedFuncDecl::replace_auto(Type*& maybe_auto, Type* replacement) {
+    LCC_ASSERT(maybe_auto and replacement);
+
+    if (is_auto(*maybe_auto))
+        maybe_auto = replacement;
+
+    // TODO: Should we assert length of children are equal between parameter
+    // type and replacement type?
+    for (
+        auto [t_child, replacement_child] : vws::zip(
+            maybe_auto->types_ref(),
+            replacement->types()
+        )
+    ) replace_auto(*t_child, replacement_child);
+}
+
+auto lcc::glint::TemplatedFuncDecl::deduce(
+    Module& mod,
+    FuncType* signature,
+    std::vector<Expr*> arguments
+) -> FuncType* {
+    // Make new FuncType with 'auto' replaced with relevant argument type.
+    auto f = new (mod) FuncType(
+        signature->params(),
+        signature->return_type(),
+        signature->attributes(),
+        signature->location()
+    );
+
+    // Replace auto in parameter types with corresponding argument type,
+    // recursively.
+    for (
+        auto [param, argument] : vws::zip(
+            f->params(),
+            arguments
+        )
+    ) replace_auto(param.type, argument->type());
+
+    return f;
 }

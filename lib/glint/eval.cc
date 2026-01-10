@@ -30,6 +30,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
         case Kind::TypeAliasDecl:
         case Kind::TypeDecl:
         case Kind::VarDecl:
+        case Kind::TemplatedFuncDecl:
             return not_a_constant_expr();
 
         /// These are here not necessarily because they are not constant
@@ -46,7 +47,6 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
         case Kind::While:
         case Kind::Match:
         case Kind::Apply:
-        case Kind::FunctionTemplate:
             return unhandled_constant_expr();
 
         case Kind::IntegerLiteral:

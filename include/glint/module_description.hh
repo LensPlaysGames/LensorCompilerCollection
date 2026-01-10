@@ -125,6 +125,9 @@ struct ModuleDescription {
                 }
                 case K::FuncDecl: return Kind::FUNCTION;
 
+                case K::TemplatedFuncDecl:
+                    LCC_TODO("Add templated function declaration kind");
+
                 // Non-decl kinds
                 case K::Apply:
                 case K::Group:
@@ -151,7 +154,6 @@ struct ModuleDescription {
                 case K::Sizeof:
                 case K::Alignof:
                 case K::Template:
-                case K::FunctionTemplate:
                     break;
             }
             LCC_UNREACHABLE();

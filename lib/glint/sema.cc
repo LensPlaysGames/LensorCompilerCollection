@@ -50,8 +50,10 @@ auto lcc::glint::Sema::ConvertImpl(
 #define from ((*expr_ptr)->type())
 
     // Cannot convert if the types contain errors.
-    if (from->is_unknown() or from->sema_errored() or to->is_unknown() or to->sema_errored())
-        return TypesContainErrors;
+    if (
+        from->is_unknown() or from->sema_errored()
+        or to->is_unknown() or to->sema_errored()
+    ) return TypesContainErrors;
 
     // This is so we don’t forget that we’ve applied lvalue-to-rvalue
     // conversion and raised the score by one.
@@ -63,6 +65,9 @@ auto lcc::glint::Sema::ConvertImpl(
 
     // Any type can be converted to void.
     if (to->is_void()) return NoOp;
+
+    // Any type can be converted to auto.
+    if (TemplatedFuncDecl::is_auto(*to)) return NoOp;
 
     // Any type can be converted to itself.
     if (Type::Equal(from, to)) {
@@ -490,6 +495,7 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::VarDecl:
         case Expr::Kind::FuncDecl:
+        case Expr::Kind::TemplatedFuncDecl:
         case Expr::Kind::EnumeratorDecl:
         case Expr::Kind::Apply:
             return true;
@@ -514,9 +520,6 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
 
         case Expr::Kind::Template:
             return HasSideEffects(as<TemplateExpr>(expr)->body());
-
-        case Expr::Kind::FunctionTemplate:
-            return HasSideEffects(as<FunctionTemplateExpr>(expr)->body());
 
         case Expr::Kind::MemberAccess:
             return HasSideEffects(as<MemberAccessExpr>(expr)->object());
@@ -1077,24 +1080,21 @@ void lcc::glint::Sema::AnalyseModule() {
         Type::Void,
         {{"dest", Type::VoidPtr, {}},
          {"src", Type::VoidPtr, {}},
-         {"size", FFIType::CInt(mod), {}}
-        }
+         {"size", FFIType::CInt(mod), {}}}
     );
     DeclareImportedGlobalFunction(
         "memset",
         Type::Void,
         {{"ptr", Type::VoidPtr, {}},
          {"value", FFIType::CInt(mod), {}},
-         {"size", FFIType::CULongLong(mod), {}}
-        }
+         {"size", FFIType::CULongLong(mod), {}}}
     );
     DeclareImportedGlobalFunction(
         "memmove",
         Type::Void,
         {{"dest", Type::VoidPtr, {}},
          {"src", Type::VoidPtr, {}},
-         {"size", FFIType::CInt(mod), {}}
-        }
+         {"size", FFIType::CInt(mod), {}}}
     );
 
     // Analyse the signatures of all functions. This must be done
@@ -1105,7 +1105,10 @@ void lcc::glint::Sema::AnalyseModule() {
     for (auto& func : mod.functions()) AnalyseFunctionSignature(func);
 
     // Analyse function bodies.
-    for (auto& func : mod.functions()) AnalyseFunctionBody(func);
+    // NOTE: Sema may create new functions, so we have to be very careful of
+    // iterator invalidation here.
+    for (usz function_index = 0; function_index < mod.functions().size(); ++function_index)
+        AnalyseFunctionBody(mod.functions().at(function_index));
 
     // TODO: Remove unused, _external_ functions.
 }
@@ -1113,11 +1116,21 @@ void lcc::glint::Sema::AnalyseModule() {
 void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     LCC_ASSERT(decl);
 
+    // fmt::print(
+    //     "Analysing body of function {} : {}\n",
+    //     decl->name(),
+    //     *decl->type()
+    // );
+
     tempset curr_func = decl;
     auto* ty = as<FuncType>(decl->type());
 
     // If the function has no body, then we’re done.
     if (not decl->body()) return;
+
+    // If the function is templated, then we’re done (unexpanded body is not
+    // checked).
+    if (is<TemplatedFuncDecl>(decl)) return;
 
     // Create variable declarations for the parameters.
     bool params_failed{false};
@@ -1921,10 +1934,6 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             // on like an expression, because it is a code generator.
         } break;
 
-        case Expr::Kind::FunctionTemplate: {
-            LCC_TODO("GlintSema: Function template");
-        } break;
-
         /// This mainly handles explicit casts, which allow more
         /// conversions than implicit casts.
         ///
@@ -2128,6 +2137,18 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 v->set_sema_done();
 
             if (v->ok() and not v->init()) {
+                // ---error/default-init argument to error on default initialization
+                // occuring.
+                //
+                // if (context->has_frontend_option("error/default-init")) {
+                //     Error(
+                //         ErrorId::Miscellaneous,
+                //         "Default Initialization Occured"
+                //     );
+                //     v->set_sema_errored();
+                //     return false;
+                // }
+
                 auto initializer = DefaultInitialize(v);
                 if (not Analyse(&initializer))
                     return false;
@@ -2689,6 +2710,10 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             LCC_ASSERT(expr->type()->is_function());
             break;
 
+        case Expr::Kind::TemplatedFuncDecl:
+            LCC_ASSERT(expr->type()->is_function());
+            break;
+
         case Expr::Kind::Type: {
             auto e_type = as<TypeExpr>(expr);
             (void) Analyse(e_type->contained_type_ref());
@@ -2803,7 +2828,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     auto cmp_or
                         = new (mod) BinaryExpr(TokenKind::Or, cmp_zero, cmp_size, {});
 
-                    // TODO: if oob_print or something.
+                    // TODO: if oob_print or something. FIXME: Use frontend option.
                     auto puts_ref = new (mod) NameRefExpr("puts", mod.global_scope(), {});
                     std::string str_value = "Glint Runtime Error: oob dynamic array access";
                     if (b->location().seekable(context)) {
@@ -4239,37 +4264,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         return;
     }
 
-    // If the callee is a function template, this is a function template
-    // expansion.
-    if (
-        is<FunctionTemplateExpr>(expr->callee())
-        or ( //
-            is<NameRefExpr>(expr->callee())
-            and is<VarDecl>(as<NameRefExpr>(expr->callee())->target())
-            and as<VarDecl>(as<NameRefExpr>(expr->callee())->target())->init()
-            and is<FunctionTemplateExpr>(as<VarDecl>(as<NameRefExpr>(expr->callee())->target())->init())
-        )
-    ) {
-        LCC_TODO("Generate function and call to said function using function template");
-
-        // 0. Analyse all arguments
-
-        // 1. If this function template has already been expanded with these
-        //    special function template arguments (auto/expr/type), then skip to
-        //    generating a call.
-
-        // 2. Pass special function template arguments to function template to
-        //    generate function body (i.e. auto/expr/type).
-
-        // 3. Define a function with the generated body from the previous step.
-
-        // 4. Generate a call to the generated function with the rest of the non-
-        //    special function template arguments.
-
-        return;
-    }
-
-    /// If the callee is an overload set, perform overload resolution.
+    // If the callee is an overload set, perform overload resolution.
     if (is<OverloadSet>(expr->callee()) or expr->callee()->type()->is_overload_set()) {
         OverloadSet* O{nullptr};
         if (is<OverloadSet>(expr->callee())) {
@@ -4288,9 +4283,11 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         expr->callee() = *resolved;
     }
 
-    /// If the callee is a function pointer, dereference it.
-    if (auto* ty = expr->callee()->type(); ty->is_pointer() and ty->elem()->is_function())
-        InsertImplicitCast(&expr->callee(), ty->elem());
+    // If the callee is a function pointer, dereference it.
+    if (
+        auto* ty = expr->callee()->type();
+        ty->is_pointer() and ty->elem()->is_function()
+    ) InsertImplicitCast(&expr->callee(), ty->elem());
 
     // If the type is not already a function type, we can’t call this.
     if (not expr->callee()->type()->is_function()) {
@@ -4309,37 +4306,99 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         if (not expr->args().empty()) {
             auto callee_location = expr->callee()->location();
             auto first_arg_location = expr->args()[0]->location();
-            if (callee_location.seekable(context) and first_arg_location.seekable(context)) {
-                auto callee_location_info = callee_location.seek_line_column(context);
-                auto first_arg_location_info = first_arg_location.seek_line_column(context);
-                if (callee_location_info.line != first_arg_location_info.line) {
-                    // TODO: I would love to be able to fix this for them and just emit a
-                    // warning, but here's the issue I ran into: if we just replace *expr_ptr
-                    // with a block expression with the callee and then the arguments, it
-                    // often forms an invalid AST as the argument expressions should be
-                    // inserted /after/ we return the callee expression by itself. So, for
-                    // this to work, we'd need to replace *expr_ptr with the callee
-                    // expression, and somehow push the argument expressions onto some sort of
-                    // stack to fetch from later. Because that is so complicated and bug-prone
-                    // to implement, I'll wait until I really feel like it.
-                    e.attach(Note(
-                        GetRightmostLocation(expr->callee()),
-                        "You probablly forgot a ';' around here somewhere. "
-                        "We thought about inserting it for you but got worried you'd get annoyed."
-                    ));
-                    return;
-                }
+            if (
+                context
+                and Location::on_different_lines(
+                    *context,
+                    callee_location,
+                    first_arg_location
+                )
+            ) {
+                // TODO: I would love to be able to fix this for them and just emit a
+                // warning, but here's the issue I ran into: if we just replace *expr_ptr
+                // with a block expression with the callee and then the arguments, it
+                // often forms an invalid AST as the argument expressions should be
+                // inserted /after/ we return the callee expression by itself. So, for
+                // this to work, we'd need to replace *expr_ptr with the callee
+                // expression, and somehow push the argument expressions onto some sort of
+                // stack to fetch from later. Because that is so complicated and bug-prone
+                // to implement, I'll wait until I really feel like it.
+                e.attach(Note(
+                    GetRightmostLocation(expr->callee()),
+                    "You probablly forgot a ';' around here somewhere. "
+                    "We thought about inserting it for you but got worried you'd get annoyed."
+                ));
             }
         }
 
         return;
     }
 
-    /// The type of the call is the return type of the function.
+    // TODO: If any child type of resolved FuncType contains `auto` somewhere
+    // within it, "deduce auto" (replace relevant auto with the relevant
+    // argument type from the call site). With our new FuncType, check if it
+    // has already been instantiated as a templated function for the called
+    // function (we need the name of the called function, as well, or at least
+    // some way to uniquely identify it every time); if it has, we should
+    // insert a call to that instantiation of the function. If it hasn't, we
+    // should instantiate a version of the function and record it in the
+    // cache, then insert a call to that instantiation.
+    // TODO: This NameRefExpr check is probably a sign of something more
+    // sinister going on, but I can't exactly pinpoint it right now.
+    if (
+        is<TemplatedFuncDecl>(expr->callee())
+        or ( //
+            is<NameRefExpr>(expr->callee())
+            and as<NameRefExpr>(expr->callee())->target()
+            and is<TemplatedFuncDecl>(as<NameRefExpr>(expr->callee())->target())
+        )
+    ) {
+        auto templated_declaration = cast<TemplatedFuncDecl>(expr->callee());
+        if (not templated_declaration)
+            templated_declaration = as<TemplatedFuncDecl>(as<NameRefExpr>(expr->callee())->target());
+
+        auto deduced_function_type = TemplatedFuncDecl::deduce(
+            mod,
+            templated_declaration->function_type(),
+            expr->args()
+        );
+
+        const bool debug_templates
+            = context and context->has_frontend_option("debug-templates");
+        if (debug_templates) {
+            fmt::print(
+                "Deduced function type: {}\n",
+                *((Type*) deduced_function_type)
+            );
+            fmt::print(
+                "From call:\n",
+                *((Type*) deduced_function_type)
+            );
+            expr->print(context->option_use_colour());
+        }
+
+        auto function_declaration
+            = templated_declaration->find_instantiation(deduced_function_type);
+
+        if (not function_declaration) {
+            function_declaration = templated_declaration->make_instantiation(
+                mod,
+                *context,
+                deduced_function_type
+            );
+        }
+
+        LCC_ASSERT(function_declaration);
+
+        expr->callee() = function_declaration;
+    }
+
+    // The type of the call is the return type of the function.
     auto* func_type = cast<FuncType>(expr->callee()->type());
+    LCC_ASSERT(func_type);
     expr->type(func_type->return_type());
 
-    /// Check that there are as many arguments as parameters.
+    // Check that there are as many arguments as parameters.
     if (expr->args().size() != func_type->params().size()) {
         Error(
             expr->location(),
@@ -4354,8 +4413,12 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     /// lvalue-to-rvalue conversion only if the parameter type is not a reference
     /// type. This is all handled transparently by Convert().
     for (usz i = 0, end = std::min(expr->args().size(), func_type->params().size()); i < end; i++) {
-        // LValueToRValue(expr->args().data() + i);
-        if (not Convert(expr->args().data() + i, func_type->params().at(i).type)) {
+        if (
+            not Convert(
+                expr->args().data() + i,
+                func_type->params().at(i).type
+            )
+        ) {
             // got
             auto* from = expr->args().at(i)->type();
             // expected
@@ -4637,7 +4700,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             return;
         }
 
-        auto err = Error(expr->location(), "Unknown symbol '{}'", expr->name());
+        auto err = Error(expr->location(), "Unknown symbol '{}' in scope at {}", expr->name(), fmt::ptr(scope));
 
         for (auto s = expr->scope(); s; s = s->parent()) {
             std::vector<std::string_view> symbol_names{};

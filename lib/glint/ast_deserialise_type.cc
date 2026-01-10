@@ -81,10 +81,10 @@ void lcc::glint::Module::scope_walk(lcc::Context* ctx, Expr* e, Scope* current_s
 
         } break;
 
-        case Expr::Kind::FunctionTemplate:
         case Expr::Kind::EnumeratorDecl:
         case Expr::Kind::For:
         case Expr::Kind::FuncDecl:
+        case Expr::Kind::TemplatedFuncDecl:
         case Expr::Kind::If:
         case Expr::Kind::Match:
         case Expr::Kind::TypeAliasDecl:
@@ -224,11 +224,13 @@ auto lcc::glint::Module::deserialise(
                         for (decltype(param_name_length) j = 0; j < param_name_length; ++j)
                             param_name += (char) module_metadata_blob.at(expr_offset++);
 
-                        parameters.emplace_back(TemplateExpr::Param{
-                            param_name,
-                            Type::Unknown,
-                            {}
-                        });
+                        parameters.emplace_back(
+                            TemplateExpr::Param{
+                                param_name,
+                                Type::Unknown,
+                                {}
+                            }
+                        );
                         fixups.emplace_back(&parameters.back().type, param_type_index);
                     }
 
@@ -269,12 +271,12 @@ auto lcc::glint::Module::deserialise(
                 case Expr::Kind::Block:
                 case Expr::Kind::Group:
                 case Expr::Kind::Match:
-                case Expr::Kind::FunctionTemplate:
                     LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));
 
                 case Expr::Kind::Module:
                 case Expr::Kind::EnumeratorDecl:
                 case Expr::Kind::FuncDecl:
+                case Expr::Kind::TemplatedFuncDecl:
                 case Expr::Kind::OverloadSet:
                 case Expr::Kind::TypeAliasDecl:
                 case Expr::Kind::TypeDecl:

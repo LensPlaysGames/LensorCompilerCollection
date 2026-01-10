@@ -30,9 +30,16 @@ class Parser : public Lexer {
 
 public:
     [[nodiscard]]
-    static auto Parse(Context* context, std::string_view source) -> std::unique_ptr<Module>;
+    static auto Parse(
+        Context* context,
+        std::string_view source
+    ) -> std::unique_ptr<Module>;
+
     [[nodiscard]]
-    static auto Parse(Context* context, File& file) -> std::unique_ptr<Module>;
+    static auto Parse(
+        Context* context,
+        File& file
+    ) -> std::unique_ptr<Module>;
 
     /// @param starting_scope The parser's scope stack will be constructed from
     ///                       this scope and any and all of it's parent scopes.
@@ -46,7 +53,10 @@ public:
 
     // Don't do syntactic analysis, just lexical.
     [[nodiscard]]
-    static auto GetTokens(Context* context, File& file) -> std::vector<GlintToken>;
+    static auto GetTokens(
+        Context* context,
+        File& file
+    ) -> std::vector<GlintToken>;
 
     using Lexer::Error;
     using Lexer::Note;

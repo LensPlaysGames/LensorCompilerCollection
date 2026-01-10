@@ -769,7 +769,9 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             LCC_ASSERT(tok.expression);
             if (tok.eval_once)
                 lhs = tok.expression;
-            else lhs = Expr::Clone(*mod, context, tok.expression);
+            else
+                lhs = Expr::Clone(*mod, context, tok.expression);
+
             NextToken();
             break;
 
@@ -1649,7 +1651,8 @@ auto lcc::glint::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Exp
 
     // Eat '=', if present.
     Consume(Tk::Eq);
-    if (At(Tk::LBrace)) expr = ParseBlock(std::move(sc));
+    if (At(Tk::LBrace))
+        expr = ParseBlock(std::move(sc));
     else expr = ParseExpr();
 
     if (expr.is_diag()) return expr.diag();
@@ -1657,17 +1660,24 @@ auto lcc::glint::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Exp
 }
 
 auto lcc::glint::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
-    LCC_ASSERT(Consume(Tk::LParen), "ParseFunctionSignature called while not at '('");
+    LCC_ASSERT(
+        Consume(Tk::LParen),
+        "ParseFunctionSignature called while not at '('"
+    );
 
     // Parse parameters.
     std::vector<FuncType::Param> parameters;
     while (not At(Tk::RParen)) {
-        /// If we’re at a colon, this parameter is unnamed.
+        // If we’re at a colon, this parameter is unnamed.
         if (Consume(Tk::Colon)) {
+            // Expect a type.
             auto type = ParseType();
             if (not type) return type.diag();
-            parameters.emplace_back("", *type, type->location());
-
+            parameters.emplace_back(
+                "",
+                *type,
+                type->location()
+            );
         }
 
         // Otherwise, we have a (maybe comma-separated) list of names followed by
@@ -2485,29 +2495,54 @@ auto lcc::glint::Parser::ParseFuncDecl(
     FuncType* type,
     bool is_external
 ) -> Result<FuncDecl*> {
-    /// Parse attributes and the function body.
+    // Parse attributes and the function body.
     auto body = ParseFuncBody(is_external);
     if (not body) return body.diag();
 
     // External implies no mangling.
     if (is_external) type->set_attr(FuncAttr::NoMangle);
 
-    /// Create the function.
-    auto* func = new (*mod) FuncDecl(
-        name,
-        type,
-        (*body).first,
-        (*body).second,
-        mod,
-        is_external ? Linkage::Imported : Linkage::Internal,
-        type->location()
-    );
+    // Create the function.
+    Linkage linkage
+        = is_external ? Linkage::Imported : Linkage::Internal;
+
+    // If the function type contains the "auto" anywhere within it, we
+    // create a Templated Function Declaration.
+    FuncDecl* func{};
+    if (type->has_auto()) {
+        func = new (*mod) TemplatedFuncDecl(
+            name,
+            type,
+            (*body).first,
+            (*body).second,
+            mod,
+            linkage,
+            type->location()
+        );
+        if (name.empty()) return func;
+    } else {
+        func = new (*mod) FuncDecl(
+            name,
+            type,
+            (*body).first,
+            (*body).second,
+            mod,
+            linkage,
+            type->location()
+        );
+    }
 
     /// If the function is anonymous, then this is a lambda.
     if (name.empty()) return func;
 
     /// Add it to the current scope and return it.
-    return as<FuncDecl>(DeclScope()->declare(context, std::move(name), func));
+    auto d = *DeclScope()->declare(
+        context,
+        std::move(name),
+        func
+    );
+
+    return as<FuncDecl>(d);
 }
 
 void lcc::glint::Parser::ParseTopLevel() {

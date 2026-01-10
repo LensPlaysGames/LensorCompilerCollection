@@ -193,12 +193,20 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 }
 
 void glint::IRGen::create_function(glint::FuncDecl* f) {
-    auto name = f->function_type()->has_attr(FuncAttr::NoMangle)
-                  ? f->name()
-                  : f->mangled_name();
+    // no-op
+    if (is<TemplatedFuncDecl>(f))
+        return;
+
+    std::string name{};
+
+    if (f->function_type()->has_attr(FuncAttr::NoMangle))
+        name = f->name();
+    else
+        name = f->mangled_name();
+
     generated_ir[f] = new (*module) Function(
         module,
-        name,
+        std::move(name),
         as<FunctionType>(Convert(ctx, f->type())),
         f->linkage(),
         f->call_conv(),
@@ -521,9 +529,13 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     //   bar.tag = foo.tag.x;
 
                     LCC_ASSERT(is<MemberAccessExpr>(unary_expr->operand()));
-                    LCC_ASSERT(is<SumType>(
-                        as<MemberAccessExpr>(unary_expr->operand())->object()->type()
-                    ));
+                    LCC_ASSERT(
+                        is<SumType>(
+                            as<MemberAccessExpr>(unary_expr->operand())
+                                ->object()
+                                ->type()
+                        )
+                    );
 
                     auto* m = as<MemberAccessExpr>(unary_expr->operand());
                     auto* struct_type = as<SumType>(m->object()->type())->struct_type();
@@ -1736,15 +1748,18 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         case K::TypeDecl:
         case K::TypeAliasDecl:
         case K::FuncDecl:
+        case K::TemplatedFuncDecl:
         case K::OverloadSet:
         case K::Template:
-        case K::FunctionTemplate:
         case K::Apply:
             break;
     }
 }
 
 void IRGen::generate_function(glint::FuncDecl* f) {
+    if (is<TemplatedFuncDecl>(f))
+        return;
+
     function = as<Function>(generated_ir[f]);
 
     if (not IsImportedLinkage(f->linkage())) {
@@ -1754,7 +1769,6 @@ void IRGen::generate_function(glint::FuncDecl* f) {
             update_block(block);
 
             // Bind param instructions.
-            // TODO: Only if used. Or remove if unused after body generated.
             for (auto [i, param] : vws::enumerate(f->param_decls())) {
                 auto* inst = function->param(usz(i));
                 auto* alloca = new (*module) AllocaInst(inst->type(), param->location());

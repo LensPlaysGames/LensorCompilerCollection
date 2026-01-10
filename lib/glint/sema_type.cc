@@ -33,6 +33,12 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             LCC_ASSERT(not n->name().empty(), "NamedType has empty name");
             LCC_ASSERT(n->scope(), "NamedType {} has NULL scope", n->name());
 
+            // `auto` is a no-op...
+            if (TemplatedFuncDecl::is_auto(*type)) {
+                type->set_sema_done();
+                break;
+            }
+
             // This code is similar to name resolution for expressions,
             // except that we don’t need to worry about overloads.
             Type* ty{};

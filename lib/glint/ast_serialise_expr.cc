@@ -282,11 +282,11 @@ auto Module::serialise_expr(
         case Expr::Kind::Module:
         case Expr::Kind::EnumeratorDecl:
         case Expr::Kind::FuncDecl:
+        case Expr::Kind::TemplatedFuncDecl:
         case Expr::Kind::OverloadSet:
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::TypeDecl:
         case Expr::Kind::VarDecl:
-        case Expr::Kind::FunctionTemplate:
             expr->print(true);
             LCC_TODO("Implement serialisation of preceding expression AST\n");
     }

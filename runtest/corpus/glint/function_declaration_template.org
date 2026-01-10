@@ -1,0 +1,21 @@
+* Function Declaration Template, Simple 001
+
+#+NAME: source
+#+begin_src glint
+  foo : int(x : auto) discardable
+    x;
+
+  foo 42;
+  foo `0`;
+
+  5;
+#+end_src
+
+#+NAME: status
+#+begin_example
+5
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

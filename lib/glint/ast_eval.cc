@@ -106,6 +106,13 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
             LCC_TODO("GlintEval: {}", ToString(expr->kind()));
         } break;
 
+        case Expr::Kind::TemplatedFuncDecl: {
+            const auto f = as<TemplatedFuncDecl>(expr);
+
+            (void) f;
+            LCC_TODO("GlintEval: {}", ToString(expr->kind()));
+        } break;
+
         // Self Evaluating...
         case Expr::Kind::IntegerLiteral:
         case Expr::Kind::StringLiteral:
@@ -487,16 +494,6 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
             // TODO: We need lcc::Context if we want to implement alignof...
 
             (void) a;
-            LCC_TODO("GlintEval: {}", ToString(expr->kind()));
-        } break;
-
-        case Expr::Kind::FunctionTemplate: {
-            const auto f = as<FunctionTemplateExpr>(expr);
-
-            // Possibly no-op or UNREACHABLE, since sema is supposed to lower these
-            // out.
-
-            (void) f;
             LCC_TODO("GlintEval: {}", ToString(expr->kind()));
         } break;
 

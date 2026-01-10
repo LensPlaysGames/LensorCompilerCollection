@@ -1136,6 +1136,11 @@ public:
         _params(std::move(params)),
         _attributes(std::move(attrs)) {}
 
+    [[nodiscard]]
+    auto attributes() const -> const Attributes& {
+        return _attributes;
+    }
+
     /// Query whether this function has an attribute.
     [[nodiscard]]
     auto has_attr(FuncAttr attr) const -> bool {
@@ -1159,6 +1164,9 @@ public:
 
     /// Set an attribute on this function.
     void set_attr(FuncAttr attr) { _attributes[attr] = true; }
+
+    [[nodiscard]]
+    bool has_auto();
 
     [[nodiscard]]
     static auto classof(const Type* type) -> bool {
@@ -1536,6 +1544,7 @@ public:
 
 /// \brief Base class for expression syntax nodes.
 class Expr : public SemaNode {
+protected:
     static auto CloneImpl(
         Module& mod,
         Context* context,
@@ -1554,6 +1563,7 @@ public:
         TypeDecl,
         TypeAliasDecl,
         EnumeratorDecl,
+        TemplatedFuncDecl,
         VarDecl,
         FuncDecl,
 
@@ -1584,7 +1594,6 @@ public:
         Alignof,
         Template,
         Apply,
-        FunctionTemplate,
     };
 
 private:
@@ -1645,13 +1654,26 @@ public:
 
     void print(bool use_colour) const;
 
-    /// Deep-copy an expression.
+    // Deep-copy an expression.
+    struct CloneResult {
+        Expr* cloned_expr{};
+        Scope* cloned_scope{};
+    };
+
     [[nodiscard]]
-    static auto Clone(Module& mod, Context* context, Expr* expr) -> Expr*;
+    static auto Clone(
+        Module& mod,
+        Context* context,
+        Expr* expr
+    ) -> Expr*;
 
     /// Deep copy a vector of expressions.
     [[nodiscard]]
-    static auto Clone(Module& mod, Context* context, std::vector<Expr*> exprs) -> std::vector<Expr*> {
+    static auto Clone(
+        Module& mod,
+        Context* context,
+        std::vector<Expr*> exprs
+    ) -> std::vector<Expr*> {
         std::vector<Expr*> out{};
         out.reserve(exprs.size());
         for (auto e : exprs)
@@ -1916,7 +1938,28 @@ class FuncDecl : public ObjectDecl {
     // NOTE: For warnings in sema
     std::vector<Decl*> _dangling_dynarrays{};
 
+protected:
+    FuncDecl(
+        Kind kind,
+        std::string name,
+        FuncType* type,
+        Expr* body,
+        Scope* scope,
+        Module* mod,
+        Linkage linkage,
+        Location location,
+        CallConv cc = CallConv::Glint
+    ) : ObjectDecl(kind, type, std::move(name), mod, linkage, location),
+        _body(body), _scope(scope), _cc(cc) {
+        mod->add_function(this);
+
+        // Functions receive special handling in sema and their types are
+        // always known when we actually start analysing code.
+        set_sema_done();
+    }
+
 public:
+    // TODO: Document what scope parameter is meant to contain.
     FuncDecl(
         std::string name,
         FuncType* type,
@@ -1926,14 +1969,7 @@ public:
         Linkage linkage,
         Location location,
         CallConv cc = CallConv::Glint
-    ) : ObjectDecl(Kind::FuncDecl, type, std::move(name), mod, linkage, location),
-        _body(body), _scope(scope), _cc(cc) {
-        mod->add_function(this);
-
-        /// Functions receive special handling in sema and their types are
-        /// always known when we actually start analysing code.
-        set_sema_done();
-    }
+    ) : FuncDecl(Kind::FuncDecl, name, type, body, scope, mod, linkage, location, cc) {}
 
     [[nodiscard]]
     auto body() -> Expr*& { return _body; }
@@ -1983,7 +2019,58 @@ public:
     [[nodiscard]]
     auto dangling_dynarrays() const -> std::vector<Decl*> { return _dangling_dynarrays; }
 
-    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::FuncDecl; }
+    static auto classof(const Expr* expr) -> bool {
+        // Because TemplateFuncDecl inherits from FuncDecl, it is safe to cast
+        // between the two.
+        return expr->kind() == Kind::FuncDecl
+            or expr->kind() == Kind::TemplatedFuncDecl;
+    }
+};
+
+class TemplatedFuncDecl : public FuncDecl {
+    // Mapping of signature to declaration.
+    std::unordered_map<FuncType*, FuncDecl*> _instantiation_cache{};
+
+public:
+    TemplatedFuncDecl(
+        std::string name,
+        FuncType* type,
+        Expr* body,
+        Scope* scope,
+        Module* mod,
+        Linkage linkage,
+        Location location,
+        CallConv cc = CallConv::Glint
+    ) : FuncDecl(Kind::TemplatedFuncDecl, name, type, body, scope, mod, linkage, location, cc) {}
+
+    [[nodiscard]]
+    auto find_instantiation(FuncType* signature) -> FuncDecl*;
+
+    [[nodiscard]]
+    auto make_instantiation(
+        Module& mod,
+        Context& context,
+        FuncType* signature
+    ) -> FuncDecl*;
+
+    static bool is_auto(const Type& t);
+
+    static void replace_auto(
+        Type*& maybe_auto,
+        Type* replacement
+    );
+    static auto deduce(
+        Module& mod,
+        FuncType* signature,
+        std::vector<Expr*> arguments
+    ) -> FuncType*;
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        // A TemplatedFuncDecl may be a FuncDecl, but only a TemplatedFuncDecl may
+        // be a TemplatedFuncDecl.
+        return expr->kind() == Kind::TemplatedFuncDecl;
+    }
 };
 
 class TypeDecl : public Decl {
@@ -2694,45 +2781,6 @@ public:
 
     [[nodiscard]]
     static auto classof(const Type* type) -> bool { return type->kind() == Kind::TemplatedStruct; }
-};
-
-class FunctionTemplateExpr : public Expr {
-    std::string _name;
-    TemplateExpr* _body{};
-    Type* _return_type;
-
-public:
-    FunctionTemplateExpr(
-        std::string_view name,
-        TemplateExpr* body,
-        Location location
-    )
-        : Expr(Kind::FunctionTemplate, location),
-          _name(name),
-          _body(body) {};
-
-    [[nodiscard]]
-    auto name() -> std::string& { return _name; }
-    [[nodiscard]]
-    auto name() const { return _name; }
-
-    [[nodiscard]]
-    auto body() -> TemplateExpr*& { return _body; }
-    [[nodiscard]]
-    auto body() const { return _body; }
-
-    [[nodiscard]]
-    auto return_type() -> Type*& { return _return_type; }
-    [[nodiscard]]
-    auto return_type() const { return _return_type; }
-
-    [[nodiscard]]
-    auto body_ref() { return &_body; }
-
-    [[nodiscard]]
-    static auto classof(const Expr* expr) -> bool {
-        return expr->kind() == Kind::FunctionTemplate;
-    }
 };
 
 bool IsCallable(Expr* expr);

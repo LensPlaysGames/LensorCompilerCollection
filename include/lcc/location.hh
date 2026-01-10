@@ -92,6 +92,20 @@ struct Location {
     static auto length_from_two_offsets_inclusive(decltype(pos) a, decltype(pos) b) {
         return 1 + length_from_two_offsets_exclusive(a, b);
     }
+
+    // If either location is not seekable, always return false.
+    static bool on_different_lines(
+        const Context& context,
+        const Location a,
+        const Location b
+    ) {
+        if (a.seekable(&context) and b.seekable(&context)) {
+            auto a_info = a.seek_line_column(&context);
+            auto b_info = b.seek_line_column(&context);
+            return a_info.line != b_info.line;
+        }
+        return false;
+    }
 };
 } // namespace lcc
 
