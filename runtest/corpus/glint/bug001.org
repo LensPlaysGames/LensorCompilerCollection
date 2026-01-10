@@ -1,0 +1,43 @@
+* Bug 001
+
+As you can see, the generated assembly contains (hopefully used to
+contain) no return instruction, meaning the computer starts executing
+random data in the memory following the last =add= instruction.
+
+#+begin_src asm
+main:
+    push %rbp
+    mov %rsp, %rbp
+    sub $32, %rsp
+.Lbody_0:
+    mov %edi, -4(%rbp)
+    mov %rsi, -12(%rbp)
+    mov %rdx, -20(%rbp)
+    mov $0, %rax
+    mov %rbp, %rsp
+    pop %rbp
+    ret
+
+_XGlintfooF0_B5:
+    push %rbp
+    mov %rsp, %rbp
+    mov $1, %rax
+    add $1, %rax
+#+end_src
+
+It seems like the fact that the function returns =void= is preventing
+semantic analysis from properly inserting a return instruction.
+
+#+NAME: source
+#+begin_src glint
+foo : void() 1 + 1;
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
