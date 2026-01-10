@@ -1,0 +1,14 @@
+* Zeal/Dash
+
+** Generate Sqlite Database
+
+#+begin_src emacs-lisp
+  (let
+      ((db (sqlite-open "Glint.docset/Contents/Resources/docSet.dsidx")))
+    (sqlite-execute db
+     "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);")
+    (sqlite-execute db
+     "CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);")
+    ;; (sqlite-execute "INSERT OR IGNORE INTO searchIndex(name, type, path) VALUES ('name', 'type', 'path');")
+    (sqlite-close db))
+#+end_src
