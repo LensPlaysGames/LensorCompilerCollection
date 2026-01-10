@@ -1009,7 +1009,7 @@ void lcc::glint::Sema::AnalyseModule() {
         "      __i_ii :: 0;\n"
         "      __i_ii < container.size;\n"
         "      __i_ii += 1;\n"
-        "    putchar @container[i];\n";
+        "    putchar @container[__i_ii];\n";
 
     auto& f = context->create_file(
         "sema_templates.g",
