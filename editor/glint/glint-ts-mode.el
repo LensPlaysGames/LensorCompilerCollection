@@ -347,8 +347,8 @@ with the braces' contents having the same indentation.
 
    :feature 'operator
    `(["@" "!" ; "~"
-      "+" "-" "*" "/" "&"  "=" "!=" "<" "<=" ">" ">="
-      "bitand" "bitor" "bitxor"
+      "+" "-" "*" "/" "&" "=" "!=" "<" "<=" ">" ">="
+      "bit&" "bit|" "bit^" "bit~"
       "::" ":" ":="
       "++" "--"
       "+=" "-=" "*=" "/=" "%=" "~=" "&=" "|=" "^=" "[="
