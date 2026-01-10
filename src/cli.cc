@@ -2,6 +2,7 @@
 #include <version.hh>
 
 #include <lcc/context.hh>
+#include <lcc/utils/string_distance.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
 
 #include <fmt/format.h>
@@ -12,6 +13,32 @@
 #include <vector>
 
 namespace cli {
+
+namespace {
+std::vector<std::string> known_arguments{
+    "-v",
+    "--version",
+    "--ast",
+    "--ir",
+    "--mir",
+    "--stats",
+    "--sarif",
+    "--stopat-lex",
+    "--stopat-syntax",
+    "--stopat-sema",
+    "--stopat-ir",
+    "--stopat-mir",
+    "--aluminium"
+    "-I",
+    "-o",
+    "-O",
+    "--passes",
+    "--color",
+    "-x",
+    "-t",
+    "-f",
+};
+} // namespace
 
 [[noreturn]]
 void help() {
@@ -178,7 +205,12 @@ auto parse(int argc, const char** argv) -> Options {
                 and format != "IR"
                 and format != "ir" and format != "ssa_ir" and format != "llvm"
             ) {
-                fmt::print("CLI ERROR: Invalid format {}\n", format);
+                fmt::print(
+                    "CLI ERROR: Invalid format {}\n"
+                    "  Expected `asm`, `obj`, `IR`, `gnu-as-att`, `wat`,\n"
+                    "           `elf`, `coff`, `ir`, `ssa_ir`, `llvm`\n",
+                    format
+                );
                 std::exit(1);
             }
             o.format = format;
@@ -192,6 +224,33 @@ auto parse(int argc, const char** argv) -> Options {
                 "    Prepend ./ or equivalent for file that starts with '-'\n",
                 arg
             );
+
+            // Attempt to find known argument with least distance between given,
+            // unknown argument.
+            std::string_view least_distance_argument{""};
+            size_t least_distance{size_t(-1)};
+            for (auto& good_argument : known_arguments) {
+                auto distance = lcc::utils::optimal_string_alignment_distance(arg, good_argument);
+                LCC_ASSERT(
+                    distance,
+                    "If distance from '{}' to '{}' was zero, then argument would have been found."
+                    " Likely error in distance calculation OR you updated the CLI only partially.\n",
+                    arg,
+                    good_argument
+                );
+                if (distance < least_distance) {
+                    least_distance_argument = good_argument;
+                    least_distance = distance;
+                }
+            }
+
+            if (least_distance_argument.size()) {
+                fmt::print(
+                    "    Maybe you meant `{}`?\n",
+                    least_distance_argument
+                );
+            }
+
             std::exit(1);
         } else {
             // Otherwise, it's a filepath

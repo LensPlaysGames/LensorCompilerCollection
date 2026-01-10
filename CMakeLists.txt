@@ -287,8 +287,8 @@ add_library(
   include/lcc/file.hh
   include/lcc/format.hh
   include/lcc/forward.hh
-  include/lcc/ir/domtree.hh
   include/lcc/ir/core.hh
+  include/lcc/ir/domtree.hh
   include/lcc/ir/module.hh
   include/lcc/ir/type.hh
   include/lcc/lcc-c.h
@@ -309,6 +309,7 @@ add_library(
   include/lcc/utils/platform.hh
   include/lcc/utils/result.hh
   include/lcc/utils/rtti.hh
+  include/lcc/utils/string_distance.hh
   include/lcc/utils/twocolumnlayouthelper.hh
   lib/lcc/calling_conventions/ms_x64.cc
   lib/lcc/calling_conventions/sysv_x86_64.cc
@@ -322,8 +323,8 @@ add_library(
   lib/lcc/diags.cc
   lib/lcc/file.cc
   lib/lcc/init.cc
-  lib/lcc/ir/domtree.cc
   lib/lcc/ir/core.cc
+  lib/lcc/ir/domtree.cc
   lib/lcc/ir/llvm.cc
   lib/lcc/ir/module.cc
   lib/lcc/ir/module_mir.cc
@@ -334,6 +335,7 @@ add_library(
   lib/lcc/opt/opt.cc
   lib/lcc/platform.cc
   lib/lcc/utils.cc
+  lib/lcc/utils/string_distance.cc
 )
 target_include_directories(liblcc PUBLIC include)
 set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
