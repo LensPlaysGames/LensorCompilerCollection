@@ -370,6 +370,7 @@ SpaceBeforeParensOptions:
   AfterRequiresInClause: true
   AfterRequiresInExpression: true
   BeforeNonEmptyParentheses: false
+  AfterNot: true
 
 ## No space before subscripts.
 SpaceBeforeSquareBrackets: false
