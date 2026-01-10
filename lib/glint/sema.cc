@@ -1292,14 +1292,23 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             last = &decl->body();
         }
     } else {
+        // else: return type is void
+
         if (auto* block = cast<BlockExpr>(decl->body())) {
             if (block->children().empty() or not is<ReturnExpr>(*block->last_expr()))
                 block->add(new (mod) ReturnExpr(nullptr, {}));
         } else {
-            // TODO: If a function with void return type and a non-block body
+            // If a function with void return type and a non-block body
             // (i.e. `foo : void() = bar 42;`) does not have a return expression, we
             // must replace the body with a block containing the non-block body
             // followed by an empty return expression.
+            if (not is<ReturnExpr>(decl->body())) {
+                decl->body() = new (mod) GroupExpr(
+                    {decl->body(),
+                     new (mod) ReturnExpr(nullptr, {})},
+                    {}
+                );
+            }
         }
 
         Discard(&decl->body());
