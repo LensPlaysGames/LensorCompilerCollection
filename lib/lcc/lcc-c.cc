@@ -36,6 +36,7 @@ LccContextRef lcc_context_create(LccTargetRef target, LccFormatRef format) {
         lcc::Context::Options{
             lcc::Context::DoNotUseColour,
             lcc::Context::DoNotPrintStats,
+            lcc::Context::DoNotDiagBacktrace,
             lcc::Context::DoNotPrintAST,
             lcc::Context::DoNotStopatLex,
             lcc::Context::DoNotStopatSyntax,

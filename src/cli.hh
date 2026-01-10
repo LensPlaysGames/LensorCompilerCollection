@@ -23,6 +23,7 @@ struct Options {
     lcc::Context::OptionStopatSyntax stopat_syntax{false};
     lcc::Context::OptionStopatSema stopat_sema{false};
     lcc::Context::OptionStopatMIR stopat_mir{false};
+    lcc::Context::OptionDiagBacktrace diag_backtrace{false};
 
     std::vector<std::string> input_files{};
     std::vector<std::string> include_directories{};

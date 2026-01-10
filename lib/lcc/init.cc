@@ -2,8 +2,6 @@
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
 
-#include <glint/ast.hh>
-
 namespace lcc {
 
 // THE VALUES WHICH THE TYPE POINTERS POINT TO ARE CREATED HERE

@@ -314,6 +314,7 @@ struct GlintTest : langtest::Test {
             lcc::Context::Options{
                 lcc::Context::DoNotUseColour,
                 lcc::Context::DoNotPrintStats,
+                lcc::Context::DoNotDiagBacktrace,
                 lcc::Context::DoNotPrintAST,
                 lcc::Context::DoNotStopatLex,
                 lcc::Context::DoNotStopatSyntax,
@@ -440,6 +441,7 @@ void output_ast(std::filesystem::path p) {
         lcc::Context::Options{
             lcc::Context::DoNotUseColour,
             lcc::Context::DoNotPrintStats,
+            lcc::Context::DoNotDiagBacktrace,
             lcc::Context::DoNotPrintAST,
             lcc::Context::DoNotStopatLex,
             lcc::Context::DoNotStopatSyntax,

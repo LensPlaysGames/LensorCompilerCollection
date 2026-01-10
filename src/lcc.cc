@@ -181,6 +181,7 @@ auto main(int argc, const char** argv) -> int {
         lcc::Context::Options{
             (lcc::Context::OptionColour) use_colour,
             options.print_stats,
+            options.diag_backtrace,
             options.ast,
             options.stopat_lex,
             options.stopat_syntax,

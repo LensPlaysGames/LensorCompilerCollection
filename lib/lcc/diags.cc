@@ -55,6 +55,10 @@ void lcc::detail::AssertFail(std::string&& msg) {
 }
 
 void lcc::Diag::HandleFatalErrors() {
+    // Print backtrace, if requested.
+    if (context and context->option_diag_backtrace())
+        platform::PrintBacktrace();
+
     // Exit on internal compiler error (ICE).
     if (kind == Kind::ICError) {
         lcc::platform::PrintBacktrace();

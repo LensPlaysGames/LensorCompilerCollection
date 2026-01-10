@@ -22,6 +22,7 @@ std::vector<std::string> known_arguments{
     "--ir",
     "--mir",
     "--stats",
+    "--diags-backtrace",
     "--sarif",
     "--stopat-lex",
     "--stopat-syntax",
@@ -52,6 +53,7 @@ void help() {
         {"  --ir", "Print LCC intermediate representation at various stages\n"},
         {"  --mir", "Print LCC machine instruction representation at various stages\n"},
         {"  --stats", "Print various statistics at various stages\n"},
+        {"  --diags-backtrace", "Diagnostics print a backtrace, if possible\n"},
         {"  --sarif", "Emit a SARIF file containing diagnostic information\n"},
         {"  --stopat-lex", "Request language does not process input further than lexical analysis\n"},
         {"  --stopat-syntax", "Request language does not process input further than syntactic analysis\n"},
@@ -138,6 +140,8 @@ auto parse(int argc, const char** argv) -> Options {
             o.stopat_mir = lcc::Context::StopatMIR;
         else if (arg == "--stats")
             o.print_stats = lcc::Context::PrintStats;
+        else if (arg == "--diags-backtrace")
+            o.diag_backtrace = lcc::Context::DiagBacktrace;
         else if (arg == "--sarif")
             o.emit_sarif = true;
 

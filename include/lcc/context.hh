@@ -59,17 +59,23 @@ public:
         PrintStats = true,
     };
 
+    enum OptionDiagBacktrace : bool {
+        DoNotDiagBacktrace,
+        DiagBacktrace = true,
+    };
+
     struct Options {
-        OptionColour _colour_diagnostics;
-        OptionPrintStats _should_print_stats;
+        OptionColour _colour_diagnostics{};
+        OptionPrintStats _should_print_stats{};
+        OptionDiagBacktrace _diag_backtrace{};
 
-        OptionPrintAST _should_print_ast;
-        OptionStopatLex _stopat_lex;
-        OptionStopatSyntax _stopat_syntax;
-        OptionStopatSema _stopat_sema;
+        OptionPrintAST _should_print_ast{};
+        OptionStopatLex _stopat_lex{};
+        OptionStopatSyntax _stopat_syntax{};
+        OptionStopatSema _stopat_sema{};
 
-        OptionPrintMIR _should_print_mir;
-        OptionStopatMIR _stopat_mir;
+        OptionPrintMIR _should_print_mir{};
+        OptionStopatMIR _stopat_mir{};
     };
 
     struct DiagnosticReport {
@@ -205,6 +211,11 @@ public:
     [[nodiscard]]
     auto option_print_stats() const {
         return _options._should_print_stats;
+    }
+
+    [[nodiscard]]
+    auto option_diag_backtrace() const {
+        return _options._diag_backtrace;
     }
 
     [[nodiscard]]

@@ -255,6 +255,7 @@ bool run_test(MIRMatcher& matcher, std::string_view test_source, const lcc::Targ
         {
             lcc::Context::UseColour,
             lcc::Context::DoNotPrintStats,
+            lcc::Context::DoNotDiagBacktrace,
             lcc::Context::DoNotPrintAST,
             lcc::Context::DoNotStopatLex,
             lcc::Context::DoNotStopatSyntax,
