@@ -454,7 +454,7 @@ auto from_bytes(std::array<lcc::u8, sizeof(T)> bytes) -> T {
 // "foo\r\n\r\n" -> "foo"
 // "foo\n\n\n" -> "foo"
 constexpr auto remove_trailing_newlines_from(std::string& s) {
-    while (s.back() == '\n' or s.back() == '\r')
+    while (s.size() and (s.back() == '\n' or s.back() == '\r'))
         s.pop_back();
 }
 
