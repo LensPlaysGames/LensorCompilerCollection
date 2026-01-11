@@ -1,0 +1,13 @@
+* The Glint Build Process
+
+Glint is most often used to make programs that a user may run on their computer; to make these programs faster, Glint code is translated into something more understandable for a machine to execute. We store this more efficient form in a file called an executable. It's an /executable/ because it contains data which a computer may treat as code and, well, /execute/ it.
+
+This translation process is called /compilation/.
+
+The tool used to achieve this translation is a /compiler/. A compiler is just another program on your computer. Glint programs are made using a Glint compiler. A compiler is just another program on your computer, and, as such, may be invoked via the command line or via another program (maybe even a graphical one).
+
+After writing Glint code (usually saved in a file), the compiler is ran with the code as input, to produce an output that directly represents the Glint code (without containing the Glint code itself).
+
+This output may need further processing by further tooling (like linking by a linker) to be executable.
+
+Once the executable is obtained, running it is equivalent to executing the Glint source code it was generated from.

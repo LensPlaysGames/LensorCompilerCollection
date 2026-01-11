@@ -14,26 +14,29 @@
 
 * Glint
 
+- [Sema]: =print= handle enum value, print enum name
+- [Parser/Sema]: Switch on value
+- [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
+- [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=
+- [Sema]: =import= namespacing
+  Basically, I want to allow "hiding" the exports of an imported module behind a "fake" structure.
+  "import foo as bar;"
+- [Sema]: Better error when accessing member of a struct with no members
+  The current is kind of awkward...
+- [Parser]: Syntax for asserting compile time evaluation
+- [Parser/Sema]: =embed "path";= -> string literal of file contents
+- [Sema]: =maps_arguments= function attribute
+
 - [Parser/Sema]: Compile-time Checked Interpolation: =printf "value: {}\n", 69;=
   This won't be different from =print=, I just like this style of doing
   things (and a lot of people tend to prefer it over splitting strings).
   This will lower into a =print= call, splitting the format string into
   relevant string literals (split on `{}`).
-- [Sema]: Better error when accessing member of a struct with no members
-  The current is kind of awkward...
-- [Sema]: =print= handle enum value, print enum name
-- [Parser/Sema]: Switch on value
-- [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
 - [Sema]: =out;= as first expression of function body becomes declaration of return type
-- [Sema]: Use intrinsic memset for initialisation (optimisation)
-- [Parser]: Syntax for asserting compile time evaluation
 - [Meta]: glintlang website
+- [Sema]: Use intrinsic memset for initialisation (optimisation)
 - [Sema]: Variable Entanglement
-- [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=
-- [Sema]: Dynamic array of =expr=. =for e in exprs, apply foo e;= type of thing.
-- [Sema]: =maps_arguments= function attribute
-- [Parser/Sema]: =embed "path";= -> string literal of file contents
-- [Sema]: =import= namespacing
+- [Sema]: Dynamic array of =expr=. =for e in exprs, apply foo, e;= type of thing.
 - [Parser]: Block comments
 - [Parser/Sema]: Tokens in the AST
 - [Diags]: Get rid of "Miscellaneous" ErrorId
@@ -51,6 +54,3 @@
   It's just far too far-reaching, all-encompassing.
 - [Sema]: =---no-default-handlers=
   If passed, do not include definitions for the functionality that Sema generates calls to, for example (i.e. =__dynarray_grow=).
-- [Glint]: Zeal docset
-  See [[https://kapeli.com/docsets#setUpFolderStructure][Dash's documentation]].
-  Really just need a way to properly create the SQL database.

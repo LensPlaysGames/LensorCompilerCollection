@@ -1,0 +1,7 @@
+* The Glint Programming Language
+
+This is the Zeal docset for the Glint programming language.
+
+[[https://github.com/LensPlaysGames/LensorCompilerCollection][Glint Compiler (LCC)]]
+
+[[thebook.html][The Book]]
