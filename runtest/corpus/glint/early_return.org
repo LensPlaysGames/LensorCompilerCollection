@@ -1,0 +1,18 @@
+* Early Return
+
+Expressions appearing after a return /used to/ cause issues during IR generation regarding inserting instructions into a block that has already been closed.
+
+#+NAME: source
+#+begin_src glint
+return 45;
+69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+45
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
