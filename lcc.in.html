@@ -199,7 +199,7 @@
       // "-O {}"
       var shouldOptimise = undefined;
 
-      var shouldStripDotLines = true;
+      var shouldStripDotLines = undefined;
       var shouldStripHashLines = undefined;
     </script>
 
@@ -325,14 +325,14 @@
       });
 
       document.getElementById('strip-lines-hash').addEventListener('change', function(event) {
-          shouldStripHashLines = event.target.value;
+          shouldStripHashLines = this.checked;
           doBuild();
       });
       // Invoke manually for initial state.
       shouldStripHashLines = document.getElementById('strip-lines-hash').checked;
 
       document.getElementById('strip-lines-dot').addEventListener('change', function(event) {
-          shouldStripDotLines = event.target.value;
+          shouldStripDotLines = this.checked;
           doBuild();
       });
       // Invoke manually for initial state.
@@ -382,7 +382,7 @@
 
           if (outputElement) {
               function strip_lines_beginning_with_from(begin_with, from_string) {
-                  const regexp = new RegExp(`^\\s*${RegExp.escape(begin_with)}.*$`, "gm");
+                  const regexp = new RegExp(`^\\s*${RegExp.escape(begin_with)}.*$[\n]`, "gm");
                   return from_string.replace(regexp, "");
               }
               if (shouldStripHashLines)
@@ -391,10 +391,12 @@
                   outputElement.value = strip_lines_beginning_with_from(".", outputElement.value);
           }
       };
+
       // Connect build button click event to doBuild function.
       document.getElementById('build').addEventListener('click', doBuild);
-      // Invoke build manually to populate output and stuff.
+      // Invoke build manually to populate output and stuff, initially.
       doBuild();
+
     </script>
 
     {{{ SCRIPT }}}
