@@ -2570,20 +2570,40 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 if (it == members.end()) {
                     // Member access name doesn't match any member's name, nor the name of any
                     // member of any supplanted member.
-                    auto e = Error(m->location(), "{} has no member named '{}'", struct_type, m->name());
-                    e.attach(
-                        Note(
-                            m->location(),
-                            "Valid members include: {}",
-                            fmt::join(
-                                vws::transform(struct_type->members(), [&](StructType::Member& member) {
-                                    if (member.supplanted) return "members of supplanted " + member.type->string();
-                                    return member.name;
-                                }),
-                                ","
-                            )
-                        )
+                    auto e = Error(
+                        m->location(),
+                        "{} has no member named '{}'",
+                        struct_type,
+                        m->name()
                     );
+                    if (struct_type->members().size()) {
+                        e.attach(
+                            Note(
+                                m->location(),
+                                "Valid members include: {}",
+                                fmt::join(
+                                    vws::transform(
+                                        struct_type->members(),
+                                        [&](StructType::Member& member) {
+                                            if (member.supplanted)
+                                                return "members of supplanted " + member.type->string();
+                                            return member.name;
+                                        }
+                                    ),
+                                    ","
+                                )
+                            )
+                        );
+                    } else {
+                        // Struct type being accessed has NO members
+                        e.attach(
+                            Note(
+                                struct_type->location(),
+                                "{} has NO members!",
+                                struct_type
+                            )
+                        );
+                    }
                     m->set_sema_errored();
                     break;
                 }

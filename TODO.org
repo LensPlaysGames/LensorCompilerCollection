@@ -21,9 +21,7 @@
 - [Sema]: =import= namespacing
   Basically, I want to allow "hiding" the exports of an imported module behind a "fake" structure.
   "import foo as bar;"
-- [Sema]: Better error when accessing member of a struct with no members
-  The current is kind of awkward...
-- [Parser]: Syntax for asserting compile time evaluation
+- [Parser/Sema]: Unary operator (keyword) for asserting compile time evaluation
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
 - [Sema]: =maps_arguments= function attribute
 
