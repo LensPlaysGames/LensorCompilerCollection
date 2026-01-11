@@ -1,7 +1,9 @@
-#include "lcc/utils.hh"
-#include <concepts>
 #include <glint/ast.hh>
 #include <glint/module_description.hh>
+
+#include <lcc/utils.hh>
+
+#include <concepts>
 
 namespace lcc::glint {
 
@@ -178,65 +180,149 @@ auto Module::serialise_expr(
             }
         } break;
 
+        // ApplyExpr
+        //     function :ExprIndex
+        //     arglists_count :u8
+        //     arglists :ExprIndex[arglists_count]
         case Expr::Kind::Apply: {
             auto a = as<ApplyExpr>(expr);
             recurse(a->function());
             for (auto e : a->argument_lists())
                 recurse(e);
+
+            write_tag();
+            write_t(indices.at(a->function()));
+            write_t(u8(a->argument_lists().size()));
+            for (auto e : a->argument_lists())
+                write_t(indices.at(e));
         } break;
 
+        // MemberAccessExpr
+        //     object :ExprIndex
+        //     name_length :u16
+        //     name :u8[name_length]
         case Expr::Kind::MemberAccess: {
             auto m = as<MemberAccessExpr>(expr);
             recurse(m->object());
+
+            write_tag();
+            write_t(indices.at(m->object()));
+
+            write_t(u16(m->name().size()));
+            write_each(m->name());
         } break;
 
+        // CastExpr
+        //     cast_kind :u8
+        //     to :TypeIndex
+        //     from :ExprIndex
         case Expr::Kind::Cast: {
             auto c = as<CastExpr>(expr);
             recurse(c->operand());
+
+            write_tag();
+            write_t(u8(+c->cast_kind()));
+            write_t(type_at(c->type()));
+            write_t(indices.at(c->operand()));
         } break;
 
+        // SizeofExpr
+        //     operand :ExprIndex
         case Expr::Kind::Sizeof: {
             auto s = as<SizeofExpr>(expr);
             recurse(s->expr());
+
+            write_tag();
+            write_t(indices.at(s->expr()));
         } break;
 
+        // AlignofExpr
+        //     operand :ExprIndex
         case Expr::Kind::Alignof: {
             auto a = as<AlignofExpr>(expr);
             recurse(a->expr());
+
+            write_tag();
+            write_t(indices.at(a->expr()));
         } break;
 
+        // UnaryExpr
+        //     operator :u8
+        //     operand :ExprIndex
         case Expr::Kind::Unary: {
             auto u = as<UnaryExpr>(expr);
             recurse(u->operand());
+
+            write_tag();
+            write_t(u8(+u->op()));
+            write_t(indices.at(u->operand()));
         } break;
 
         // Expressions that have multiple children.
+
+        // BinaryExpr
+        //     operator :u8
+        //     operands :ExprIndex[2]
         case Expr::Kind::Binary: {
             auto b = as<BinaryExpr>(expr);
             recurse(b->lhs());
             recurse(b->rhs());
+
+            write_tag();
+            write_t(u8(+b->op()));
+            write_t(indices.at(b->lhs()));
+            write_t(indices.at(b->rhs()));
         } break;
 
+        // IfExpr
+        //     condition :ExprIndex
+        //     then :ExprIndex
+        //     else :ExprIndex
         case Expr::Kind::If: {
             auto i = as<IfExpr>(expr);
             recurse(i->condition());
             recurse(i->then());
             if (i->otherwise())
                 recurse(i->otherwise());
+
+            write_tag();
+            write_t(indices.at(i->condition()));
+            write_t(indices.at(i->then()));
+            if (i->otherwise())
+                write_t(indices.at(i->otherwise()));
+            else write_t(ModuleDescription::bad_expr_index);
         } break;
 
+        // WhileExpr
+        //     condition :ExprIndex
+        //     body :ExprIndex
         case Expr::Kind::While: {
             auto w = as<WhileExpr>(expr);
             recurse(w->condition());
             recurse(w->body());
+
+            write_tag();
+            write_t(indices.at(w->condition()));
+            write_t(indices.at(w->body()));
         } break;
 
+        // ForExpr
+        //     init :ExprIndex
+        //     condition :ExprIndex
+        //     increment :ExprIndex
+        //     body :ExprIndex
         case Expr::Kind::For: {
             auto f = as<ForExpr>(expr);
             recurse(f->init());
             recurse(f->condition());
             recurse(f->increment());
             recurse(f->body());
+
+            write_tag();
+            write_t(indices.at(f->init()));
+            write_t(indices.at(f->condition()));
+            write_t(indices.at(f->increment()));
+            write_t(indices.at(f->body()));
         } break;
 
         // Expressions that have a variable amount of children.
@@ -258,18 +344,38 @@ auto Module::serialise_expr(
                 recurse(e);
         } break;
 
+        // BlockExpr
+        //     count :u8
+        //     expressions :ExprIndex[count]
         case Expr::Kind::Block: {
             auto b = as<BlockExpr>(expr);
             for (auto e : b->children())
                 recurse(e);
+
+            write_tag();
+            write_t(u8(b->children().size()));
+            for (auto e : b->children())
+                write_t(indices.at(e));
         } break;
 
+        // GroupExpr
+        //     count       :u8
+        //     expressions :ExprIndex[count]
         case Expr::Kind::Group: {
             auto g = as<GroupExpr>(expr);
             for (auto e : g->expressions())
                 recurse(e);
+
+            write_tag();
+            write_t(u8(g->expressions().size()));
+            for (auto e : g->expressions())
+                write_t(indices.at(e));
         } break;
 
+        // MatchExpr
+        //     object :ExprIndex
+        //     body_count :u16
+        //     bodies :(name_length :u8, name :u8[name_length], body :ExprIndex)[body_count]
         case Expr::Kind::Match: {
             auto m = as<MatchExpr>(expr);
             recurse(m->object());
@@ -277,6 +383,29 @@ auto Module::serialise_expr(
             for (auto e : m->bodies())
                 recurse(e);
 
+            LCC_TODO("Serialise MatchExpr...");
+        } break;
+
+        // VarDecl
+        //     name_length :u8
+        //     name :u8[name_length]
+        //     linkage :u8
+        //     init :ExprIndex
+        case Expr::Kind::VarDecl: {
+            auto v = as<VarDecl>(expr);
+            if (v->init())
+                recurse(v->init());
+
+            write_tag();
+
+            write_t(v->name().size());
+            write_each(v->name());
+
+            write_t(+v->linkage());
+
+            if (v->init())
+                write_t(indices.at(v->init()));
+            else write_t(ModuleDescription::bad_expr_index);
         } break;
 
         case Expr::Kind::Module:
@@ -286,7 +415,6 @@ auto Module::serialise_expr(
         case Expr::Kind::OverloadSet:
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::TypeDecl:
-        case Expr::Kind::VarDecl:
             expr->print(true);
             LCC_TODO("Implement serialisation of preceding expression AST\n");
     }

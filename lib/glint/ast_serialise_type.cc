@@ -338,7 +338,26 @@ auto lcc::glint::Module::serialise(
             }
         } break;
 
+        // serialise()
+        // TemplatedStructType:
+        //     align_in_bytes :u16
+        //     parameter_count :u16
+        //     parameter_data :(parameter_type :TypeIndex, name_length :u16, parameter_name :u8[name_length])[parameter_count]
+        //     member_count :u16
+        //     member_data :(member_type :TypeIndex, name_length :u16, member_name :u8[name_length])[member_count]
         case Type::Kind::TemplatedStruct: {
+            auto t = as<TemplatedStructType>(ty);
+
+            // TODO: Custom Align
+
+            // TODO: Struct Template Parameters
+            for (auto p : t->params()) {
+            }
+
+            // TODO: Struct Members
+            for (auto m : t->members()) {
+            }
+
             LCC_TODO("Serialise templated struct type...");
         } break;
 
