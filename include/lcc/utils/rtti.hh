@@ -4,75 +4,77 @@
 #include <lcc/utils.hh>
 
 namespace lcc::detail {
-/// Check that an object is a pointer to a class type.
+// Check that an object is a pointer to a class type.
 template <typename Type>
 concept ClassPointer = std::is_pointer_v<std::remove_reference_t<Type>>
                    and std::is_class_v<std::remove_pointer_t<std::remove_reference_t<Type>>>;
 
-/// Return const To if either From or To is const.
+// Return const To if either From or To is const.
 template <typename From, typename To>
-using merge_const = std::conditional_t<
-    std::is_const_v<From>,
-    std::add_const_t<To>,
-    To>;
+using merge_const = std::conditional_t<std::is_const_v<From>, std::add_const_t<To>, To>;
 
-/// This function implements (checked) casting between types.
+// This function implements (checked) casting between types.
 template <bool checked, typename Target, typename Value>
 auto cast_impl(Value&& value) {
-    /// Make sure Target is at most const-qualified.
+    // Make sure Target is at most const-qualified.
     static_assert(
         std::is_same_v<std::remove_cvref_t<Target>, std::remove_const_t<Target>>,
         "Target type of class may at most be const-qualified"
     );
 
-    /// Make sure Target is a class type.
+    // Make sure Target is a class type.
     static_assert(
         std::is_class_v<Target>,
         "Target type of cast must be a (const-qualified) class type"
     );
 
-    /// Value must be a pointer type.
+    // Value must be a pointer type.
     static_assert(
         std::is_pointer_v<std::remove_cvref_t<Value>>,
         "Argument of cast function must be a pointer to a class type"
     );
 
-    /// Strip references and one level of pointers.
+    // Strip references and one level of pointers.
     using ClassType = std::remove_pointer_t<std::remove_reference_t<Value>>;
 
-    /// Class type must be a class.
+    // Class type must be a class.
     static_assert(
         std::is_class_v<ClassType>,
         "Value type of cast must be a (const-qualified) pointer or to a class type"
     );
 
-    /// Result type is a (const) pointer to Target.
+    // Result type is a (const) pointer to Target.
     using ResultType = merge_const<ClassType, Target>*;
 
-    /// If the types are the same, or if Target is a base class of the
-    /// value class, just cast to the target type.
+    // If the types are the same, or if Target is a base class of the
+    // value class, just cast to the target type.
     if constexpr (std::is_same_v<ClassType, Target> or std::is_base_of_v<Target, ClassType>)
         return static_cast<ResultType>(value);
 
-    /// If To is a derived class of From, then, if the dynamic type
-    /// of From is-a To, perform the cast, otherwise, return null.
+    // If To is a derived class of From, then, if the dynamic type
+    // of From is-a To, perform the cast, otherwise, return null.
     else if constexpr (std::is_base_of_v<ClassType, Target>) {
         LCC_ASSERT(value, "Cannot perform dynamic cast from null");
 
-        /// If the dynamic types match, return the cast value.
-        if (Target::classof(value)) return static_cast<ResultType>(value);
+        // If the dynamic types match, return the cast value.
+        if (Target::classof(value))
+            return static_cast<ResultType>(value);
 
-        /// Otherwise, issue an error if requested.
-        if constexpr (checked) LCC_ASSERT(false, "Unexpected dynamic type");
+        // Otherwise, issue an error if requested.
+        if constexpr (checked)
+            LCC_ASSERT(false, "Unexpected dynamic type");
 
-        /// And return nullptr.
+        // And return nullptr.
         return static_cast<ResultType>(nullptr);
     }
 
-    /// Otherwise, if From and To are not related at all, then this
-    /// is a compile-time error.
+    // Otherwise, if From and To are not related at all, then this
+    // is a compile-time error.
     else {
-        static_assert(always_false<Target>, "Cannot cast between unrelated types");
+        static_assert(
+            always_false<Target>,
+            "Cannot cast between unrelated types"
+        );
     }
 }
 } // namespace lcc::detail
