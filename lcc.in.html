@@ -99,6 +99,14 @@
             <input type="checkbox" id="print-output" name="print-output-checkbox" value="print-output" checked>
             Print Output
           </label>
+          <label for="strip-lines-hash">
+            <input type="checkbox" id="strip-lines-hash" name="strip-lines-hash-checkbox" value="strip-lines-hash" checked>
+            Strip # Lines
+          </label>
+          <label for="strip-lines-dot">
+            <input type="checkbox" id="strip-lines-dot" name="strip-lines-dot-checkbox" value="strip-lines-dot" checked>
+            Strip . Lines
+          </label>
           <label>
             Format
             <select id="format" name="format" aria-label="Format" autocomplete="nothanks" required>
@@ -190,6 +198,9 @@
       var shouldUseFormat = undefined;
       // "-O {}"
       var shouldOptimise = undefined;
+
+      var shouldStripDotLines = true;
+      var shouldStripHashLines = undefined;
     </script>
 
     <script type="module">
@@ -313,6 +324,20 @@
           doBuild();
       });
 
+      document.getElementById('strip-lines-hash').addEventListener('change', function(event) {
+          shouldStripHashLines = event.target.value;
+          doBuild();
+      });
+      // Invoke manually for initial state.
+      shouldStripHashLines = document.getElementById('strip-lines-hash').checked;
+
+      document.getElementById('strip-lines-dot').addEventListener('change', function(event) {
+          shouldStripDotLines = event.target.value;
+          doBuild();
+      });
+      // Invoke manually for initial state.
+      shouldStripDotLines = document.getElementById('strip-lines-dot').checked;
+
       async function doBuild() {
           // Clear output
           outputElement.value = "";
@@ -354,6 +379,17 @@
           Module.setStatus("Running lcc ", lccArguments);
           Module.callMain(lccArguments);
           Module.setStatus("Ran lcc ", lccArguments);
+
+          if (outputElement) {
+              function strip_lines_beginning_with_from(begin_with, from_string) {
+                  const regexp = new RegExp(`^\\s*${RegExp.escape(begin_with)}.*$`, "gm");
+                  return from_string.replace(regexp, "");
+              }
+              if (shouldStripHashLines)
+                  outputElement.value = strip_lines_beginning_with_from("#", outputElement.value);
+              if (shouldStripDotLines)
+                  outputElement.value = strip_lines_beginning_with_from(".", outputElement.value);
+          }
       };
       // Connect build button click event to doBuild function.
       document.getElementById('build').addEventListener('click', doBuild);
