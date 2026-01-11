@@ -26,7 +26,7 @@
 
 ;;; Commentary:
 
-;; commentary
+;; This is made so that we can generate a Glint docset.
 
 ;;; Code:
 
@@ -67,6 +67,12 @@
 ;; Eventually, we want little one-off explainers on Glint concepts as
 ;; Guides. i.e. one for default initialization, one for how to represent
 ;; trees in Glint using the built-in sum and dynamic array types, etc.
+
+
+(defun docset-make ()
+  ;; TODO: The Book
+  ;; TODO: Process Org guides in src/guides/
+  )
 
 (provide 'docset)
 
