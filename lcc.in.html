@@ -278,27 +278,40 @@
           else inputElement.removeEventListener('change', doBuild);
       }
       // Register change event.
-      document.getElementById('build-on-change').addEventListener('change', function() { eventBuildOnChange(this.checked); });
+      document.getElementById('build-on-change').addEventListener('change', function() {
+          eventBuildOnChange(this.checked); });
       // Invoke manually for initial state.
       eventBuildOnChange(document.getElementById('build-on-change').checked);
 
       // Register change event.
-      document.getElementById('print-ast').addEventListener('change', function() { shouldPrintAST = this.checked; doBuild(); });
+      document.getElementById('print-ast').addEventListener('change', function() {
+          shouldPrintAST = this.checked;
+          doBuild();
+      });
       // Invoke manually for initial state.
       shouldPrintAST = document.getElementById('print-ast').checked;
 
       // Register change event.
-      document.getElementById('print-ir').addEventListener('change', function() { shouldPrintIR = this.checked; doBuild(); });
+      document.getElementById('print-ir').addEventListener('change', function() {
+          shouldPrintIR = this.checked;
+          doBuild();
+      });
       // Invoke manually for initial state.
       shouldPrintIR = document.getElementById('print-ir').checked;
 
       // Register change event.
-      document.getElementById('print-mir').addEventListener('change', function() { shouldPrintMIR = this.checked; doBuild(); });
+      document.getElementById('print-mir').addEventListener('change', function() {
+          shouldPrintMIR = this.checked;
+          doBuild();
+      });
       // Invoke manually for initial state.
       shouldPrintMIR = document.getElementById('print-mir').checked;
 
       // Register change event.
-      document.getElementById('print-output').addEventListener('change', function() { shouldPrintOutput = this.checked; doBuild(); });
+      document.getElementById('print-output').addEventListener('change', function() {
+          shouldPrintOutput = this.checked;
+          doBuild();
+      });
       // Invoke manually for initial state.
       shouldPrintOutput = document.getElementById('print-output').checked;
 
@@ -385,10 +398,18 @@
                   const regexp = new RegExp(`^\\s*${RegExp.escape(begin_with)}.*$[\n]`, "gm");
                   return from_string.replace(regexp, "");
               }
-              if (shouldStripHashLines)
-                  outputElement.value = strip_lines_beginning_with_from("#", outputElement.value);
-              if (shouldStripDotLines)
-                  outputElement.value = strip_lines_beginning_with_from(".", outputElement.value);
+              if (shouldStripHashLines) {
+                  outputElement.value = strip_lines_beginning_with_from(
+                      "#",
+                      outputElement.value
+                  );
+              }
+              if (shouldStripDotLines) {
+                  outputElement.value = strip_lines_beginning_with_from(
+                      ".",
+                      outputElement.value
+                  );
+              }
           }
       };
 
