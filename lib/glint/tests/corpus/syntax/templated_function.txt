@@ -9,5 +9,5 @@ foo : int(x : auto)
 ---
 
 (block
- (function_declaration
+ (templated_function_declaration
   (binary_add (name) (integer_literal))))
