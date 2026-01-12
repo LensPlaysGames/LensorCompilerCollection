@@ -12,6 +12,7 @@
 - [LangTest]: fail test specifier given an expected error id in brackets
   i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expected/ diagnostic is emitted, not just a similar one.
 - [Register Allocation]: ISel should mark call instructions as clobbering a unique "volatile registers" register (similar to return register), such that RA knows whats up, and could even insert spills before and after the call if necessary.
+- [Backend/WASM]: Flesh Out
 
 * Glint
 
@@ -54,3 +55,4 @@
   It's just far too far-reaching, all-encompassing.
 - [Sema]: =---no-default-handlers=
   If passed, do not include definitions for the functionality that Sema generates calls to, for example (i.e. =__dynarray_grow=).
+- [Sema]: Disallow =_X= anywhere in identifiers (for mangled name compatibility)

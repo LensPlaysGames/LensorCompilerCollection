@@ -2699,7 +2699,21 @@ auto lcc::glint::ObjectDecl::mangled_name() const -> std::string {
         return name();
     }
 
-    return fmt::format("_XGlint{}{}", name(), type()->representation());
+    const auto to_alphanumerics = [](std::string_view in) -> std::string {
+        std::string out{};
+        for (auto c : in) {
+            if (not Lexer::IsAlphaNumeric((u32) c))
+                out += fmt::format("_X{:02X}", (u32) c);
+            else out += c;
+        }
+        return out;
+    };
+
+    return fmt::format(
+        "_XGlint{}{}",
+        to_alphanumerics(name()),
+        type()->representation()
+    );
 }
 
 auto lcc::glint::Module::enclosing_scope(Location l) const -> Scope* {
