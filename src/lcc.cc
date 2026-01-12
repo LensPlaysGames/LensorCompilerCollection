@@ -367,8 +367,15 @@ auto main(int argc, const char** argv) -> int {
         GenerateOutputFile(input_files[0], output_file_path);
 
         if (options.emit_sarif) {
-            auto s = as_sarif(context);
-            lcc::File::WriteOrTerminate(s.data(), s.size(), "out.sarif");
+            std::string command_line{};
+            for (auto i = 0; i < argc; ++i) {
+                if (i > 0) command_line += ' ';
+                command_line += argv[i];
+            }
+            auto s = as_sarif(context, command_line);
+            auto sarif_path = std::filesystem::path{output_file_path}
+                                  .replace_extension(".sarif");
+            lcc::File::WriteOrTerminate(s.data(), s.size(), sarif_path);
         }
 
         if (context.has_error()) return 1;

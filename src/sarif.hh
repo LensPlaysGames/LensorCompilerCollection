@@ -45,6 +45,6 @@ struct SARIFProperty {
     std::string emit();
 };
 
-std::string as_sarif(lcc::Context& ctx);
+std::string as_sarif(lcc::Context& ctx, std::string_view command_line);
 
 #endif /* LCC_DRIVER_SARIF_HH */

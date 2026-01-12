@@ -40,10 +40,19 @@ void SARIFArray::add_element(SARIFObject value) {
 
 std::string SARIFItem::emit() {
     if (std::holds_alternative<std::string>(value)) {
-        return fmt::format(
-            "\"{}\"",
-            std::get<std::string>(value)
-        );
+        std::string s{};
+        // Cleanse string
+        // Escape control characters, double quotes, and backslash.
+        // (JSON does not allow un-escaped control characters).
+        for (auto c : std::get<std::string>(value)) {
+            if (c == '\n') s += "\n";
+            if (c == '\t') s += "\t";
+            else if (c < ' ' or c > '~')
+                s += fmt::format("\\u{:04x}", (lcc::u32) c);
+            else s += c;
+        }
+
+        return fmt::format("\"{}\"", s);
     }
 
     if (std::holds_alternative<int>(value))
@@ -88,7 +97,7 @@ std::string SARIFArray::emit() {
     );
 }
 
-std::string as_sarif(lcc::Context& ctx) {
+std::string as_sarif(lcc::Context& ctx, std::string_view command_line) {
     const auto escape = [](std::string_view s) {
         std::string escaped{};
         constexpr std::string_view basic_escapes{"\\\""};
@@ -162,6 +171,20 @@ std::string as_sarif(lcc::Context& ctx) {
         }
     }
     run.add_property("artifacts", artifacts);
+
+    // SARIF run object invocations array property
+    SARIFArray invocations{};
+
+    // SARIF invocation object
+    SARIFObject invocation{};
+    // Add "commandLine" property
+    invocation.add_property(
+        "commandLine",
+        std::string(command_line)
+    );
+    invocations.add_element(invocation);
+
+    run.add_property("invocations", invocations);
 
     // run results
     // A SARIF "result" is pretty much equivalent to an LCC "diagnostic".
@@ -239,7 +262,11 @@ std::string as_sarif(lcc::Context& ctx) {
         }
         result.add_property("locations", locations);
 
-        // TODO: fixes
+        // SARIF fixes
+        SARIFArray fixes{};
+        // TODO: Include Diag::fixes in Context::DiagnosticReport.
+        // SARIF fix object
+        result.add_property("fixes", fixes);
 
         results.add_element(result);
     }
