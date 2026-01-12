@@ -22,7 +22,10 @@
 - [Sema]: =import= namespacing
   Basically, I want to allow "hiding" the exports of an imported module behind a "fake" structure.
   "import foo as bar;"
+  Probably means a new type of declaration in the AST that gets removed at sema.
 - [Parser/Sema]: Unary operator (keyword) for asserting compile time evaluation
+  =evaluate=?
+  "evaluate 42 + 27" -> "69".
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
 - [Sema]: =maps_arguments= function attribute
 
@@ -33,12 +36,20 @@
   This will lower into a =print= call, splitting the format string into
   relevant string literals (split on `{}`).
 - [Sema]: =out;= as first expression of function body becomes declaration of return type
+  Or maybe behind a =builds_result= attribute, where =result= is then automagically declared as a variable of the return type.
 - [Meta]: glintlang website
+  Probably a GitHub organisation with a GitHub Pages website.
+  Site generated from Org and org-publish or something like that.
 - [Sema]: Use intrinsic memset for initialisation (optimisation)
+  I just used an external memset because that seemed easier at the time. I think the word intrinsic scared (scares?) me.
 - [Sema]: Variable Entanglement
+  Tell the compiler that if a variable =A= has a known value (or a range of values), then variable =B= has a known value (or a range of values).
+  The compiler would be able to optimise more in certain cases if it knew more about how values were related to each other (if they are).
 - [Sema]: Dynamic array of =expr=. =for e in exprs, apply foo, e;= type of thing.
 - [Parser]: Block comments
+  Syntax? Maybe =[- comment goes here -]=
 - [Parser/Sema]: Tokens in the AST
+  Basically, if we could have a dynamic array of =token=, we could then insert that into the source code via some special token list application operator... This would let Glint code build Glint code at compile time (like a LISP macro operating on symbols themselves vs the values they are bound to).
 - [Diags]: Get rid of "Miscellaneous" ErrorId
 - [Lexer]: Case Insensitivity
   Behind =---case-insensitive= flag?
@@ -54,4 +65,4 @@
   It's just far too far-reaching, all-encompassing.
 - [Sema]: =---no-default-handlers=
   If passed, do not include definitions for the functionality that Sema generates calls to, for example (i.e. =__dynarray_grow=).
-- [Sema]: Disallow =_X= anywhere in identifiers (for mangled name compatibility)
+- [Lexer]: Disallow =_X= anywhere in identifiers (for mangled name compatibility)
