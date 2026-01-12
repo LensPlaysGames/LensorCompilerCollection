@@ -961,13 +961,20 @@ void lcc::glint::Sema::AnalyseModule() {
 
         // Insert call to init function of imported module.
         auto call_init = new (mod) CallExpr(
-            new (mod) NameRefExpr(Module::InitFunctionName(import.name), mod.global_scope(), {}),
+            new (mod) NameRefExpr(
+                Module::InitFunctionName(import.name),
+                mod.global_scope(),
+                {}
+            ),
             {},
             {}
         );
         as<BlockExpr>(mod.top_level_function()->body())
             ->children()
-            .insert(as<BlockExpr>(mod.top_level_function()->body())->children().begin(), call_init);
+            .insert(
+                as<BlockExpr>(mod.top_level_function()->body())->children().begin(),
+                call_init
+            );
     }
 
     // Parse templates that sema will use to expand and/or rewrite things
@@ -2852,7 +2859,11 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                         = new (mod) BinaryExpr(TokenKind::Or, cmp_zero, cmp_size, {});
 
                     // TODO: if oob_print or something. FIXME: Use frontend option.
-                    auto puts_ref = new (mod) NameRefExpr("puts", mod.global_scope(), {});
+                    auto puts_ref = new (mod) NameRefExpr(
+                        "puts",
+                        mod.global_scope(),
+                        {}
+                    );
                     std::string str_value = "Glint Runtime Error: oob dynamic array access";
                     if (b->location().seekable(context)) {
                         auto locinfo = b->location().seek_line_column(context);
@@ -2877,10 +2888,18 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                         {}
                     );
 
-                    auto exit_ref = new (mod) NameRefExpr("exit", mod.global_scope(), {});
+                    auto exit_ref = new (mod) NameRefExpr(
+                        "exit",
+                        mod.global_scope(),
+                        {}
+                    );
                     auto status_literal = new (mod) IntegerLiteral(1, {});
                     // TODO: When user defines oob_access handler, call that handler.
-                    auto then_outofbounds = new (mod) CallExpr(exit_ref, {status_literal}, {});
+                    auto then_outofbounds = new (mod) CallExpr(
+                        exit_ref,
+                        {status_literal},
+                        {}
+                    );
                     auto then_block = new (mod) BlockExpr(
                         {then_print,
                          then_outofbounds},
@@ -2896,11 +2915,19 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     exprs.emplace_back(if_outofbounds);
 
                     // Grow, if need be.
-                    auto grow_if = new (mod) CallExpr(named_template("dynarray_grow"), {dynarray_expr}, {});
+                    auto grow_if = new (mod) CallExpr(
+                        named_template("dynarray_grow"),
+                        {dynarray_expr},
+                        {}
+                    );
                     exprs.emplace_back(grow_if);
 
                     auto memmove_ref
-                        = new (mod) NameRefExpr("memmove", mod.global_scope(), {});
+                        = new (mod) NameRefExpr(
+                            "memmove",
+                            mod.global_scope(),
+                            {}
+                        );
                     // subscript dynarray_expr.data with index_expr + 1 offset
                     auto index_plusone
                         = new (mod) BinaryExpr(
@@ -2909,14 +2936,26 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                             new (mod) IntegerLiteral(1, {}),
                             {}
                         );
-                    auto memmove_dest
-                        = new (mod) BinaryExpr(TokenKind::Subscript, dyn_data, index_plusone, {});
+                    auto memmove_dest = new (mod) BinaryExpr(
+                        TokenKind::Subscript,
+                        dyn_data,
+                        index_plusone,
+                        {}
+                    );
                     // subscript dynarray_expr.data with index_expr
-                    auto memmove_source
-                        = new (mod) BinaryExpr(TokenKind::Subscript, dyn_data, index_expr, {});
+                    auto memmove_source = new (mod) BinaryExpr(
+                        TokenKind::Subscript,
+                        dyn_data,
+                        index_expr,
+                        {}
+                    );
                     // subtract index_expr from dynarray_expr.size
-                    auto memmove_size
-                        = new (mod) BinaryExpr(TokenKind::Minus, dyn_size, index_expr, {});
+                    auto memmove_size = new (mod) BinaryExpr(
+                        TokenKind::Minus,
+                        dyn_size,
+                        index_expr,
+                        {}
+                    );
                     auto call_memmove = new (mod) CallExpr(
                         memmove_ref,
                         {memmove_dest, memmove_source, memmove_size},
@@ -2925,11 +2964,19 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     exprs.emplace_back(call_memmove);
 
                     // Subscript dynarray data with index expression
-                    auto assign_lhs_subscript
-                        = new (mod) BinaryExpr(TokenKind::Subscript, dyn_data, index_expr, {});
+                    auto assign_lhs_subscript = new (mod) BinaryExpr(
+                        TokenKind::Subscript,
+                        dyn_data,
+                        index_expr,
+                        {}
+                    );
                     // Dereference subscript
-                    auto assign_lhs
-                        = new (mod) UnaryExpr(TokenKind::Dereference, assign_lhs_subscript, false, {});
+                    auto assign_lhs = new (mod) UnaryExpr(
+                        TokenKind::Dereference,
+                        assign_lhs_subscript,
+                        false,
+                        {}
+                    );
                     // @dynarray[index] := value;
                     auto assign = new (mod) BinaryExpr(
                         TokenKind::ColonEq,
@@ -4077,7 +4124,11 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 bool arg_is_byte = arg->type()->is_byte();
                 if (arg_is_byte) {
                     auto print_call = new (mod) CallExpr(
-                        new (mod) NameRefExpr("putchar", mod.global_scope(), expr->location()),
+                        new (mod) NameRefExpr(
+                            "putchar",
+                            mod.global_scope(),
+                            expr->location()
+                        ),
                         {arg},
                         expr->location()
                     );
@@ -4087,10 +4138,15 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 
                 // Just call puts on byte pointers
                 // print x:byte.ptr -> puts x
-                bool arg_is_pointer_to_byte = arg->type()->is_pointer() and Type::Equal(arg->type()->elem(), Type::Byte);
+                bool arg_is_pointer_to_byte = arg->type()->is_pointer()
+                                          and Type::Equal(arg->type()->elem(), Type::Byte);
                 if (arg_is_pointer_to_byte) {
                     auto puts_call = new (mod) CallExpr(
-                        new (mod) NameRefExpr("puts", mod.global_scope(), expr->location()),
+                        new (mod) NameRefExpr(
+                            "puts",
+                            mod.global_scope(),
+                            expr->location()
+                        ),
                         {arg},
                         expr->location()
                     );
@@ -4101,7 +4157,8 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 // Don't format dynamic byte arrays...
                 // print x:[byte] -> puts x.data
                 bool arg_is_dynamic_array_of_byte
-                    = arg->type()->strip_references()->is_dynamic_array() and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
+                    = arg->type()->strip_references()->is_dynamic_array()
+                  and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
                 if (arg_is_dynamic_array_of_byte) {
                     auto print_call = new (mod) CallExpr(
                         named_template("print__putchar_each"),
@@ -4130,7 +4187,8 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 // Handle array view of byte.
                 // print x:[byte view] -> puts x.data
                 bool arg_is_view_of_byte
-                    = arg->type()->strip_references()->is_view() and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
+                    = arg->type()->strip_references()->is_view()
+                  and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
                 if (arg_is_view_of_byte) {
                     auto print_call = new (mod) CallExpr(
                         named_template("print__putchar_each"),
@@ -4314,7 +4372,11 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 // -formattmp;
                 auto unary = new (mod) UnaryExpr(
                     TokenKind::Minus,
-                    new (mod) NameRefExpr(format_decl->name(), scope, {}),
+                    new (mod) NameRefExpr(
+                        format_decl->name(),
+                        scope,
+                        {}
+                    ),
                     false,
                     {}
                 );
