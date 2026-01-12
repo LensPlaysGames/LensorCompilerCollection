@@ -5,6 +5,7 @@
 - [Meta]: Flatten source structure, re-organize into folders as necessary
 - [Driver]: =-gcc= compatibility layer: args after are parsed as GCC arguments
 - [Register Allocation]: Register classes (floats/scalar)
+  Unspecified and float
 - [Register Allocation]: Register (un)spilling
   I need to create an LCC IR source that will cause spilling to happen; I currently can't really figure out how to get Glint to generate code that needs it...
 - [Driver]: =--color-theme <file>= option to remap ANSI/VT100 emitted terminal codes to different colors (i.e. BoldRed -> Green) if you want green errors for some reason.
@@ -25,6 +26,7 @@
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
 - [Sema]: =maps_arguments= function attribute
 
+- [Parser]: Warn when multiple expressions appear on one line
 - [Parser/Sema]: Compile-time Checked Interpolation: =printf "value: {}\n", 69;=
   This won't be different from =print=, I just like this style of doing
   things (and a lot of people tend to prefer it over splitting strings).
