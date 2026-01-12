@@ -121,6 +121,10 @@ using s_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::SExt), Register<>>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveSignExtended), o<0>, i<0>>>>;
 
+using s_ext_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::SExt), Immediate<>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveSignExtended), o<0>, i<0>>>>;
+
 using not_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Compl), Register<>>>,
     InstList<
@@ -241,6 +245,17 @@ using add_global_imm = Pattern<
     InstList<
         Inst<Clobbers<>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
+
+// NOTE: We cannot use i<0> (output register of first instruction) to
+// store the LEA intermediate result, because the input register operand
+// may be the output register of the first instruction, and we need that
+// unclobbered for the later add.
+using add_global_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Add), Global<>, Register<>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::LoadEffectiveAddress), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::Add), o<1>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using add_local_imm_1 = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
@@ -465,6 +480,12 @@ using z_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::ZExt), Register<>>>,
     InstList<Inst<Clobbers<>, usz(Opcode::MoveZeroExtended), o<0>, i<0>>>>;
 
+using z_ext_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::ZExt), Immediate<>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::MoveZeroExtended), v<0, 0>, i<0>>>>;
+
 // clang-format off
 // This doesn't really work, as far as I can tell. Not exactly sure yet,
 // could be o<1> in input pattern not being resolved, could be order of
@@ -504,7 +525,9 @@ using AllPatterns = PatternList<
     copy_imm,
 
     s_ext_reg,
+    s_ext_imm,
     z_ext_reg,
+    z_ext_imm,
 
     not_reg,
 
@@ -530,12 +553,13 @@ using AllPatterns = PatternList<
     or_reg_reg,
     or_reg_imm,
 
-    add_local_imm_1,
-    add_local_imm_2,
     add_reg_reg,
     add_imm_reg,
+    add_global_reg,
     add_reg_imm,
     add_imm_imm,
+    add_local_imm_1,
+    add_local_imm_2,
     add_global_imm,
 
     mul_reg_reg,
