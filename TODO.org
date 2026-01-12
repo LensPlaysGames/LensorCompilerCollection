@@ -16,7 +16,6 @@
 
 * Glint
 
-- [Sema]: =print= handle enum value, print enum name
 - [Parser/Sema]: Switch on value
 - [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
 - [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=
