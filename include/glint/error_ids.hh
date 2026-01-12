@@ -17,6 +17,10 @@ enum struct ErrorId : unsigned {
     InvalidIntegerLiteral,
     InvalidStringLiteral,
 
+    LexerMacro,
+
+    Redefinition,
+
     Expected,
 
     Miscellaneous,
@@ -26,13 +30,17 @@ enum struct ErrorId : unsigned {
 
 constexpr std::array<
     std::pair<ErrorId, const char*>,
-    7>
+    9>
     error_id_strings{
         std::pair{ErrorId::INVALID, "ICE: INVALID ERROR ID"},
 
         {ErrorId::InvalidByteLiteral, "invalid-literal/byte"},
         {ErrorId::InvalidIntegerLiteral, "invalid-literal/integer"},
         {ErrorId::InvalidStringLiteral, "invalid-literal/string"},
+
+        {ErrorId::LexerMacro, "macro"},
+
+        {ErrorId::Redefinition, "redefinition"},
 
         {ErrorId::Expected, "expected"},
 

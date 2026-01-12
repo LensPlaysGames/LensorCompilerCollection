@@ -1,0 +1,33 @@
+* Attempt to Print Invalid Enum Value
+
+Cast an invalid value to an enum type, and attempt to print it.
+
+Glint should have inserted code that makes sure any invalid enum value will cause a Glint Runtime Error when attempting to print it.
+
+#+NAME: source
+#+begin_src glint
+  foo :: enum { A :: 69; };
+
+  x : foo;
+
+  x := foo.A;
+
+  ;; Cast an invalid value to the foo enum type, and attempt to print it.
+  print (foo `*`);
+
+  foo.A;
+#+end_src
+
+#+NAME: status
+#+begin_example
+1
+#+end_example
+
+#+NAME: output
+#+begin_src emacs-lisp
+  (lambda (o)
+    "Return t iff output is empty OR contains a glint runtime error."
+    (or
+     (string-empty-p o)
+     (string-search (downcase "Glint Runtime Error") (downcase o))))
+#+end_src

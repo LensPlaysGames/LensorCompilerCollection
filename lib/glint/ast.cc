@@ -3105,3 +3105,14 @@ auto lcc::glint::TemplatedFuncDecl::deduce(
 
     return f;
 }
+
+auto lcc::glint::EnumType::enumerator_by_value(aint value) -> EnumeratorDecl* {
+    EnumeratorDecl* e_decl{};
+    for (auto e : enumerators()) {
+        if (e->value() == value) {
+            e_decl = e;
+            break;
+        }
+    }
+    return e_decl;
+}

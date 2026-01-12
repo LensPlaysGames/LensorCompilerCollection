@@ -356,7 +356,8 @@ auto lcc::glint::Sema::ConvertToCommonType(Expr** a, Expr** b) -> bool {
         if (b_is_literal)
             return Convert(b, (*a)->type()->strip_references());
     }
-    return Convert(a, (*b)->type()) or Convert(b, (*a)->type());
+    return Convert(a, (*b)->type())
+        or Convert(b, (*a)->type());
 }
 
 auto lcc::glint::Sema::TryConvert(Expr** expr, Type* type) -> ConversionStatus {
@@ -946,7 +947,7 @@ void lcc::glint::Sema::AnalyseModule() {
             // TODO: Link/reference help documentation on how to point the compiler to
             // look in the proper place for Glint metadata, and how to produce it.
             Error(
-                {},
+                import.location,
                 "Could not find imported module {} in any include directory.\n"
                 "Working Directory: {}\n"
                 "Paths tried:\n"
@@ -954,10 +955,6 @@ void lcc::glint::Sema::AnalyseModule() {
                 import.name,
                 std::filesystem::current_path().lexically_normal().string(),
                 fmt::join(paths_tried, "\n")
-            );
-            Note(
-                import.location,
-                "Imported here"
             );
             std::exit(1);
         }
@@ -1007,6 +1004,12 @@ void lcc::glint::Sema::AnalyseModule() {
         "    dynarray.capacity *= 2;\n"
         "  };\n"
         "};\n"
+        "__putchar_each :: template(container : expr, size : uint)\n"
+        "  cfor\n"
+        "      __i_ii :: 0;\n"
+        "      __i_ii < size;\n"
+        "      __i_ii += 1;\n"
+        "    putchar @container[__i_ii];\n"
         "__print__putchar_each :: template(container : expr)\n"
         "  cfor\n"
         "      __i_ii :: 0;\n"
@@ -3292,11 +3295,16 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
             /// If both operands are integers, convert them to their common type.
             if (
-                (lhs_t->is_integer() and rhs_t->is_integer())
-                or (lhs_t->is_enum() and rhs_t->is_enum())
+                ((lhs_t->is_integer() or lhs_t->is_enum())
+                 and (rhs_t->is_integer() or rhs_t->is_enum()))
             ) {
                 if (not ConvertToCommonType(&b->lhs(), &b->rhs())) {
-                    Error(b->location(), "Cannot compare {} and {}", lhs_t, rhs_t);
+                    Error(
+                        b->location(),
+                        "Cannot compare {} and {} (operands type mismatch)",
+                        lhs_t,
+                        rhs_t
+                    );
                     b->set_sema_errored();
                     return;
                 }
@@ -3321,7 +3329,12 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 // TODO: if (function-exists "_GlintOpOverload<OpString>") -> do that
                 // Also make sure it returns something convertible to bool.
 
-                Error(b->location(), "Cannot compare {} and {}", lhs_t, rhs_t);
+                Error(
+                    b->location(),
+                    "Cannot compare {} and {} (types not allowed)",
+                    lhs_t,
+                    rhs_t
+                );
             }
 
             /// Comparisons return bool.
@@ -3538,13 +3551,21 @@ void lcc::glint::Sema::AnalyseCall_Integer(Expr** expr_ptr, CallExpr* expr) {
 
 void lcc::glint::Sema::AnalyseCall_Type(Expr** expr_ptr, CallExpr* expr) {
     LCC_ASSERT(
-        is<TypeExpr>(expr->callee()) or ( //
-            is<NameRefExpr>(expr->callee()) and is<TypeDecl>(as<NameRefExpr>(expr->callee())->target())
-        ),
+        is<TypeExpr>(expr->callee())
+            or (is<NameRefExpr>(expr->callee())
+                and as<NameRefExpr>(expr->callee())->target()
+                and is<TypeDecl>(
+                    as<NameRefExpr>(expr->callee())->target()
+                )),
         "Invalid arguments of call to \"analyse type call\" function"
     );
 
-    auto called_type = as<TypeExpr>(expr->callee())->contained_type();
+    Type* called_type{};
+    if (is<TypeExpr>(expr->callee()))
+        called_type = as<TypeExpr>(expr->callee())->contained_type();
+    else
+        called_type = as<TypeDecl>(as<NameRefExpr>(expr->callee())->target())->type();
+    LCC_ASSERT(called_type);
 
     // Calling a type expression with a single compound literal argument is a
     // declaration that the compound literal is expected to be of that type.
@@ -4035,6 +4056,8 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         }
 
         if (n == "__glintprint") {
+            // This is the group of expressions we will be replacing the print call
+            // expression with.
             std::vector<Expr*> exprs{};
             for (auto& arg : expr->args()) {
                 if (not Analyse(&arg)) {
@@ -4118,14 +4141,147 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     continue;
                 }
 
+                // Handle enum value (print name of value).
+                bool arg_is_enum
+                    = is<EnumType>(arg->type()->strip_references());
+                if (arg_is_enum) {
+                    auto enum_type = as<EnumType>(arg->type()->strip_references());
+                    LCC_ASSERT(enum_type->enumerators().size());
+
+                    // If the value is known at compile time, just print the name of the enum
+                    // that we know it is.
+                    if (
+                        auto enum_expression = cast<ConstantExpr>(arg);
+                        enum_expression
+                    ) {
+                        auto enum_value = enum_expression->value().as_int();
+
+                        auto e_decl = enum_type->enumerator_by_value(enum_value);
+                        LCC_ASSERT(e_decl and e_decl->name().size());
+
+                        auto string_literal = new (mod) StringLiteral(
+                            mod,
+                            e_decl->name(),
+                            e_decl->location()
+                        );
+
+                        auto print_call = new (mod) CallExpr(
+                            named_template("putchar_each"),
+                            {string_literal,
+                             new (mod) IntegerLiteral(e_decl->name().size(), {})},
+                            arg->location()
+                        );
+
+                        exprs.emplace_back(print_call);
+                        continue;
+                    }
+
+                    // Map dynamic enum value to it's corresponding string literal.
+                    // TODO: Use `switch` once we have it. Binary search?
+                    //
+                    // For every enumerator in the type...
+                    //     if arg = enumerator, puts "enumerator"[0];
+
+                    // The failure case (value is not equal to any possible enumerator)
+                    std::string str_value = "Glint Runtime Error: attempt to print enum value that is not associated with a declared enumerator";
+                    if (arg->location().seekable(context)) {
+                        auto locinfo = arg->location().seek_line_column(context);
+                        str_value = fmt::format(
+                            "{}:{}:{}: {}",
+                            locinfo.line,
+                            locinfo.col,
+                            context
+                                ->files()
+                                .at(arg->location().file_id)
+                                ->path()
+                                .lexically_normal()
+                                .string(),
+                            str_value
+                        );
+                    }
+                    auto str = new (mod) StringLiteral(mod, str_value, {});
+                    auto sub_str = new (mod) BinaryExpr(
+                        TokenKind::Subscript,
+                        str,
+                        new (mod) IntegerLiteral(0, {}),
+                        {}
+                    );
+                    auto invalid_print = new (mod) CallExpr(
+                        new (mod) NameRefExpr(
+                            "puts",
+                            mod.global_scope(),
+                            expr->location()
+                        ),
+                        {sub_str},
+                        {}
+                    );
+
+                    auto status_literal = new (mod) IntegerLiteral(1, {});
+                    auto exit_call = new (mod) CallExpr(
+                        new (mod) NameRefExpr(
+                            "exit",
+                            mod.global_scope(),
+                            {}
+                        ),
+                        {status_literal},
+                        {}
+                    );
+
+                    Expr* otherwise = new (mod) GroupExpr({invalid_print, exit_call}, {});
+
+                    for (auto e : enum_type->enumerators()) {
+                        auto test_value = new (mod) ConstantExpr(
+                            enum_type->underlying_type(),
+                            EvalResult(e->value()),
+                            {}
+                        );
+                        auto eq_condition = new (mod) BinaryExpr(
+                            TokenKind::Eq,
+                            test_value,
+                            arg,
+                            {}
+                        );
+
+                        auto string_literal = new (mod) StringLiteral(
+                            mod,
+                            e->name(),
+                            e->location()
+                        );
+
+                        auto print_call = new (mod) CallExpr(
+                            named_template("putchar_each"),
+                            {string_literal,
+                             new (mod) IntegerLiteral(e->name().size(), {})},
+                            arg->location()
+                        );
+
+                        auto if_value_matches = new (mod) IfExpr(
+                            eq_condition,
+                            print_call,
+                            otherwise,
+                            {}
+                        );
+
+                        otherwise = if_value_matches;
+                    }
+                    LCC_ASSERT(otherwise);
+
+                    exprs.emplace_back(otherwise);
+                    continue;
+                }
+
                 // Otherwise, format argument
                 // print x -> { tmp :: format x; puts tmp.data; -tmp; }
                 auto format_call = new (mod) CallExpr(
-                    new (mod) NameRefExpr("format", mod.top_level_scope(), expr->location()),
+                    new (mod) NameRefExpr(
+                        "format",
+                        mod.top_level_scope(),
+                        expr->location()
+                    ),
                     {arg},
                     expr->location()
                 );
-                auto format_decl_name = mod.unique_name("formattmp_");
+                auto format_decl_name = mod.unique_name("fmttmp_");
                 auto scope = name->scope();
                 auto format_decl = scope->declare(
                     context,

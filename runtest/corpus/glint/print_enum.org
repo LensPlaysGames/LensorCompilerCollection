@@ -1,0 +1,18 @@
+* Print Enumerator Name From Value (compile time)
+
+#+NAME: source
+#+begin_src glint
+foo :: enum { A :: 69; };
+
+print foo.A, `\n`;
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+A
+#+end_example

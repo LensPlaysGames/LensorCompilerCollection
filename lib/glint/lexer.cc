@@ -254,7 +254,10 @@ void lcc::glint::Lexer::NextToken() {
                 NextToken();
 
                 if (tok.kind != TokenKind::Ident) {
-                    Error(ErrorId::Expected, "Expected identifier following '$' to name macro argument");
+                    Error(
+                        ErrorId::Expected,
+                        "Expected identifier following '$' to name macro argument"
+                    );
                 }
 
                 std::string name = tok.text;
@@ -266,14 +269,25 @@ void lcc::glint::Lexer::NextToken() {
                     // Get selector identifier.
                     NextToken();
                     if (tok.kind != TokenKind::Ident) {
-                        Error(ErrorId::Expected, "Expected identifier following ':' in named macro argument");
+                        Error(
+                            ErrorId::Expected,
+                            "Expected identifier following ':' in named macro argument"
+                        );
                     }
 
                     auto selector = MacroArgumentSelector::Token;
-                    if (tok.text == "expr") selector = MacroArgumentSelector::Expr;
-                    else if (tok.text == "expr_once") selector = MacroArgumentSelector::ExprOnce;
+                    if (tok.text == "expr")
+                        selector = MacroArgumentSelector::Expr;
+                    else if (tok.text == "expr_once")
+                        selector = MacroArgumentSelector::ExprOnce;
                     else if (tok.text == "token") {
-                    } else Error("Unrecognised macro argument selector identifier");
+                        // no-op
+                    } else {
+                        Error(
+                            ErrorId::LexerMacro,
+                            "Unrecognised macro argument selector identifier"
+                        );
+                    }
                     tok.integer_value = (u64) selector;
                 }
 
@@ -535,7 +549,12 @@ void lcc::glint::Lexer::NextToken() {
                 break;
             }
 
-            Error("Invalid token (codepoint 0x{:x}, `{}')", lastc, utf8::ToString(lastc));
+            Error(
+                ErrorId::Expected,
+                "Invalid token (codepoint 0x{:x}, `{}')",
+                lastc,
+                utf8::ToString(lastc)
+            );
             // Yeet invalid character, skipping it.
             NextChar();
         } break;
@@ -681,7 +700,11 @@ void lcc::glint::Lexer::NextString() {
                     case '\'': tok.text += '\''; break;
                     case '\"': tok.text += '\"'; break;
                     case '\\': tok.text += '\\'; break;
-                    default: Error("Invalid escape sequence");
+                    default:
+                        Error(
+                            ErrorId::InvalidStringLiteral,
+                            "Invalid escape sequence"
+                        );
                 }
             } else {
                 if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in string literal");
@@ -872,6 +895,7 @@ void lcc::glint::Lexer::ExpandMacro(Macro& m) {
             auto param = ToSource(param_tok);
             if (arg and param) {
                 Error(
+                    ErrorId::LexerMacro,
                     "Ill-formed macro invocation: got token '{}', but expected token '{}' (parameter of macro {})",
                     *arg,
                     *param,
@@ -879,6 +903,7 @@ void lcc::glint::Lexer::ExpandMacro(Macro& m) {
                 );
             } else {
                 Error(
+                    ErrorId::LexerMacro,
                     "Ill-formed macro invocation: argument token does not match fixed parameter token of macro {}",
                     m.name
                 );
@@ -900,7 +925,10 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
     /// Check if we’re at EOF.
     const auto AtEof = [&] {
         if (tok.kind == Tk::Eof) {
-            Error("Unexpected end of file while parsing macro");
+            Error(
+                ErrorId::Expected,
+                "Unexpected end of file while parsing macro"
+            );
             return true;
         }
 
@@ -921,12 +949,22 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
 
     /// Lex macro name.
     auto name_result = ToSource(tok);
-    if (not name_result) Error("Could not lex name of macro...");
+    if (not name_result) {
+        Error(
+            ErrorId::LexerMacro,
+            "Could not lex name of macro..."
+        );
+    }
     auto name = *name_result;
 
     /// Check that the macro isn’t already defined.
-    if (rgs::find_if(macros, [&](auto&& m) { return m.name == name; }) != macros.end())
-        Error("Macro '{}' is already defined", name);
+    if (rgs::find_if(macros, [&](auto&& m) { return m.name == name; }) != macros.end()) {
+        Error(
+            ErrorId::Redefinition,
+            "Macro '{}' is already defined",
+            name
+        );
+    }
 
     auto& macro = macros.emplace_back(name);
 
@@ -948,7 +986,11 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
             );
 
             if (it != macro.parameters.end()) {
-                Error("Duplicate macro argument name '{}'", tok.text);
+                Error(
+                    ErrorId::LexerMacro,
+                    "Duplicate macro argument name '{}'",
+                    tok.text
+                );
             }
         }
 
@@ -965,13 +1007,20 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
 
             /// Definitions must be identifiers.
             if (tok.kind != Tk::Ident) {
-                Error(ErrorId::Expected, "Expected identifier in macro definition list");
+                Error(
+                    ErrorId::Expected,
+                    "Expected identifier in macro definition list"
+                );
                 continue;
             }
 
             /// Check for duplicates.
             if (rgs::find(macro.definitions, tok.text) != macro.definitions.end()) {
-                Error("Duplicate macro definition '{}'", tok.text);
+                Error(
+                    ErrorId::Redefinition,
+                    "Duplicate macro definition '{}'",
+                    tok.text
+                );
                 continue;
             }
 
@@ -999,7 +1048,11 @@ void lcc::glint::Lexer::HandleMacroDefinition() {
             );
 
             if (arg == macro.parameters.end())
-                Error("Undefined macro argument '{}'", tok.text);
+                Error(
+                    ErrorId::LexerMacro,
+                    "Undefined macro argument '{}'",
+                    tok.text
+                );
         }
 
         else if (tok.kind == Tk::Ident) {
@@ -1295,13 +1348,25 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
 }
 
 /// Convert a token back to the source it may have been lexed from.
-auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::string> {
+auto lcc::glint::ToSource(
+    const lcc::glint::GlintToken& t
+) -> lcc::Result<std::string> {
     switch (t.kind) {
         case Tk::Invalid:
             return lcc::Diag::Error(
                 "Cannot create source from invalid token {}",
                 lcc::glint::ToString(t.kind)
             );
+
+        case Tk::Ident: return t.text;
+        case Tk::Number: return std::to_string(t.integer_value);
+        case Tk::ByteLiteral: return fmt::format("`{}`", (char) t.integer_value);
+        case Tk::String: return fmt::format("\"{}\"", t.text);
+        case Tk::ArbitraryInt: {
+            auto c = t.text[0] == 'u' ? 'u' : 's';
+            return fmt::format("{}{}", c, t.integer_value);
+        }
+        case Tk::MacroArg: return fmt::format("${}", t.text);
 
         case Tk::Eof: return {""};
         case Tk::Apply: return {"apply"};
@@ -1352,10 +1417,6 @@ auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::s
         case Tk::ColonEq: return {":="};
         case Tk::ColonColon: return {"::"};
         case Tk::RightArrow: return {"->"};
-        case Tk::Ident: return t.text;
-        case Tk::Number: return std::to_string(t.integer_value);
-        case Tk::ByteLiteral: return fmt::format("`{}`", (char) t.integer_value);
-        case Tk::String: return fmt::format("\"{}\"", t.text);
         case Tk::If: return {"if"};
         case Tk::Else: return {"else"};
         case Tk::While: return {"while"};
@@ -1369,10 +1430,6 @@ auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::s
         case Tk::Or: return {"or"};
         case Tk::Int: return {"int"};
         case Tk::UInt: return {"uint"};
-        case Tk::ArbitraryInt: {
-            auto c = t.text[0] == 'u' ? 'u' : 's';
-            return fmt::format("{}{}", c, t.integer_value);
-        }
         case Tk::Sizeof: return {"sizeof"};
         case Tk::Alignof: return {"alignof"};
         case Tk::Has: return {"has"};
@@ -1398,7 +1455,10 @@ auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::s
         case Tk::CULong: return {"culong"};
         case Tk::CLongLong: return {"clonglong"};
         case Tk::CULongLong: return {"culonglong"};
-        case Tk::MacroArg: return fmt::format("${}", t.text);
+        case TokenKind::BitAND: return {"bit&"};
+        case TokenKind::BitOR: return {"bit|"};
+        case TokenKind::BitXOR: return {"bit^"};
+        case TokenKind::BitNOT: return {"bit~"};
 
         // Er, I'm not sure you can have a gensym token in the input, as they are
         // only ever created by the lexer itself (by parsing an identifier in
@@ -1415,11 +1475,6 @@ auto lcc::glint::ToSource(const lcc::glint::GlintToken& t) -> lcc::Result<std::s
             return lcc::Diag::Error(
                 "Cannot convert expression token into source, seeing as we can't (yet) turn AST node's back to source code."
             );
-
-        case TokenKind::BitAND: return {"bitand"};
-        case TokenKind::BitOR: return {"bitor"};
-        case TokenKind::BitXOR: return {"bitxor"};
-        case TokenKind::BitNOT: return {"bitnot"};
     }
     LCC_UNREACHABLE();
 }

@@ -1539,6 +1539,9 @@ public:
     auto underlying_type() const -> Type* { return _underlying_type; }
 
     [[nodiscard]]
+    auto enumerator_by_value(aint value) -> EnumeratorDecl*;
+
+    [[nodiscard]]
     static auto classof(const Type* type) -> bool { return type->kind() == Kind::Enum; }
 };
 
