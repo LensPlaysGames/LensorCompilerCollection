@@ -2,9 +2,12 @@
 #define LCC_CODEGEN_INSTRUCTION_SELECTION_HH
 
 #include <lcc/codegen/mir.hh>
+#include <lcc/context.hh>
 #include <lcc/ir/module.hh>
+#include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/result.hh>
+
 #include <unordered_map>
 #include <variant>
 
@@ -406,8 +409,10 @@ struct Inst {
                         "Local operand referenced by NewVirtual in isel pattern has absolute index (no way to get type or size info)"
                     );
 
-                    size = function.locals().at(local_index)->allocated_type()->bytes();
+                    size = function.locals().at(local_index)->allocated_type()->bits();
 
+                } else if (std::holds_alternative<MOperandGlobal>(op)) {
+                    size = mod->context()->target()->size_of_pointer;
                 } else LCC_ASSERT(false, "Sorry, moperand type not handled in NewVirtual handling...");
 
                 return MOperandRegister(new_virtuals[operand::index], uint(size));
