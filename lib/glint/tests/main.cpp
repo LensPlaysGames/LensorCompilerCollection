@@ -388,29 +388,42 @@ struct GlintTest : langtest::Test {
                     }
                 }
 
+                // Turn the text back to regular where the expected and got text last
+                // differ.
+                // We do this first so that we don't invalidate the diff begin offset.
+                auto reset_color = C(lcc::utils::Colour::Reset);
+                expected.insert(
+                    std::max(
+                        expected.end() - lcc::isz(diff_end),
+                        expected.begin() + lcc::isz(diff_begin) + 1
+                    ),
+                    reset_color.begin(),
+                    reset_color.end()
+                );
+                // Turn the text green where the expected and got text first differ.
                 auto expected_color = C(lcc::utils::Colour::Green);
                 expected.insert(
                     expected.begin() + lcc::isz(diff_begin),
                     expected_color.begin(),
                     expected_color.end()
                 );
-                auto reset_color = C(lcc::utils::Colour::Reset);
-                expected.insert(
-                    expected.end() - lcc::isz(diff_end),
+
+                // Turn the text back to regular where the expected and got text last
+                // differ.
+                got.insert(
+                    std::max(
+                        got.end() - lcc::isz(diff_end),
+                        got.begin() + lcc::isz(diff_begin) + 1
+                    ),
                     reset_color.begin(),
                     reset_color.end()
                 );
-
+                // Turn the text red where the expected and got text first differ.
                 auto got_color = C(lcc::utils::Colour::Red);
                 got.insert(
                     got.begin() + lcc::isz(diff_begin),
                     got_color.begin(),
                     got_color.end()
-                );
-                got.insert(
-                    got.end() - lcc::isz(diff_end),
-                    reset_color.begin(),
-                    reset_color.end()
                 );
 
                 fmt::print("EXPECTED: {}\n", expected);
