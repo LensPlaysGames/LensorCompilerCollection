@@ -563,8 +563,12 @@ void emit_gnu_att_assembly(
                 }
                 // Only emit align directive once, even if there are multiple exported
                 // names.
-                if (not defines)
-                    out += fmt::format(".align {}\n", var->allocated_type()->align_bytes());
+                if (not defines) {
+                    out += fmt::format(
+                        ".align {}\n",
+                        var->allocated_type()->align_bytes()
+                    );
+                }
 
                 // If safe_name breaks the identifier, well, there's not much we can do,
                 // since the identifier cannot be represented in the output format...
@@ -578,13 +582,21 @@ void emit_gnu_att_assembly(
         LCC_ASSERT(not var->init());
         LCC_ASSERT(defines);
 
-        out += fmt::format(".zero {}\n", var->allocated_type()->bytes());
+        out += fmt::format(
+            ".zero {}\n",
+            var->allocated_type()->bytes()
+        );
     }
 
     for (auto& section : module->extra_sections()) {
         out += fmt::format(".section {}\n", section.name);
-        LCC_ASSERT(not section.is_fill, "Sorry, haven't handled fill extra sections");
-        if (section.contents().empty()) continue;
+        LCC_ASSERT(
+            not section.is_fill,
+            "Sorry, haven't handled fill extra sections"
+        );
+        if (section.contents().empty())
+            continue;
+
         const auto write_byte = [&](u8 byte) {
             return fmt::format("0x{:x}", byte);
         };
@@ -596,7 +608,8 @@ void emit_gnu_att_assembly(
 
     out += ".section .note.GNU-stack\n";
 
-    if (output_path.empty() or output_path == "-") fmt::print("{}", out);
+    if (output_path.empty() or output_path == "-")
+        fmt::print("{}", out);
     else File::WriteOrTerminate(out.data(), out.size(), output_path);
 }
 
