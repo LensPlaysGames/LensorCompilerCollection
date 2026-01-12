@@ -1400,8 +1400,11 @@ auto lcc::glint::Expr::langtest_name() const -> std::string {
 }
 auto lcc::glint::Expr::langtest_children() const -> std::vector<lcc::glint::Expr*> {
     // Return function body as child of function declaration.
-    if (auto* func_decl = cast<FuncDecl>(this))
-        return {func_decl->body()};
+    if (auto* func_decl = cast<FuncDecl>(this)) {
+        if (func_decl->body())
+            return {func_decl->body()};
+        return {};
+    }
 
     // Do not follow NameRefExpr when testing (lots of duplicate variable declarations).
     if (is<NameRefExpr>(this)) return {};
