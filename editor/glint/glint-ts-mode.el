@@ -2,7 +2,7 @@
 
 ;; Author: Lens_r
 ;; Maintainer: Lens_r
-;; Version: 0.2.4
+;; Version: 0.2.6
 ;; Package-Requires: ((emacs "29.1") (treesit))
 ;; Homepage: https://github.com/LensPlaysGames/LensorCompilerCollection
 ;; Keywords: glint, tree-sitter
@@ -26,6 +26,8 @@
 
 ;;; Commentary:
 
+;; Grammar at https://github.com/LensPlaysGames/tree-sitter-glint
+
 ;;; Code:
 
 (require 'treesit)
@@ -37,8 +39,6 @@
   glint-ts-mode-indent-offset 2
   "Amount of spaces to be used as a unit of indentation."
   :type 'integer)
-;; FIXME: why is this here
-(unless glint-ts-mode-indent-offset (setq glint-ts-mode-indent-offset 2))
 
 (defvar glint-ts-mode--unary-node-names
   '("addressof" "dereference"
