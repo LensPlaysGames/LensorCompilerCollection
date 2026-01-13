@@ -1,15 +1,79 @@
+<!--
+    The LCC Playground HTML Template
+    Used by EMSCRIPTEN (emcc) to produce `lcc.html`
+
+    `lcc.html` requires `lcc.wasm`, `lcc.js` (also produced by EMSCRIPTEN).
+
+    TODO: https://github.com/tree-sitter/tree-sitter/tree/master/lib/binding_web
+    Use tree-sitter and the Glint tree-sitter Grammar to highlight input textarea.
+
+    TODO: A real-time view of the virtual WASM filesystem, with the ability
+    to create, edit, and delete files.
+    That way you could write multiple file projects in the browser, build a
+    better (and real) understanding of modules, imports, and exports.
+ -->
 <!doctype html>
 <html lang="en-us">
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
     <title>LCC Playground</title>
+    <link rel="canonical" href="https://lensplaysgames.github.io/LensorCompilerCollection/lcc.html" />
+
+    <!-- General -->
+    <meta name="application-name" content="Lensor Compiler Collection" />
+    <meta name="author" content="Lens" />
+    <meta name="description" content="Landing Page for Lensor Compiler Collection" />
+    <meta
+      name="keywords"
+      content="compiler, programming, development, cpp, c, glint, lcc"
+    />
+    <meta name="referrer" content="strict-origin" />
+    <meta itemprop="name" content="Lensor Compiler Collection" />
+    <meta itemprop="description" content="Interactive Playground for the Lensor Compiler Collection" />
+    <!-- <meta itemprop="image" content="./img/icons/128x128.png" /> -->
+
+    <!-- Microsoft -->
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <meta name="msapplication-starturl" content="/LensorCompilerCollection/lcc.html" />
+    <meta name="msapplication-tooltip" content="Landing Page for the Lensor Compiler Collection" />
+    <meta name="msapplication-TileColor" content="#0e1011" />
+    <!-- <meta name="msapplication-config" content="browserconfig.xml" /> -->
+
+    <!-- Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://lensplaysgames.github.io/LensorCompilerCollection/lcc.html" />
+    <meta property="og:title" content="Lensor Compiler Collection" />
+    <meta property="og:description" content="Landing Page for the Lensor Compiler Collection" />
+    <!-- <meta property="og:image" content="./img/icons/600x600.png" /> -->
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="app" />
+    <meta name="twitter:title" content="Lensor Compiler Collection" />
+    <meta name="twitter:description" content="Landing Page for the Lensor Compiler Collection" />
+    <meta name="twitter:url" content="https://lensplaysgames.github.io/LensorCompilerCollection/lcc.html" />
+    <!-- <meta name="twitter:image" content="./img/icons/512x512.png" /> -->
+
+    <!-- iOS -->
+    <meta name="apple-mobile-web-app-title" content="Lensor Compiler Collection" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="#0e1011" />
+    <!-- <link rel="apple-touch-icon" href="./img/icons/512x512.png" /> -->
+
+    <!-- Android -->
+    <meta name="theme-color" content="#0e1011" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Lens' Style -->
     <style>
       :root {
           /* Default (dark) theme colors */
           --bg-color: rgb(14, 16, 17);
           --text-color: #ffffff;
-          color-scheme: light dark; /* Informs browser the site supports both modes */
+           /* Informs browser the site supports both modes */
+          color-scheme: dark light;
       }
       body {
           background: var(--bg-color);
@@ -59,6 +123,8 @@
       }
 
     </style>
+    <!-- Helps prevent flashing on page load -->
+    <meta name="color-scheme" content="dark light">
   </head>
   <body>
     <header>
