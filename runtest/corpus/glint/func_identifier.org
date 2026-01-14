@@ -2,9 +2,9 @@
 
 #+NAME: source
 #+begin_src glint
-_!$&+-/?@^_|~ : int() 69;
+  _!$&+-/?@^_|~ : int() 69;
 
-_!$&+-/?@^_|~;
+  _!$&+-/?@^_|~;
 #+end_src
 
 #+NAME: status
