@@ -16,7 +16,8 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
     auto* type = *type_ptr;
 
     // Don’t analyse the same type twice.
-    if (type->sema() != SemaNode::State::NotAnalysed) return type->ok();
+    if (type->sema() != SemaNode::State::NotAnalysed)
+        return type->ok();
     type->set_sema_in_progress();
 
     switch (type->kind()) {
@@ -181,7 +182,20 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             }
 
             // Cache struct type for IRGen.
-            LCC_ASSERT(Analyse((Type**) &a->struct_type(mod)));
+            // FIXME: Terrible, no-good check for iterator invalidation, and quickfix.
+            if (type_ptr >= mod.types.data() and type_ptr < mod.types.data() + mod.types.size()) {
+                auto index = type_ptr - mod.types.data();
+                LCC_ASSERT(
+                    index > 0 and index < (decltype(index)) mod.types.size(),
+                    "Attempt to curtail iterator invalidation went severely wrong"
+                );
+                // Just to create it.
+                (void) a->struct_type(mod);
+                type_ptr = mod.types.data() + index;
+            } else {
+                (void) a->struct_type(mod);
+            }
+            LCC_ASSERT(Analyse((Type**) &a->struct_type()));
         } break;
 
         // Apply decltype decay to the element type, prohibit arrays of
@@ -189,7 +203,10 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
         // Also set cached struct type for IRGen by calling struct_type().
         case Type::Kind::DynamicArray: {
             auto* a = as<DynamicArrayType>(type);
-            LCC_ASSERT(a->element_type(), "DynamicArray has NULL element type");
+            LCC_ASSERT(
+                a->element_type(),
+                "DynamicArray has NULL element type"
+            );
             (void) Analyse(&a->element_type());
             a->element_type(DeclTypeDecay(a->element_type()));
 
@@ -200,13 +217,35 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
                     "Cannot create dynamic array of reference type {}",
                     elem
                 );
+                else Error(
+                    a->location(),
+                    "Cannot create dynamic array of reference type"
+                );
                 a->set_sema_errored();
             }
 
-            // Cache struct type for IRGen.
-            LCC_ASSERT(Analyse((Type**) &a->struct_type(mod)));
+            if (elem->ok() and not a->sema_errored())
+                a->set_sema_done();
+            else a->set_sema_errored();
 
-            if (a->initial_size()) (void) Analyse(&a->initial_size());
+            // Cache struct type for IRGen.
+            // FIXME: Terrible, no-good check for iterator invalidation, and quickfix.
+            if (type_ptr >= mod.types.data() and type_ptr < mod.types.data() + mod.types.size()) {
+                auto index = type_ptr - mod.types.data();
+                LCC_ASSERT(
+                    index > 0 and index < (decltype(index)) mod.types.size(),
+                    "Attempt to curtail iterator invalidation went severely wrong"
+                );
+                // Just to create it.
+                (void) a->struct_type(mod);
+                type_ptr = mod.types.data() + index;
+            } else {
+                (void) a->struct_type(mod);
+            }
+            LCC_ASSERT(Analyse((Type**) &a->struct_type()));
+
+            if (a->initial_size())
+                (void) Analyse(&a->initial_size());
         } break;
 
         // Apply decltype decay to the element type, prohibit arrays of
@@ -253,7 +292,20 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             s->byte_size(utils::AlignTo(s->byte_size(), s->alignment()));
 
             // Cache struct type for IRGen.
-            LCC_ASSERT(Analyse((Type**) &s->struct_type(mod)));
+            // FIXME: Terrible, no-good check for iterator invalidation, and quickfix.
+            if (type_ptr >= mod.types.data() and type_ptr < mod.types.data() + mod.types.size()) {
+                auto index = type_ptr - mod.types.data();
+                LCC_ASSERT(
+                    index > 0 and index < (decltype(index)) mod.types.size(),
+                    "Attempt to curtail iterator invalidation went severely wrong"
+                );
+                // Just to create it.
+                (void) s->struct_type(mod);
+                type_ptr = mod.types.data() + index;
+            } else {
+                (void) s->struct_type(mod);
+            }
+            LCC_ASSERT(Analyse((Type**) &s->struct_type()));
 
             // IMPORTANT: Struct type alignment calculation is probably wrong, since
             // the actual types were punned in the underlying type... So, we must
@@ -323,8 +375,23 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
             u->byte_size(utils::AlignTo(u->byte_size(), u->alignment()));
 
             // Cache struct type for IRGen
-            auto passed = Analyse((Type**) &u->array_type(mod));
-            LCC_ASSERT(passed, "UnionType underlying array type failed analysis");
+            // FIXME: Terrible, no-good check for iterator invalidation, and quickfix.
+            if (type_ptr >= mod.types.data() and type_ptr < mod.types.data() + mod.types.size()) {
+                auto index = type_ptr - mod.types.data();
+                LCC_ASSERT(
+                    index > 0 and index < (decltype(index)) mod.types.size(),
+                    "Attempt to curtail iterator invalidation went severely wrong"
+                );
+                // Just to create it.
+                (void) u->array_type(mod);
+                type_ptr = mod.types.data() + index;
+            } else {
+                (void) u->array_type(mod);
+            }
+            LCC_ASSERT(
+                Analyse((Type**) &u->array_type()),
+                "UnionType underlying array type failed analysis"
+            );
         } break;
 
         /// Analyse the parameters, the return type, and attributes.
