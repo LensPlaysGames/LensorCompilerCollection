@@ -12,7 +12,9 @@
 - [LangTest]: fail test specifier given an expected error id in brackets
   i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expected/ diagnostic is emitted, not just a similar one.
 - [Register Allocation]: ISel should mark call instructions as clobbering a unique "volatile registers" register (similar to return register), such that RA knows whats up, and could even insert spills before and after the call if necessary.
-- [Backend/WASM]: Flesh Out
+- [Backend/WASM]: Struct and array types
+  WebAssembly 3.0 has composite types, =struct= and =array=.
+  They need a bit of special handling, so it will be quite an extensive feature to implement (requiring overrides for storing and loading, variable initialisation, and more).
 
 * Glint
 

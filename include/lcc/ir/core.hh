@@ -1490,7 +1490,17 @@ public:
     static auto classof(Value* v) -> bool { return v->kind() == Kind::Shl; }
 };
 
-/// An arithmetic right shift.
+/// An arithmetic right shift. SIGNED
+///
+/// given:  0b0100
+///              1 SAR
+/// result: 0b0010
+/// given:  0b1100
+///              1 SAR
+/// result: 0b1110
+///
+/// Basically, the original sign bit value is used as the value for bits
+/// shifted in, maintaining negative numbers through "division".
 class SarInst : public BinaryInst {
     friend parser::Parser;
 
@@ -1508,12 +1518,22 @@ public:
     static auto classof(Value* v) -> bool { return v->kind() == Kind::Sar; }
 };
 
-/// A logical right shift.
+/// A logical right shift. UNSIGNED
+///
+/// given:  0b0100
+///              1 SHR
+/// result: 0b0010
+/// given:  0b1100
+///              1 SHR
+/// result: 0b0110
+///
+/// The value of the bit(s) shifted in is always zero.
 class ShrInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit ShrInst(Type* ty, Location location = {}) : BinaryInst(Kind::Shr, nullptr, nullptr, ty, location) {}
+    explicit ShrInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::Shr, nullptr, nullptr, ty, location) {}
 
 public:
     explicit ShrInst(Value* lhs, Value* rhs, Location location = {})
@@ -1793,7 +1813,7 @@ public:
 
     [[nodiscard]]
     static auto classof(Value* v) -> bool {
-        return +v->kind() >= +Kind::ZExt and + v->kind() <= +Kind::Compl;
+        return +v->kind() >= +Kind::ZExt and +v->kind() <= +Kind::Compl;
     }
 };
 
@@ -1882,6 +1902,8 @@ public:
 };
 
 /// Negate an integer value.
+/// That is, given a positive value, result a negative value.
+/// Given a negative value, result a positive value.
 class NegInst : public UnaryInstBase {
     friend parser::Parser;
 

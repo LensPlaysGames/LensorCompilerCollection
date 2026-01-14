@@ -2,12 +2,16 @@
 #include <lcc/core.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
+#include <lcc/ir/type.hh>
 #include <lcc/utils.hh>
 
 #include <string>
 #include <unordered_map>
 
 namespace lcc {
+
+// Forward declaration
+auto wat_inst(Module& m, Inst* i) -> std::string;
 
 auto wat_parameter_name(Parameter* p) -> std::string {
     LCC_ASSERT(p);
@@ -34,6 +38,12 @@ auto wat_local_name(AllocaInst* a) -> std::string {
     return fmt::format("$tmp{}", a->instructions_before_this().size());
 }
 
+auto wat_global_name(GlobalVariable* g) -> std::string {
+    LCC_ASSERT(g);
+    LCC_ASSERT(g->names().size());
+    return fmt::format("${}", g->names().at(0).name);
+}
+
 auto wat_type(Module& m, Type* t) -> std::string {
     switch (t->kind) {
         case Type::Kind::Unknown:
@@ -46,14 +56,40 @@ auto wat_type(Module& m, Type* t) -> std::string {
             LCC_ASSERT(false, "WAT Overlarge integer type");
         }
 
-            // In WebAssembly, pointers are i32's that contain an offset into the linear memory region.
+        // In WebAssembly, pointers are i32's that contain an offset into the linear memory region.
         case Type::Kind::Pointer: return "i32";
 
+        // In WebAssembly 3.0, structs may be represented by the `struct` and
+        // `field` operators.
+        case Type::Kind::Struct: {
+            auto s = as<StructType>(t);
+            std::string fields{};
+            for (auto member : s->members()) {
+                fields += fmt::format(
+                    " {}",
+                    wat_type(m, member)
+                );
+            }
+            return fmt::format(
+                "(struct{})",
+                fields
+            );
+        }
+
+        case Type::Kind::Array: {
+            auto a = as<ArrayType>(t);
+            return fmt::format(
+                "(array {})",
+                wat_type(m, a->element_type())
+            );
+        }
+
         case Type::Kind::Void:
-        case Type::Kind::Array:
         case Type::Kind::Function:
-        case Type::Kind::Struct:
-            LCC_TODO("WAT unhandled type {}", t->string(m.context()->option_use_colour()));
+            LCC_TODO(
+                "WAT unhandled type {}",
+                t->string(m.context()->option_use_colour())
+            );
     }
     LCC_UNREACHABLE();
 }
@@ -70,11 +106,12 @@ auto wat_value(Module& m, Value* v) -> std::string {
             LCC_UNREACHABLE();
 
         case Value::Kind::IntegerConstant: {
+            auto integer_value = as<IntegerConstant>(v)->value().value();
             if (v->type()->bits() <= 32)
-                return fmt::format("i32.const {}", 0); // todo
+                return fmt::format("i32.const {}", integer_value);
 
             if (v->type()->bits() <= 64)
-                return fmt::format("i64.const {}", 0); // todo
+                return fmt::format("i64.const {}", integer_value);
 
             LCC_ASSERT(
                 false,
@@ -84,8 +121,8 @@ auto wat_value(Module& m, Value* v) -> std::string {
         }
 
         case Value::Kind::GlobalVariable: {
-            LCC_TODO("WAT global");
-            return fmt::format("global {} {}", "todo name", "todo type");
+            auto g = as<GlobalVariable>(v);
+            return fmt::format("global.get {}", wat_global_name(g));
         }
 
         case Value::Kind::Block: {
@@ -136,6 +173,7 @@ auto wat_value(Module& m, Value* v) -> std::string {
             return o;
         }
 
+        // These are not values (probably instructions).
         case Value::Kind::Return:
         case Value::Kind::Store: LCC_UNREACHABLE();
 
@@ -148,13 +186,6 @@ auto wat_value(Module& m, Value* v) -> std::string {
             );
         }
 
-        case Value::Kind::GetElementPtr:
-        case Value::Kind::GetMemberPtr:
-        case Value::Kind::Intrinsic:
-        case Value::Kind::Phi:
-        case Value::Kind::Branch:
-        case Value::Kind::CondBranch:
-        case Value::Kind::Unreachable:
         case Value::Kind::ZExt:
         case Value::Kind::SExt:
         case Value::Kind::Trunc:
@@ -162,9 +193,6 @@ auto wat_value(Module& m, Value* v) -> std::string {
         case Value::Kind::Neg:
         case Value::Kind::Copy:
         case Value::Kind::Compl:
-        case Value::Kind::Add:
-        case Value::Kind::Sub:
-        case Value::Kind::Mul:
         case Value::Kind::SDiv:
         case Value::Kind::UDiv:
         case Value::Kind::SRem:
@@ -185,6 +213,19 @@ auto wat_value(Module& m, Value* v) -> std::string {
         case Value::Kind::ULe:
         case Value::Kind::UGt:
         case Value::Kind::UGe:
+        case Value::Kind::Mul:
+        case Value::Kind::Add:
+        case Value::Kind::Sub: {
+            return wat_inst(m, as<Inst>(v));
+        }
+
+        case Value::Kind::GetElementPtr:
+        case Value::Kind::GetMemberPtr:
+        case Value::Kind::Intrinsic:
+        case Value::Kind::Phi:
+        case Value::Kind::Branch:
+        case Value::Kind::CondBranch:
+        case Value::Kind::Unreachable:
             v->print();
             LCC_TODO("Sorry, not yet implemented");
     }
@@ -212,12 +253,17 @@ auto wat_inst(Module& m, Inst* i) -> std::string {
         case Value::Kind::Parameter:
         case Value::Kind::ArrayConstant:
         case Value::Kind::Function:
-        case Value::Kind::Poison:
-            LCC_UNREACHABLE();
+        case Value::Kind::Poison: {
+            LCC_ASSERT(
+                false,
+                "Not an instruction, therefore wat_inst() is invalid"
+            );
+        }
 
-            // Local definitions handled in function definition.
+        // Local definitions handled in function definition.
         case Value::Kind::Alloca:
-            return "";
+            // no-op
+            return std::string("");
 
         case Value::Kind::Call: {
             auto c = as<CallInst>(i);
@@ -248,9 +294,19 @@ auto wat_inst(Module& m, Inst* i) -> std::string {
             auto s = as<StoreInst>(i);
             // Store to local uses local.set
             if (auto a = cast<AllocaInst>(s->ptr())) {
+                // TODO: sketchy parens
                 return fmt::format(
                     "(local.set {} ({}))",
                     wat_local_name(a),
+                    wat_value(m, s->val())
+                );
+            }
+            // Store to global uses global.set
+            if (auto g = cast<GlobalVariable>(s->ptr())) {
+                // TODO: sketchy parens
+                return fmt::format(
+                    "(global.set {} ({}))",
+                    wat_global_name(g),
                     wat_value(m, s->val())
                 );
             }
@@ -268,6 +324,7 @@ auto wat_inst(Module& m, Inst* i) -> std::string {
 
         case Value::Kind::Return: {
             auto r = as<ReturnInst>(i);
+            // TODO: sketchy parens
             if (r->has_value())
                 return fmt::format("(return ({}))", wat_value(m, r->val()));
             return "return";
@@ -278,39 +335,81 @@ auto wat_inst(Module& m, Inst* i) -> std::string {
         case Value::Kind::Mul: return binary("i32.mul");
         case Value::Kind::SDiv: return binary("i32.div_s");
         case Value::Kind::UDiv: return binary("i32.div_u");
+        case Value::Kind::SRem: return binary("i32.rem_s");
+        case Value::Kind::URem: return binary("i32.rem_u");
         case Value::Kind::And: return binary("i32.and");
         case Value::Kind::Or: return binary("i32.or");
+        case Value::Kind::Eq: return binary("i32.eq");
+        case Value::Kind::Ne: return binary("i32.ne");
+        case Value::Kind::SLt: return binary("i32.lt_s");
+        case Value::Kind::SLe: return binary("i32.le_s");
+        case Value::Kind::SGt: return binary("i32.gt_s");
+        case Value::Kind::SGe: return binary("i32.ge_s");
+        case Value::Kind::ULt: return binary("i32.lt_u");
+        case Value::Kind::ULe: return binary("i32.le_u");
+        case Value::Kind::UGt: return binary("i32.gt_u");
+        case Value::Kind::UGe: return binary("i32.ge_u");
+        case Value::Kind::Xor: return binary("i32.xor");
+        case Value::Kind::Shl: return binary("i32.shl");
+        case Value::Kind::Sar: return binary("i32.shr_s");
+        case Value::Kind::Shr: return binary("i32.shr_u");
+
+        case Value::Kind::Compl: {
+            // WASM doesn't have a bitwise not; instead, they recommend XORing with
+            // negative one (-1).
+            return fmt::format(
+                "(i32.xor (i32.const -1) {})",
+                wat_value(m, as<UnaryInstBase>(i)->operand())
+            );
+        }
+
+        case Value::Kind::Neg: {
+            // WASM doesn't have an integer negation; instead, they recommend
+            // subtracting the integer from zero, letting wrapping handle things.
+            return fmt::format(
+                "(i32.sub (i32.const 0) {})",
+                wat_value(m, as<UnaryInstBase>(i)->operand())
+            );
+        }
+
+        case Value::Kind::Branch: {
+            auto t = as<BranchInst>(i)->target();
+            return fmt::format("br {}", wat_block_name(t));
+        }
+
+        case Value::Kind::Unreachable:
+            return "unreachable";
+
+        case Value::Kind::CondBranch: {
+            auto b = as<CondBranchInst>(i);
+            return fmt::format(
+                "{}\n"
+                "br_if {}",
+                wat_value(m, b->cond()),
+                wat_block_name(b->then_block())
+            );
+        }
+
+        case Value::Kind::ZExt: {
+            return fmt::format(
+                "(i64.extend_i32_u {})",
+                wat_value(m, as<UnaryInstBase>(i)->operand())
+            );
+        }
+        case Value::Kind::SExt: {
+            return fmt::format(
+                "(i64.extend_i32_s {})",
+                wat_value(m, as<UnaryInstBase>(i)->operand())
+            );
+        }
 
         case Value::Kind::GetElementPtr:
         case Value::Kind::GetMemberPtr:
         case Value::Kind::Intrinsic:
         case Value::Kind::Phi:
-        case Value::Kind::Branch:
-        case Value::Kind::CondBranch:
-        case Value::Kind::Unreachable:
-        case Value::Kind::ZExt:
-        case Value::Kind::SExt:
         case Value::Kind::Trunc:
         case Value::Kind::Bitcast:
-        case Value::Kind::Neg:
         case Value::Kind::Copy:
-        case Value::Kind::Compl:
-        case Value::Kind::SRem:
-        case Value::Kind::URem:
-        case Value::Kind::Shl:
-        case Value::Kind::Sar:
-        case Value::Kind::Shr:
-        case Value::Kind::Xor:
-        case Value::Kind::Eq:
-        case Value::Kind::Ne:
-        case Value::Kind::SLt:
-        case Value::Kind::SLe:
-        case Value::Kind::SGt:
-        case Value::Kind::SGe:
-        case Value::Kind::ULt:
-        case Value::Kind::ULe:
-        case Value::Kind::UGt:
-        case Value::Kind::UGe:
             i->print();
             LCC_TODO("Sorry, not yet implemented");
     }
@@ -355,7 +454,6 @@ auto wat_function(Module& m, Function* f) -> std::string {
         "({}",
         wat_function_signature(m, f)
     );
-
     for (auto bb : f->blocks()) {
         for (auto i : bb->instructions()) {
             if (auto a = cast<AllocaInst>(i)) {
@@ -432,7 +530,42 @@ auto Module::as_wat() -> std::string {
     }
 
     for (auto g : vars()) {
-        out += fmt::format("({})\n", wat_value(*this, g));
+        // Skip globals that aren't defined by this module.
+        bool defines{true};
+        for (auto n : g->names()) {
+            if (IsImportedLinkage(n.linkage)) {
+                defines = false;
+                break;
+            }
+        }
+        if (not defines) continue;
+
+        if (g->init() and is<ArrayConstant>(g->init())) {
+            auto array = as<ArrayConstant>(g->init());
+            std::span array_span{array->data(), array->size()};
+            out += fmt::format(
+                "(global {} (import \"\" \"{}\") externref)\n",
+                wat_global_name(g),
+                array_span
+            );
+            continue;
+        }
+
+        if (g->init()) {
+            // TODO: sketchy parens
+            out += fmt::format(
+                "(global {} {} ({}))\n",
+                wat_global_name(g),
+                wat_type(*this, g->allocated_type()),
+                wat_value(*this, g->init())
+            );
+        } else {
+            out += fmt::format(
+                "(global {} {})\n",
+                wat_global_name(g),
+                wat_type(*this, g->allocated_type())
+            );
+        }
     }
 
     for (auto f : code()) {
