@@ -2,18 +2,18 @@
 
 #+NAME: source
 #+begin_src glint
-import foo_dynarray_bytefudgedfun
+  import foo_dynarray_bytefudgedfun;
 
-bar :: foo();
+  bar :: foo();
 
-print bar;
+  print bar;
 
--bar;
+  -bar;
 #+end_src
 
 #+NAME: source
 #+begin_src glint
-  module foo_dynarray_bytefudgedfun
+  module foo_dynarray_bytefudgedfun;
 
   export foo : [byte]() {
     out : [byte];

@@ -1308,19 +1308,34 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                     NextToken();
                     auto index = ParseExpr();
                     if (not index) return index.diag();
-                    lhs = new (*mod) BinaryExpr(Tk::LBrack, *lhs, *index, {lhs->location(), tok.location});
-                    if (not Consume(Tk::RBrack)) return Error(ErrorId::Expected, "Expected ]");
+                    lhs = new (*mod) BinaryExpr(
+                        Tk::LBrack,
+                        *lhs,
+                        *index,
+                        {lhs->location(), tok.location}
+                    );
+                    if (not Consume(Tk::RBrack))
+                        return Error(ErrorId::Expected, "Expected ]");
                     continue;
                 }
 
                 /// The member access operator must be followed by an identifier.
                 case Tk::Dot: {
                     NextToken();
-                    if (not At(Tk::Ident)) return Error(ErrorId::Expected, "Expected identifier after .");
+                    if (not At(Tk::Ident)) {
+                        return Error(
+                            ErrorId::Expected,
+                            "Expected identifier after ."
+                        );
+                    }
                     auto member = tok.text;
                     auto loc = tok.location;
                     NextToken();
-                    lhs = new (*mod) MemberAccessExpr(*lhs, std::move(member), {lhs->location(), loc});
+                    lhs = new (*mod) MemberAccessExpr(
+                        *lhs,
+                        std::move(member),
+                        {lhs->location(), loc}
+                    );
                     continue;
                 }
             }
@@ -1873,7 +1888,7 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
     // know about any weirdness going on can install a classic "print message
     // and crash" handler. This is sort of like operator overloading but on a
     // module, I guess, lol.
-    std::string module_name;
+    std::string module_name{};
     auto module_kind = Module::IsAnExecutable;
 
     if (At(Tk::Ident) and tok.text == "module" and not tok.artificial) {
@@ -1901,9 +1916,10 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
     while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
 
     // Parse module imports.
-    // ENTRY := "export" [ "import" ] IDENTIFIER
-    //        | "import" IDENTIFIER
-    //        .
+    // ENTRY := ENTRY_BEGIN [ "as" IDENTIFIER ] .
+    // ENTRY_BEGIN := "export" [ "import" ] IDENTIFIER
+    //              | "import" IDENTIFIER
+    //              .
     while (At(Tk::Ident)) {
         if (tok.artificial) break;
 
@@ -1926,6 +1942,7 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
             // declarations, and we also currently have no way to refer to a module
             // via a declaration. So, yeah.
             //     mod->add_export(module_by_name);
+            LCC_TODO("Exporting a module doesn't work yet.");
         }
 
         if (tok.text == "import") {
@@ -1940,7 +1957,27 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
 
             // Add the module to be loaded later.
             mod->add_import(tok.text, {loc, tok.location});
+            std::string imported_module_name{tok.text};
             NextToken(); // Yeet module name.
+
+            // Contextual Keyword
+            if (At(TokenKind::Ident) and tok.text == "as") {
+                // Yeet 'as' contextual keyword
+                NextToken();
+
+                if (not At(Tk::Ident, Tk::String)) {
+                    return Error(
+                        ErrorId::Expected,
+                        "Expected a declared module name after 'as'"
+                    );
+                }
+                // Update reference with aliased name
+                auto& ref = mod->imports().back();
+                ref.aliased_name = tok.text;
+                ref.location = {loc, tok.location};
+                // Yeet declared name following "as".
+                NextToken();
+            }
 
             while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
 

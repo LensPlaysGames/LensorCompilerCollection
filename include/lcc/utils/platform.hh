@@ -6,7 +6,7 @@
 /// the APIs below platform-agnostic.
 
 namespace lcc::platform {
-/// Print a stack trace to a FILE*.
+/// Print a stack trace.
 void PrintBacktrace();
 
 /// Check whether stdout is a terminal.

@@ -74,8 +74,19 @@ lcc::glint::Module::Module(
 lcc::glint::Module::~Module() {
     for (auto* node : nodes) delete node;
     for (auto* type : types) delete type;
+    auto global_scope_ = global_scope();
     for (auto* scope : scopes) delete scope;
-    for (auto& import : _imports) delete import.module;
+    for (auto& import_ref : _imports) {
+        if (not import_ref.module)
+            continue;
+        // If global scope is shared, don't double free it.
+        if (import_ref.module->global_scope() == global_scope_) {
+            import_ref.module->scopes.erase(
+                import_ref.module->scopes.cbegin()
+            );
+        }
+        delete import_ref.module;
+    }
 }
 
 void lcc::glint::Module::add_top_level_expr(Expr* node) {
@@ -356,7 +367,7 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
     std::unordered_map<Type*, ModuleDescription::TypeIndex> type_indices{};
     {
         usz index{0};
-        for (auto* decl : exports) {
+        for (auto* decl : exports()) {
             calculate_indices(type_indices, index, decl->type());
 
             if (
@@ -377,7 +388,7 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
     std::unordered_map<Expr*, ModuleDescription::ExprIndex> expr_indices{};
     {
         usz index{0};
-        for (auto* decl : exports) {
+        for (auto* decl : exports()) {
             if (
                 ModuleDescription::DeclarationHeader::get_kind(decl)
                 == ModuleDescription::DeclarationHeader::Kind::TEMPLATE
@@ -395,7 +406,7 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
     std::vector<Expr*> expr_cache{};
     std::vector<Expr*> expr_current{};
 
-    for (auto* decl : exports) {
+    for (auto* decl : exports()) {
         // Decl: DeclHeader, length :u8, name :u8[length]
 
         // Prepare declaration header
@@ -492,7 +503,7 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
         + types_data.size()
         + exprs_data.size()
     );
-    hdr.declaration_count = u16(exports.size());
+    hdr.declaration_count = u16(exports().size());
     hdr.type_count = u16(type_cache.size());
     hdr.expr_count = u16(expr_cache.size());
 

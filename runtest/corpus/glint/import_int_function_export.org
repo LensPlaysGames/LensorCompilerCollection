@@ -2,16 +2,16 @@
 
 #+NAME: source
 #+begin_src glint
-import foo_intfun
+  import foo_intfun;
 
-print (byte foo), `\n`;
+  print (byte foo), `\n`;
 #+end_src
 
 #+NAME: source
 #+begin_src glint
-module foo_intfun
+  module foo_intfun;
 
-export foo : int() = 69;
+  export foo : int() = 69;
 #+end_src
 
 #+NAME: status

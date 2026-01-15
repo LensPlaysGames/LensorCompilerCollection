@@ -18,13 +18,10 @@
 
 * Glint
 
+- [Cereal]: Flesh out binary AST format
 - [Parser/Sema]: Switch on value
 - [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
 - [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=
-- [Sema]: =import= namespacing
-  Basically, I want to allow "hiding" the exports of an imported module behind a "fake" structure.
-  "import foo as bar;"
-  Probably means a new type of declaration in the AST that gets removed at sema.
 - [Parser/Sema]: Unary operator (keyword) for asserting compile time evaluation
   =evaluate=?
   "evaluate 42 + 27" -> "69".

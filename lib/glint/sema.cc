@@ -99,7 +99,8 @@ auto lcc::glint::Sema::ConvertImpl(
     // Casting to an array view can be done from an lvalue.
 
     // Fixed Array to Array View
-    bool from_array_ref = (from->is_pointer() or from->is_reference()) and from->elem()->is_array();
+    bool from_array_ref = (from->is_pointer() or from->is_reference())
+                      and from->elem()->is_array();
     if ((from->is_array() or from_array_ref) and to->is_view()) {
         auto* from_elem = from->elem();
         if (from_array_ref) from_elem = from_elem->elem();
@@ -293,7 +294,8 @@ auto lcc::glint::Sema::ConvertImpl(
             auto val = res.as_int();
 
             // Signed to Unsigned Conversion
-            if (val.slt(0) and to->is_unsigned_int(context)) return ConversionImpossible;
+            if (val.slt(0) and to->is_unsigned_int(context))
+                return ConversionImpossible;
 
             // Unsigned to Unsigned Conversion
             auto bits = to->size(context);
@@ -507,6 +509,7 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
         case Expr::Kind::OverloadSet:
         case Expr::Kind::NameRef:
         case Expr::Kind::Module:
+
         case Expr::Kind::Type:
         case Expr::Kind::Sizeof:
         case Expr::Kind::Alignof:
@@ -733,12 +736,19 @@ void lcc::glint::Sema::Analyse(Context* ctx, Module& m, bool use_colours) {
 }
 
 auto lcc::glint::Sema::try_get_metadata_blob_from_object(
-    const Module::Ref& import,
+    Module::Ref& import_ref,
     const std::string& include_dir,
     std::vector<std::string>& paths_tried
 ) -> bool {
-    auto path_base0 = include_dir + std::filesystem::path::preferred_separator + import.name;
-    auto path_base1 = include_dir + std::filesystem::path::preferred_separator + "lib" + import.name;
+    auto path_base0
+        = include_dir
+        + std::filesystem::path::preferred_separator
+        + import_ref.name;
+    auto path_base1
+        = include_dir
+        + std::filesystem::path::preferred_separator
+        + "lib"
+        + import_ref.name;
     auto paths = {
         path_base0 + ".o",
         path_base0 + ".obj",
@@ -750,14 +760,14 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_object(
     for (auto p : paths) {
         paths_tried.push_back(p);
         if (std::filesystem::exists(p)) {
-            fmt::print("Found IMPORT {} at {}\n", import.name, p);
+            fmt::print("Found IMPORT {} at {}\n", import_ref.name, p);
             // Open file, get contents
             auto object_file = File::Read(p);
 
             LCC_ASSERT(
                 not object_file.empty(),
                 "Found object file for module {} at {}, but the file is empty",
-                import.name,
+                import_ref.name,
                 p
             );
 
@@ -776,14 +786,14 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_object(
             } else LCC_ASSERT(
                 false,
                 "Unrecognized file format of module {} at {}",
-                import.name,
+                import_ref.name,
                 p
             );
             // Very basic validation pass
             LCC_ASSERT(
                 not metadata_blob.empty(),
                 "Didn't properly get metadata (it's empty) for module {} at {}",
-                import.name,
+                import_ref.name,
                 p
             );
             LCC_ASSERT(
@@ -792,29 +802,37 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_object(
                     and metadata_blob.at(2) == ModuleDescription::magic_byte1
                     and metadata_blob.at(3) == ModuleDescription::magic_byte2,
                 "Metadata for module {} at {} has invalid magic bytes",
-                import.name,
+                import_ref.name,
                 p
             );
-            // Deserialise metadata blob into a module
-            // FIXME: (this module? or a new module?)
-            return mod.deserialise(context, metadata_blob);
+            // Deserialise metadata blob into a newly created shell of a module.
+            auto imported_mod = new Module(
+                nullptr,
+                import_ref.name,
+                Module::IsAModule
+            );
+            import_ref.module = imported_mod;
+            // "Copy" global scope to imported module, since they will access the same
+            // globals in the same program.
+            imported_mod->scopes.emplace_back(mod.global_scope());
+            return imported_mod->deserialise(context, metadata_blob);
         }
     }
     return false;
 }
 
 auto lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
-    const Module::Ref& import,
+    Module::Ref& import_ref,
     const std::string& include_dir,
     std::vector<std::string>& paths_tried
 ) -> bool {
     auto path = include_dir
               + std::filesystem::path::preferred_separator
-              + import.name + std::string(metadata_file_extension);
+              + import_ref.name + std::string(metadata_file_extension);
 
     paths_tried.push_back(path);
     if (std::filesystem::exists(path)) {
-        fmt::print("Found IMPORT {} at {}\n", import.name, path);
+        fmt::print("Found IMPORT {} at {}\n", import_ref.name, path);
 
         // Open file, get contents
         auto gmeta_file = File::Read(path);
@@ -825,7 +843,7 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
         LCC_ASSERT(
             not metadata_blob.empty(),
             "Found gmeta file for module {} at {}, but the file is empty",
-            import.name,
+            import_ref.name,
             path
         );
         LCC_ASSERT(
@@ -834,23 +852,33 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
                 and metadata_blob.at(2) == ModuleDescription::magic_byte1
                 and metadata_blob.at(3) == ModuleDescription::magic_byte2,
             "Metadata for module {} at {} has invalid magic bytes",
-            import.name,
+            import_ref.name,
             path
         );
-        return mod.deserialise(context, metadata_blob);
+        // Deserialise metadata blob into a newly created shell of a module.
+        auto imported_mod = new Module(
+            nullptr,
+            import_ref.name,
+            Module::IsAModule
+        );
+        import_ref.module = imported_mod;
+        // "Copy" global scope to imported module, since they will access the same
+        // globals in the same program.
+        imported_mod->scopes.emplace_back(mod.global_scope());
+        return imported_mod->deserialise(context, metadata_blob);
     }
 
     return false;
 }
 
 auto lcc::glint::Sema::try_get_metadata_blob_from_assembly(
-    const Module::Ref& import,
+    Module::Ref& import_ref,
     const std::string& include_dir,
     std::vector<std::string>& paths_tried
 ) -> bool {
     auto path = include_dir
               + std::filesystem::path::preferred_separator
-              + import.name + ".s";
+              + import_ref.name + ".s";
 
     paths_tried.push_back(path);
     if (std::filesystem::exists(path)) {
@@ -874,7 +902,12 @@ void lcc::glint::Sema::DeclareImportedGlobalFunction(
         std::move(name),
         new (mod) FuncDecl(
             name,
-            new (mod) FuncType(param_ty, return_ty, {{FuncAttr::NoMangle, true}, {FuncAttr::NoReturn, no_return}}, {}),
+            new (mod) FuncType(
+                param_ty,
+                return_ty,
+                {{FuncAttr::NoMangle, true}, {FuncAttr::NoReturn, no_return}},
+                {}
+            ),
             nullptr,
             mod.global_scope(),
             &mod,
@@ -932,14 +965,19 @@ auto lcc::glint::Sema::apply_template(
 
 void lcc::glint::Sema::AnalyseModule() {
     // Load imported modules.
-    for (auto& import : mod.imports()) {
+    // Don't load imported modules twice.
+    std::unordered_set<Module*> loaded_modules{};
+    for (auto& import_ref : mod.imports()) {
+        if (loaded_modules.contains(import_ref.module))
+            continue;
+
         bool loaded{false};
         std::vector<std::string> paths_tried{};
 
         for (const auto& include_dir : context->include_directories()) {
-            loaded = try_get_metadata_blob_from_gmeta(import, include_dir, paths_tried)
-                  or try_get_metadata_blob_from_object(import, include_dir, paths_tried)
-                  or try_get_metadata_blob_from_assembly(import, include_dir, paths_tried);
+            loaded = try_get_metadata_blob_from_gmeta(import_ref, include_dir, paths_tried)
+                  or try_get_metadata_blob_from_object(import_ref, include_dir, paths_tried)
+                  or try_get_metadata_blob_from_assembly(import_ref, include_dir, paths_tried);
             if (loaded) break;
         }
 
@@ -947,22 +985,32 @@ void lcc::glint::Sema::AnalyseModule() {
             // TODO: Link/reference help documentation on how to point the compiler to
             // look in the proper place for Glint metadata, and how to produce it.
             Error(
-                import.location,
+                import_ref.location,
                 "Could not find imported module {} in any include directory.\n"
                 "Working Directory: {}\n"
                 "Paths tried:\n"
                 "{}",
-                import.name,
+                import_ref.name,
                 std::filesystem::current_path().lexically_normal().string(),
                 fmt::join(paths_tried, "\n")
             );
             std::exit(1);
         }
 
+        LCC_ASSERT(import_ref.module);
+        loaded_modules.emplace(import_ref.module);
+
+        // Add imported functions from imported module to our list of functions as
+        // imported... I'll say imported one more time just so you don't get confused.
+        for (auto f : import_ref.module->functions()) {
+            if (IsImportedLinkage(f->linkage()))
+                mod.add_function(f);
+        }
+
         // Insert call to init function of imported module.
         auto call_init = new (mod) CallExpr(
             new (mod) NameRefExpr(
-                Module::InitFunctionName(import.name),
+                Module::InitFunctionName(import_ref.name),
                 mod.global_scope(),
                 {}
             ),
@@ -2359,9 +2407,14 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 auto* name_ref = as<NameRefExpr>(m->object());
                 auto* module_expr = as<ModuleExpr>(name_ref->target());
                 auto* referenced_module = module_expr->mod();
+                LCC_ASSERT(referenced_module, "ModuleExpr invalid");
                 auto* scope = referenced_module->global_scope();
                 // Replace member access with a name ref
-                *expr_ptr = new (mod) NameRefExpr(m->name(), scope, m->location());
+                *expr_ptr = new (mod) NameRefExpr(
+                    m->name(),
+                    scope,
+                    m->location()
+                );
                 AnalyseNameRef(as<NameRefExpr>(*expr_ptr));
                 break;
             }
@@ -4879,9 +4932,15 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
     if (syms.empty()) {
         /// Search imported modules here.
         for (const auto& ref : mod.imports()) {
-            if (expr->name() == ref.name) {
+            if (
+                expr->name() == ref.name
+                or (expr->name() == ref.aliased_name)
+            ) {
                 // Set expr->target() and expr->type() to something reasonable.
-                auto* module_expr = new (mod) ModuleExpr(ref.module, expr->location());
+                auto* module_expr = new (mod) ModuleExpr(
+                    ref.module,
+                    expr->location()
+                );
                 expr->target(module_expr);
                 expr->type(Type::Void);
                 return;
@@ -5053,7 +5112,8 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
 
         expr->target(syms.at(0));
         expr->type(syms.at(0)->type());
-        if (syms.at(0)->is_lvalue()) expr->set_lvalue();
+        if (syms.at(0)->is_lvalue())
+            expr->set_lvalue();
         return;
     }
 

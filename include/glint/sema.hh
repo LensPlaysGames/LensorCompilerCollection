@@ -362,17 +362,17 @@ private:
     void WrapWithCast(Expr** expr, Type* type, CastKind kind);
 
     auto try_get_metadata_blob_from_gmeta(
-        const Module::Ref& import,
+        Module::Ref& import,
         const std::string& include_dir,
         std::vector<std::string>& paths_tried
     ) -> bool;
     auto try_get_metadata_blob_from_object(
-        const Module::Ref& import,
+        Module::Ref& import,
         const std::string& include_dir,
         std::vector<std::string>& paths_tried
     ) -> bool;
     auto try_get_metadata_blob_from_assembly(
-        const Module::Ref& import,
+        Module::Ref& import,
         const std::string& include_dir,
         std::vector<std::string>& paths_tried
     ) -> bool;

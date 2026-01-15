@@ -286,10 +286,10 @@ auto lcc::glint::Module::deserialise(
         }
     }
 
-    for (auto e : exprs) {
-        fmt::print("Deserialised expression:\n");
-        e->print(true);
-    }
+    // for (auto e : exprs) {
+    //     fmt::print("Deserialised expression:\n");
+    //     e->print(true);
+    // }
 
     // Fixup/build scope information in deserialised expressions.
     {
@@ -303,7 +303,8 @@ auto lcc::glint::Module::deserialise(
         // itself, but not the program stuff. (A module reaching into a program
         // may seem useful for things like making the module consumer define
         // option variables, but, there are better ways to do that imo).
-        Scope* module_scope = new (*this) Scope(global_scope());
+        auto the_global_scope = global_scope();
+        Scope* module_scope = new (*this) Scope(the_global_scope);
 
         for (auto e : exprs)
             scope_walk(context, e, module_scope);

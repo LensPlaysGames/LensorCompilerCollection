@@ -95,7 +95,11 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             for (const auto& m : struct_type->members())
                 member_types.push_back(Convert(ctx, m.type));
 
-            return lcc::StructType::Get(ctx, std::move(member_types), t_dyn_array->align(ctx));
+            return lcc::StructType::Get(
+                ctx,
+                std::move(member_types),
+                t_dyn_array->align(ctx)
+            );
         }
 
         case Type::Kind::ArrayView: {
@@ -424,9 +428,19 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                                     }
                                     generate_expression(member.value);
 
-                                    auto* member_index = new (*module) IntegerConstant(Convert(ctx, Type::UInt), i);
-                                    auto* gmp = new (*module) GetMemberPtrInst(Convert(ctx, s), alloca, member_index);
-                                    auto* store = new (*module) StoreInst(generated_ir[member.value], gmp);
+                                    auto* member_index = new (*module) IntegerConstant(
+                                        Convert(ctx, Type::UInt),
+                                        i
+                                    );
+                                    auto* gmp = new (*module) GetMemberPtrInst(
+                                        Convert(ctx, s),
+                                        alloca,
+                                        member_index
+                                    );
+                                    auto* store = new (*module) StoreInst(
+                                        generated_ir[member.value],
+                                        gmp
+                                    );
                                     insert(gmp);
                                     insert(store);
                                 }
@@ -442,9 +456,19 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                                     auto member = c->values().at(i);
                                     generate_expression(member.value);
 
-                                    auto* element_index = new (*module) IntegerConstant(Convert(ctx, Type::UInt), i);
-                                    auto* gep = new (*module) GEPInst(Convert(ctx, a->elem()), alloca, element_index);
-                                    auto* store = new (*module) StoreInst(generated_ir[member.value], gep);
+                                    auto* element_index = new (*module) IntegerConstant(
+                                        Convert(ctx, Type::UInt),
+                                        i
+                                    );
+                                    auto* gep = new (*module) GEPInst(
+                                        Convert(ctx, a->elem()),
+                                        alloca,
+                                        element_index
+                                    );
+                                    auto* store = new (*module) StoreInst(
+                                        generated_ir[member.value],
+                                        gep
+                                    );
                                     insert(gep);
                                     insert(store);
                                 }
@@ -455,7 +479,11 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         } else {
                             generate_expression(init_expr);
                             // Store generated init_expr into above inserted declaration
-                            auto* local_init = new (*module) StoreInst(generated_ir[init_expr], alloca, expr->location());
+                            auto* local_init = new (*module) StoreInst(
+                                generated_ir[init_expr],
+                                alloca,
+                                expr->location()
+                            );
                             insert(local_init);
                         }
                     } else {
@@ -1345,9 +1373,15 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         case K::NameRef: {
             auto* name_ref = as<NameRefExpr>(expr);
 
-            if (is<ObjectDecl>(name_ref->target())
-                and as<ObjectDecl>(name_ref->target())->linkage() == Linkage::Imported)
-                generate_expression(name_ref->target());
+            LCC_ASSERT(
+                name_ref->target(),
+                "Sema needs to set the target of NameRefExpr"
+            );
+
+            if (
+                is<ObjectDecl>(name_ref->target())
+                and as<ObjectDecl>(name_ref->target())->linkage() == Linkage::Imported
+            ) generate_expression(name_ref->target());
 
             LCC_ASSERT(
                 generated_ir[name_ref->target()],
@@ -1584,7 +1618,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 args.push_back(generated_ir[arg]);
             }
 
-            auto* ir_call = new (*module) CallInst(generated_ir[call->callee()], function_type, std::move(args), expr->location());
+            auto* ir_call = new (*module) CallInst(
+                generated_ir[call->callee()],
+                function_type,
+                std::move(args),
+                expr->location()
+            );
 
             generated_ir[expr] = ir_call;
             insert(ir_call);
@@ -1599,19 +1638,34 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     LCC_UNREACHABLE();
 
                 case IntrinsicKind::BuiltinDebugtrap: {
-                    LCC_ASSERT(intrinsic->args().empty(), "No arguments to Debug Trap Builtin");
-                    LCC_ASSERT(false, "TODO: Implement debug trap IR instruction, as it needs to make it all the way to MIR");
+                    LCC_ASSERT(
+                        intrinsic->args().empty(),
+                        "No arguments to Debug Trap Builtin"
+                    );
+                    LCC_ASSERT(
+                        false,
+                        "TODO: Implement debug trap IR instruction, as it needs to make it all the way to MIR"
+                    );
                 } break;
 
                 case IntrinsicKind::BuiltinInline: {
-                    LCC_ASSERT(intrinsic->args().empty(), "No arguments to Inline Builtin");
+                    LCC_ASSERT(
+                        intrinsic->args().empty(),
+                        "No arguments to Inline Builtin"
+                    );
                 } break;
                 case IntrinsicKind::BuiltinMemCopy: {
-                    LCC_ASSERT(intrinsic->args().size() == 3, "Exactly three arguments to Memory Copy Builtin: (destination, source, amountOfBytesToCopy)");
+                    LCC_ASSERT(
+                        intrinsic->args().size() == 3,
+                        "Exactly three arguments to Memory Copy Builtin: (destination, source, amountOfBytesToCopy)"
+                    );
                     LCC_ASSERT(false, "TODO: memcopy ir generation");
                 } break;
                 case IntrinsicKind::BuiltinMemSet: {
-                    LCC_ASSERT(intrinsic->args().size() == 3, "Exactly three arguments to Memory Set Builtin");
+                    LCC_ASSERT(
+                        intrinsic->args().size() == 3,
+                        "Exactly three arguments to Memory Set Builtin"
+                    );
                     LCC_ASSERT(false, "TODO: memset ir generation");
                 } break;
                 case IntrinsicKind::BuiltinSyscall: {
@@ -1633,27 +1687,38 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 auto* struct_type = sum_type->struct_type();
                 auto* tag_type = Convert(ctx, struct_type->members().at(0).type);
 
-                auto it = rgs::find_if(sum_type->members(), [&](auto& member) { return member.name == m->name(); });
+                auto it = rgs::find_if(
+                    sum_type->members(),
+                    [&](auto& member) { return member.name == m->name(); }
+                );
                 LCC_ASSERT(
                     it != sum_type->members().end(),
                     "Sum type {} has no member named '{}'",
                     sum_type->string(ctx->option_use_colour()),
                     m->name()
                 );
-                auto member_index = usz(std::distance(sum_type->members().begin(), it));
+                auto member_index = usz(
+                    std::distance(sum_type->members().begin(), it)
+                );
 
                 // Get pointer to tag member of underlying struct of sum type.
                 auto* tag_ptr = new (*module) GetMemberPtrInst(
                     Convert(ctx, struct_type),
                     generated_ir[m->object()],
-                    new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0),
+                    new (*module) IntegerConstant(
+                        Convert(ctx, Type::UInt),
+                        0
+                    ),
                     m->location()
                 );
                 // Load tag from that pointer.
                 auto* load_tag = new (*module) LoadInst(tag_type, tag_ptr);
                 // Compare expected tag from member expression to actual tag loaded from
                 // the sum type.
-                auto* expected = new (*module) IntegerConstant(tag_type, member_index + 1);
+                auto* expected = new (*module) IntegerConstant(
+                    tag_type,
+                    member_index + 1
+                );
                 auto* eq = new (*module) EqInst(load_tag, expected);
 
                 // If eq, load from data member of underlying struct.
@@ -1661,15 +1726,26 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                 // Create Basic Blocks
                 static usz total_sum_access{0};
-                auto* then = new (*module) lcc::Block(fmt::format("sum.access.good.{}", total_sum_access));
-                auto* otherwise = new (*module) lcc::Block(fmt::format("sum.access.bad.{}", total_sum_access));
-                auto* exit = new (*module) lcc::Block(fmt::format("sum.access.exit.{}", total_sum_access));
+                auto* then = new (*module) lcc::Block(
+                    fmt::format("sum.access.good.{}", total_sum_access)
+                );
+                auto* otherwise = new (*module) lcc::Block(
+                    fmt::format("sum.access.bad.{}", total_sum_access)
+                );
+                auto* exit = new (*module) lcc::Block(
+                    fmt::format("sum.access.exit.{}", total_sum_access)
+                );
                 total_sum_access += 1;
 
                 insert(tag_ptr);
                 insert(load_tag);
                 insert(eq);
-                insert(new (*module) CondBranchInst(eq, then, otherwise, expr->location()));
+                insert(new (*module) CondBranchInst(
+                    eq,
+                    then,
+                    otherwise,
+                    expr->location()
+                ));
 
                 // ptr type because member access results in an lvalue. Load happens
                 // during lvalue to rvalue conversion.
@@ -1700,7 +1776,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     auto* exit_call = new (*module) CallInst(
                         *exit_func,
                         as<FunctionType>(exit_func->type()),
-                        {new (*module) IntegerConstant(Convert(ctx, Type::UInt), rc)}
+                        {new (*module) IntegerConstant(
+                            Convert(ctx, Type::UInt),
+                            rc
+                        )}
                     );
                     insert(exit_call);
                 }
@@ -1723,8 +1802,15 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             );
             auto* struct_t = Convert(ctx, member_access->struct_type());
             auto* instance_pointer = generated_ir[member_access->object()];
-            auto* index = new (*module) IntegerConstant(lcc::IntegerType::Get(ctx, 64), member_access->member());
-            auto* gmp = new (*module) GetMemberPtrInst(struct_t, instance_pointer, index);
+            auto* index = new (*module) IntegerConstant(
+                lcc::IntegerType::Get(ctx, 64),
+                member_access->member()
+            );
+            auto* gmp = new (*module) GetMemberPtrInst(
+                struct_t,
+                instance_pointer,
+                index
+            );
             generated_ir[expr] = gmp;
             insert(gmp);
         } break;
@@ -1736,7 +1822,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
         case K::CompoundLiteral: {
             // TODO: I need help with this. What IR does it make?
-            LCC_ASSERT(false, "TODO: I'm blanking on how to implement compound literal IRGen, so I'm going to wait until I can talk to somebody smarter than me.");
+            LCC_ASSERT(
+                false,
+                "TODO: I'm blanking on how to implement compound literal IRGen, so I'm going to wait until I can talk to somebody smarter than me."
+            );
         } break;
 
         // no-op/handled elsewhere

@@ -213,11 +213,21 @@ public:
         std::string name;
         Module* module;
         Location location;
+        std::string aliased_name;
 
         // STYLE NOTE: Because this is a struct where we are meant to access the members
         // directly, we use a trailing underscore to disambiguate.
         Ref(std::string name_, Module* module_, Location location_)
-            : name(std::move(name_)), module(module_), location(location_) {}
+            : name(std::move(name_)),
+              module(module_),
+              location(location_),
+              aliased_name("") {}
+
+        Ref(std::string name_, Module* module_, std::string alias_, Location location_)
+            : name(std::move(name_)),
+              module(module_),
+              location(location_),
+              aliased_name(alias_) {}
     };
 
 private:
@@ -234,7 +244,7 @@ private:
     File* _file;
 
     std::vector<Ref> _imports{};
-    std::vector<Decl*> exports{};
+    std::vector<Decl*> _exports{};
     std::vector<FuncDecl*> _functions{};
 
     usz _unique_counter = 0;
@@ -256,14 +266,21 @@ public:
     ~Module();
 
     /// Add an export.
-    void add_export(Decl* decl) { exports.push_back(decl); }
+    void add_export(Decl* decl) { _exports.push_back(decl); }
 
     /// Add a function to this module.
+    /// TODO: I don't think this should be public, since we call it from the
+    /// FuncDecl constructor...
     void add_function(FuncDecl* func) { _functions.push_back(func); }
 
     // Add an import
     void add_import(std::string module_name, Location location = {}) {
         _imports.emplace_back(std::move(module_name), nullptr, location);
+    }
+
+    // Add an import
+    void add_import(std::string module_name, std::string alias, Location location = {}) {
+        _imports.emplace_back(std::move(module_name), nullptr, alias, location);
     }
 
     /// Add a top-level expression.
@@ -277,6 +294,9 @@ public:
 
     /// Get the module imports.
     auto imports() -> std::vector<Ref>& { return _imports; }
+
+    /// Get the module imports.
+    auto exports() -> std::vector<Decl*>& { return _exports; }
 
     /// Intern a string and return its index.
     [[nodiscard]]
@@ -408,7 +428,17 @@ class Scope {
     Location _location;
 
 public:
-    Scope(Scope* parent) : _parent(parent) {}
+    explicit Scope(Scope* parent) : _parent(parent) {
+        // Assert no recursive scopes.
+        auto p = parent;
+        while (p) {
+            LCC_ASSERT(
+                p != this,
+                "Stopping attempt to create recursive scope"
+            );
+            p = p->_parent;
+        }
+    }
 
     /// Disallow creating scopes without a module reference.
     void* operator new(size_t) = delete;
@@ -2612,7 +2642,9 @@ public:
     }
 
     [[nodiscard]]
-    static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Module; }
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::Module;
+    }
 };
 
 class SizeofExpr : public Expr {
