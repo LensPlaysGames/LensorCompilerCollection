@@ -1,0 +1,24 @@
+* Import Module As Foo
+
+#+NAME: source
+#+begin_src glint
+  import foo_astest as bar;
+
+  bar.baz;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_astest;
+
+  export baz : int 69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
