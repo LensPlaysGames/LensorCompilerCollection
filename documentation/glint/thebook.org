@@ -12,6 +12,7 @@
   (defun lens/export-the-book ()
     "Export the book when it is your current buffer"
     (interactive)
+    (defvar org-html-head)
     (let
         ((org-html-htmlize-output-type 'css)
          (org-publish-use-timestamps-flag nil)
@@ -668,7 +669,7 @@ Given an instance of the above struct, setting the value of =x= would *not* alte
 To access these points, you use the member access operator, =.=, with the object you are trying to access on the left hand side, and the name of the member you are trying to reference on the right hand side. A member access, as it references a unique point in memory, may be assigned to.
 
 #+begin_src glint
-  A : struct {
+  A :: struct {
     x : int;
     y : int;
   };
@@ -686,12 +687,12 @@ To access these points, you use the member access operator, =.=, with the object
 A struct may have another struct (or sum) type supplanted within it; this means that the supplanted type's members are now accessible as if they were members of the struct the member resides in. In reality, the compiler does generate a unique name for the member and generates code to access that member by name; this construct is simply for the programmer's convenience.
 
 #+begin_src glint
-  A : struct {
+  A :: struct {
     x : int;
     y : int;
   };
 
-  B : struct {
+  B :: struct {
     supplant A;
     z : int;
   };
@@ -723,13 +724,18 @@ Enumerations, often shortened to just /enums/, are named constant values.
 
 Let's say you wanted the number =1= to be called =Success=, and the number =7= to be called =Erased=, to make your Glint code more readable, or understandable.
 #+begin_src glint
-  enum(int) {
+  Code :: enum(int) {
     Success :: 1;
     Erased :: 7;
   };
+
+  Code.Success; ;; = 1
+  Code.Erased; ;; = 7
 #+end_src
 
-Enumerators (in Glint) are /just named constants/. If you come from Rust (you crustacean, you), see sum types for what you may call enums. If you come from C or C++, not too much has changed.
+Enumerators (in Glint) are /just named constants/. As such, the values of an enumerator must be known at compile time. The underlying value type may be specified within parentheses.
+
+If you come from Rust (you crustacean, you), see sum types for what you may call enums. If you come from C or C++, not too much has changed.
 
 *** Sums
 
@@ -748,7 +754,7 @@ A sum type is a lot like a union, except that when you access a member of a sum 
 Given an instance of the above struct, *setting the value of =x= would alter the value of* =y=, and vice versa. The catch is that, you would never be able to access =y= after setting =x=; doing so would actually cause the program to exit.
 
 #+begin_src glint
-  A : sum {
+  A :: sum {
     x : int;
     y : byte;
   };
@@ -760,7 +766,7 @@ Given an instance of the above struct, *setting the value of =x= would alter the
 The only way to get your Glint program to continue execution when accessing a sum's member is to access the /right/ one. The /right/ one is whichever one is currently stored in the sum type. Note that this is NOT calculated at compile-time; each sum type stores a value in the computer's memory /at run-time/ indicating which member is valid (if any). The compiler automatically generates code to update this value accordingly whenever assigning to any sum type's member.
 
 #+begin_src glint
-  A : sum {
+  A :: sum {
     x : int;
     y : byte;
   };
@@ -771,7 +777,7 @@ The only way to get your Glint program to continue execution when accessing a su
 #+end_src
 
 #+begin_src glint
-  A : sum {
+  A :: sum {
     x : int;
     y : byte;
   };
@@ -788,7 +794,7 @@ The members of a given instance of a sum type may not co-exist at any one time. 
 You may query if a given member is valid using the =has= unary prefix operator.
 
 #+begin_src glint
-  A : sum {
+  A :: sum {
     x : int;
     y : byte;
   };
@@ -808,7 +814,7 @@ You may query if a given member is valid using the =has= unary prefix operator.
 To avoid long chains of =if= expressions used in conjunction with =has=, as seen above, the =match= expression may be used in turn. In fact, there are more benefits to using =match=, such as compile-time guarantee that every possible member has a control flow to handle it.
 
 #+begin_src glint
-  A : sum {
+  A :: sum {
     x : int;
     y : byte;
   };

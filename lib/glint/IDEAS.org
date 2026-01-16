@@ -1,14 +1,21 @@
+* Append w/ Iterator Fixup
+keywords: iterator, container, feature
+
+A way to append to a container and pass along references to any iterators you'd like "fixed up", if they were invalidated by the append. Also the same with erasure. Also the same with indices instead of iterators.
+
 * If a (mangled) symbol gets long enough, we should just hash it and use that symbol.
 
 We'll just pick a long enough limit where the resulting hash is pretty much guaranteed to be unique, or something. Is a hash written with 64 characters not enough to cover just about everything? Then, we could apply this only to functions over a certain length that makes the chosen hash function very unlikely to collide. We could even use a hash function that intentionally produces pretty short hashes (i.e. =adler32=). Or even =crc32= for simplicity.
 
 * Iterator Invalidation Caught at Compile-Time
+keywords: iterator, error, container
 
 If you write a ranged =for= loop, supplying a given container expression, then, if that container expression is modified /at all/ in the =for='s body, raise an error.
 
 I'm not sure if this is even possible, or how one would go about implementing it, but it would be a really, /really/ useful language feature.
 
 * =enumerate=
+keywords: iterator, container
 
 Basically, a =for=-like looping mechanism that enumerates all values starting at 0 up until =<container>.size=.
 
