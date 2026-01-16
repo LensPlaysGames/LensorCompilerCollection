@@ -26,12 +26,20 @@ enum struct ErrorId : unsigned {
 
     InvalidLiteral,
 
+    Expected,
+
+    Miscellaneous,
+
     COUNT
 };
-std::array<std::pair<ErrorId, const char*>, 3> error_id_strings{
+std::array<std::pair<ErrorId, const char*>, 5> error_id_strings{
     std::pair{ErrorId::INVALID, "ICE: INVALID ERROR ID"},
 
     {ErrorId::InvalidLiteral, "invalid-literal"},
+
+    {ErrorId::Expected, "expected"},
+
+    {ErrorId::Miscellaneous, "miscellaneous"},
 
     {ErrorId::COUNT, "ICE: INVALID ERROR ID"}
 };
@@ -95,12 +103,12 @@ std::unordered_map<std::string, IntrinsicKind> intrinsic_kinds{
 };
 
 class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
-    using syntax::Lexer<syntax::Token<TokenKind>>::Error;
-    using syntax::Lexer<syntax::Token<TokenKind>>::Warning;
-    using syntax::Lexer<syntax::Token<TokenKind>>::Note;
-
     using Tk = TokenKind;
     using Token = syntax::Token<Tk>;
+
+    using syntax::Lexer<Token>::Error;
+    using syntax::Lexer<Token>::Warning;
+    using syntax::Lexer<Token>::Note;
 
     /// Because of forward references, values in the IR may
     /// not be fully constructed when they are first created.
@@ -128,7 +136,7 @@ class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
     StringMap<std::vector<std::pair<Inst*, Value**>>> global_fixups{};
 
 public:
-    std::unique_ptr<Module> mod;
+    std::unique_ptr<Module> mod{};
 
     Parser(Context* ctx, File* file)
         : syntax::Lexer<Token>(ctx, file) {
@@ -147,10 +155,14 @@ public:
 private:
     /// Check if we’re at one of a set of tokens.
     [[nodiscard]]
-    static auto Is(Token* tk, auto... tks) -> bool { return ((tk->kind == tks) or ...); }
+    static auto Is(Token* tk, auto... tks) -> bool {
+        return ((tk->kind == tks) or ...);
+    }
 
     [[nodiscard]]
-    auto At(auto... tks) -> bool { return Is(&tok, tks...); }
+    auto At(auto... tks) -> bool {
+        return Is(&tok, tks...);
+    }
 
     [[nodiscard]]
     auto Kw(std::string_view text) -> bool {
@@ -159,7 +171,7 @@ private:
 
     void AddTemporary(std::string name, Value* val) {
         if (temporaries.contains(name))
-            Error("Duplicate temporary '{}'", name);
+            Error(ErrorId::Miscellaneous, "Duplicate temporary '{}'", name);
         temporaries[std::move(name)] = val;
     }
 
@@ -173,7 +185,13 @@ private:
     }
 
     auto ConsumeOrError(Tk t) -> Result<void> {
-        if (not Consume(t)) return Error("Expected '{}'", t);
+        if (not Consume(t)) {
+            return Error(
+                ErrorId::Expected,
+                "Expected '{}'",
+                t
+            );
+        }
         return {};
     }
 
@@ -207,36 +225,36 @@ private:
     void SetValue(Inst* parent, Value*& val, IRValue v);
 
     template <typename... Args>
-    [[deprecated("Please provide a diagnostic ID")]]
-    auto Error(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    [[deprecated("Please provide a diagnostic ID")]]
-    auto Warning(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    [[deprecated("Please provide a diagnostic ID")]]
-    auto Note(fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Note(context, tok.location, fmt, std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
     auto Error(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Error(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
+        return Diag::Error(
+            context,
+            tok.location,
+            error_id_strings.at(+id).second,
+            fmt,
+            std::forward<Args>(args)...
+        );
     }
 
     template <typename... Args>
     auto Warning(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Warning(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
+        return Diag::Warning(
+            context,
+            tok.location,
+            error_id_strings.at(+id).second,
+            fmt,
+            std::forward<Args>(args)...
+        );
     }
 
     template <typename... Args>
     auto Note(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
-        return Diag::Note(context, tok.location, error_id_strings.at(+id).second, fmt, std::forward<Args>(args)...);
+        return Diag::Note(
+            context,
+            tok.location,
+            error_id_strings.at(+id).second,
+            fmt,
+            std::forward<Args>(args)...
+        );
     }
 
     static auto IsIdentStart(u32 c) -> bool {
@@ -486,7 +504,11 @@ void lcc::parser::Parser::NextToken() {
             } else if (IsDecimalDigit(lastc)) {
                 NextNumber();
             } else {
-                Error("Unexpected character '{}'", lastc);
+                Error(
+                    ErrorId::Expected,
+                    "Unexpected character '{}'",
+                    lastc
+                );
             }
             break;
     }
@@ -521,7 +543,8 @@ auto lcc::parser::Parser::ParseBinary(std::string tmp) -> Result<Inst*> {
     NextToken();
     auto lhs = ParseValue();
     auto comma = ConsumeOrError(Tk::Comma);
-    if (IsError(lhs, comma)) return Diag();
+    if (IsError(lhs, comma))
+        return Diag();
     auto rhs = ParseUntypedValue(lhs->first);
 
     Instruction* inst;
@@ -539,12 +562,15 @@ auto lcc::parser::Parser::ParseBinary(std::string tmp) -> Result<Inst*> {
 
 auto lcc::parser::Parser::ParseBlock() -> Result<Block*> {
     /// Block name and colon.
-    if (not At(Tk::Keyword)) return Error("Expected block name");
+    if (not At(Tk::Keyword))
+        return Error(ErrorId::Expected, "Expected block name");
     auto* b = new (*mod) Block(tok.text);
     AddTemporary("%" + b->name(), b);
     NextToken();
-    if (not Consume(Tk::Colon)) return Error("Expected ':'");
-    if (not Consume(Tk::Newline)) return Error("Expected line break");
+    if (not Consume(Tk::Colon))
+        return Error(ErrorId::Expected, "Expected ':'");
+    if (not Consume(Tk::Newline))
+        return Error(ErrorId::Expected, "Expected line break");
 
     /// Parse instructions.
     while (At(Tk::Indent) and LookAhead(2)->kind != Tk::Colon) {
@@ -568,7 +594,8 @@ auto lcc::parser::Parser::ParseCall(bool tail) -> Result<CallInst*> {
     std::vector<IRValue> args;
     auto callee = ParseUntypedValue(ret);
     if (not callee) return callee.diag();
-    if (not Consume(Tk::LParen)) return Error("Expected '('");
+    if (not Consume(Tk::LParen))
+        return Error(ErrorId::Expected, "Expected '('");
     while (not At(Tk::RParen)) {
         auto arg = ParseValue();
         if (not arg) return arg.diag();
@@ -577,7 +604,8 @@ auto lcc::parser::Parser::ParseCall(bool tail) -> Result<CallInst*> {
         if (not Consume(Tk::Comma)) break;
     }
 
-    if (not Consume(Tk::RParen)) return Error("Expected ')'");
+    if (not Consume(Tk::RParen))
+        return Error(ErrorId::Expected, "Expected ')'");
 
     bool is_variadic = false;
     if (At(Tk::Keyword) and tok.text == "variadic") {
@@ -611,17 +639,20 @@ auto lcc::parser::Parser::ParseIntrinsic() -> Result<IntrinsicInst*> {
     std::vector<IRValue> args;
 
     auto intrinsic_name = tok.text;
-    if (not At(Tk::Global)) return Error("Expected intrinsic name");
+    if (not At(Tk::Global))
+        return Error(ErrorId::Expected, "Expected intrinsic name");
 
     auto name = tok.text;
     auto loc = tok.location;
 
     auto intrinsic_it = intrinsic_kinds.find(name);
-    if (intrinsic_it == intrinsic_kinds.end()) return Error("Unrecognized intrinsic name");
+    if (intrinsic_it == intrinsic_kinds.end())
+        return Error(ErrorId::Miscellaneous, "Unrecognized intrinsic name");
 
     NextToken();
 
-    if (not Consume(Tk::LParen)) return Error("Expected '('");
+    if (not Consume(Tk::LParen))
+        return Error(ErrorId::Expected, "Expected '('");
     while (not At(Tk::RParen)) {
         auto arg = ParseValue();
         if (not arg) return arg.diag();
@@ -630,7 +661,8 @@ auto lcc::parser::Parser::ParseIntrinsic() -> Result<IntrinsicInst*> {
         if (not Consume(Tk::Comma)) break;
     }
 
-    if (not Consume(Tk::RParen)) return Error("Expected ')'");
+    if (not Consume(Tk::RParen))
+        return Error(ErrorId::Expected, "Expected ')'");
 
     auto* intrinsic = new (*mod) IntrinsicInst(intrinsic_it->second, {}, loc);
     intrinsic->operand_list.resize(args.size());
@@ -660,7 +692,8 @@ auto lcc::parser::Parser::ParseCast(std::string tmp) -> Result<Inst*> {
     auto val = ParseValue();
     auto to = ParseLiteral("to");
     auto ty = ParseType();
-    if (IsError(val, to, ty)) return Diag();
+    if (IsError(val, to, ty))
+        return Diag();
     auto inst = new (*mod) Instruction(*ty, tok.location);
     SetValue(inst, inst->op, val->second);
     AddTemporary(std::move(tmp), inst);
@@ -669,16 +702,23 @@ auto lcc::parser::Parser::ParseCast(std::string tmp) -> Result<Inst*> {
 
 auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     /// Parse name and colon.
-    if (not At(Tk::Keyword)) return Error("Expected function name");
+    if (not At(Tk::Keyword))
+        return Error(ErrorId::Expected, "Expected function name");
     auto name = tok.text;
     auto loc = tok.location;
     // Eat name
     NextToken();
 
     // Eat lparen to open linkage string
-    if (not Consume(Tk::LParen)) return Error("Expected '('");
+    if (not Consume(Tk::LParen))
+        return Error(ErrorId::Expected, "Expected '('");
 
-    if (not At(Tk::Keyword)) return Error("Expected linkage (local, imported, exported, etc.)");
+    if (not At(Tk::Keyword)) {
+        return Error(
+            ErrorId::Expected,
+            "Expected linkage (local, imported, exported, etc.)"
+        );
+    }
 
     auto linkage = Linkage::Exported;
     if (tok.text == "local") linkage = Linkage::LocalVar;
@@ -687,14 +727,22 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     else if (tok.text == "exported") linkage = Linkage::Exported;
     else if (tok.text == "imported") linkage = Linkage::Imported;
     else if (tok.text == "reexported") linkage = Linkage::Reexported;
-    else Error("Expected valid linkage (imported, exported, etc.), got '{}'", tok.text);
+    else {
+        return Error(
+            ErrorId::Expected,
+            "Expected valid linkage (imported, exported, etc.), got '{}'",
+            tok.text
+        );
+    }
 
     // Eat linkage
     NextToken();
 
-    if (not Consume(Tk::RParen)) return Error("Expected ')'");
+    if (not Consume(Tk::RParen))
+        return Error(ErrorId::Expected, "Expected ')'");
 
-    if (not Consume(Tk::Colon)) return Error("Expected ':'");
+    if (not Consume(Tk::Colon))
+        return Error(ErrorId::Expected, "Expected ':'");
 
     CallConv cc = ParseCallConv();
 
@@ -703,7 +751,7 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     if (not ret) return ret.diag();
 
     if (not Consume(Tk::LParen))
-        return Error("Expected '('");
+        return Error(ErrorId::Expected, "Expected '('");
 
     std::vector<Type*> args{};
     std::vector<std::string> names{};
@@ -719,7 +767,8 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
         }
         if (not Consume(Tk::Comma)) break;
     }
-    if (not Consume(Tk::RParen)) return Error("Expected ')'");
+    if (not Consume(Tk::RParen))
+        return Error(ErrorId::Expected, "Expected ')'");
 
     bool is_variadic = false;
     if (At(Tk::Keyword) and tok.text == "variadic") {
@@ -739,13 +788,15 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
 
     /// Check for duplicates.
     for (auto n : f->names()) {
-        if (globals.contains(n.name)) Error("Duplicate global symbol '{}'", n.name);
+        if (globals.contains(n.name))
+            Error(ErrorId::Miscellaneous, "Duplicate global symbol '{}'", n.name);
         globals[n.name] = f;
     }
 
     /// Colon means we have a body.
     if (not Consume(Tk::Colon)) return {};
-    if (not Consume(Tk::Newline)) return Error("Expected line break");
+    if (not Consume(Tk::Newline))
+        return Error(ErrorId::Expected, "Expected line break");
 
     /// Register mappings for function arguments.
     temporaries.clear();
@@ -768,7 +819,8 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     /// Fix up temporaries.
     for (auto& [tmp, fixups] : temporary_fixups) {
         auto it = temporaries.find(tmp);
-        if (it == temporaries.end()) return Error("Unknown value '{}'", tmp);
+        if (it == temporaries.end())
+            return Error(ErrorId::Miscellaneous, "Unknown value '{}'", tmp);
         for (auto elem : fixups) {
             *elem.second = it->second;
             Inst::AddUse(it->second, elem.first);
@@ -778,9 +830,11 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     /// Fix up blocks.
     for (auto [tmp, fixups] : block_fixups) {
         auto it = temporaries.find(tmp);
-        if (it == temporaries.end()) return Error("Unknown block '{}'", tmp);
+        if (it == temporaries.end())
+            return Error(ErrorId::Miscellaneous, "Unknown block '{}'", tmp);
         auto* b = cast<Block>(it->second);
-        if (not b) return Error("'{}' is not a block", tmp);
+        if (not b)
+            return Error(ErrorId::Miscellaneous, "'{}' is not a block", tmp);
         for (auto elem : fixups) {
             *elem.second = b;
             Inst::AddUse(b, elem.first);
@@ -799,7 +853,8 @@ auto lcc::parser::Parser::ParseGEP(std::string tmp) -> Result<Inst*> {
     auto ptr = ParseUntypedValue(Type::PtrTy);
     auto at = ParseLiteral("at");
     auto idx = ParseValue();
-    if (IsError(ty, lit, ptr, at, idx)) return Diag();
+    if (IsError(ty, lit, ptr, at, idx))
+        return Diag();
     auto gep = new (*mod) Instruction(*ty, loc);
     SetValue(gep, gep->pointer, *ptr);
     SetValue(gep, gep->index, idx->second);
@@ -808,7 +863,8 @@ auto lcc::parser::Parser::ParseGEP(std::string tmp) -> Result<Inst*> {
 }
 
 auto lcc::parser::Parser::ParseLiteral(std::string_view lit) -> Result<void> {
-    if (not At(Tk::Keyword) or tok.text != lit) return Error("Expected '{}'", lit);
+    if (not At(Tk::Keyword) or tok.text != lit)
+        return Error(ErrorId::Expected, "Expected '{}'", lit);
     NextToken();
     return {};
 }
@@ -834,7 +890,8 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
             auto into = ParseLiteral("into");
             auto ptr = ParseUntypedValue(val->first);
 
-            if (IsError(val, into, ptr)) return Diag();
+            if (IsError(val, into, ptr))
+                return Diag();
             auto store = new (*mod) StoreInst(loc);
             SetValue(store, store->value, val->second);
             SetValue(store, store->pointer, *ptr);
@@ -862,7 +919,8 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
                 auto to = ParseUntypedValue(nullptr);
                 auto lit_else = ParseLiteral("else");
                 auto els = ParseUntypedValue(nullptr);
-                if (IsError(cond, lit_to, to, lit_else, els)) return Diag();
+                if (IsError(cond, lit_to, to, lit_else, els))
+                    return Diag();
                 auto br = new (*mod) CondBranchInst(loc);
                 SetValue(br, br->condition, *cond);
                 SetBlock(br, br->then, *to);
@@ -870,7 +928,10 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
                 return br;
             }
 
-            return Error("Expected 'to' or 'on' after 'branch'");
+            return Error(
+                ErrorId::Expected,
+                "Expected 'to' or 'on' after 'branch'"
+            );
         }
 
         if (tok.text == "return") {
@@ -889,16 +950,18 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
             return new (*mod) UnreachableInst(loc);
         }
 
-        return Error("Unknown instruction '{}'", tok.text);
+        return Error(ErrorId::Miscellaneous, "Unknown instruction '{}'", tok.text);
     }
 
     /// Instructions that yield a value.
-    if (not At(Tk::Temporary)) return Error("Expected instruction");
+    if (not At(Tk::Temporary))
+        return Error(ErrorId::Expected, "Expected instruction");
     auto loc = tok.location;
     auto tmp = tok.text;
     NextToken();
     (void) ConsumeOrError(Tk::Equals);
-    if (not At(Tk::Keyword)) return Error("Expected instruction");
+    if (not At(Tk::Keyword))
+        return Error(ErrorId::Expected, "Expected instruction");
 
     if (tok.text == "alloca") {
         NextToken();
@@ -934,7 +997,8 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         auto ty = ParseType();
         auto from = ParseLiteral("from");
         auto ptr = ParseUntypedValue(Type::PtrTy);
-        if (IsError(ty, from, ptr)) return Diag();
+        if (IsError(ty, from, ptr))
+            return Diag();
         auto load = new (*mod) LoadInst(*ty, loc);
         SetValue(load, load->pointer, *ptr);
         AddTemporary(std::move(tmp), load);
@@ -945,7 +1009,8 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         NextToken();
         auto type = ParseType();
         auto com = ConsumeOrError(Tk::Comma);
-        if (IsError(type, com)) return Diag();
+        if (IsError(type, com))
+            return Diag();
 
         std::vector<IRValue> blocks;
         std::vector<IRValue> values;
@@ -955,7 +1020,8 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
             auto co = ConsumeOrError(Tk::Colon);
             auto value = ParseUntypedValue(*type);
             auto r = ConsumeOrError(Tk::RBrack);
-            if (IsError(l, block, co, value, r)) return Diag();
+            if (IsError(l, block, co, value, r))
+                return Diag();
             blocks.push_back(*block);
             values.push_back(*value);
         } while (Consume(Tk::Comma));
@@ -1019,7 +1085,11 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
     if (tok.text == "sext") return ParseCast<SExtInst>(std::move(tmp));
     if (tok.text == "trunc") return ParseCast<TruncInst>(std::move(tmp));
 
-    return Error("Unknown instruction '{}'", tok.text);
+    return Error(
+        ErrorId::Miscellaneous,
+        "Unknown instruction '{}'",
+        tok.text
+    );
 }
 
 auto lcc::parser::Parser::ParseModule() -> Result<void> {
@@ -1047,7 +1117,8 @@ auto lcc::parser::Parser::ParseModule() -> Result<void> {
     /// Fix up references to globals.
     for (auto&& [name, fixups] : global_fixups) {
         auto it = globals.find(name);
-        if (it == globals.end()) return Error("Unknown global '{}'", name);
+        if (it == globals.end())
+            return Error(ErrorId::Miscellaneous, "Unknown global '{}'", name);
         for (auto elem : fixups) {
             *elem.second = it->second;
             Inst::AddUse(it->second, elem.first);
@@ -1070,8 +1141,12 @@ auto lcc::parser::Parser::ParseType() -> Result<Type*> {
         // Eat struct keyword
         NextToken();
 
-        if (not At(Tk::Keyword))
-            return Error("Expected name of struct following 'struct' keyword");
+        if (not At(Tk::Keyword)) {
+            return Error(
+                ErrorId::Expected,
+                "Expected name of struct following 'struct' keyword"
+            );
+        }
         name = tok.text;
         // Eat struct name
         NextToken();
@@ -1110,8 +1185,13 @@ auto lcc::parser::Parser::ParseType() -> Result<Type*> {
 
         // Find name in list of registered named types.
         auto found = named_types.find(n);
-        if (found == named_types.end())
-            return Error("Got name when parsing type, but '{}' doesn't refer to an existing named type!", n);
+        if (found == named_types.end()) {
+            return Error(
+                ErrorId::Miscellaneous,
+                "Got name when parsing type, but '{}' doesn't refer to an existing named type!",
+                n
+            );
+        }
 
         // If a named type is registered to nullptr, we are still parsing the type
         // and it is incomplete, and therefore cannot show up in it's own
@@ -1119,7 +1199,7 @@ auto lcc::parser::Parser::ParseType() -> Result<Type*> {
         LCC_ASSERT(found->second, "A named type must not reference itself in it's own definition.");
 
         return found->second;
-    } else return Error("Expected type");
+    } else return Error(ErrorId::Expected, "Expected type");
     NextToken();
 
     /// Parse qualifiers.
@@ -1132,12 +1212,12 @@ auto lcc::parser::Parser::ParseType() -> Result<Type*> {
         NextToken();
 
         if (not At(Tk::Integer))
-            return Error("Expected integer");
+            return Error(ErrorId::Expected, "Expected integer");
         auto size = tok.integer_value;
         NextToken();
 
         if (not Consume(Tk::RBrack))
-            return Error("Expected ']'");
+            return Error(ErrorId::Expected, "Expected ']'");
 
         base = ArrayType::Get(mod->context(), (usz) size, base);
     }
@@ -1180,7 +1260,7 @@ auto lcc::parser::Parser::ParseUntypedValue(Type* assumed_type) -> Result<IRValu
     }
 
     /// TODO: strings and array constants.
-    return Error("Expected value");
+    return Error(ErrorId::Expected, "Expected value");
 }
 
 auto lcc::parser::Parser::ParseValue() -> Result<std::pair<Type*, IRValue>> {
@@ -1206,13 +1286,13 @@ void lcc::parser::Parser::SetBlock(Inst* parent, lcc::Block*& val, lcc::parser::
     if (auto* value = std::get_if<Value*>(&v)) {
         auto* b = cast<Block>(*value);
         if (not b) {
-            Error("Value does not name a block");
+            Error(ErrorId::Miscellaneous, "Value does not name a block");
             return;
         }
         val = b;
         Inst::AddUse(b, parent);
     } else if ([[maybe_unused]] auto* g = std::get_if<Global>(&v)) {
-        Error("Value does not name a block");
+        Error(ErrorId::Miscellaneous, "Value does not name a block");
     } else {
         block_fixups[std::get<Temporary>(v).data]
             .emplace_back(parent, &val);
