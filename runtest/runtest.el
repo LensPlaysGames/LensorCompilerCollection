@@ -324,6 +324,7 @@ Properties:
 
 Additional properties are included, but not necessary:
 :path    Path to org-file containing test declaration
+:flags   List of flags to pass to LCC when compiling the test
 "
   (when (not (file-name-absolute-p org-filepath))
     (error "Expected absolute filepath to parse org file from..."))
@@ -333,6 +334,7 @@ Additional properties are included, but not necessary:
                 :source ,nil
                 :status ,nil :output ,nil
                 :path ,org-filepath
+                :flags ,nil
                 :artifacts ,nil
                 :intermediate_artifacts ,nil)))
     (with-current-buffer (find-file-noselect org-filepath)
@@ -373,6 +375,8 @@ Additional properties are included, but not necessary:
                   (setf test
                         (plist-put
                          test :output (org-element-property :value elem))))))
+            (when (string-equal (org-element-property :name elem) "flags")
+              (push (org-element-property :value elem) (plist-get test :flags)))
             ))))
 
     (let ((invalid-name (string-empty-p (plist-get test :name)))
@@ -502,12 +506,12 @@ Additional properties are included, but not necessary:
                   (run-test--glint-gcc test ,glint-lcc-output-filepath))
               (progn
                 (setf test (plist-put test :failed t))
-        '("-I" ".")))))
                 (message
                  "Error: Test %s: LCC returned non-zero exit code (%i)\n%s"
                  (plist-get test :name)
                  (process-exit-status p)
                  ,glint-lcc-output)))))
+        (append '("-I" ".") (plist-get test :flags))
         ))))
 
 (defun run-test--glint-lcc (test test-source)
@@ -665,6 +669,7 @@ Additional properties are included, but not necessary:
                  (process-exit-status p)
                  ,ir-lcc-output)))
             ))
+        (plist-get test :flags)
         ))))
 
 (defun run-test--ir-lcc (test test-source)
