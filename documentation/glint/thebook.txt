@@ -1016,7 +1016,7 @@ _________________
   be assigned to.
 
   ,----
-  | A : struct {
+  | A :: struct {
   |   x : int;
   |   y : int;
   | };
@@ -1040,12 +1040,12 @@ _________________
   programmer's convenience.
 
   ,----
-  | A : struct {
+  | A :: struct {
   |   x : int;
   |   y : int;
   | };
   | 
-  | B : struct {
+  | B :: struct {
   |   supplant A;
   |   z : int;
   | };
@@ -1090,15 +1090,22 @@ _________________
   number `7' to be called `Erased', to make your Glint code more
   readable, or understandable.
   ,----
-  | enum(int) {
+  | Code :: enum(int) {
   |   Success :: 1;
   |   Erased :: 7;
   | };
+  | 
+  | Code.Success; ;; = 1
+  | Code.Erased; ;; = 7
   `----
 
-  Enumerators (in Glint) are /just named constants/. If you come from
-  Rust (you crustacean, you), see sum types for what you may call
-  enums. If you come from C or C++, not too much has changed.
+  Enumerators (in Glint) are /just named constants/. As such, the values
+  of an enumerator must be known at compile time. The underlying value
+  type may be specified within parentheses.
+
+  If you come from Rust (you crustacean, you), see sum types for what
+  you may call enums. If you come from C or C++, not too much has
+  changed.
 
 
 2.8.4 Sums
@@ -1128,7 +1135,7 @@ _________________
   cause the program to exit.
 
   ,----
-  | A : sum {
+  | A :: sum {
   |   x : int;
   |   y : byte;
   | };
@@ -1146,7 +1153,7 @@ _________________
   accordingly whenever assigning to any sum type's member.
 
   ,----
-  | A : sum {
+  | A :: sum {
   |   x : int;
   |   y : byte;
   | };
@@ -1157,7 +1164,7 @@ _________________
   `----
 
   ,----
-  | A : sum {
+  | A :: sum {
   |   x : int;
   |   y : byte;
   | };
@@ -1177,7 +1184,7 @@ _________________
   operator.
 
   ,----
-  | A : sum {
+  | A :: sum {
   |   x : int;
   |   y : byte;
   | };
@@ -1200,7 +1207,7 @@ _________________
   guarantee that every possible member has a control flow to handle it.
 
   ,----
-  | A : sum {
+  | A :: sum {
   |   x : int;
   |   y : byte;
   | };

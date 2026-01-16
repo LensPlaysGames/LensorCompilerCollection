@@ -12,7 +12,7 @@
   (defun lens/export-the-book ()
     "Export the book when it is your current buffer"
     (interactive)
-    (defvar org-html-head)
+    (defvar org-html-head "")
     (let
         ((org-html-htmlize-output-type 'css)
          (org-publish-use-timestamps-flag nil)
