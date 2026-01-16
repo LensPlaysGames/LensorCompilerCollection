@@ -1,0 +1,23 @@
+* Optimisation, Constant Folding, Simple Addition
+
+#+NAME: flags
+#+begin_example
+-O 1
+#+end_example
+
+#+NAME: source
+#+begin_src lcc-ir
+  main (exported): ccc i32():
+    bb0:
+      %0 = add i32 42, 27
+      return i32 %0
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

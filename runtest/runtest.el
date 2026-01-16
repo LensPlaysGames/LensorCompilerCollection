@@ -376,8 +376,15 @@ Additional properties are included, but not necessary:
                         (plist-put
                          test :output (org-element-property :value elem))))))
             (when (string-equal (org-element-property :name elem) "flags")
-              (push (org-element-property :value elem) (plist-get test :flags)))
+              (mapc
+               (lambda (flag)
+                 (push flag (plist-get test :flags)))
+               (split-string (org-element-property :value elem))))
             ))))
+
+    ;; Reverse collected flags (if any)
+    (setf (plist-get test :flags)
+          (reverse (plist-get test :flags)))
 
     (let ((invalid-name (string-empty-p (plist-get test :name)))
           (invalid-source (not (plist-get test :source)))
