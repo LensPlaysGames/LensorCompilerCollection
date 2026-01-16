@@ -13,3 +13,11 @@ Each test is defined in it's own org file within the =runtest/corpus/= directory
 Tests consist of a single headline, the value of which is the human readable name of the test.
 
 Under that headline, there are three blocks expected: one code block, and two example blocks. Each block should be named (using =#+NAME: <name>=), where =<name>= is one of =source= (the test input, passed to LCC), =status= (the expected program exit status), or =output= (the expected program output).
+
+*** Tests With Multiple Sources
+
+By providing more than one =source= block, the following blocks will be compiled into object files and linked with the final executable. This lets you test imports/exports, FFI, etc.
+
+*** Tests With Specific Command Line Flags
+
+By providing a block named =flags=, RunTest will pass the given arguments along to LCC when compiling the sources defined in the test.
