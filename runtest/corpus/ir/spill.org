@@ -1,0 +1,48 @@
+* Spill
+
+#+NAME: source
+#+begin_src lcc-ir
+  main (exported): ccc i32():
+    bb0:
+      %0 = add i32 1, 1
+      %1 = add i32 1, 1
+      %2 = add i32 1, 1
+      %3 = add i32 1, 1
+      %4 = add i32 1, 1
+      %5 = add i32 1, 1
+      %6 = add i32 1, 1
+      %7 = add i32 1, 1
+      %8 = add i32 1, 1
+      %9 = add i32 1, 1
+      %10 = add i32 1, 1
+      %11 = add i32 1, 1
+      %12 = add i32 1, 1
+      %13 = add i32 1, 1
+      %14 = add i32 1, 1
+      %15 = add i32 1, 1
+      %16 = add i32 %0, %1
+      %17 = add i32 %16, %2
+      %18 = add i32 %17, %3
+      %19 = add i32 %18, %4
+      %20 = add i32 %19, %5
+      %21 = add i32 %20, %6
+      %22 = add i32 %21, %7
+      %23 = add i32 %22, %8
+      %24 = add i32 %23, %9
+      %25 = add i32 %24, %10
+      %26 = add i32 %25, %11
+      %27 = add i32 %26, %12
+      %28 = add i32 %27, %13
+      %29 = add i32 %28, %14
+      %30 = add i32 %29, %15
+      return i32 %30
+#+end_src
+
+#+NAME: status
+#+begin_example
+64
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

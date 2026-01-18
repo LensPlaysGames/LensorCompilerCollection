@@ -58,6 +58,7 @@ auto PrintMInstImpl(const MInst& inst, auto&& inst_opcode) -> std::string {
         and (inst.kind() == MInst::Kind::Store
              or inst.kind() == MInst::Kind::Branch
              or inst.kind() == MInst::Kind::CondBranch
+             or inst.kind() == MInst::Kind::Spill
              or inst.kind() == MInst::Kind::Return
              or inst.kind() == MInst::Kind::Unreachable))
         // clang-format on

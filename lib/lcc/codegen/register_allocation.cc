@@ -10,6 +10,7 @@
 #include <memory>
 #include <ranges>
 #include <string>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -65,7 +66,9 @@ struct AdjacencyList {
     // Live index of this list.
     usz index;
 
-    usz regmask;
+    // If a register value appears in this set, this list is said to interfere
+    // with that register value.
+    std::unordered_set<usz> regmask{};
 
     // Value/Id of register that this list has been colored with.
     usz color;
@@ -343,9 +346,13 @@ void collect_interferences(
 
 } // namespace
 
-void allocate_registers(const MachineDescription& desc, MFunction& function) {
+auto allocate_registers(
+    const MachineDescription& desc,
+    MFunction& function
+) -> Result<void> {
     // Don't allocate registers for empty functions.
-    if (function.blocks().empty()) return;
+    if (function.blocks().empty())
+        return {};
 
     // Steps:
     //   1. Collect all existing registers, both hardware and virtual.
@@ -511,8 +518,9 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
 
             for (auto& list : lists) {
                 if (should_skip_list(list)) continue;
-                list.spill_cost
-                    = list.degree() ? (list.spill_cost / list.degree()) : 0;
+                if (list.degree())
+                    list.spill_cost = list.spill_cost / list.degree();
+                else list.spill_cost = 0;
                 if (list.degree() and list.spill_cost <= min_cost) {
                     min_cost = list.spill_cost;
                     node_to_spill = list.index;
@@ -538,7 +546,7 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
         if (list.value < +MInst::Kind::ArchStart)
             continue;
 
-        usz register_interferences = list.regmask;
+        auto& register_interferences = list.regmask;
         for (usz i_adj : list.adjacencies) {
             auto adj_list = rgs::find_if(
                 lists,
@@ -555,7 +563,7 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             // list must not be colored with that color.
             if (adj_list->color) {
                 // fmt::print("Colored adjacency: [r{}, {}]\n", adj_list->value, adj_list->color);
-                register_interferences |= usz(1) << adj_list->color;
+                register_interferences.emplace(adj_list->color);
             }
         }
 
@@ -563,7 +571,7 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
         // with the register associated with the current adjacency list.
         usz reg_value = 0;
         for (auto reg : desc.registers) {
-            if (not (register_interferences & (usz(1) << reg))) {
+            if (not register_interferences.contains(reg)) {
                 reg_value = reg;
                 break;
             }
@@ -576,31 +584,137 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
         // not able to allocate registers for the function (in it's current
         // state).
         if (not reg_value) {
-            // TODO: There are zero hardware registers that don't interfere with the
+            // There are zero hardware registers that don't interfere with the
             // current virtual register we are trying to color; we need to pick one of
             // the virtual registers that has already been allocated a hardware
             // register, go back and insert a "save to stack" instruction (spill), and
             // then insert "load from stack" (unspill) instructions at every use.
-            // We also need to insert an Alloca instruction at the beginning of the
-            // function, so that we actually have a place to load/store the register
-            // from/to.
-            // NOTE: We cannot use "regular" alloca, store, load, etc. because the MIR
-            // has already been lowered and instructions selected for a particular
-            // instruction set architecture; the MIR has these "spill" pseudo-codes
-            // that are implemented directly in each backend.
-            auto e = Diag::Error(
-                "register-allocation",
-                "Can not color graph with {} colors until stack spilling is implemented!",
-                desc.registers.size()
+
+            // Get virtual register value we need to spill
+            LCC_ASSERT(register_interferences.size());
+            auto spilled_hardreg = *(register_interferences.begin());
+            fmt::print("Spilling r{}\n", spilled_hardreg);
+            usz spilled_vreg{0};
+            // Look in the adjacency lists to map the list with the interfering color
+            // back to the virtual register the list is associated with.
+            for (auto& l : lists) {
+                if (l.value != spilled_hardreg and l.color == spilled_hardreg) {
+                    spilled_vreg = l.value;
+                    break;
+                }
+            }
+            LCC_ASSERT(
+                spilled_vreg,
+                "Unable to resolve assigned hardware register back to virtual register for spilling"
             );
-            e.attach(
-                Diag::Note(
-                    "register-allocation",
-                    "Allocating registers for function `{}`",
-                    function.names().at(0).name
-                )
-            );
-            return;
+
+            fmt::print("  vreg r{}\n", spilled_vreg);
+
+            // We need to find instruction by virtual register value (find relevant
+            // defining use).
+            // Once we have this instruction, we need to insert a "save to stack"
+            // instruction (spill) directly following it.
+            bool spill_after{false};
+            for (auto& block : function.blocks()) {
+                if (spill_after) break;
+                for (auto [inst_i, inst] : vws::enumerate(block.instructions())) {
+                    // for every instruction...
+                    if (inst.reg() == spilled_vreg) {
+                        // This instruction result is stored into the spilled virtual register;
+                        // insert the spill right after this instruction.
+                        spill_after = true;
+                    }
+                    for (auto& op : inst.all_operands()) {
+                        // for every operand...
+                        if (
+                            std::holds_alternative<MOperandRegister>(op)
+                            and std::get<MOperandRegister>(op).value == spilled_vreg
+                        ) {
+                            spill_after = true;
+                            break;
+                        }
+                    }
+                    if (spill_after) {
+                        // insert spill after
+                        auto spill = MInst(usz(MInst::Kind::Spill), {});
+                        // TODO: We should copy size of virtual register
+                        spill.add_operand(MOperandRegister(spilled_vreg, 0));
+                        fmt::print("Inserted spill at index {}\n", inst_i);
+                        fmt::print("{}\n", PrintMInst(inst));
+                        block.instructions().insert(
+                            block.instructions().begin() + inst_i + 1,
+                            spill
+                        );
+                        break;
+                    }
+                }
+            }
+
+            // Next, we need to replace all uses of the /virtual/ register value with
+            // the use of an inserted instruction directly /before/ the use.
+            // That inserted instruction is a "load from stack" instruction (unspill).
+            bool done{false};
+            // TODO: Er, how do we get a unique virtual register from here?
+            usz new_vreg = 0x06942069;
+            for (auto& block : function.blocks()) {
+                if (done) break;
+                for (auto inst_i = block.instructions().size(); inst_i; --inst_i) {
+                    bool unspill_before{false};
+                    auto& inst = block.instructions().at(inst_i - 1);
+                    if (inst.opcode() == +MInst::Kind::Spill) {
+                        if (
+                            std::get<MOperandRegister>(inst.get_operand(0)).value
+                            == spilled_vreg
+                        ) {
+                            done = true;
+                            break;
+                        }
+                    }
+
+                    // Result of this instruction is the virtual register;
+                    // er, I'm not sure this counts as a "use"?
+                    if (inst.reg() == spilled_vreg) {
+                        unspill_before = true;
+                        inst.reg(new_vreg);
+                    }
+
+                    for (auto& op : inst.all_operands()) {
+                        // Operand of this instruction is the spilled virtual register.
+                        if (
+                            std::holds_alternative<MOperandRegister>(op)
+                            and std::get<MOperandRegister>(op).value == spilled_vreg
+                        ) {
+                            unspill_before = true;
+                            std::get<MOperandRegister>(op).value = new_vreg;
+                        }
+                    }
+
+                    if (unspill_before) {
+                        // New virtual register that this particular use of the spilled vreg will
+                        // unspill into.
+                        // TODO: spilled register size
+                        auto unspill = MInst(
+                            usz(MInst::Kind::Unspill),
+                            {new_vreg, 0, {}, true}
+                        );
+                        unspill.add_operand(MOperandRegister(spilled_vreg, 0));
+                        fmt::print("Inserted unspill at index {}\n", inst_i);
+                        block.instructions().insert(
+                            block.instructions().begin() + (isz) inst_i - 1,
+                            unspill
+                        );
+                        // TODO: Update new_vreg to a new, unique virtual register.
+                        new_vreg++;
+                    }
+                }
+            }
+
+            fmt::print("{}\n", PrintMFunction(function));
+            LCC_TODO("Spill implementation...");
+
+            // With the new spill/unspill instructions inserted, retry register
+            // allocation...
+            return allocate_registers(desc, function);
         }
 
         list.color = reg_value;
@@ -637,6 +751,8 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             }
         }
     }
+
+    return {};
 }
 
 } // namespace lcc

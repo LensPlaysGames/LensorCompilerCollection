@@ -2,6 +2,8 @@
 #define LCC_REGISTER_ALLOCATION_HH
 
 #include <lcc/forward.hh>
+#include <lcc/utils.hh>
+#include <lcc/utils/result.hh>
 
 #include <vector>
 
@@ -13,8 +15,11 @@ struct MachineDescription {
     std::vector<usz> registers;
 };
 
-void allocate_registers(const MachineDescription& desc, MFunction& function);
+auto allocate_registers(
+    const MachineDescription& desc,
+    MFunction& function
+) -> Result<void>;
 
-}
+} // namespace lcc
 
 #endif /* LCC_REGISTER_ALLOCATION_HH */

@@ -723,8 +723,9 @@ void Module::emit(std::filesystem::path output_file_path) {
                 }
             } else LCC_ASSERT(false, "Sorry, unhandled target architecture");
 
-            for (auto& mfunc : machine_ir)
-                allocate_registers(desc, mfunc);
+            for (auto& mfunc : machine_ir) {
+                (void) allocate_registers(desc, mfunc);
+            }
 
             if (_ctx->option_print_mir()) {
                 fmt::print("\nAfter RA\n");

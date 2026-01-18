@@ -14,8 +14,14 @@ namespace lcc {
 
 // Machine Register Description
 struct Register {
+    // This denotes /which/ register this instance refers to.
     usz value;
+    // This denotes the size of the register being accessed.
+    // On x86_64, to access RAX set this to 64; 32 for EAX.
     uint size;
+    // When true, this instance refers to the use of the register that sets
+    // the value.
+    // For register allocation: liveness tracking.
     bool defining_use = false;
 };
 
@@ -107,6 +113,10 @@ public:
         UGt,
         UGe,
 
+        // Inserted by register allocation
+        Spill,
+        Unspill,
+
         ArchStart = 0x420,
     };
 
@@ -169,7 +179,10 @@ public:
     Kind kind() const {
         // FIXME: This should be enabled, but I don't have stackframes and can't
         // tell where this is triggering from so... yeah.
-        // LCC_ASSERT(_opcode < +Kind::ArchStart, "kind() must only be called for general MIR instructions; for architecture-specific instructions, please call opcode()");
+        // LCC_ASSERT(
+        //     _opcode < +Kind::ArchStart,
+        //     "kind() must only be called for general MIR instructions; for architecture-specific instructions, please call opcode()"
+        // );
         return static_cast<Kind>(_opcode);
     }
 
@@ -472,6 +485,8 @@ inline std::string ToString(MInst::Kind k) {
         case MInst::Kind::ULe: return "M.ULe";
         case MInst::Kind::UGt: return "M.UGt";
         case MInst::Kind::UGe: return "M.UGe";
+        case MInst::Kind::Spill: return "M.Spill";
+        case MInst::Kind::Unspill: return "M.Unspill";
         case MInst::Kind::ArchStart: return "M.ArchStart";
     }
     LCC_UNREACHABLE();
