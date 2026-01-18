@@ -3,10 +3,14 @@
 *.o
 *.exe
 *.ll
+*.out
+
 # CCache
 .cache
+
 # CMake
 **/bld
+**/bldweb*
 **/bld-*
 **/build
 **/win
@@ -33,6 +37,9 @@
 /.idea
 /tst/out.txt
 *.dot
+
+# Debuggers
+**/.gdb_history
 
 # Language Server
 **/compile_commands.json

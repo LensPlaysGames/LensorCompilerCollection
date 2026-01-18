@@ -1,0 +1,1971 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- 2026-01-18 Sun 12:23 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Programming in Lensor Glint</title>
+<meta name="author" content="lens_r" />
+<meta name="generator" content="Org Mode" />
+<link rel="stylesheet" href="all.css">
+<script>
+  window.MathJax = {
+    tex: {
+      ams: {
+        multlineWidth: '85%'
+      },
+      tags: 'ams',
+      tagSide: 'right',
+      tagIndent: '.8em'
+    },
+    chtml: {
+      scale: 1.0,
+      displayAlign: 'center',
+      displayIndent: '0em'
+    },
+    svg: {
+      scale: 1.0,
+      displayAlign: 'center',
+      displayIndent: '0em'
+    },
+    output: {
+      font: 'mathjax-modern',
+      displayOverflow: 'overflow'
+    }
+  };
+</script>
+
+<script
+  id="MathJax-script"
+  async
+  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+</script>
+</head>
+<body>
+<div id="content" class="content">
+<h1 class="title">Programming in Lensor Glint</h1>
+<div id="table-of-contents" role="doc-toc">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents" role="doc-toc">
+<ul>
+<li><a href="#org14c134d">1. Preface</a>
+<ul>
+<li><a href="#org310e5ca">1.1. Hardware</a></li>
+<li><a href="#orgd3f1ed7">1.2. Software</a></li>
+<li><a href="#orged9b9ec">1.3. Tooling</a></li>
+</ul>
+</li>
+<li><a href="#org6a1019a">2. Programming in Lensor Glint</a>
+<ul>
+<li><a href="#orgacbb737">2.1. Introduction, Overview</a>
+<ul>
+<li><a href="#org42b469b">2.1.1. History</a></li>
+<li><a href="#orgc7096f1">2.1.2. Example Program</a></li>
+<li><a href="#org0b594b2">2.1.3. Program Structure</a></li>
+<li><a href="#org9a544f2">2.1.4. Glint Exercise</a></li>
+</ul>
+</li>
+<li><a href="#org3838760">2.2. Simple Values</a>
+<ul>
+<li><a href="#org90132e3">2.2.1. Integers</a></li>
+<li><a href="#orga27a05b">2.2.2. Bytes</a></li>
+<li><a href="#org614039c">2.2.3. Boolean</a></li>
+<li><a href="#org99154b5">2.2.4. Strings</a></li>
+</ul>
+</li>
+<li><a href="#org7ff4cfc">2.3. Variables</a>
+<ul>
+<li><a href="#org5a63187">2.3.1. Declaration Forms</a></li>
+<li><a href="#orgc2342a7">2.3.2. Type Decay</a></li>
+<li><a href="#org9ad1247">2.3.3. Scopes</a></li>
+<li><a href="#org126a32c">2.3.4. Assignment</a></li>
+<li><a href="#org9f96408">2.3.5. Glint Exercise</a></li>
+</ul>
+</li>
+<li><a href="#org4b7b82f">2.4. Basic Expressions</a>
+<ul>
+<li><a href="#org9120bec">2.4.1. Arithmetic</a></li>
+<li><a href="#org5df6663">2.4.2. Bitwise</a></li>
+<li><a href="#orgb80e3e2">2.4.3. Implicit Casting</a></li>
+<li><a href="#org6a2d8b4">2.4.4. Explicit Casting</a></li>
+<li><a href="#orge43def8">2.4.5. Glint Exercise</a></li>
+</ul>
+</li>
+<li><a href="#orgebc3e7f">2.5. Glint's Print</a>
+<ul>
+<li><a href="#org2dc0e9a">2.5.1. Glint Exercise</a></li>
+</ul>
+</li>
+<li><a href="#org3196124">2.6. Arrays</a>
+<ul>
+<li><a href="#org582deef">2.6.1. Fixed Arrays</a></li>
+<li><a href="#org12a3664">2.6.2. Dynamic Arrays</a></li>
+<li><a href="#orgcd6128c">2.6.3. Array Views</a></li>
+</ul>
+</li>
+<li><a href="#org1d5a8a6">2.7. Conditionals and Control Flow</a>
+<ul>
+<li><a href="#orgab11663">2.7.1. <code>if</code></a></li>
+<li><a href="#org6f4768b">2.7.2. <code>while</code></a></li>
+<li><a href="#orgf2a64ed">2.7.3. <code>for</code></a></li>
+<li><a href="#org6d9dff1">2.7.4. <code>cfor</code></a></li>
+<li><a href="#orgfcf49d9">2.7.5. <code>match</code></a></li>
+</ul>
+</li>
+<li><a href="#orged440ee">2.8. Declared Types</a>
+<ul>
+<li><a href="#org038cd43">2.8.1. Structs</a></li>
+<li><a href="#org5c2c1fb">2.8.2. Unions</a></li>
+<li><a href="#orgaa8f353">2.8.3. Enumerations</a></li>
+<li><a href="#org9e5f8e2">2.8.4. Sums</a></li>
+</ul>
+</li>
+<li><a href="#orgdb0519b">2.9. Basic Functions</a>
+<ul>
+<li><a href="#orgff26616">2.9.1. Function Attributes</a></li>
+</ul>
+</li>
+<li><a href="#org83fc6db">2.10. Pointers and References</a></li>
+<li><a href="#org0e9c997">2.11. Templates</a></li>
+<li><a href="#orgdc26f35">2.12. Function Overloading</a></li>
+<li><a href="#orgec998ce">2.13. Operator Overloading</a></li>
+<li><a href="#org8511a7c">2.14. Templated Functions and Templated Types</a></li>
+<li><a href="#org9aef097">2.15. Modules</a>
+<ul>
+<li><a href="#orgaeba439">2.15.1. Writing A Module Vs A Program</a></li>
+<li><a href="#orgd3731b0">2.15.2. Exporting Variables</a></li>
+<li><a href="#orgeaba148">2.15.3. Importing Modules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#orgb87bc36">3. Types</a>
+<ul>
+<li><a href="#orgd3be353">3.1. Built-in Types</a></li>
+<li><a href="#org07e341c">3.2. FFI Types</a></li>
+<li><a href="#orgd4b04db">3.3. Arbitrary Integers</a></li>
+<li><a href="#org7e07405">3.4. Types with One Element</a>
+<ul>
+<li><a href="#org57d4116">3.4.1. Pointers</a></li>
+<li><a href="#orgd611893">3.4.2. References</a></li>
+</ul>
+</li>
+<li><a href="#orgc36a125">3.5. Composite Types</a>
+<ul>
+<li><a href="#org83f468a">3.5.1. Struct Types</a></li>
+<li><a href="#org3368865">3.5.2. Union Types</a></li>
+<li><a href="#org7e44565">3.5.3. Sum Types</a></li>
+</ul>
+</li>
+<li><a href="#org6f101dc">3.6. <code>sizeof</code> and <code>alignof</code></a>
+<ul>
+<li><a href="#org583c957">3.6.1. On bits vs bytes</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org6a85fde">4. Postface</a>
+<ul>
+<li><a href="#orgd836bc6">4.1. Example Programs</a>
+<ul>
+<li><a href="#orgd3f9d90">4.1.1. Hello, World!</a></li>
+<li><a href="#orgf129b45">4.1.2. Factorial</a></li>
+<li><a href="#org678799a">4.1.3. Recursive Fibonacci</a></li>
+<li><a href="#orgb89e413">4.1.4. Euclid GCD</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org14c134d" class="outline-2">
+<h2 id="org14c134d"><span class="section-number-2">1.</span> Preface</h2>
+<div class="outline-text-2" id="text-1">
+</div>
+<div id="outline-container-org310e5ca" class="outline-3">
+<h3 id="org310e5ca"><span class="section-number-3">1.1.</span> Hardware</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+Glint is a programming language. This book is meant to teach it (at least somewhat). A programming language is not useful in a vacuum (literally or figuratively); a programming language is a language that allows a programmer to instruct a computer with what to do (and when to do it).
+</p>
+
+<p>
+A computer is a broad term, but, for the most part, simply refers to a machine that does "work" via a sequence of operations on binary (on or off) values. This sequence of operations is called <i>code</i>. A collection of code that a computer may run is called a <i>program</i>. So, a program is a collection of code, and code is a sequence of operations that tells the computer what to do.
+</p>
+
+<p>
+A program <i>starts</i> at a specific point (usually called the entry point). A program is not required to end explicitly, and there are various routes through which a program may end up not running anymore. A program is said to be <i>running</i> on a given computer when operations from that program's code are currently executing on that computer.
+</p>
+
+<p>
+A computer has to do operations <i>on</i> something. That is, an addition operation isn't useful unless you are actually operating on meaningful values. In the real world, computers have all sorts of different hardware to make this happen (i.e. CPU registers, ALUs, etc.), but we won't get into all of that right now.
+</p>
+
+<p>
+For now, you just need to learn about something called <i>memory</i>. A computer has to operate on values, and store the result somewhere; it also has to store code, and keep track of it's place. Computers often store those values in their <i>memory</i> (so they can recall it later).
+</p>
+
+<p>
+A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary <i>bits</i> (values that may only be on or off), it is addressed via <i>bytes</i>. In hardware, a byte (the minimum addressable unit in memory) is <i>usually</i> eight bits.
+</p>
+
+<pre class="example" id="orgbd44bf2">
+MEMORY
+| off on  off off off on  off on | ...
+| BYTE 0                         | BYTE 1
+</pre>
+
+<p>
+In the example above, each <code>off</code> and <code>on</code> represents a bit (an actual stored value in memory that is either <code>on</code> or <code>off</code>). Every eight bits is labeled as a <code>byte</code>. If we were to access any value seen above within the computer's memory, we would do so by first <i>loading</i> the zero-eth byte from memory.
+</p>
+
+<p>
+To <code>load</code> from memory means to copy the relevant set of bits from memory. Loading requires a memory address: the index of the byte we'd like to load.
+</p>
+
+<p>
+The opposite of <i>loading from</i> memory is <i>storing into</i> memory. A value (or values) may be stored into memory, such that further loads from that memory result in the stored value(s). Because loading and storing both work with memory, they have the same limitations of not working directly on bits, but on sets of bits called <i>bytes</i>.
+</p>
+
+<p>
+The operations that a computer performs (or, the <i>code</i> that a computer <i>executes</i>) operate directly on sets of bit values (on or off). These values may be written to or loaded from memory for later use/re-use.
+</p>
+
+<p>
+As we touched on earlier, even a computer's code is stored in it's own memory. That is, a computer's operations are encoded in a binary format (such that they may be represented by values that may only be <code>on</code> or <code>off</code>), and those binary values are stored into the computer's memory. When the computer is started, the computer loads an operation from it's memory, executes it, and repeats. The computer keeps track of where in it's memory it is executing via a <i>program counter</i>. The program counter is also sometimes known as an <i>instruction pointer</i>. The program counter simply keeps track of which byte within memory the current operation is stored at. When the operation is finished, the computer may look at the next byte within memory to find the next operation.
+</p>
+
+<p>
+There is also a more permanent form of memory known as <i>storage</i>. A computer's storage is, like memory, a set of binary values (on or off). In an ideal world, memory and storage wouldn't be different. In the real world, storage is much slower (as it solves a different physical problem; it doesn't just store bit values while the computer is on, it stores them even without power). For the most part, computer <i>files</i> are meaningful, named portions of a computer's storage.
+</p>
+</div>
+</div>
+<div id="outline-container-orgd3f1ed7" class="outline-3">
+<h3 id="orgd3f1ed7"><span class="section-number-3">1.2.</span> Software</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+Now that you know what a computer is, and a little bit about how a computer functions, we can now learn some basic conventions about how all modern computers use that hardware to do useful things.
+</p>
+
+<p>
+Most computers come with code in their memory that may not ever be changed; it is locked into the hardware (physical parts of the computer machine). This code is called <i>firmware</i>, since it is bound to the physical hardware, yet it is still able to be changed without building a new physical chip. A computer's firmware usually handles doing initialisation procedures when the computer turns on, getting the computer to a known state. It does this so that the user of the computer may write software with a known starting state (it'd be quite difficult to guess where the computer has started executing code at, if the program counter's value was random every time the computer was started).
+</p>
+
+<p>
+That code that the user runs on their computer is known as <i>software</i>. Most computers these days come with a conventional piece of software known as an <i>operating system</i> (often abbreviated <i>OS</i>). An <i>OS</i> is software that deals with the specifics of the particular hardware, such that <i>it</i> may provide a <i>more</i> known starting state to <i>other</i> software. An OS usually consists of a kernel program that "talks" to the hardware; in reality, it does whatever is needed to make hardware do a given operation whenever software requests that operation be completed (no actual "talking" involved).
+</p>
+
+<p>
+The programs that an OS runs are usually called "user programs", and the known state that the OS provides to software called "userspace". User programs are said to run within userspace.
+</p>
+
+<p>
+Glint is a programming language meant to write user programs, so, Glint code runs within userspace of some OS on some computer. This is important to understand how to get the computer to do what you want it to do. <i>If you want to shoot an arrow and hit a target, you have to know where you are standing.</i>
+</p>
+</div>
+</div>
+<div id="outline-container-orged9b9ec" class="outline-3">
+<h3 id="orged9b9ec"><span class="section-number-3">1.3.</span> Tooling</h3>
+<div class="outline-text-3" id="text-1-3">
+<p>
+Now, the weird part is that we actually <i>use</i> computers to do (or at least help with) the work of producing code. This means there is actually <i>software</i> we use when writing <i>software</i>.
+</p>
+
+<p>
+One such piece of software is a <i>compiler</i> program. A compiler produces code in a file, given some input. The format that a compiler inputs and outputs is not set in stone, and varies depending on your particular OS, hardware, etc. A compiler is usually referred to by the <i>language</i> the compiler accepts as input. For example, a <i>C compiler</i> would be a compiler that takes as input the language <i>C</i>, and outputs code in some other (possibly machine-ready) format.
+</p>
+
+<p>
+A compiler will often tell you when a program is ill-formed; a good compiler will tell you where and how. An ill-formed program is like a sentence that doesn't follow grammar rules: the sentence will never convey any meaning until the rules are followed, as it is fundamentally flawed. Some problems in programs mean the program will never work; these are usually called <i>errors</i>. Other problems are just things that are likely to be misinterpreted or often cause confusion (like a sentence that starts with "Because"); these are usually called <i>warnings</i>.
+</p>
+
+<p>
+The file a compiler produces is called an <i>object</i> file. An object file is a type of file that stores code and data, and necessary information about that code and data.
+</p>
+
+<p>
+An object file must be turned into an executable file via a <i>linker</i> program before a computer may load it into memory and actually execute the operations. An executable file is just a binary format that an OS supports loading, like <i>the Executable and Linkable Format (ELF)</i>. A linker's main job is to convert named portions of memory to actual memory addresses.
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org6a1019a" class="outline-2">
+<h2 id="org6a1019a"><span class="section-number-2">2.</span> Programming in Lensor Glint</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+NOTE: Glint is a language, Lensor is the specification of the language described by this book.
+</p>
+
+<p>
+RECOMMENDATION TO READERS: It is my belief that you will learn faster, and better understand the concepts presented, if you have a computer with <i>some</i> implementation of a Glint compiler present on the system. As you read, test yourself by trying to write Glint programs that you believe to follow the rules as you currently understand them. The feedback the compiler gives you when trying to build the programs you write is invaluable in quickly correcting small errors in your current mental model.
+</p>
+
+<p>
+I recommend GNU Emacs (or Vim) as an editor, but you may use whatever editor tooling you find the most comfortable.
+</p>
+</div>
+<div id="outline-container-orgacbb737" class="outline-3">
+<h3 id="orgacbb737"><span class="section-number-3">2.1.</span> Introduction, Overview</h3>
+<div class="outline-text-3" id="text-2-1">
+</div>
+<div id="outline-container-org42b469b" class="outline-4">
+<h4 id="org42b469b"><span class="section-number-4">2.1.1.</span> History</h4>
+<div class="outline-text-4" id="text-2-1-1">
+<p>
+Glint started in 2023 when Lens_r decided he wanted to make a compiler, from scratch, for fun. That compiler needed to compile a language, and so he made one up. At first, it had no name, and was referred to as "the language the FUNCompiler compiles"; as you may have guessed, that grew tedious rather fast, and we needed a name.
+</p>
+
+<p>
+That's when Glint got it's name: <i>Intercept</i>. Yes, it was named something else for the first year or so. It was renamed Glint when the language itself was cleaned up and made more opinionated toward important design goals, and the language kind of outgrew it's initial version, looking nothing like it used to (and as such, felt deserving of a new name).
+</p>
+
+<p>
+The hope is that, even if this language doesn't change your perceptions entirely, or blow your mind, you'll be able to see a glint of promise in an otherwise dark world <code>:^)</code>.
+</p>
+</div>
+</div>
+<div id="outline-container-orgc7096f1" class="outline-4">
+<h4 id="orgc7096f1"><span class="section-number-4">2.1.2.</span> Example Program</h4>
+<div class="outline-text-4" id="text-2-1-2">
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-comment">;; Comments may be placed in the source to explain the program and/or make</span>
+<span class="org-comment">;; it easier to understand. They begin with ;; and end with a newline or</span>
+<span class="org-comment">;; end of file (EOF).</span>
+
+<span class="org-comment">;; Variable Declaration</span>
+my/array <span class="org-operator">:</span> <span class="org-type">[byte]</span>;
+
+my/array <span class="org-operator">+=</span> <span class="org-number">`8`</span>; <span class="org-comment">;; append</span>
+my/array <span class="org-operator">~=</span> <span class="org-number">`5`</span>; <span class="org-comment">;; prepend</span>
+
+<span class="org-comment">;; Iteration</span>
+<span class="org-keyword">for</span> b <span class="org-keyword">in</span> my/array,
+  b <span class="org-operator">+=</span> <span class="org-number">1</span>;
+
+<span class="org-comment">;; Emit "69".</span>
+<span class="org-keyword">print</span> my/array, <span class="org-number">`\n`</span>;
+
+<span class="org-comment">;; Some Glint tooling (namely glintdoc) makes use of special comments that</span>
+<span class="org-comment">;; precede declarations. They usually contain @ directives.</span>
+
+<span class="org-comment">;; @returns the answer to the universe.</span>
+<span class="org-function-name">my/cool-function!</span> <span class="org-operator">:</span> <span class="org-type">int</span><span class="org-delimiter">()</span>
+  <span class="org-number">42</span>;
+
+<span class="org-comment">;; Emit "420".</span>
+<span class="org-keyword">print</span> <span class="org-number">10</span> my/cool-function!, <span class="org-number">`\n`</span>;
+
+<span class="org-comment">;; The final expression in the program is returned.</span>
+<span class="org-number">69</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org0b594b2" class="outline-4">
+<h4 id="org0b594b2"><span class="section-number-4">2.1.3.</span> Program Structure</h4>
+<div class="outline-text-4" id="text-2-1-3">
+<p>
+A Glint program consists of:
+</p>
+<dl class="org-dl">
+<dt>Header</dt><dd>The first portion of the file designates module status and imported dependencies.</dd>
+<dt>Comments</dt><dd>Non-code portions of the file that are used to describe, annotate, and document the code portions of the file. Comments begin at <code>;;</code> and go until a newline or EOF.</dd>
+<dt>Expressions</dt><dd>Code portions of the file that are used to tell the computer what to do; they are said to "return" a value of some type upon evaluation/execution.</dd>
+</dl>
+</div>
+</div>
+<div id="outline-container-org9a544f2" class="outline-4">
+<h4 id="org9a544f2"><span class="section-number-4">2.1.4.</span> Glint Exercise</h4>
+<div class="outline-text-4" id="text-2-1-4">
+<div class="org-src-container">
+<pre class="src src-glint"><span class="linenr"> 1: </span><span class="org-comment">;; Declare some variables with initial values.</span>
+<span class="linenr"> 2: </span>a <span class="org-operator">:</span> <span class="org-type">int</span> <span class="org-number">42</span>;
+<span class="linenr"> 3: </span>b <span class="org-operator">:</span> <span class="org-type">byte</span> <span class="org-number">27</span>;
+<span class="linenr"> 4: </span>
+<span class="linenr"> 5: </span><span class="org-comment">;; @returns the sum of parameters x and y.</span>
+<span class="linenr"> 6: </span><span class="org-function-name">foo</span> <span class="org-operator">:</span> <span class="org-type">int</span><span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">int</span>, y <span class="org-operator">:</span> <span class="org-type">int</span><span class="org-delimiter">)</span>
+<span class="linenr"> 7: </span>  x <span class="org-operator">+</span> y; <span class="org-comment">;; adds x and y</span>
+<span class="linenr"> 8: </span>
+<span class="linenr"> 9: </span><span class="org-comment">;; Invocation of function foo with parameters a and b.</span>
+<span class="linenr">10: </span>foo a, b;
+</pre>
+</div>
+
+<p>
+The following questions relate to the above example. If you don't know the answer to one, just keep reading and move on, it's okay; you can come back whenever you are ready.
+</p>
+
+<ol class="org-ol">
+<li>On what line does the first <i>expression</i> appear?</li>
+
+<li>On what line does the comment with an @ directive appear?</li>
+
+<li>Is there an expression on line 7?</li>
+
+<li>What would the result of the entire program be?</li>
+
+<li>Is there a comment on line 7?</li>
+</ol>
+
+<p>
+Extra credit:
+</p>
+
+<ol class="org-ol">
+<li>How many parameters does <code>foo</code> take?</li>
+
+<li>What kind of type is <code>foo</code> of?</li>
+</ol>
+</div>
+</div>
+</div>
+<div id="outline-container-org3838760" class="outline-3">
+<h3 id="org3838760"><span class="section-number-3">2.2.</span> Simple Values</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+or, Literals and Constants,
+or, Self-evaluating Expressions.
+</p>
+</div>
+<div id="outline-container-org90132e3" class="outline-4">
+<h4 id="org90132e3"><span class="section-number-4">2.2.1.</span> Integers</h4>
+<div class="outline-text-4" id="text-2-2-1">
+<p>
+Glint supports decimal, hexadecimal, octal, and binary integer literal formats; all except decimal are accessible through a special prefix that begins with <code>0</code>. A decimal number literal may not begin with <code>0</code>.
+</p>
+
+<p>
+A hexadecimal number literal is prefixed with <code>0x</code>. <code>0xf</code> has the value of <code>f</code> in hexadecimal, or <code>15</code> in decimal.
+</p>
+
+<p>
+An octal number literal is prefixed with <code>0o</code>. <code>0o25</code> has the value of <code>25</code> in octal, or <code>21</code> in decimal.
+</p>
+
+<p>
+A binary number literal is prefixed with <code>0b</code>. <code>0b10</code> has the value of <code>10</code> in binary, or <code>2</code> in decimal.
+</p>
+
+<p>
+Integer literals are always of <code>int</code> type.
+</p>
+</div>
+</div>
+<div id="outline-container-orga27a05b" class="outline-4">
+<h4 id="orga27a05b"><span class="section-number-4">2.2.2.</span> Bytes</h4>
+<div class="outline-text-4" id="text-2-2-2">
+<p>
+Glint makes no distinction between character and integer data types (unlike Pascal, and like C).
+</p>
+
+<p>
+Glint provides a way to get the encoded byte value of a character as an integer value in the program, and that is to wrap the character in <code>`</code> (back-ticks).
+</p>
+
+<p>
+<code>`0`</code> is equivalent to <code>48</code>.
+</p>
+
+<p>
+Often, it can be messy to have control characters appear in the source code, so Glint provides an "escape" syntax, such that other, non-control characters may represent the control characters.
+</p>
+
+<p>
+Relevant escape characters include <code>\n</code> for a line feed, <code>\\</code> for a <code>\</code> (backslash), and <code>\t</code> for a tab stop.
+</p>
+
+<p>
+Byte literals are always of <code>byte</code> type.
+</p>
+</div>
+</div>
+<div id="outline-container-org614039c" class="outline-4">
+<h4 id="org614039c"><span class="section-number-4">2.2.3.</span> Boolean</h4>
+<div class="outline-text-4" id="text-2-2-3">
+<p>
+Logical values that denote veracity of an expression.
+</p>
+
+<p>
+<code>true</code> and <code>false</code> keywords to access these values.
+</p>
+
+<p>
+Boolean values are always of <code>s1</code> (one-bit signed integer) type.
+</p>
+</div>
+</div>
+<div id="outline-container-org99154b5" class="outline-4">
+<h4 id="org99154b5"><span class="section-number-4">2.2.4.</span> Strings</h4>
+<div class="outline-text-4" id="text-2-2-4">
+<p>
+A string allows the Glint programmer to include (textual) data directly from the source code into the final program as an array of byte values.
+</p>
+
+<p>
+Inescapable strings are wrapped with <code>'</code> (U+0027, apostrophe), and escape-able strings with <code>"</code> (U+0022, quotation mark).
+</p>
+
+<p>
+An inescapable string will contain the contents between the two <code>'</code> (apostrophes), verbatim. <b><code>\</code> is not special within an inescapable string.</b> An inescapable string may span any amount of newlines.
+</p>
+
+<p>
+<code>'foo\﻿n'</code> -&gt; [102, 111, 111, 92, 110, 0]
+</p>
+
+<p>
+An escape-able string accepts the "escape" syntax that byte literals also accept.
+</p>
+
+<p>
+<code>"foo\﻿n"</code> -&gt; [102, 111, 111, 10, 0]
+</p>
+
+<p>
+For historical reasons, and compatibility with other languages and tooling, Glint strings have a NUL byte (value of zero) appended. So, the empty string literal <code>''</code> contains the bytes <code>[0]</code>, and is of type <code>[byte 1]</code>.
+</p>
+
+<p>
+String literals are always a fixed array of <code>byte</code>, with the length set long enough to store the string and the implicit NUL byte.
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org7ff4cfc" class="outline-3">
+<h3 id="org7ff4cfc"><span class="section-number-3">2.3.</span> Variables</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+A variable is a name we give to some Glint construct. In most cases, a variable refers to data at some address in memory; as such, it is sort of like a labeled, specialty box. The box may only contain the type of data the box is declared to contain, and the box may be referenced by it's name. Any value may go in the box, as long as it fits both in the box and through the opening.
+</p>
+
+<p>
+A variable is a named location in the computer's memory at the time of evaluation.
+You may store data at this named location for easier retrieval later on. The data is stored on a computer, and, as such, is in a binary format (just bits). However, Glint makes use of types of data that the hardware cannot understand, allowing the Glint programmer to write more idiomatic source code. You can think of types as an interpretation of the binary bits that are actually on your computer hardware when the code is running. The type of data that is stored at this location is declared by the programmer either explicitly or implicitly in a <i>declaration expression</i>.
+</p>
+</div>
+<div id="outline-container-org5a63187" class="outline-4">
+<h4 id="org5a63187"><span class="section-number-4">2.3.1.</span> Declaration Forms</h4>
+<div class="outline-text-4" id="text-2-3-1">
+<p>
+A declaration expression may take on several different <i>forms</i>. All of these forms accomplish the same thing (declaring a variable), but in different ways and with different requirements.
+</p>
+
+<p>
+The most standard form of declaration expression is an explicitly-typed variable.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint">x <span class="org-operator">:</span> <span class="org-type">int</span>;
+</pre>
+</div>
+
+<p>
+This sort of expression may be read as, "x is an integer".
+</p>
+
+<p>
+This form may be built upon to include an initializing expression, placed directly after the type expression. In this way, it is equivalent in syntax to an explicit cast expression preceded by an identifier.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint">x <span class="org-operator">:</span> <span class="org-type">int</span> <span class="org-number">69</span>;
+</pre>
+</div>
+
+<p>
+This may be read as, "x is an integer with the value sixty-nine".
+</p>
+
+<p>
+There is another form of declaration, though, that allows us to shorten a lot of code, and reduce duplicated type names in declarations: the type-inferred declaration expression form.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint">x <span class="org-operator">::</span> <span class="org-number">69</span>;
+</pre>
+</div>
+
+<p>
+This may be read as "x has the value of 69". The type of x will be set to whatever the type of the initializing expression is (in this case, <code>int</code>).
+</p>
+
+<p>
+<b>Uninitialized variables are default initialized</b>, which, for the most part, means they have a value of zero (except for dynamic arrays, but, we'll get to that).
+</p>
+</div>
+</div>
+<div id="outline-container-orgc2342a7" class="outline-4">
+<h4 id="orgc2342a7"><span class="section-number-4">2.3.2.</span> Type Decay</h4>
+<div class="outline-text-4" id="text-2-3-2">
+<p>
+One of the more confusing parts of any type system is declaration type decay; as long as you aren't doing anything too weird, you'll never run into problems. But, if you are trying to pass functions as parameters to other functions, it becomes relevant. For now, just understand that some types are quite complex in Glint, but quite simple in the underlying implementation, and that means that sometimes you want the simple underlying implementation rather than all the complexities that come with the Glint type (if that makes any sense).
+</p>
+</div>
+</div>
+<div id="outline-container-org9ad1247" class="outline-4">
+<h4 id="org9ad1247"><span class="section-number-4">2.3.3.</span> Scopes</h4>
+<div class="outline-text-4" id="text-2-3-3">
+<p>
+A <i>scope</i> is a concept of a meaningful collection of declarations. For example, the body of a function is within a new scope, such that any variable declarations are not accessible from outside the function.
+</p>
+
+<p>
+A Glint programmer may open a scope manually by using a block expression; the contents of which is within a new scope.
+</p>
+
+<p>
+Whenever a new scope is created (or <i>opened</i>), it is given a parent scope; if a name lookup doesn't match in the enclosing scope, the parent will be searched until either the name is found or there are no more parent scopes.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">x <span class="org-operator">:</span> <span class="org-type">int</span>;
+
+<span class="org-delimiter">{</span>
+  y <span class="org-operator">:</span> <span class="org-type">int</span>;
+<span class="org-delimiter">}</span>
+
+y; <span class="org-comment">;; Error! Unknown symbol y'</span>
+</pre>
+</div>
+
+<p>
+The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
+</p>
+<pre class="example" id="orga06f091">
+root
+|-- x
+`--block
+   `-- y
+</pre>
+
+<p>
+When we "exit" the block expression, the scope is exited as well; further expressions are once again within the parent scope.
+</p>
+
+<p>
+If we were to lookup <code>x</code> from the <code>block</code> scope, we would not find it in the enclosing scope, search the parent (<code>root</code>), and find it. This means that <code>x</code> is accessible from the block scope, and it would not be an error to use it there.
+</p>
+
+<p>
+On the contrary, if we were to lookup <code>y</code> from the <code>root</code> scope, we would again not find it in the enclosing scope; but, there is no parent of the <code>root</code> scope, so we are done searching. Because we exhausted the search of scopes and did not find a matching declaration, that means this symbol is not valid at this point in the program. That is why the above use of <code>y</code>, outside of the block expression, is invalid.
+</p>
+
+<p>
+In Glint, shadowing is not allowed, so you cannot actually declare a variable of the same name as another if both would be valid at that point.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">x <span class="org-operator">:</span> <span class="org-type">int</span>;
+<span class="org-delimiter">{</span> x <span class="org-operator">:</span> <span class="org-type">int</span>; <span class="org-delimiter">}</span> <span class="org-comment">;; Error! Redeclaration of 'x'</span>
+</pre>
+</div>
+
+<p>
+The following is a non-exhaustive list of expressions which have containing expressions that are parsed in a different scope.
+</p>
+
+<ul class="org-ul">
+<li>Block Expression</li>
+<li>If Expression</li>
+<li>Else Clause</li>
+<li>For/CFor</li>
+<li>Function Body</li>
+<li>Each Match Expression</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org126a32c" class="outline-4">
+<h4 id="org126a32c"><span class="section-number-4">2.3.4.</span> Assignment</h4>
+<div class="outline-text-4" id="text-2-3-4">
+<p>
+Assignment is the operation of setting a variable's value, such that further accesses to the variable result in the set value. Assignment uses the <code>:=</code> operator (like Pascal). Assignment destructively modifies the values in memory associated with the given variable. After assignment, any value that was held in the memory <i>before</i> the assignment is destroyed, and can not be accessed.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">x <span class="org-operator">:</span> <span class="org-type">int</span>;
+
+<span class="org-comment">;; This is an assignment!</span>
+x <span class="org-operator">:=</span> <span class="org-number">69</span>;
+</pre>
+</div>
+
+<p>
+Often, you want to use the variable itself in the calculation of the new value of the variable; there are short-hands for lots of operations mixed with assignment.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint">x <span class="org-operator">::</span> <span class="org-number">42</span>;
+x <span class="org-operator">+=</span> <span class="org-number">27</span>; <span class="org-comment">;; Now, x = 69</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org9f96408" class="outline-4">
+<h4 id="org9f96408"><span class="section-number-4">2.3.5.</span> Glint Exercise</h4>
+<div class="outline-text-4" id="text-2-3-5">
+<p>
+Exercise Mission
+</p>
+<ul class="org-ul">
+<li>Recognize declarations of any form.</li>
+<li>Differentiate variable names, types, and initializing expressions.</li>
+<li>Reason about the values variables have at different points in the control flow of the program.</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-glint">x <span class="org-operator">:</span> <span class="org-type">int</span>;
+y <span class="org-operator">:</span> <span class="org-type">int</span> <span class="org-operator">=</span> <span class="org-number">420</span>;
+
+<span class="org-comment">;; y := y - x;</span>
+y <span class="org-operator">-=</span> x;
+
+x <span class="org-operator">:=</span> <span class="org-number">351</span>;
+
+z <span class="org-operator">::</span> y <span class="org-operator">-</span> x;
+</pre>
+</div>
+
+<p>
+The following questions relate to the above example.
+</p>
+
+<ol class="org-ol">
+<li>What is the name of the first variable declared?</li>
+
+<li>How many variables are declared?</li>
+
+<li>What is the value of variable 'y' when the program starts, and when the program finishes?</li>
+
+<li>What is the initial value of 'z'?</li>
+
+<li>What is the type of 'z'?</li>
+
+<li>What is the value of the variable 'x' when the program starts, and when the program finishes?</li>
+</ol>
+</div>
+</div>
+</div>
+<div id="outline-container-org4b7b82f" class="outline-3">
+<h3 id="org4b7b82f"><span class="section-number-3">2.4.</span> Basic Expressions</h3>
+<div class="outline-text-3" id="text-2-4">
+</div>
+<div id="outline-container-org9120bec" class="outline-4">
+<h4 id="org9120bec"><span class="section-number-4">2.4.1.</span> Arithmetic</h4>
+<div class="outline-text-4" id="text-2-4-1">
+<p>
+Glint programs often need to do basic math; for this, there are the arithmetic operators. These include the standard addition (<code>+</code>), subtraction (<code>-</code> ), multiplication (<code>*</code>), division (<code>/</code>), and modulo (<code>%</code>).
+</p>
+</div>
+</div>
+<div id="outline-container-org5df6663" class="outline-4">
+<h4 id="org5df6663"><span class="section-number-4">2.4.2.</span> Bitwise</h4>
+<div class="outline-text-4" id="text-2-4-2">
+<p>
+On computers, data is represented as bits. Bitwise operations allow you to operate directly on the data bits, rather than on sets of bits with some applied semantics (i.e. an 8-bit signed byte). Bitwise operations include AND, OR, XOR, and NOT.
+</p>
+</div>
+</div>
+<div id="outline-container-orgb80e3e2" class="outline-4">
+<h4 id="orgb80e3e2"><span class="section-number-4">2.4.3.</span> Implicit Casting</h4>
+<div class="outline-text-4" id="text-2-4-3">
+<p>
+In Glint, the philosophy is that you should have to write less code <i>when you can</i>. That means that, as long as everything is clear to the compiler, you don't need to mark up your program with meaning that is already implied. This reduces the code the Glint programmer has to write, and, in turn, reduces chances that they may introduce a bug.
+</p>
+
+<p>
+An integer is implicitly convertible to a boolean, and vice versa.
+</p>
+
+<p>
+For integer to integer casts, it is valid if the bitwidth we are casting from is less than or equal to the bitwidth we are casting to, OR, if the values are known at compile time, if data is preserved through performing the cast.
+</p>
+
+<p>
+A struct is implicitly convertible to any supplanted member.
+</p>
+
+<p>
+A fixed array is implicitly convertible to an array view.
+</p>
+
+<p>
+A dynamic array is implicitly convertible to an array view.
+</p>
+
+<p>
+Functions are implicitly convertible to their corresponding function pointers.
+</p>
+
+<p>
+Functions with no parameters are implicitly convertible to their return type.
+</p>
+
+<p>
+Pointers are convertible to <code>void.ptr</code>.
+</p>
+</div>
+</div>
+<div id="outline-container-org6a2d8b4" class="outline-4">
+<h4 id="org6a2d8b4"><span class="section-number-4">2.4.4.</span> Explicit Casting</h4>
+<div class="outline-text-4" id="text-2-4-4">
+<p>
+To treat a variable's memory as if it were of another type, you can explicitly cast a value. To do this, simply invoke the type with a single argument of the type you'd like to cast.
+</p>
+
+<p>
+To cast integer <code>42</code> to <code>byte</code>:
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">byte</span> <span class="org-number">42</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orge43def8" class="outline-4">
+<h4 id="orge43def8"><span class="section-number-4">2.4.5.</span> Glint Exercise</h4>
+<div class="outline-text-4" id="text-2-4-5">
+<p>
+TODO
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-orgebc3e7f" class="outline-3">
+<h3 id="orgebc3e7f"><span class="section-number-3">2.5.</span> Glint's Print</h3>
+<div class="outline-text-3" id="text-2-5">
+<p>
+Often, a program will need to "print" values, such that a human running the program may see them. We still use the word "print", but we are not referring to printing onto paper; now-a-days, we have software terminals which are much faster and cheaper to run than a dedicated printer <code>:^)</code>.
+</p>
+
+<p>
+In <code>Glint</code>, the <code>print</code> keyword acts as a pseudo-function, and inserts code for each argument passed to it according to the type of the argument.
+</p>
+
+<ul class="org-ul">
+<li><code>void</code> arguments signal an error.</li>
+<li><code>byte</code> arguments get printed immediately using <code>putchar</code> or similar.</li>
+<li><code>[byte]</code>, <code>[byte view]</code>, and fixed byte arrays (i.e. <code>[byte 4]</code>) arguments get each byte printed using <code>putchar</code> or similar.</li>
+<li>Otherwise, a call to <code>format</code>, a function that returns a dynamic byte array, is inserted, the contents of that returned dynamic byte array are printed, and then the dynamic array is freed.</li>
+</ul>
+
+<p>
+Since byte literals are of <code>byte</code> type, they get printed "verbatim". The following Glint program would print <code>420</code> and then a newline (line feed character).
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">print</span> <span class="org-number">`4`</span>, <span class="org-number">`2`</span>, <span class="org-number">`0`</span>, <span class="org-number">`\n`</span>;
+</pre>
+</div>
+</div>
+<div id="outline-container-org2dc0e9a" class="outline-4">
+<h4 id="org2dc0e9a"><span class="section-number-4">2.5.1.</span> Glint Exercise</h4>
+<div class="outline-text-4" id="text-2-5-1">
+<p>
+TODO
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org3196124" class="outline-3">
+<h3 id="org3196124"><span class="section-number-3">2.6.</span> Arrays</h3>
+<div class="outline-text-3" id="text-2-6">
+<p>
+An array is a (contiguous) collection of a given element type.
+</p>
+
+<p>
+A fixed array has the amount of elements known at compile-time. This is like arrays in the C language.
+</p>
+
+<p>
+A dynamic array has the amount of elements known at runtime. This is like vectors in the C++ language.
+</p>
+
+<p>
+An array view is a non-owning view of a contiguous collection of elements of a given type.
+</p>
+</div>
+<div id="outline-container-org582deef" class="outline-4">
+<h4 id="org582deef"><span class="section-number-4">2.6.1.</span> Fixed Arrays</h4>
+<div class="outline-text-4" id="text-2-6-1">
+<p>
+A fixed array has the amount of elements known at compile-time. This means that the compiler is able to check every compile-time known subscript to be in range. You should use this type of array if the amount of elements never changes.
+</p>
+
+<p>
+The type of a string literal is a fixed array with an element type of <code>byte</code>. The size of the fixed array is the amount of bytes needed to contain the contents of the string literal, plus one for the implicit terminating NUL byte.
+</p>
+</div>
+</div>
+<div id="outline-container-org12a3664" class="outline-4">
+<h4 id="org12a3664"><span class="section-number-4">2.6.2.</span> Dynamic Arrays</h4>
+<div class="outline-text-4" id="text-2-6-2">
+<p>
+A dynamic array may have any amount of elements; any given instance of a dynamic array type stores a value regarding it's size.
+</p>
+
+<p>
+A dynamic array's <code>data</code> pointer is initialized using the return value of <code>malloc</code> (A function provided by the C standard library). Glint is (mainly) intended to write userspace programs, and as such defaults to defining <code>main</code> (such that a C runtime may call it). Therefore, Glint implementations may rely on the presence of any C runtime functions (like <code>malloc</code>) to implement their features.
+</p>
+
+<p>
+That's right! Dynamic arrays are <i>always</i> default initialized, and <code>data</code> <i>always</i> points to some memory of size <code>capacity * byte_size_of_element_type</code>.
+</p>
+
+<p>
+Therefore, the elements of a dynamic array are available via a subscriptable pointer at the <code>data</code> member. The first element of dynamic array <code>d</code> is accessible via <code>@d.data[0]</code>; there is a short-hand that subscripting a dynamic array directly is equivalent to subscripting it's <code>data</code> member. That means the first element is usually accessed using <code>@d[0]</code>.
+</p>
+
+<p>
+You can think of a dynamic array type as a shorthand for defining the following struct, where <code>T</code> is the element type of the dynamic array.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">[T]</span>;
+<span class="org-comment">;; equivalent to</span>
+<span class="org-type">struct</span> <span class="org-delimiter">{</span>
+  data <span class="org-operator">:</span> <span class="org-type">T.ptr</span>;
+  size <span class="org-operator">:</span> <span class="org-type">uint</span>;
+  capacity <span class="org-operator">:</span> <span class="org-type">uint</span>;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+
+<p>
+Where <code>size</code> is the first invalid index at <code>data</code>. <code>capacity</code> refers to the size of memory located at <code>data</code>. If the memory at <code>data</code> is not large enough to store an inserted element, <code>data</code> is reallocated and all of the old elements are copied to the new memory.
+</p>
+
+<p>
+An element may be prepended to (added to the front of) a dynamic array using the <code>~=</code> operator.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint">d <span class="org-operator">:</span> <span class="org-type">[byte]</span>;
+d <span class="org-operator">~=</span> <span class="org-number">`9`</span>;
+d <span class="org-operator">~=</span> <span class="org-number">`6`</span>;
+
+<span class="org-comment">;; Outputs 69, then a newline</span>
+<span class="org-keyword">print</span> d, <span class="org-number">`\n`</span>;
+</pre>
+</div>
+
+<p>
+An element may be appended to (added to the back of) a dynamic array using the <code>+=</code> operator.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint">d <span class="org-operator">:</span> <span class="org-type">[byte]</span>;
+d <span class="org-operator">+=</span> <span class="org-number">`6`</span>;
+d <span class="org-operator">+=</span> <span class="org-number">`9`</span>;
+
+<span class="org-comment">;; Outputs 69, then a newline</span>
+<span class="org-keyword">print</span> d, <span class="org-number">`\n`</span>;
+</pre>
+</div>
+
+<p>
+Finally, when a dynamic array is declared, memory is allocated; that means that, after the dynamic array is done being used, the programmer must free it by using the unary minus operator <code>-</code>.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint">d <span class="org-operator">:</span> <span class="org-type">[byte]</span>;
+d <span class="org-operator">+=</span> <span class="org-number">`6`</span>;
+d <span class="org-operator">+=</span> <span class="org-number">`9`</span>;
+
+<span class="org-comment">;; Outputs 69, then a newline</span>
+<span class="org-keyword">print</span> d, <span class="org-number">`\n`</span>;
+
+<span class="org-comment">;; Free the memory associated with the dynamic array.</span>
+<span class="org-operator">-</span>d;
+<span class="org-comment">;; Any further uses of 'd' would be a program error reported by the</span>
+<span class="org-comment">;; compiler.</span>
+</pre>
+</div>
+
+<p>
+A dynamic array is compatible with a ranged for loop expression (more on that later).
+</p>
+</div>
+</div>
+<div id="outline-container-orgcd6128c" class="outline-4">
+<h4 id="orgcd6128c"><span class="section-number-4">2.6.3.</span> Array Views</h4>
+<div class="outline-text-4" id="text-2-6-3">
+<p>
+You can think of a view type as a shorthand for defining the following struct, where <code>T</code> is the element type.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">[T view]</span>;
+<span class="org-comment">;; equivalent to</span>
+<span class="org-type">struct</span> <span class="org-delimiter">{</span>
+  data <span class="org-operator">:</span> <span class="org-type">T.ptr</span>;
+  size <span class="org-operator">:</span> <span class="org-type">uint</span>;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+
+<p>
+A view is meant to act as the minimal representation of a contiguous set of elements of a given type; it contains a pointer to the contiguous memory where all the elements are stored, as well as a value denoting how many elements are stored there.
+</p>
+
+<p>
+A view is compatible with a ranged for loop expression (more on that later).
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org1d5a8a6" class="outline-3">
+<h3 id="org1d5a8a6"><span class="section-number-3">2.7.</span> Conditionals and Control Flow</h3>
+<div class="outline-text-3" id="text-2-7">
+</div>
+<div id="outline-container-orgab11663" class="outline-4">
+<h4 id="orgab11663"><span class="section-number-4">2.7.1.</span> <code>if</code></h4>
+<div class="outline-text-4" id="text-2-7-1">
+<p>
+<code>if</code> evaluates a condition expression, and, if the result is truthy, evaluates a body expression. Optionally, when an <code>else</code> clause is present, a different body expression will be evaluated if the result of evaluating the condition expression is falsy.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">if</span> condition, body;
+</pre>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">if</span> condition,
+  then
+<span class="org-keyword">else</span> otherwise;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org6f4768b" class="outline-4">
+<h4 id="org6f4768b"><span class="section-number-4">2.7.2.</span> <code>while</code></h4>
+<div class="outline-text-4" id="text-2-7-2">
+<p>
+<code>while</code> evaluates a condition expression, and, if the result is truthy, evaluates a body expression. After evaluating the body expression, it will jump back to evaluating the condition expression.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">while</span> condition, body;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgf2a64ed" class="outline-4">
+<h4 id="orgf2a64ed"><span class="section-number-4">2.7.3.</span> <code>for</code></h4>
+<div class="outline-text-4" id="text-2-7-3">
+<p>
+<code>for</code> is a loop structure that will iterate over anything with <code>data</code> and <code>size</code> members (like dynamic arrays or array views). It provides a reference to the corresponding element for each iteration.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">for</span> element <span class="org-keyword">in</span> container, body;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org6d9dff1" class="outline-4">
+<h4 id="org6d9dff1"><span class="section-number-4">2.7.4.</span> <code>cfor</code></h4>
+<div class="outline-text-4" id="text-2-7-4">
+<p>
+<code>cfor</code> is a control structure that mimics C's <code>for</code>.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">cfor</span> init; condition; increment; body;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgfcf49d9" class="outline-4">
+<h4 id="orgfcf49d9"><span class="section-number-4">2.7.5.</span> <code>match</code></h4>
+<div class="outline-text-4" id="text-2-7-5">
+<p>
+<code>match</code> selects a control flow depending on which member of a sum type is held.
+</p>
+
+<p>
+<code>match</code> must handle every possible member a sum type may have.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">match</span> value_of_sum_type, <span class="org-delimiter">{</span>
+  .member0 expr;
+  .member1 expr;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orged440ee" class="outline-3">
+<h3 id="orged440ee"><span class="section-number-3">2.8.</span> Declared Types</h3>
+<div class="outline-text-3" id="text-2-8">
+</div>
+<div id="outline-container-org038cd43" class="outline-4">
+<h4 id="org038cd43"><span class="section-number-4">2.8.1.</span> Structs</h4>
+<div class="outline-text-4" id="text-2-8-1">
+<p>
+The most important declared type there is, the <code>struct</code>. A struct is a way to group other types together in memory, and reference each type's value by a name.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">struct</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">uint</span>;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+
+<p>
+Given an instance of the above struct, setting the value of <code>x</code> would <b>not</b> alter the value of <code>y</code>, and vice versa. They are unique, named points in memory.
+</p>
+
+<p>
+To access these points, you use the member access operator, <code>.</code>, with the object you are trying to access on the left hand side, and the name of the member you are trying to reference on the right hand side. A member access, as it references a unique point in memory, may be assigned to.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">A <span class="org-operator">::</span> <span class="org-type">struct</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">int</span>;
+<span class="org-delimiter">}</span>;
+
+foo <span class="org-operator">:</span> <span class="org-type">A</span>;
+
+foo.x <span class="org-operator">:=</span> <span class="org-number">70</span>;
+foo.y <span class="org-operator">:=</span> <span class="org-operator">-</span><span class="org-number">1</span>;
+
+foo.x <span class="org-operator">+</span> foo.y;
+</pre>
+</div>
+</div>
+<ol class="org-ol">
+<li><a id="orgb0beb5d"></a>Supplanted Members<br />
+<div class="outline-text-5" id="text-2-8-1-1">
+<p>
+A struct may have another struct (or sum) type supplanted within it; this means that the supplanted type's members are now accessible as if they were members of the struct the member resides in. In reality, the compiler does generate a unique name for the member and generates code to access that member by name; this construct is simply for the programmer's convenience.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">A <span class="org-operator">::</span> <span class="org-type">struct</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">int</span>;
+<span class="org-delimiter">}</span>;
+
+B <span class="org-operator">::</span> <span class="org-type">struct</span> <span class="org-delimiter">{</span>
+  <span class="org-keyword">supplant</span> A;
+  z <span class="org-operator">:</span> <span class="org-type">int</span>;
+<span class="org-delimiter">}</span>;
+
+foo <span class="org-operator">:</span> <span class="org-type">B</span>;
+foo.x;
+foo.y;
+foo.z;
+</pre>
+</div>
+</div>
+</li>
+</ol>
+</div>
+<div id="outline-container-org5c2c1fb" class="outline-4">
+<h4 id="org5c2c1fb"><span class="section-number-4">2.8.2.</span> Unions</h4>
+<div class="outline-text-4" id="text-2-8-2">
+<p>
+A union is a way to store multiple types in one place in memory. A union is only as big as it's largest member.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">union</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">uint</span>;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+
+<p>
+Given an instance of the above struct, <b>setting the value of <code>x</code> would alter the value of <code>y</code></b>, and vice versa. They <i>are</i> named points in memory, but they are not unique. You could say a union gives multiple names to the same position in memory.
+</p>
+
+<p>
+If you can't picture why that'd be useful, then you don't ever need to use unions; they are really just there so that people who want to solve problems a certain way are able to do it that way.
+</p>
+</div>
+</div>
+<div id="outline-container-orgaa8f353" class="outline-4">
+<h4 id="orgaa8f353"><span class="section-number-4">2.8.3.</span> Enumerations</h4>
+<div class="outline-text-4" id="text-2-8-3">
+<p>
+Enumerations, often shortened to just <i>enums</i>, are named constant values.
+</p>
+
+<p>
+Let's say you wanted the number <code>1</code> to be called <code>Success</code>, and the number <code>7</code> to be called <code>Erased</code>, to make your Glint code more readable, or understandable.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint">Code <span class="org-operator">::</span> <span class="org-type">enum</span><span class="org-delimiter">(</span><span class="org-type">int</span><span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
+  Success <span class="org-operator">::</span> <span class="org-number">1</span>;
+  Erased <span class="org-operator">::</span> <span class="org-number">7</span>;
+<span class="org-delimiter">}</span>;
+
+Code.Success; <span class="org-comment">;; = 1</span>
+Code.Erased; <span class="org-comment">;; = 7</span>
+</pre>
+</div>
+
+<p>
+Enumerators (in Glint) are <i>just named constants</i>. As such, the values of an enumerator must be known at compile time. The underlying value type may be specified within parentheses.
+</p>
+
+<p>
+If you come from Rust (you crustacean, you), see sum types for what you may call enums. If you come from C or C++, not too much has changed.
+</p>
+</div>
+</div>
+<div id="outline-container-org9e5f8e2" class="outline-4">
+<h4 id="org9e5f8e2"><span class="section-number-4">2.8.4.</span> Sums</h4>
+<div class="outline-text-4" id="text-2-8-4">
+<p>
+A sum is a way to store <b>one of</b> a group of types in one position.
+</p>
+
+<p>
+A sum type is a lot like a union, except that when you access a member of a sum type, it is verified that the member you are accessing is <i>actually</i> currently stored in the memory where that member is stored. You see, each member of a sum type is stored at the same position in memory (like a union), but the sum type also keeps track of what member was last assigned to, and, as such, what kind of value is stored in it's member memory.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">sum</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">int</span>;
+  z <span class="org-operator">:</span> <span class="org-type">byte</span>;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+
+<p>
+Given an instance of the above struct, <b>setting the value of <code>x</code> would alter the value of</b> <code>y</code>, and vice versa. The catch is that, you would never be able to access <code>y</code> after setting <code>x</code>; doing so would actually cause the program to exit.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">A <span class="org-operator">::</span> <span class="org-type">sum</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">byte</span>;
+<span class="org-delimiter">}</span>;
+
+foo <span class="org-operator">:</span> <span class="org-type">A</span>;
+foo.x; <span class="org-comment">;; program exits here</span>
+</pre>
+</div>
+
+<p>
+The only way to get your Glint program to continue execution when accessing a sum's member is to access the <i>right</i> one. The <i>right</i> one is whichever one is currently stored in the sum type. Note that this is NOT calculated at compile-time; each sum type stores a value in the computer's memory <i>at run-time</i> indicating which member is valid (if any). The compiler automatically generates code to update this value accordingly whenever assigning to any sum type's member.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">A <span class="org-operator">::</span> <span class="org-type">sum</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">byte</span>;
+<span class="org-delimiter">}</span>;
+
+foo <span class="org-operator">:</span> <span class="org-type">A</span>;
+foo.x <span class="org-operator">:=</span> <span class="org-number">69</span>;
+foo.y; <span class="org-comment">;; program exits here</span>
+</pre>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-glint">A <span class="org-operator">::</span> <span class="org-type">sum</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">byte</span>;
+<span class="org-delimiter">}</span>;
+
+foo <span class="org-operator">:</span> <span class="org-type">A</span>;
+foo.x <span class="org-operator">:=</span> <span class="org-number">69</span>;
+foo.y <span class="org-operator">:=</span> foo.x;
+foo.y;
+foo.x; <span class="org-comment">;; program exits here</span>
+</pre>
+</div>
+
+<p>
+The members of a given instance of a sum type may not co-exist at any one time. However, over the "lifetime" of an instance of a sum type, any amount of members may be valid.
+</p>
+
+<p>
+You may query if a given member is valid using the <code>has</code> unary prefix operator.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">A <span class="org-operator">::</span> <span class="org-type">sum</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">byte</span>;
+<span class="org-delimiter">}</span>;
+
+foo <span class="org-operator">:</span> <span class="org-type">A</span>;
+foo.x <span class="org-operator">:=</span> <span class="org-number">69</span>;
+foo.y <span class="org-operator">:=</span> foo.x;
+
+out <span class="org-operator">:</span> <span class="org-type">int</span>;
+
+<span class="org-keyword">if</span> <span class="org-delimiter">(</span>has foo.x<span class="org-delimiter">)</span>, out <span class="org-operator">:=</span> foo.x;
+<span class="org-keyword">if</span> <span class="org-delimiter">(</span>has foo.y<span class="org-delimiter">)</span>, out <span class="org-operator">:=</span> foo.y;
+
+out;
+</pre>
+</div>
+
+<p>
+To avoid long chains of <code>if</code> expressions used in conjunction with <code>has</code>, as seen above, the <code>match</code> expression may be used in turn. In fact, there are more benefits to using <code>match</code>, such as compile-time guarantee that every possible member has a control flow to handle it.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">A <span class="org-operator">::</span> <span class="org-type">sum</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">byte</span>;
+<span class="org-delimiter">}</span>;
+
+foo <span class="org-operator">:</span> <span class="org-type">A</span>;
+foo.x <span class="org-operator">:=</span> <span class="org-number">69</span>;
+foo.y <span class="org-operator">:=</span> foo.x;
+
+<span class="org-keyword">match</span> foo, <span class="org-delimiter">{</span>
+  .x out <span class="org-operator">:=</span> foo.x;
+  .y out <span class="org-operator">:=</span> foo.y;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+
+<p>
+The match expression will execute exactly one of it's named body expressions: the one matching the name of the value currently stored in the instance of the given sum type.
+</p>
+
+<p>
+The program would not compile if there were no body expression named <code>x</code> or if there were no body expression named <code>y</code>; every declared member within the sum type must have an expression associated with it in a <code>match</code> expression on that sum type.
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-orgdb0519b" class="outline-3">
+<h3 id="orgdb0519b"><span class="section-number-3">2.9.</span> Basic Functions</h3>
+<div class="outline-text-3" id="text-2-9">
+<p>
+A <i>function</i> is a concept that programming borrows from mathematics.
+</p>
+
+<p>
+Remember \( f(x) \) in math class? That is a <i>function application</i>. What it means is that, <code>f</code> is some operation (or sequence of operations) that we would like to apply to <code>x</code>. Hence, <i>application</i>.
+</p>
+
+<p>
+In programming, we've extended math to suit our use-case; variables have types associated with them, for example (not really a thing in math: numbers are numbers).
+</p>
+
+<p>
+Functions are no different; programming extends them to better fit the common use-cases.
+</p>
+
+<p>
+Just like in math, Glint functions may have any amount of parameters.
+</p>
+
+<p>
+Remember <code>f(x)</code> from before? <code>x</code> is a <i>function parameter</i>. <code>f</code> is said to be a function with a single parameter. A parameter is a variable (as in, it may vary) value that may change upon different invocations of the function. You may think of it like a name for a placeholder value that will be filled in at some later point.
+</p>
+
+<dl class="org-dl">
+<dt>On Parameters vs Arguments</dt><dd>Parameters appear in the function declaration and definition, while arguments appear in each function invocation. An argument is the value that a parameter takes on during a particular invocation of a function.</dd>
+</dl>
+
+<p>
+NOTE: Function arguments are evaluated "in order"; that is, the order they appear <i>in the function's type declaration</i>.
+</p>
+
+<p>
+Functions do not <i>just</i> execute an operation, or sequence of operations, though. They apply operations in order to form a result value, which is then said to be "returned from" the function, upon application. In Glint, the result of evaluating the last expression in a function is the return value, unless otherwise explicitly returning via <code>return</code>.
+</p>
+
+<p>
+A function's return value is constrained to be of the declared return type of the function (such that uses of the function may rely upon a binary format of the returned value).
+</p>
+
+<p>
+NOTE: There is a special built-in type named <code>void</code> which declares the absence of a valid binary value. Therefore, it is an incomplete type and uses of it are invalid. However, it is most used as the return type of a function that doesn't return anything; that way, the compiler knows not to expect a value to return, and you don't have to return an <code>int</code> for no reason or something (making future users of your module question why in the world you are returning zero from a function every time).
+</p>
+
+<p>
+Basic functions allow the programmer to de-duplicate code, increase readability, and form custom control flow.
+</p>
+
+<p>
+You should write a function when you find yourself writing the same set of expressions over and over, with just a few values swapped out for another in each set. Instead, extract that set of expressions into a function body, then invoke that function each time you need to do that set of operations.
+</p>
+
+<p>
+Basic function example:
+</p>
+<div class="org-src-container">
+<pre class="src src-glint">foo <span class="org-operator">:</span> <span class="org-type">[int 2]</span> <span class="org-operator">!</span><span class="org-delimiter">{</span> <span class="org-number">69</span>, <span class="org-number">42</span> <span class="org-delimiter">}</span>;
+bar <span class="org-operator">:</span> <span class="org-type">[int 2]</span> <span class="org-operator">!</span><span class="org-delimiter">{</span> <span class="org-number">27</span>, <span class="org-number">42</span> <span class="org-delimiter">}</span>;
+baz <span class="org-operator">:</span> <span class="org-type">[int 2]</span> <span class="org-operator">!</span><span class="org-delimiter">{</span> <span class="org-number">64920</span>, <span class="org-number">42</span> <span class="org-delimiter">}</span>;
+
+<span class="org-operator">@</span>foo[<span class="org-number">1</span>] <span class="org-operator">*=</span> <span class="org-number">10</span>;
+<span class="org-operator">@</span>bar[<span class="org-number">1</span>] <span class="org-operator">*=</span> <span class="org-number">10</span>;
+<span class="org-operator">@</span>baz[<span class="org-number">1</span>] <span class="org-operator">*=</span> <span class="org-number">10</span>;
+</pre>
+</div>
+
+<p>
+With a function:
+</p>
+<div class="org-src-container">
+<pre class="src src-glint">foo <span class="org-operator">:</span> <span class="org-type">[int 2]</span> <span class="org-operator">!</span><span class="org-delimiter">{</span> <span class="org-number">69</span>, <span class="org-number">42</span> <span class="org-delimiter">}</span>;
+bar <span class="org-operator">:</span> <span class="org-type">[int 2]</span> <span class="org-operator">!</span><span class="org-delimiter">{</span> <span class="org-number">27</span>, <span class="org-number">42</span> <span class="org-delimiter">}</span>;
+baz <span class="org-operator">:</span> <span class="org-type">[int 2]</span> <span class="org-operator">!</span><span class="org-delimiter">{</span> <span class="org-number">64920</span>, <span class="org-number">42</span> <span class="org-delimiter">}</span>;
+
+<span class="org-function-name">ten_times_second</span> <span class="org-operator">:</span> <span class="org-type">void</span><span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">[int 2]</span><span class="org-delimiter">)</span>
+  <span class="org-operator">@</span>x[<span class="org-number">1</span>] <span class="org-operator">*=</span> <span class="org-number">10</span>;
+
+ten_times_second foo;
+ten_times_second bar;
+ten_times_second baz;
+</pre>
+</div>
+
+<p>
+As you can see, when proper names are picked, functions increase the ability for code readers to understand what the code is trying to do (vs what it may actually be doing). They also allow for easier refactors; imagine you want to also multiply the first value of every array by 3. That would be one expression, one extra line of Glint code to write in the function body. Without a function, you'd have to write and edit that line of code where every invocation is! For this simple example, it would be doable, but, with a large and growing codebase, that becomes more and more difficult.
+</p>
+</div>
+<div id="outline-container-orgff26616" class="outline-4">
+<h4 id="orgff26616"><span class="section-number-4">2.9.1.</span> Function Attributes</h4>
+</div>
+</div>
+<div id="outline-container-org83fc6db" class="outline-3">
+<h3 id="org83fc6db"><span class="section-number-3">2.10.</span> Pointers and References</h3>
+<div class="outline-text-3" id="text-2-10">
+<p>
+We've talked a little about how variables (for the most part) are named locations in the computer's memory. When we say memory, we mean it's RAM (<i>Random Access Memory</i>). RAM is (usually) a linear set of addressable bytes that the CPU may read from and write to.
+</p>
+
+<p>
+When we say <i>addressable</i>, we mean that there is a unique way of referring to each and every byte within that linear set. Mostly, this is done simply by index, and we call this index a <i>memory address</i>.
+</p>
+
+<p>
+A <i>pointer</i> is simply a memory address; an index into that linear set of bytes that the CPU can do whatever it wants with. In Glint, pointers have an associated underlying type; the type tells Glint how to interpret the value in memory at that memory address. So, a value of type <code>int.ptr</code> (a pointer to an integer) will be some index into the linear memory array; we don't really care what it is. If we were to <code>load</code> the value at that memory address (technically the next eight values, since an <code>int</code> is eight bytes), we would then have a value of type <code>int</code>.
+</p>
+
+<p>
+In Glint, subscripting is the act of offsetting a pointer by some multiple of the size of a given type. So, to continue with our last example, subscripting a value of type <code>int.ptr</code> by one would increase the value by eight, since that is the size in bytes of an integer. The idea is, the first subscript of a pointer gets the address where the next element in contiguous memory would be, if there were one. This applies to every value, not just the first, so the zero-eth subscript leaves the pointer unchanged, while the second subscript increases the pointer by the size of two elements (sixteen bytes in the case of <code>int.ptr</code>).
+</p>
+
+<p>
+Do keep in mind that, unlike most other languages, Glint's subscript does <b>NOT</b> dereference. That is, the act of subscripting does not load any values in Glint; it simply calculates the memory address. In order to load a value from a memory address, you have to dereference it. In Glint, that is done via the unary prefix operator <code>@</code> (i.e. get the value "at" the given memory address).
+</p>
+</div>
+</div>
+<div id="outline-container-org0e9c997" class="outline-3">
+<h3 id="org0e9c997"><span class="section-number-3">2.11.</span> Templates</h3>
+<div class="outline-text-3" id="text-2-11">
+<p>
+Templates, at their core, are expressions which evaluate to other expressions.
+</p>
+
+<p>
+A template is a special form of expression that results in an expression upon evaluation. You can think of it as code that generates code.
+</p>
+
+<p>
+This is often useful when you have some expression (or set of expressions) that end up being duplicated throughout a function, with just a few values swapped out for different ones here and there.
+</p>
+
+<p>
+First, let's look at the most basic template expression: the <i>identity</i> template.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">template<span class="org-delimiter">(</span>x <span class="org-operator">:</span> expr<span class="org-delimiter">)</span> x;
+</pre>
+</div>
+
+<p>
+This template expression, when invoked with an expression, would evaluate to that argument expression unchanged.
+</p>
+
+<p>
+Often, you want to use a template more than once; for convenience, a Glint programmer may name a template expression. This may also improve readability. Remember that templates are NOT functions! They are their own type of invocable (callable) expression.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">identity <span class="org-operator">::</span> template<span class="org-delimiter">(</span>x <span class="org-operator">:</span> expr<span class="org-delimiter">)</span> x;
+
+<span class="org-comment">;; Evaluates to '69420'.</span>
+identity <span class="org-number">69420</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgdc26f35" class="outline-3">
+<h3 id="orgdc26f35"><span class="section-number-3">2.12.</span> Function Overloading</h3>
+<div class="outline-text-3" id="text-2-12">
+<p>
+Glint supports <i>function overloading</i>, which is the idea of giving multiple definitions to a single, named function; each definition differs in their signature (return type and/or parameter types), and the compiler determines which definition to call at each call site based on the types of the argument expressions.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-comment">;; [0]</span>
+<span class="org-function-name">make_byte</span> <span class="org-operator">:</span> <span class="org-type">byte</span><span class="org-delimiter">(</span>v <span class="org-operator">:</span> <span class="org-type">int</span><span class="org-delimiter">)</span>
+  <span class="org-type">byte</span> v;
+
+<span class="org-comment">;; [1]</span>
+<span class="org-function-name">make_byte</span> <span class="org-operator">:</span> <span class="org-type">byte</span><span class="org-delimiter">(</span>v <span class="org-operator">:</span> <span class="org-type">byte</span><span class="org-delimiter">)</span>
+  v;
+
+make_byte <span class="org-number">69</span>; <span class="org-comment">;; calls [0]</span>
+make_byte <span class="org-number">`0`</span>; <span class="org-comment">;; calls [1]</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgec998ce" class="outline-3">
+<h3 id="orgec998ce"><span class="section-number-3">2.13.</span> Operator Overloading</h3>
+<div class="outline-text-3" id="text-2-13">
+<p>
+<i>Operators</i> are tokens, or sequences of tokens, that may be placed somewhere around an expression in order to alter the result of the expression in some way. Operators may be defined by how many inputs they operate on (<i>arity</i>), as well as where the operator is placed in relation to the inputs (prefix, infix, or postfix). An operator that comes before the single expression it operates on would be a <i>unary prefix operator</i>. An operator that sits between the two expressions it operates on would be a <i>binary infix operator</i>.
+</p>
+
+<p>
+For simple types like pointers or integers, an operator will map quite neatly to one (or a minimal amount of) machine instruction(s), so there is really no advantage to defining functions for these operations; instead, we insert the instructions directly.
+</p>
+
+<p>
+However, in Glint, a programmer may declare their own types, as well as variables with values of those declared types. The programmer may want to take advantage of these operators for their own types; to accomplish this, Glint inserts calls to specially-named functions when these custom types are used in these operators that normally wouldn't support them. The programmer may then define these functions themselves, customizing the code that runs when these operators are used.
+</p>
+
+<p>
+TODO: syntax example
+</p>
+</div>
+</div>
+<div id="outline-container-org8511a7c" class="outline-3">
+<h3 id="org8511a7c"><span class="section-number-3">2.14.</span> Templated Functions and Templated Types</h3>
+<div class="outline-text-3" id="text-2-14">
+<p>
+You do not ever need to implement a vector in Glint, as there is the dynamic array type built-in to the language. However, vectors are simple to understand, and widespread enough that I believe this to be the best (as in least-confusing) example to give.
+</p>
+
+<p>
+A templated type is like a template expression that defines a type.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">vector <span class="org-operator">::</span> <span class="org-type">struct</span> <span class="org-delimiter">(</span>T <span class="org-operator">:</span> <span class="org-type">type</span><span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
+  data <span class="org-operator">:</span> <span class="org-type">T.ptr</span>;
+  size <span class="org-operator">:</span> <span class="org-type">uint</span>;
+  capacity <span class="org-operator">:</span> <span class="org-type">uint</span>;
+<span class="org-delimiter">}</span>;
+
+my_vec_of_int <span class="org-operator">:</span> <span class="org-type">vector</span> <span class="org-type">int</span>;
+</pre>
+</div>
+
+<p>
+A templated function is like a template expression that defines a function.
+The catch here is that the template arguments are all types (because, well, templating a function on a value seems an awful lot like you may just want to use a parameter instead <code>:^)</code>). Because of that, the syntax has removed the <code>(T1 : type, T2 : type)</code> boilerplate in favor of automagically generating them from the amount of unique <code>auto</code> types in the signature. Notice the <code>auto</code> type allows for partial definition of a type, just like C++20's concepts.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">vector_push <span class="org-operator">:</span> <span class="org-type">void</span><span class="org-delimiter">(</span>vec <span class="org-operator">:</span> <span class="org-delimiter">(</span>vector auto.element<span class="org-delimiter">)</span>.ref, val <span class="org-operator">:</span> <span class="org-type">auto</span>.element<span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
+  <span class="org-keyword">if</span> vec.size <span class="org-operator">+</span> <span class="org-number">2</span> <span class="org-operator">&gt;</span> vec.capacity,
+    vector_grow vec;
+
+  <span class="org-operator">@</span>vec.data[vec.size] <span class="org-operator">:=</span> val;
+  vec.size <span class="org-operator">+=</span> <span class="org-number">1</span>;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+
+<p>
+Now, upon invocation of <code>vector_push</code>, the compiler will first look for a defined function with the signature matching the given arguments (i.e. <code>auto.element</code> is <code>int</code>). If it exists, it will call it. If it doesn't, it will use the templated function's body as a template body and expand it with the given type(s). It will then call that defined function.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">vector_push <span class="org-operator">::</span> template<span class="org-delimiter">(</span>element <span class="org-operator">:</span> type<span class="org-delimiter">)</span>
+  <span class="org-function-name">vector_push_impl</span> <span class="org-operator">:</span> <span class="org-type">void</span><span class="org-delimiter">(</span>vec <span class="org-operator">:</span> vector element, val <span class="org-operator">:</span> element<span class="org-delimiter">)</span>
+    ...;
+
+<span class="org-comment">;; Invocations could be thought of like this</span>
+<span class="org-delimiter">(</span>vector_push <span class="org-type">int</span><span class="org-delimiter">)</span> my_vec_of_int <span class="org-number">69</span>;
+</pre>
+</div>
+
+<p>
+Basically, a templated function is shorthand to define a template that defines a unique function for every unique set of types passed in place of <code>auto</code> in the parameters.
+</p>
+</div>
+</div>
+<div id="outline-container-org9aef097" class="outline-3">
+<h3 id="org9aef097"><span class="section-number-3">2.15.</span> Modules</h3>
+<div class="outline-text-3" id="text-2-15">
+</div>
+<div id="outline-container-orgaeba439" class="outline-4">
+<h4 id="orgaeba439"><span class="section-number-4">2.15.1.</span> Writing A Module Vs A Program</h4>
+<div class="outline-text-4" id="text-2-15-1">
+<p>
+A Glint program is a collection of Glint source code that may be compiled and linked to an executable. A Glint program may import Glint modules.
+</p>
+
+<p>
+A Glint module is a collection of Glint source code that does not compile to executable, but rather a library. This library then may be used by a linker to include it's code in a separate executable. This library is also used by the Glint compiler to resolve the Glint module's metadata that produced it when compiling code that imports the module.
+</p>
+
+<p>
+Programs and modules may import modules, but neither programs nor modules may import programs.
+</p>
+</div>
+</div>
+<div id="outline-container-orgd3731b0" class="outline-4">
+<h4 id="orgd3731b0"><span class="section-number-4">2.15.2.</span> Exporting Variables</h4>
+<div class="outline-text-4" id="text-2-15-2">
+<p>
+A Glint module may export any amount of variables, such that those variables are accessible by any Glint program or module that imports the module. This is done via the <code>export</code> keyword, a storage specifier. Storage specifiers come before the name, within a declaration expression.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">module</span> Foo;
+
+<span class="org-keyword">export</span> foo <span class="org-operator">:</span> <span class="org-type">int</span> <span class="org-number">69</span>;
+</pre>
+</div>
+
+<p>
+Within Glint, you may now put <code>import Foo;</code> at the top of a file, and subsequent expressions will execute as if <code>foo : int 69;</code> was at the top of the file (but without having to execute any code for that to happen!).
+</p>
+
+<p>
+In practice, this most often makes the symbol associated with the variable "visible" to the linker in the generated object file. This means that other object files may reference the symbol to access, operate on, and interact with the variable.
+</p>
+</div>
+</div>
+<div id="outline-container-orgeaba148" class="outline-4">
+<h4 id="orgeaba148"><span class="section-number-4">2.15.3.</span> Importing Modules</h4>
+<div class="outline-text-4" id="text-2-15-3">
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">import</span> Foo;
+
+foo; <span class="org-comment">;; equals int 69</span>
+</pre>
+</div>
+
+<p>
+TODO: Mention Glint compiler not being able to find module metadata.
+</p>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orgb87bc36" class="outline-2">
+<h2 id="orgb87bc36"><span class="section-number-2">3.</span> Types</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+Just some extra information on the type sub-language. A lot of the first portion of the book goes into expressions, and types are used within them, but the types themselves are not fully expanded upon in one area. That's why this exists.
+</p>
+</div>
+<div id="outline-container-orgd3be353" class="outline-3">
+<h3 id="orgd3be353"><span class="section-number-3">3.1.</span> Built-in Types</h3>
+<div class="outline-text-3" id="text-3-1">
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-comment">;; architecture-sized integer. 64 bits on x86_64, for example.</span>
+<span class="org-type">int</span>;
+<span class="org-comment">;; architecture-sized unsigned integer. Same size as 'int'.</span>
+<span class="org-type">uint</span>;
+<span class="org-comment">;; Boolean: binary value 'true' or 'false'.</span>
+<span class="org-type">bool</span>;
+<span class="org-comment">;; The nothing type. Declares absence of something (i.e. a function that</span>
+<span class="org-comment">;; doesn't return anything).</span>
+<span class="org-type">void</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org07e341c" class="outline-3">
+<h3 id="org07e341c"><span class="section-number-3">3.2.</span> FFI Types</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+FFI stands for Foreign Function Interface. These types allow you to define variables as if they had a type from another language. For now, C is the only supported "foreign" (read: non-Glint) language by the Lensor Compiler Collection Glint implementation.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-comment">;; The convention is to take the primitive integer type from C, and</span>
+<span class="org-comment">;; prepend the 'c' character, codepoint U+0063. Where 'unsigned' would</span>
+<span class="org-comment">;; appear, instead prepend 'cu'.</span>
+<span class="org-type">cshort</span>;     <span class="org-comment">;; 'short'</span>
+<span class="org-type">cint</span>;       <span class="org-comment">;; 'int'</span>
+<span class="org-type">clong</span>;      <span class="org-comment">;; 'long'</span>
+<span class="org-type">clonglong</span>;  <span class="org-comment">;; 'long long'</span>
+<span class="org-comment">;; Unsigned</span>
+<span class="org-type">cushort</span>;    <span class="org-comment">;; 'unsigned short'</span>
+<span class="org-type">cuint</span>;      <span class="org-comment">;; 'unsigned int'</span>
+<span class="org-type">culong</span>;     <span class="org-comment">;; 'unsigned long'</span>
+<span class="org-type">culonglong</span>; <span class="org-comment">;; 'unsigned long long'</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgd4b04db" class="outline-3">
+<h3 id="orgd4b04db"><span class="section-number-3">3.3.</span> Arbitrary Integers</h3>
+<div class="outline-text-3" id="text-3-3">
+<p>
+TODO
+</p>
+</div>
+</div>
+<div id="outline-container-org7e07405" class="outline-3">
+<h3 id="org7e07405"><span class="section-number-3">3.4.</span> Types with One Element</h3>
+<div class="outline-text-3" id="text-3-4">
+</div>
+<div id="outline-container-org57d4116" class="outline-4">
+<h4 id="org57d4116"><span class="section-number-4">3.4.1.</span> Pointers</h4>
+<div class="outline-text-4" id="text-3-4-1">
+<p>
+You can make a pointer to any type by appending <code>.ptr</code>.
+</p>
+
+<p>
+This is a pointer to a signed integer type.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">int.ptr</span>;
+</pre>
+</div>
+
+<p>
+Pointers may be loaded from, which yields the underlying type.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">value <span class="org-operator">:</span> <span class="org-type">int</span>
+  <span class="org-number">69</span>;
+pointer <span class="org-operator">:</span> <span class="org-type">int.ptr</span>
+  <span class="org-operator">&amp;</span>value;
+loaded_value <span class="org-operator">:</span> <span class="org-type">int</span>
+  <span class="org-operator">@</span>pointer;
+</pre>
+</div>
+
+<p>
+Pointers may be stored into, which destrucively modifies the underlying value.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">value <span class="org-operator">:</span> <span class="org-type">int</span>
+  <span class="org-number">69</span>;
+pointer <span class="org-operator">:</span> <span class="org-type">int.ptr</span>
+  <span class="org-operator">&amp;</span>value;
+
+<span class="org-operator">@</span>pointer <span class="org-operator">:=</span> <span class="org-number">420</span>;
+
+value <span class="org-operator">=</span> <span class="org-number">69</span>; <span class="org-comment">;; false!!!</span>
+</pre>
+</div>
+
+<p>
+As you can see, a pointer doesn't store an <code>int</code> value, it stores somewhere an <code>int</code> may be found (upon loading from it). This also lets you change the value where that <code>int</code> may be found (upon storing into it).
+</p>
+</div>
+</div>
+<div id="outline-container-orgd611893" class="outline-4">
+<h4 id="orgd611893"><span class="section-number-4">3.4.2.</span> References</h4>
+<div class="outline-text-4" id="text-3-4-2">
+<p>
+You can make a reference to <i>almost</i> any type by appending <code>.ref</code>.
+</p>
+
+<p>
+This is a reference to a signed integer type.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">int.ref</span>;
+</pre>
+</div>
+
+<p>
+Like a pointer, a reference doesn't store the underlying value, but a location where that value may be found. The difference is that a reference does not require <i>explicit</i> loading and storing via the <code>@</code> operator; you can just use it like it's the underlying type.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">value <span class="org-operator">:</span> <span class="org-type">int</span>
+  <span class="org-number">69</span>;
+
+reference <span class="org-operator">:</span> <span class="org-type">int.ref</span>
+  <span class="org-operator">&amp;</span>value;
+
+reference <span class="org-operator">-=</span> <span class="org-number">27</span>;
+
+value <span class="org-operator">=</span> <span class="org-number">42</span>; <span class="org-comment">;; true!!!</span>
+</pre>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-function-name">reference_example</span> <span class="org-operator">:</span> <span class="org-type">uint</span><span class="org-delimiter">()</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orgc36a125" class="outline-3">
+<h3 id="orgc36a125"><span class="section-number-3">3.5.</span> Composite Types</h3>
+<div class="outline-text-3" id="text-3-5">
+<p>
+A composite type is a type that is made up of other types; that is, these types allow you to group types together.
+</p>
+</div>
+<div id="outline-container-org83f468a" class="outline-4">
+<h4 id="org83f468a"><span class="section-number-4">3.5.1.</span> Struct Types</h4>
+<div class="outline-text-4" id="text-3-5-1">
+<p>
+A struct type is a sequential set of typed values that may be accessed via a given name. These are called the struct's <i>members</i>.
+</p>
+
+<p>
+For an instance of the following struct&#x2026;
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">struct</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">:</span> <span class="org-type">int</span>;
+  y <span class="org-operator">:</span> <span class="org-type">uint</span>;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+
+<p>
+If <code>x</code> was modified, <code>y</code> would be unchanged, and vice versa. A struct may have as many members as you could feasibly want, and their types are not required to be unique. You may have two <code>int</code> typed values in one struct with different names.
+</p>
+</div>
+</div>
+<div id="outline-container-org3368865" class="outline-4">
+<h4 id="org3368865"><span class="section-number-4">3.5.2.</span> Union Types</h4>
+<div class="outline-text-4" id="text-3-5-2">
+<p>
+A union type is an non-type-safe way of converting between types. A union declaration looks a lot like a struct, but the underlying semantics are very different. For one, a union is only large enough to store it's largest member, and all the members share an address. This means that, if one member is changed, all the others are destructively modified! For most use cases, you should use a sum type instead. But, this is here if you know what you are doing and need to do it your way. You are the Glint programmer, after all, you are in total control.
+</p>
+
+<p>
+For a real world use case: use unions to convert between a type and it's binary format easily.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">union</span> <span class="org-delimiter">{</span>
+  value <span class="org-operator">:</span> <span class="org-type">int</span>;
+  bytes <span class="org-operator">:</span> <span class="org-type">[byte (sizeof int)]</span>;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org7e44565" class="outline-4">
+<h4 id="org7e44565"><span class="section-number-4">3.5.3.</span> Sum Types</h4>
+<div class="outline-text-4" id="text-3-5-3">
+<p>
+A sum type is a type-safe way of storing a group of types in one location. A sum type may only have one of it's members valid at a time, and, each time an access is performed, Glint will safely (and forcefully) exit the program before any memory errors may occur iff the access is not to the valid member.
+</p>
+
+<p>
+A sum type's members are much like a union type's: only one member is valid at a given point in the program, and all the members share an address. However, the sum type has a hidden <code>tag</code> value that stores which member is currently valid (if any). Whenever an access occurs, this tag may be checked against, and an access to an invalid value will error. This means that sum types do not allow you to convert between types, like a union, but they do allow you to have one variable have "one of a group of" types.
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org6f101dc" class="outline-3">
+<h3 id="org6f101dc"><span class="section-number-3">3.6.</span> <code>sizeof</code> and <code>alignof</code></h3>
+<div class="outline-text-3" id="text-3-6">
+<p>
+<code>sizeof T</code> where <code>T</code> is any valid type will return the size <b>IN BITS</b> of the given type.
+</p>
+
+<p>
+<code>alignof T</code> where <code>T</code> is any valid type will return the size <b>IN BYTES</b> of the given type.
+</p>
+</div>
+<div id="outline-container-org583c957" class="outline-4">
+<h4 id="org583c957"><span class="section-number-4">3.6.1.</span> On bits vs bytes</h4>
+<div class="outline-text-4" id="text-3-6-1">
+<p>
+Bit alignment is not something that is supported by any real machine or language. By definition, a byte is the minimum addressable unit in any computer. So, when it comes to alignment of an address, bytes are relevant. However, when it comes to the size of a type in Glint, bits are definitely relevant, since you may have a <code>u27</code> or a <code>s42</code>.
+</p>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org6a85fde" class="outline-2">
+<h2 id="org6a85fde"><span class="section-number-2">4.</span> Postface</h2>
+<div class="outline-text-2" id="text-4">
+</div>
+<div id="outline-container-orgd836bc6" class="outline-3">
+<h3 id="orgd836bc6"><span class="section-number-3">4.1.</span> Example Programs</h3>
+<div class="outline-text-3" id="text-4-1">
+</div>
+<div id="outline-container-orgd3f9d90" class="outline-4">
+<h4 id="orgd3f9d90"><span class="section-number-4">4.1.1.</span> Hello, World!</h4>
+<div class="outline-text-4" id="text-4-1-1">
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">print</span> <span class="org-string">"Hello, World!"</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgf129b45" class="outline-4">
+<h4 id="orgf129b45"><span class="section-number-4">4.1.2.</span> Factorial</h4>
+<div class="outline-text-4" id="text-4-1-2">
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-function-name">factorial</span> <span class="org-operator">:</span> <span class="org-type">uint</span><span class="org-delimiter">(</span>n <span class="org-operator">:</span> <span class="org-type">uint</span><span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
+  result <span class="org-operator">::</span> <span class="org-number">1</span>;
+
+  <span class="org-keyword">cfor</span>
+      i <span class="org-operator">:</span> <span class="org-type">uint</span> <span class="org-number">1</span>;
+      i <span class="org-operator">&lt;=</span> n;
+      i <span class="org-operator">+=</span> <span class="org-number">1</span>;
+    result <span class="org-operator">*=</span> i;
+
+  result;
+<span class="org-delimiter">}</span>;
+
+<span class="org-comment">;; Calculate the factorial of 5, and return that.</span>
+factorial <span class="org-number">5</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org678799a" class="outline-4">
+<h4 id="org678799a"><span class="section-number-4">4.1.3.</span> Recursive Fibonacci</h4>
+<div class="outline-text-4" id="text-4-1-3">
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-function-name">fib</span> <span class="org-operator">:</span> <span class="org-type">uint</span><span class="org-delimiter">(</span>n <span class="org-operator">:</span> <span class="org-type">uint</span><span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
+  <span class="org-keyword">if</span> n <span class="org-operator">&lt;=</span> <span class="org-number">1</span>, <span class="org-keyword">return</span> n;
+  <span class="org-delimiter">(</span>fib n <span class="org-operator">-</span> <span class="org-number">1</span><span class="org-delimiter">)</span> <span class="org-operator">+</span> <span class="org-delimiter">(</span>fib n <span class="org-operator">-</span> <span class="org-number">2</span><span class="org-delimiter">)</span>;
+<span class="org-delimiter">}</span>;
+
+<span class="org-comment">;; Calculate 7th number in the Fibonacci sequence, and return that.</span>
+fib <span class="org-number">7</span>;
+</pre>
+</div>
+
+<p>
+Writing this example actually caught a bug in the compiler implementation regarding IR generation; see commit 9d152973, if interested.
+</p>
+</div>
+</div>
+<div id="outline-container-orgb89e413" class="outline-4">
+<h4 id="orgb89e413"><span class="section-number-4">4.1.4.</span> Euclid GCD</h4>
+<div class="outline-text-4" id="text-4-1-4">
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-function-name">gcd</span> <span class="org-operator">:</span> <span class="org-type">uint</span><span class="org-delimiter">(</span>a <span class="org-operator">:</span> <span class="org-type">uint</span>, b <span class="org-operator">:</span> <span class="org-type">uint</span><span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
+  <span class="org-keyword">if</span> b <span class="org-operator">=</span> <span class="org-number">0</span>, <span class="org-keyword">return</span> a;
+  gcd b, a % b;
+<span class="org-delimiter">}</span>;
+
+<span class="org-comment">;; Calculate the greatest common denominator of 32 and 80, and return</span>
+<span class="org-comment">;; that.</span>
+gcd <span class="org-number">32</span>, <span class="org-number">80</span>;
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>

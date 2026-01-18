@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- 2026-01-18 Sun 12:23 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>&lrm;</title>
+<meta name="author" content="Lens_r" />
+<meta name="generator" content="Org Mode" />
+<link rel="stylesheet" href="all.css">
+</head>
+<body>
+<div id="content" class="content">
+<div id="outline-container-org26a4dc4" class="outline-2">
+<h2 id="org26a4dc4"><span class="section-number-2">1.</span> The Glint Build Process</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+Glint is most often used to make programs that a user may run on their computer; to make these programs faster, Glint code is translated into something more understandable for a machine to execute. We store this more efficient form in a file called an executable. It's an <i>executable</i> because it contains data which a computer may treat as code and, well, <i>execute</i> it.
+</p>
+
+<p>
+This translation process is called <i>compilation</i>.
+</p>
+
+<p>
+The tool used to achieve this translation is a <i>compiler</i>. A compiler is just another program on your computer. Glint programs are made using a Glint compiler. A compiler is just another program on your computer, and, as such, may be invoked via the command line or via another program (maybe even a graphical one).
+</p>
+
+<p>
+After writing Glint code (usually saved in a file), the compiler is ran with the code as input, to produce an output that directly represents the Glint code (without containing the Glint code itself).
+</p>
+
+<p>
+This output may need further processing by further tooling (like linking by a linker) to be executable.
+</p>
+
+<p>
+Once the executable is obtained, running it is equivalent to executing the Glint source code it was generated from.
+</p>
+</div>
+</div>
+</div>
+</body>
+</html>
