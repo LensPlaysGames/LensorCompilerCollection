@@ -1,0 +1,34 @@
+================
+Line Comment
+:syntax
+================
+
+;; cool
+
+---
+
+(block)
+
+================
+Block Comment
+:syntax
+================
+
+[-
+cool
+-]
+
+---
+
+(block)
+
+================
+Empty Block Comment
+:syntax
+================
+
+[--]
+
+---
+
+(block)
