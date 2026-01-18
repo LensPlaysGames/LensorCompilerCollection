@@ -19,7 +19,8 @@ set(
 # ============================================================================
 #  Global CMake Variables
 # ============================================================================
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # Export compilation database in JSON format.
+# Export compilation database in JSON format.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
