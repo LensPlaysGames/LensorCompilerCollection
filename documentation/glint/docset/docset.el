@@ -166,6 +166,12 @@ Return the absolute file path of the generated HTML."
     ;;     src/keywords/*.org
     ;; We want constants like =true=.
     ;;     src/constants/*.org
+    ;; We want operators like =+=.
+    ;;     src/operators/*.org
+    ;; We want modules like =std.io=.
+    ;;     src/modules/*.org
+    ;; We want errors like =expected=.
+    ;;     src/errors/*.org
 
     ;; index.org -> HTML
     (docset-org-to-html "./src/index.org")

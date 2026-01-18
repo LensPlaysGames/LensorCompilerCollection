@@ -5,4 +5,8 @@ This is the Zeal docset for the Glint programming language.
 Main reference and tutorial can be found here:
 [[file:thebook.html][The Book]]
 
-[[https://github.com/LensPlaysGames/LensorCompilerCollection][Glint Compiler (LCC) on GitHub]]
+** External Resources
+
+You can [[https://lensplaysgames.github.io/LensorCompilerCollection/lcc.html][write Glint online]] and see the real-time, /actual/ compiler's output, just like Compiler Explorer.
+
+[[https://github.com/LensPlaysGames/LensorCompilerCollection][Glint Compiler Source Code on GitHub]]
