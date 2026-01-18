@@ -2,6 +2,7 @@
 
 This is the Zeal docset for the Glint programming language.
 
-[[https://github.com/LensPlaysGames/LensorCompilerCollection][Glint Compiler (LCC)]]
+Main reference and tutorial can be found here:
+[[file:thebook.html][The Book]]
 
-[[thebook.html][The Book]]
+[[https://github.com/LensPlaysGames/LensorCompilerCollection][Glint Compiler (LCC) on GitHub]]

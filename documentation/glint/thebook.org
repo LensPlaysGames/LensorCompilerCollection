@@ -2,6 +2,9 @@
 #+author: lens_r
 #+created: 2025-11-04
 
+# Export a table of contents
+#+options: toc:t
+
 # Do not treat _ and ^ as subscript and superscript, respectively.
 #+options: ^:{}
 

@@ -1,0 +1,46 @@
+* Foreign Function Interface
+
+** Declaring External Functions
+
+Calling functions defined in other languages from Glint (and vice versa).
+
+In Glint, you can declare a function without defining it using =external=.
+
+#+begin_src glint
+  ;; declared in C's stdio.h
+  external putchar : cint(ch : cint);
+#+end_src
+
+Equivalent in C/C++:
+#+begin_src c
+  #include <stdio.h>
+  // Declared in C's stdio.h
+  extern "C" int putchar(int ch);
+#+end_src
+
+Equivalent in LLVM IR:
+#+begin_src llvm
+  declare external i32 @putchar (i32 %0)
+#+end_src
+
+Use of an external function is dictated by the declared type, just like a defined function. If the declared type of the function doesn't match the actual function's implementation, errors that are hard to debug may occur, differing across calling conventions.
+
+** Defining Functions for External Use
+
+Glint may define functions that are then called from another language. Actually, any Glint function may be called from another language, but, there are language features to make it easier.
+
+#+begin_src glint
+  my_glint_function : cint() nomangle
+    69;
+#+end_src
+
+The =nomangle= function attribute specifies that the function signature should not be encoded into the function name (such as to allow for overloading); this means other languages don't have to use an esoteric, mangled function name: WYSIWYG.
+
+From C, the above function could be called like (assuming both Glint and C programs are built and linked to form a single binary).
+#+begin_src c
+  extern int my_glint_function();
+
+  int my_c_function() {
+    return my_glint_function();
+  }
+#+end_src
