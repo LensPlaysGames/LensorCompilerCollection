@@ -312,6 +312,39 @@ void lcc::glint::Lexer::NextToken() {
         case '[': {
             tok.kind = TokenKind::LBrack;
             NextChar();
+
+            // "[-" :: block comment
+            if (lastc == '-') {
+                NextChar();
+                bool lbrack{false};
+                bool exit_possible{false};
+                while (lastc) {
+                    if (exit_possible and lastc == ']')
+                        break;
+                    else exit_possible = false;
+
+                    if (lbrack and lastc == '-') {
+                        Warning(
+                            ErrorId::Miscellaneous,
+                            "Apparent nested block comment; this is not supported"
+                        );
+                    } else lbrack = false;
+
+                    if (lastc == '-')
+                        exit_possible = true;
+                    else if (lastc == '[')
+                        lbrack = true;
+
+                    NextChar();
+                }
+                if (lastc != ']') {
+                    Error(
+                        ErrorId::Expected,
+                        "Unterminated block comment: expected `-]`"
+                    );
+                } else NextChar();
+                return NextToken();
+            }
         } break;
 
         case ']': {
