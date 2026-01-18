@@ -306,15 +306,28 @@ _________________
   | ;; it easier to understand. They begin with ;; and end with a newline or
   | ;; end of file (EOF).
   | 
+  | ;; Variable Declaration
+  | my/array : [byte];
+  | 
+  | my/array += `8`; ;; append
+  | my/array ~= `5`; ;; prepend
+  | 
+  | ;; Iteration
+  | for b in my/array,
+  |   b += 1;
+  | 
+  | ;; Emit "69".
+  | print my/array, `\n`;
+  | 
   | ;; Some Glint tooling (namely glintdoc) makes use of special comments that
   | ;; precede declarations. They usually contain @ directives.
   | 
-  | foo : int;
+  | ;; @returns the answer to the universe.
+  | my/cool-function! : int()
+  |   42;
   | 
-  | ;; @returns updated value of 'foo'.
-  | ;; @see foo;
-  | getset_foo : int()
-  |   foo := ++foo;
+  | ;; Emit "420".
+  | print 10 my/cool-function!, `\n`;
   | 
   | ;; The final expression in the program is returned.
   | 69;
