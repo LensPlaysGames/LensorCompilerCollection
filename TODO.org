@@ -20,16 +20,16 @@
 
 * Glint
 
+- [Parser/Sema]: =embed "path";= -> string literal of file contents
 - [Cereal]: Flesh out binary AST format
 - [Parser/Sema]: Switch on value
 - [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
 - [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=
+- [Sema]: =maps_arguments= function attribute
+
 - [Parser/Sema]: Unary operator (keyword) for asserting compile time evaluation
   =evaluate=?
   "evaluate 42 + 27" -> "69".
-- [Parser/Sema]: =embed "path";= -> string literal of file contents
-- [Sema]: =maps_arguments= function attribute
-
 - [Parser]: Warn when multiple expressions appear on one line
 - [Parser/Sema]: Compile-time Checked Interpolation: =printf "value: {}\n", 69;=
   This won't be different from =print=, I just like this style of doing
@@ -54,6 +54,7 @@
 - [Diags]: Get rid of "Miscellaneous" ErrorId
 - [Lexer]: Case Insensitivity
   Behind =---case-insensitive= flag?
+  Or =---case-sensitive=?
 - [Parser/Sema]: Recursive Lambda
 - [Parser/Sema]: Named scopes
 - [Module]: =---ast-binary= to emit binary representation of AST
@@ -64,6 +65,8 @@
 - [Meta]: Fix abuse of =ast.hh=
 
   It's just far too far-reaching, all-encompassing.
+
+  Ideally, we'd /at least/ separate the definitions of the "base" types (Expr, Type, Loop) and the "final" types (ReturnExpr, etc).
 - [Sema]: =---no-default-handlers=
   If passed, do not include definitions for the functionality that Sema generates calls to, for example (i.e. =__dynarray_grow=).
 - [Lexer]: Disallow =_X= anywhere in identifiers (for mangled name compatibility)
