@@ -36,6 +36,9 @@
   things (and a lot of people tend to prefer it over splitting strings).
   This will lower into a =print= call, splitting the format string into
   relevant string literals (split on `{}`).
+
+  Also =println=, which just adds a byte literal =\n= as a final argument.
+- [Sema]: Include an =int= formatter function, so that people can write =print 420=, and it "just works".
 - [Sema]: =out;= as first expression of function body becomes declaration of return type
   Or maybe behind a =builds_result= attribute, where =result= is then automagically declared as a variable of the return type.
 - [Meta]: glintlang website
@@ -70,3 +73,9 @@
 - [Sema]: =---no-default-handlers=
   If passed, do not include definitions for the functionality that Sema generates calls to, for example (i.e. =__dynarray_grow=).
 - [Lexer]: Disallow =_X= anywhere in identifiers (for mangled name compatibility)
+- [Parser/Sema]: Module versioning
+
+  Require MAJOR.MINOR.PATCH version in module declaration.
+  Require MAJOR.MINOR.PATCH version during module import.
+
+  The idea is, the "package.json" of Glint should be the file header. It should contain the declaration of the "package", as well as dependencies, including versions.
