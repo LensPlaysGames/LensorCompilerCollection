@@ -19,6 +19,17 @@ struct Register {
     // This denotes the size of the register being accessed.
     // On x86_64, to access RAX set this to 64; 32 for EAX.
     uint size;
+    // This denotes the "type" of register this instance refers to; it is
+    // mainly used by the register allocator in order to assign from the
+    // proper "pool" of registers. Really, if register category doesn't match,
+    // the registers interfere (other than when unspecified).
+    enum class Category {
+        UNSPECIFIED,
+        DEFAULT = UNSPECIFIED,
+        FLOAT,
+
+        COUNT
+    } category{Category::DEFAULT};
     // When true, this instance refers to the use of the register that sets
     // the value.
     // For register allocation: liveness tracking.
@@ -346,6 +357,9 @@ class MFunction {
 
     std::vector<MBlock> _blocks{};
 
+    // TODO: This is awful; we need to reduce interop between IR and MIR as
+    // much as possible, and this just directly violates that.
+    // high priority
     std::vector<AllocaInst*> _locals{};
 
     std::set<u8> _registers_used{};

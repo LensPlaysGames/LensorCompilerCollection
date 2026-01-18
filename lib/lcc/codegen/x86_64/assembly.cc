@@ -41,6 +41,7 @@ auto block_name(const std::string& in) -> std::string {
 
 } // namespace
 
+// FIXME: ToString is a bad name for this!
 auto ToString(MFunction& function, MOperand op) -> std::string {
     static_assert(
         std::variant_size_v<MOperand> == 6,
@@ -160,8 +161,6 @@ void emit_gnu_att_assembly(
             );
         }
 
-        // TODO: Total hack just to try and get the source to show up at all in a
-        // debugger. We would need real location information to properly do this.
         // Keep in mind that debug lines are 1-indexed.
         //   .loc <file-id> <line-number> [ <column-number> ]
         if (function.location().seekable(module->context())) {
@@ -198,6 +197,22 @@ void emit_gnu_att_assembly(
             0,
             std::plus{}
         );
+        std::unordered_map<usz, usz> spill_offsets{};
+        for (auto& block : function.blocks()) {
+            for (auto& instruction : block.instructions()) {
+                if (instruction.opcode() == +MInst::Kind::Spill) {
+                    auto& r = std::get<MOperandRegister>(
+                        instruction.all_operands().at(0)
+                    );
+                    auto i = std::get<MOperandImmediate>(
+                        instruction.all_operands().at(1)
+                    );
+                    LCC_ASSERT(r.size % 8 == 0, "Invalid spilled register size");
+                    stack_frame_size += r.size / 8;
+                    spill_offsets[i.value] = stack_frame_size;
+                }
+            }
+        }
         if (stack_frame_size) {
             constexpr usz alignment = 16;
             stack_frame_size = utils::AlignTo(stack_frame_size, alignment);
@@ -238,6 +253,47 @@ void emit_gnu_att_assembly(
                     auto next_block = function.blocks().at(usz(block_index + 1));
                     if (target_block->name() == next_block.name())
                         continue;
+                }
+
+                // ================================
+                // SPILL
+                // ================================
+                if (instruction.opcode() == +MInst::Kind::Spill) {
+                    // Store register operand onto the stack at "spill offset - reg.size"
+                    auto& r = std::get<MOperandRegister>(
+                        instruction.all_operands().at(0)
+                    );
+                    // slot
+                    auto i = std::get<MOperandImmediate>(
+                        instruction.all_operands().at(1)
+                    );
+                    LCC_ASSERT(r.size % 8 == 0, "Invalid spilled register size");
+                    out += fmt::format(
+                        "    {} {}, -{}(%rbp)\n",
+                        ToString(Opcode(+x86_64::Opcode::MoveDereferenceRHS)),
+                        ToString(function, r),
+                        spill_offsets.at(i.value)
+                    );
+                    continue;
+                }
+                // ================================
+                // UNSPILL
+                // ================================
+                if (instruction.opcode() == +MInst::Kind::Unspill) {
+                    // slot
+                    auto i = std::get<MOperandImmediate>(
+                        instruction.all_operands().at(0)
+                    );
+                    out += fmt::format(
+                        "    {} -{}(%rbp), {}\n",
+                        ToString(Opcode(+x86_64::Opcode::MoveDereferenceLHS)),
+                        spill_offsets.at(i.value),
+                        ToString(
+                            function,
+                            MOperandRegister(instruction.reg(), (uint) instruction.regsize())
+                        )
+                    );
+                    continue;
                 }
 
                 // ================================
@@ -610,7 +666,13 @@ void emit_gnu_att_assembly(
 
     if (output_path.empty() or output_path == "-")
         fmt::print("{}", out);
-    else File::WriteOrTerminate(out.data(), out.size(), output_path);
+    else {
+        File::WriteOrTerminate(
+            out.data(),
+            out.size(),
+            output_path
+        );
+    }
 }
 
 } // namespace lcc::x86_64

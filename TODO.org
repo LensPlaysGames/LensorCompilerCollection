@@ -9,8 +9,6 @@
 
   I may just use "regular" Register operands and have special instructions that "treats" register operands as float registers... I dunno. I guess I need /some/ way of telling the register allocator to allocate certain registers...
 
-- [Register Allocation]: Register (un)spilling
-  I need to create an LCC IR source that will cause spilling to happen; I currently can't really figure out how to get Glint to generate code that needs it...
 - [Meta]: Flatten source structure, re-organize into folders as necessary
 - [LangTest]: fail test specifier given an expected error id in brackets
   i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expected/ diagnostic is emitted, not just a similar one.

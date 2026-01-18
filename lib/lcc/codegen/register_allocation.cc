@@ -362,7 +362,7 @@ auto allocate_registers(
     //      list the "coloring stack".
     //   5. Assign colors to registers, ensuring no overlap (adjacencies), in
     //      order of the coloring stack.
-    //     5a. TODO If we can't color with the existing stack, spill a register
+    //     5a. If we can't color with the existing stack, spill a register
     //         and retry.
     //   6. Map colors to registers, updating all register operands to the
     //      allocated register.
@@ -577,12 +577,16 @@ auto allocate_registers(
             }
         }
 
+        // STEP FIVE A
+        // 5a. If we can't color with the existing stack, spill a register
+        //     and retry.
+        //
         // If we were not able to assign a register value, that means there are
         // zero registers in the machine description that don't interfere with the
         // current virtual register; that is, there is no hardware register for
         // this virtual register to be assigned to. As such, in this case, we are
         // not able to allocate registers for the function (in it's current
-        // state).
+        // state). So, let's modify the function's state such that we can :^).
         if (not reg_value) {
             // There are zero hardware registers that don't interfere with the
             // current virtual register we are trying to color; we need to pick one of
@@ -593,10 +597,12 @@ auto allocate_registers(
             // Get virtual register value we need to spill
             LCC_ASSERT(register_interferences.size());
             auto spilled_hardreg = *(register_interferences.begin());
-            fmt::print("Spilling r{}\n", spilled_hardreg);
-            usz spilled_vreg{0};
+
+            // Spilling hardware register 'spilled_hardreg'
+
             // Look in the adjacency lists to map the list with the interfering color
             // back to the virtual register the list is associated with.
+            usz spilled_vreg{0};
             for (auto& l : lists) {
                 if (l.value != spilled_hardreg and l.color == spilled_hardreg) {
                     spilled_vreg = l.value;
@@ -608,17 +614,58 @@ auto allocate_registers(
                 "Unable to resolve assigned hardware register back to virtual register for spilling"
             );
 
-            fmt::print("  vreg r{}\n", spilled_vreg);
+            // Get virtual register size (we really should have an "origin
+            // instruction" member in adjacency lists... or /something/).
+            usz spilled_vreg_size{0};
+            for (auto& block : function.blocks()) {
+                for (auto& inst : block.instructions()) {
+                    if (inst.reg() == spilled_vreg) {
+                        spilled_vreg_size = inst.regsize();
+                        break;
+                    }
+                    for (auto op : inst.all_operands()) {
+                        if (std::holds_alternative<MOperandRegister>(op)) {
+                            auto& r = std::get<MOperandRegister>(op);
+                            if (r.value == spilled_vreg) {
+                                spilled_vreg_size = r.size;
+                                break;
+                            }
+                        }
+                    }
+                    if (spilled_vreg_size) break;
+                }
+                if (spilled_vreg_size) break;
+            }
+            LCC_ASSERT(
+                spilled_vreg_size,
+                "Unable to resolve virtual register back to it's defining use for spilling"
+            );
 
             // We need to find instruction by virtual register value (find relevant
             // defining use).
             // Once we have this instruction, we need to insert a "save to stack"
             // instruction (spill) directly following it.
+            // We need to insert the spill after the last instruction with
+            // inst.reg() == spilled_vreg in the function.
+            // This is because a single instruction may become multiple during
+            // instruction selection.
+            //     %0 = add i32 1, 1
+            //     V
+            //     %0 = mov $1 into %0
+            //     %0 = add $1 into %0
+            // We want the spill after the add, not the move.
             bool spill_after{false};
             for (auto& block : function.blocks()) {
                 if (spill_after) break;
                 for (auto [inst_i, inst] : vws::enumerate(block.instructions())) {
                     // for every instruction...
+
+                    auto next_inst = block.instructions().begin() + inst_i + 1;
+                    bool next_inst_spilled_vreg = next_inst < block.instructions().end()
+                                              and next_inst->reg() == spilled_vreg;
+                    if (next_inst_spilled_vreg)
+                        continue;
+
                     if (inst.reg() == spilled_vreg) {
                         // This instruction result is stored into the spilled virtual register;
                         // insert the spill right after this instruction.
@@ -637,10 +684,16 @@ auto allocate_registers(
                     if (spill_after) {
                         // insert spill after
                         auto spill = MInst(usz(MInst::Kind::Spill), {});
-                        // TODO: We should copy size of virtual register
-                        spill.add_operand(MOperandRegister(spilled_vreg, 0));
-                        fmt::print("Inserted spill at index {}\n", inst_i);
-                        fmt::print("{}\n", PrintMInst(inst));
+
+                        // Copy value and size of virtual register
+                        spill.add_operand(MOperandRegister(
+                            spilled_vreg,
+                            (uint) spilled_vreg_size
+                        ));
+                        // Slot
+                        spill.add_operand(MOperandImmediate(spilled_vreg));
+
+                        // Insert spill instruction after index 'inst_i'.
                         block.instructions().insert(
                             block.instructions().begin() + inst_i + 1,
                             spill
@@ -654,13 +707,19 @@ auto allocate_registers(
             // the use of an inserted instruction directly /before/ the use.
             // That inserted instruction is a "load from stack" instruction (unspill).
             bool done{false};
-            // TODO: Er, how do we get a unique virtual register from here?
+            bool unspill_before{false};
+            // This is the virtual register value that we will unspill "into"; uses of
+            // the spilled register regarding a particular unspill should be replaced
+            // with this register (the result of the unspill).
+            // TODO: Er, how do we get a (guaranteed) unique virtual register from here?
             usz new_vreg = 0x06942069;
             for (auto& block : function.blocks()) {
                 if (done) break;
                 for (auto inst_i = block.instructions().size(); inst_i; --inst_i) {
-                    bool unspill_before{false};
                     auto& inst = block.instructions().at(inst_i - 1);
+
+                    // We are done when we find the relevant spill instruction (it wouldn't
+                    // make sense to unspill /before/ a spill, now would it?).
                     if (inst.opcode() == +MInst::Kind::Spill) {
                         if (
                             std::get<MOperandRegister>(inst.get_operand(0)).value
@@ -689,28 +748,37 @@ auto allocate_registers(
                         }
                     }
 
+                    if (unspill_before and inst_i > 1) {
+                        auto prev_inst = block.instructions().at(inst_i - 2);
+                        // We've already updated references to spilled vreg with new virtual
+                        // register; now we just need to keep going until we actually need to
+                        // insert the spill.
+                        if (prev_inst.reg() == inst.reg())
+                            continue;
+                    }
+
                     if (unspill_before) {
                         // New virtual register that this particular use of the spilled vreg will
                         // unspill into.
-                        // TODO: spilled register size
                         auto unspill = MInst(
                             usz(MInst::Kind::Unspill),
-                            {new_vreg, 0, {}, true}
+                            {new_vreg, (uint) spilled_vreg_size, {}, true}
                         );
-                        unspill.add_operand(MOperandRegister(spilled_vreg, 0));
-                        fmt::print("Inserted unspill at index {}\n", inst_i);
+                        // Slot
+                        unspill.add_operand(MOperandImmediate(spilled_vreg));
+
+                        // Inserting unspill instruction before index 'inst_i'
                         block.instructions().insert(
                             block.instructions().begin() + (isz) inst_i - 1,
                             unspill
                         );
-                        // TODO: Update new_vreg to a new, unique virtual register.
+                        // Update new_vreg to a new, unique virtual register.
+                        // TODO: Guarantee uniquness
                         new_vreg++;
+                        unspill_before = false;
                     }
                 }
             }
-
-            fmt::print("{}\n", PrintMFunction(function));
-            LCC_TODO("Spill implementation...");
 
             // With the new spill/unspill instructions inserted, retry register
             // allocation...
