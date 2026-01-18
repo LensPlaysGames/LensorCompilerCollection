@@ -4,6 +4,11 @@
 
 - [Register Allocation]: Register classes (floats/scalar)
   Unspecified and float
+
+  [[https://my.eng.utah.edu/~cs4400/sse-fp.pdf][Relevant Edu Doc]]
+
+  I may just use "regular" Register operands and have special instructions that "treats" register operands as float registers... I dunno. I guess I need /some/ way of telling the register allocator to allocate certain registers...
+
 - [Register Allocation]: Register (un)spilling
   I need to create an LCC IR source that will cause spilling to happen; I currently can't really figure out how to get Glint to generate code that needs it...
 - [Meta]: Flatten source structure, re-organize into folders as necessary
@@ -50,8 +55,6 @@
   Tell the compiler that if a variable =A= has a known value (or a range of values), then variable =B= has a known value (or a range of values).
   The compiler would be able to optimise more in certain cases if it knew more about how values were related to each other (if they are).
 - [Sema]: Dynamic array of =expr=. =for e in exprs, apply foo, e;= type of thing.
-- [Parser]: Block comments
-  Syntax? Maybe =[- comment goes here -]=
 - [Parser/Sema]: Tokens in the AST
   Basically, if we could have a dynamic array of =token=, we could then insert that into the source code via some special token list application operator... This would let Glint code build Glint code at compile time (like a LISP macro operating on symbols themselves vs the values they are bound to).
 - [Diags]: Get rid of "Miscellaneous" ErrorId
