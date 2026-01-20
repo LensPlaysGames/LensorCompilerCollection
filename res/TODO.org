@@ -9,9 +9,20 @@
 
   I may just use "regular" Register operands and have special instructions that "treats" register operands as float registers... I dunno. I guess I need /some/ way of telling the register allocator to allocate certain registers...
 
-- [Meta]: Flatten source structure, re-organize into folders as necessary
 - [Meta]: Move IR optimisations to their own library
   I want =libopt= to be a library LCC uses that operates on LCC IR; that way, other programs may be able to re-use the optimisations if they choose to target LCC IR (without having to use our driver).
+- [Meta]: Move LCC IR to it's own library (in it's own folder under =lib/=)
+  Also move LCC IR Parser to a proper frontend (in it's own folder under =lib/=)
+
+  Basically, we currently have "LCC" as a monolithic library. I dislike it.
+  I want LCC to be broken into LCC IR (declaration, creation, module, etc), LCC IR Optimisations (IR -> IR transformations), and LCC Core (context, utilities, file opening, etc).
+
+  #+begin_example
+  LCC IR               depends on LCC CORE
+  LCC IR Optimisations depends on LCC IR
+  LCC IR Frontend      depends on LCC IR
+  #+end_example
+
 - [Test]: Move testing implementations from within source tree to subdirectory of =tst/=.
 - [Register Allocation]: ISel should mark call instructions as clobbering a unique "volatile registers" register (similar to return register), such that RA knows whats up, and could even insert spills before and after the call if necessary.
 - [Test]: Convert old opt tests in =tst/= into RunTest tests.
