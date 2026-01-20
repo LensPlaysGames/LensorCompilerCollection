@@ -6,7 +6,19 @@ This also means any changes will be tested across different frontends, backends,
 
 To take advantage of these testing facilities, run it and get a baseline for the output (how many langtest fails, how many runtest fails, etc). After you make your changes, run the testing facilities again, and you can see what has changed (less tests failing, more tests failing, etc).
 
+There are a lot of data transformation stages in a compiler (even this hobby one), and each of those is a place to potentially get things wrong. Testing facilities target some span of these transformative stages, asserting that a given input /should/ result in a given output if the compiler is working properly (or, for a fail test, that it doesn't result in an output).
+
+Here's a small (non-exhaustive) overview of the data transformation stages of LCC.
+
+#+begin_example
+SOURCE -> AST -> IR -> MIR -> CODE
+-----FRONTEND------
+                 -----BACKEND-----
+#+end_example
+
 ** LangTest
+
+Tests =SOURCE -> AST -> IR= (frontend).
 
 See [[file:../documentation/lcc/LangTest.org][relevant documentation]].
 
@@ -18,6 +30,8 @@ The =langtest= cmake target will run all LangTest tests.
 
 ** CodeTest
 
+Tests =IR -> MIR=.
+
 See [[file:../documentation/lcc/CodeTest.org][relevant documentation]].
 
 The =codetest= cmake target will run all CodeTest tests.
@@ -25,6 +39,8 @@ The =codetest= cmake target will run all CodeTest tests.
 - x86_64 :: Located in [[file:../lib/lcc/tests/x86_64][lib/lcc/tests/x86_64]].
 
 ** RunTest
+
+Tests =SOURCE -> ... -> EXECUTABLE=.
 
 See [[file:../documentation/lcc/RunTest.org][relevant documentation]].
 
