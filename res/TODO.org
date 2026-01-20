@@ -83,3 +83,12 @@
   Require MAJOR.MINOR.PATCH version during module import.
 
   The idea is, the "package.json" of Glint should be the file header. It should contain the declaration of the "package", as well as dependencies, including versions.
+
+* LangTest
+
+- [Deduplication]: Better facilities for parsing lang tests.
+
+* RunTest
+
+- Delete generated gmeta files
+  We should probably just delete all of them in the directory after we are done, or something (rather than try to delete each one as it's generated, like we do with other artifacts).

@@ -239,7 +239,7 @@ target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
 target_link_libraries(options INTERFACE fmt)
 
 # Add ‘include’ as an include dir.
-target_include_directories(options INTERFACE include)
+target_include_directories(options INTERFACE inc)
 
 # Do not link with libm (math) when target is windows executable.
 if (NOT WIN32)
@@ -259,59 +259,59 @@ endif()
 # Generic object library (convertible to ELF and COFF, currently)
 add_library(
   object STATIC
-  include/object/elf.h
-  include/object/elf.hh
-  include/object/generic.hh
+  inc/object/elf.h
+  inc/object/elf.hh
+  inc/object/generic.hh
   lib/object/elf.cc
   lib/object/generic.cc
 )
-target_include_directories(object PUBLIC include)
+target_include_directories(object PUBLIC inc)
 target_link_libraries(object PRIVATE options)
 
 # Add the main lcc library.
 add_library(
   liblcc STATIC
-  include/lcc/calling_conventions/ms_x64.hh
-  include/lcc/calling_conventions/sysv_x86_64.hh
-  include/lcc/codegen/gnu_as_att_assembly.hh
-  include/lcc/codegen/isel.hh
-  include/lcc/codegen/mir.hh
-  include/lcc/codegen/mir_utils.hh
-  include/lcc/codegen/register_allocation.hh
-  include/lcc/codegen/x86_64/assembly.hh
-  include/lcc/codegen/x86_64/isel_patterns.hh
-  include/lcc/codegen/x86_64/object.hh
-  include/lcc/codegen/x86_64/x86_64.hh
-  include/lcc/context.hh
-  include/lcc/core.hh
-  include/lcc/diags.hh
-  include/lcc/file.hh
-  include/lcc/format.hh
-  include/lcc/forward.hh
-  include/lcc/ir/core.hh
-  include/lcc/ir/domtree.hh
-  include/lcc/ir/module.hh
-  include/lcc/ir/type.hh
-  include/lcc/lcc-c.h
-  include/lcc/location.hh
-  include/lcc/opt/opt.hh
-  include/lcc/syntax/lexer.hh
-  include/lcc/syntax/token.hh
-  include/lcc/target.hh
-  include/lcc/typedefs.hh
-  include/lcc/utils.hh
-  include/lcc/utils/aint.hh
-  include/lcc/utils/ast_printer.hh
-  include/lcc/utils/dependency_graph.hh
-  include/lcc/utils/generator.hh
-  include/lcc/utils/ir_printer.hh
-  include/lcc/utils/iterator.hh
-  include/lcc/utils/macros.hh
-  include/lcc/utils/platform.hh
-  include/lcc/utils/result.hh
-  include/lcc/utils/rtti.hh
-  include/lcc/utils/string_distance.hh
-  include/lcc/utils/twocolumnlayouthelper.hh
+  inc/lcc/calling_conventions/ms_x64.hh
+  inc/lcc/calling_conventions/sysv_x86_64.hh
+  inc/lcc/codegen/gnu_as_att_assembly.hh
+  inc/lcc/codegen/isel.hh
+  inc/lcc/codegen/mir.hh
+  inc/lcc/codegen/mir_utils.hh
+  inc/lcc/codegen/register_allocation.hh
+  inc/lcc/codegen/x86_64/assembly.hh
+  inc/lcc/codegen/x86_64/isel_patterns.hh
+  inc/lcc/codegen/x86_64/object.hh
+  inc/lcc/codegen/x86_64/x86_64.hh
+  inc/lcc/context.hh
+  inc/lcc/core.hh
+  inc/lcc/diags.hh
+  inc/lcc/file.hh
+  inc/lcc/format.hh
+  inc/lcc/forward.hh
+  inc/lcc/ir/core.hh
+  inc/lcc/ir/domtree.hh
+  inc/lcc/ir/module.hh
+  inc/lcc/ir/type.hh
+  inc/lcc/lcc-c.h
+  inc/lcc/location.hh
+  inc/lcc/opt/opt.hh
+  inc/lcc/syntax/lexer.hh
+  inc/lcc/syntax/token.hh
+  inc/lcc/target.hh
+  inc/lcc/typedefs.hh
+  inc/lcc/utils.hh
+  inc/lcc/utils/aint.hh
+  inc/lcc/utils/ast_printer.hh
+  inc/lcc/utils/dependency_graph.hh
+  inc/lcc/utils/generator.hh
+  inc/lcc/utils/ir_printer.hh
+  inc/lcc/utils/iterator.hh
+  inc/lcc/utils/macros.hh
+  inc/lcc/utils/platform.hh
+  inc/lcc/utils/result.hh
+  inc/lcc/utils/rtti.hh
+  inc/lcc/utils/string_distance.hh
+  inc/lcc/utils/twocolumnlayouthelper.hh
   lib/lcc/calling_conventions/ms_x64.cc
   lib/lcc/calling_conventions/sysv_x86_64.cc
   lib/lcc/codegen/isel.cc
@@ -338,7 +338,7 @@ add_library(
   lib/lcc/utils.cc
   lib/lcc/utils/string_distance.cc
 )
-target_include_directories(liblcc PUBLIC include)
+target_include_directories(liblcc PUBLIC inc)
 set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
 
 # Link main lcc library with generic object library.
@@ -350,15 +350,15 @@ target_link_libraries(liblcc PRIVATE options)
 # Glint language library
 add_library(
   glint STATIC
-  include/glint/ast.hh
-  include/glint/ast_eval.hh
-  include/glint/driver.hh
-  include/glint/error_ids.hh
-  include/glint/eval.hh
-  include/glint/ir_gen.hh
-  include/glint/lexer.hh
-  include/glint/parser.hh
-  include/glint/sema.hh
+  inc/glint/ast.hh
+  inc/glint/ast_eval.hh
+  inc/glint/driver.hh
+  inc/glint/error_ids.hh
+  inc/glint/eval.hh
+  inc/glint/ir_gen.hh
+  inc/glint/lexer.hh
+  inc/glint/parser.hh
+  inc/glint/sema.hh
   lib/glint/ast.cc
   lib/glint/ast_deserialise_expr.cc
   lib/glint/ast_deserialise_type.cc
@@ -375,7 +375,7 @@ add_library(
   lib/glint/sema.cc
   lib/glint/sema_type.cc
 )
-target_include_directories(glint PUBLIC include)
+target_include_directories(glint PUBLIC inc)
 target_link_libraries(glint PRIVATE options)
 target_link_libraries(glint PRIVATE object)
 target_link_libraries(glint PRIVATE liblcc)
