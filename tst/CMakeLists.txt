@@ -31,6 +31,8 @@ project(lcctest)
 #  Executables and libraries.
 # ============================================================================
 
+# We don't want to build an LCC for no reason, unless it is used by a
+# testing facility. We don't need the LCC binary, basically.
 add_subdirectory("./../" "lcc" EXCLUDE_FROM_ALL)
 
 # LangTest
@@ -45,7 +47,7 @@ add_custom_target(
   emacs -Q
   --batch
   --chdir "${CMAKE_CURRENT_LIST_DIR}/../runtest/"
-  --eval "(setq lcc-path \"$<TARGET_FILE:lcc>\")"
+  --eval "(setf lcc-path \"$<TARGET_FILE:lcc>\")"
   --load ./runtest.el
   DEPENDS
   lcc
@@ -75,11 +77,29 @@ add_custom_target(
   USES_TERMINAL
 )
 
+# langtest target
+# |-- Glint LangTest Implementation
+# `-- ...
+add_custom_target(
+  langtest
+  DEPENDS
+  langtest_glint_command
+)
+
+# codetest target
+# |-- x86_64
+# `-- ...
+add_custom_target(
+  codetest
+  DEPENDS
+  codetest_x86_64_command
+)
+
 add_custom_target(
   test
   DEPENDS
-  langtest_glint_command
-  codetest_x86_64_command
+  langtest
+  codetest
   runtest
 )
 

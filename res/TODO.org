@@ -10,14 +10,17 @@
   I may just use "regular" Register operands and have special instructions that "treats" register operands as float registers... I dunno. I guess I need /some/ way of telling the register allocator to allocate certain registers...
 
 - [Meta]: Flatten source structure, re-organize into folders as necessary
+- [Meta]: Move IR optimisations to their own library
+  I want =libopt= to be a library LCC uses that operates on LCC IR; that way, other programs may be able to re-use the optimisations if they choose to target LCC IR (without having to use our driver).
 - [LangTest]: fail test specifier given an expected error id in brackets
   i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expected/ diagnostic is emitted, not just a similar one.
 - [Register Allocation]: ISel should mark call instructions as clobbering a unique "volatile registers" register (similar to return register), such that RA knows whats up, and could even insert spills before and after the call if necessary.
-
+- [Test]: Convert old opt tests in =tst/= into RunTest tests.
+- [Test]: Write an IR LangTest implementation.
 - [Backend/WASM]: Struct and array types
   WebAssembly 3.0 has composite types, =struct= and =array=.
   They need a bit of special handling, so it will be quite an extensive feature to implement (requiring overrides for storing and loading, variable initialisation, and more).
-
+- [Emscripten]: Automatically install =res/lcc.svg=
 - [Driver]: =-gcc= compatibility layer: args after are parsed as GCC arguments
 - [Driver]: =--color-theme <file>= option to remap ANSI/VT100 emitted terminal codes to different colors (i.e. BoldRed -> Green) if you want green errors for some reason.
 

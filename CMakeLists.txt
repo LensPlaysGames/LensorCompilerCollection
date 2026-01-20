@@ -58,7 +58,7 @@ if (EMSCRIPTEN)
   # Ask Emscripten to please generate HTML.
   set(CMAKE_EXECUTABLE_SUFFIX ".html")
   # Custom HTML template file.
-  add_link_options(--shell-file ${CMAKE_CURRENT_LIST_DIR}/lcc.in.html)
+  add_link_options(--shell-file ${CMAKE_CURRENT_LIST_DIR}/res/lcc.in.html)
   # Increase the stack size; some languages use a recursive descent parsing
   # algorithm that means the stack isn't always necessarily small.
   add_link_options(-sSTACK_SIZE=1048576)

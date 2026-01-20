@@ -1,1 +1,33 @@
-* See TESTING.org in Base of Repository
+* LCC's Testing Facilities
+
+To run a lot---hopefully all---of the below tests, there is a CMake project with custom targets to run them at CMake build time, ensuring the compiler is up to date (so that you aren't testing an out-of-date version of the compiler after having edited the source code).
+
+This also means any changes will be tested across different frontends, backends, with and without optimisations, etc.
+
+To take advantage of these testing facilities, run it and get a baseline for the output (how many langtest fails, how many runtest fails, etc). After you make your changes, run the testing facilities again, and you can see what has changed (less tests failing, more tests failing, etc).
+
+** LangTest
+
+See [[file:../documentation/lcc/LangTest.org][relevant documentation]].
+
+Header located in [[file:../inc/langtest/][include/langtest/]].
+
+The =langtest= cmake target will run all LangTest tests.
+
+- Glint :: Located in [[file:../lib/glint/tests/][lib/glint/tests/]].
+
+** CodeTest
+
+See [[file:../documentation/lcc/CodeTest.org][relevant documentation]].
+
+The =codetest= cmake target will run all CodeTest tests.
+
+- x86_64 :: Located in [[file:../lib/lcc/tests/x86_64][lib/lcc/tests/x86_64]].
+
+** RunTest
+
+See [[file:../documentation/lcc/RunTest.org][relevant documentation]].
+
+The =runtest= cmake target will run all RunTest tests.
+
+Implemented at [[file:../runtest/][runtest/]].
