@@ -1,9 +1,32 @@
+#
+# This file is the pre-configured file that will /actually/ be "included"
+# by projects that have Glint as a language. It should set all of:
+# - CMAKE_Glint_COMPILER
+#   The path to the Glint compiler on this system
+# - CMAKE_Glint_COMPILER_LOADED
+# - CMAKE_Glint_COMPILER_WORKS
+# - CMAKE_Glint_COMPILER_ID
+#   A short string to identify the compiler (such as to differentiate
+#   between different Glint compiler implementations).
+# - CMAKE_Glint_SOURCE_FILE_EXTENSIONS
+#   When a file appears in a targets sources list with an extension that
+#   appears in this list, this compiler will be used to compile that
+#   source.
+# - CMAKE_Glint_COMPILER_ENV_VAR
+#   The environment variable where the Glint compiler may be expected on
+#   the current system.
+#
+# Expected input configure variables from "Determine" file:
+# - CMAKE_Glint_COMPILER
+# - CMAKE_Glint_COMPILER_ENV_VAR
+# - CMAKE_Glint_COMPILER_WORKS
+
 set(CMAKE_Glint_COMPILER "@CMAKE_Glint_COMPILER@")
 
 set(CMAKE_Glint_COMPILER_LOADED 1)
 set(CMAKE_Glint_COMPILER_WORKS "@CMAKE_Glint_COMPILER_WORKS@")
 
-set(CMAKE_Glint_COMPILER_ID_RUN 1)
+set(CMAKE_Glint_COMPILER_ID "Lensor")
 set(CMAKE_Glint_SOURCE_FILE_EXTENSIONS g)
 
-set(CMAKE_Glint_COMPILER_ENV_VAR "GLINTC")
+set(CMAKE_Glint_COMPILER_ENV_VAR "@CMAKE_Glint_COMPILER_ENV_VAR@")

@@ -1,5 +1,13 @@
+#
+# This file defines recipes for how to convert Glint sources into
+# objects, static libraries, and executables.
+#
+
+# Set the output extension CMake can expect to find the output of a file
+# at. The "-f asm" below means we should use ".s".
 set(CMAKE_Glint_OUTPUT_EXTENSION .s)
-# TODO When I write an assembler again, do this thing.
+# NOTE If LCC emits objects by default, this would be how to tell CMake
+# about that.
 # if(UNIX)
 #   set(CMAKE_Glint_OUTPUT_EXTENSION .o)
 # else()
