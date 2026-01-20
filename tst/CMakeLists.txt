@@ -46,7 +46,7 @@ add_custom_target(
   COMMAND
   emacs -Q
   --batch
-  --chdir "${CMAKE_CURRENT_LIST_DIR}/../runtest/"
+  --chdir "${CMAKE_CURRENT_LIST_DIR}/runtest/"
   --eval "(setf lcc-path \"$<TARGET_FILE:lcc>\")"
   --load ./runtest.el
   DEPENDS

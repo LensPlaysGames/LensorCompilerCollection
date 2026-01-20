@@ -46,4 +46,4 @@ See [[file:../documentation/lcc/RunTest.org][relevant documentation]].
 
 The =runtest= cmake target will run all RunTest tests.
 
-Implemented at [[file:../runtest/][runtest/]].
+Implemented at [[file:./runtest/][tst/runtest/]].
