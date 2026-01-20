@@ -10,6 +10,8 @@ LCC exists so that you may implement your language without
 
 The mantra: no third-party dependencies. Everything in-house and from scratch. This prevents beginners running into unending linker errors (ahem, LLVM), as well as having to figure out all the right flags and options to pass to a configure script (ahem, GCC). While this does create head-aches (/shudders in register allocation/), it also means that nothing is "hidden". If you want to know how something works, the code is right here in the codebase, written in a familiar style.
 
+[[file:res/HISTORY.org][History of LCC]]
+
 ** Usage
 
 For convenience purposes, there is a single executable, ~lcc~, that can delegate between all of the different compilers in the collection. This is called the /compiler driver/, often shortened to just /driver/. Languages may choose to implement a standalone executable that only compiles their language, but it is not required, and they are not built/distributed by default.
