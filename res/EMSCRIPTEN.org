@@ -1,0 +1,34 @@
+* Building LCC for the Web
+
+LCC is a CLI program, written in C++ (for now). This makes it inaccessible to the "average joe" who doesn't feel comfortable using a terminal and /definitely/ doesn't know how to build a C++ program using CMake.
+
+In an effort to make LCC more accessible, we have an "LCC Playground" where you can use the compiler program in a browser.
+
+This is achieved by compiling the C++ source to WebAssembly, which is then directly invokable from JavaScript in any "modern" browser.
+
+One toolchain that supports this capability is [[https://emscripten.org/][Emscripten]].
+It provides a =gcc= drop-in replacement called =emcc=.
+
+** Emscripten
+
+Be sure to follow the [[https://emscripten.org/docs/getting_started/downloads.html][non-conventional install]] of Emscripten.
+
+NOTE: If you use a non-bash shell, you should switch to =bash= (or just =sh=). Emscripten expects it in a lot of their scripts and commands, so it's easier to just be in that environment vs translating everything to your particular shell's syntax or what-have-you.
+
+Configure CMake build tree "like normal" using =emcmake= prefix.
+#+begin_src shell
+  emcmake cmake -B bldweb -DCMAKE_BUILD_TYPE=MinSizeRel
+#+end_src
+
+If you see the following warning, delete your build tree (i.e. =bldweb=), and try again.
+#+begin_example
+CMake Warning:
+  Manually-specified variables were not used by the project:
+
+    CMAKE_TOOLCHAIN_FILE
+#+end_example
+
+After you have your build tree, invoke it like a regular CMake build. This produces the playground HTML as the output, along with a JavaScript script, and the WebAssembly binary itself.
+#+begin_src shell
+  cmake --build bldweb
+#+end_src
