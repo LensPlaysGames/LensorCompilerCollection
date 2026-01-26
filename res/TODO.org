@@ -23,7 +23,6 @@
   LCC IR Frontend      depends on LCC IR
   #+end_example
 
-- [Test]: Move testing implementations from within source tree to subdirectory of =tst/=.
 - [Register Allocation]: ISel should mark call instructions as clobbering a unique "volatile registers" register (similar to return register), such that RA knows whats up, and could even insert spills before and after the call if necessary.
 - [Test]: Convert old opt tests in =tst/= into RunTest tests.
 - [Backend/WASM]: Struct and array types
@@ -39,13 +38,19 @@
 - [Cereal]: Flesh out binary AST format
 - [Parser/Sema]: Switch on value
 - [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
-- [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=
+- [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=, =T_enum.count=
 - [Sema]: =maps_arguments= function attribute
+- [Parser/Sema]: Module versioning
 
+  Require MAJOR.MINOR.PATCH version in module declaration.
+  Require MAJOR.MINOR.PATCH version during module import.
+
+  The idea is, the "package.json" of Glint should be the file header. It should contain the declaration of the "package", as well as dependencies, including versions.
 - [Parser/Sema]: Unary operator (keyword) for asserting compile time evaluation
   =evaluate=?
   "evaluate 42 + 27" -> "69".
 - [Parser]: Warn when multiple expressions appear on one line
+  Multiple "top level" expressions.
 - [Parser/Sema]: Compile-time Checked Interpolation: =printf "value: {}\n", 69;=
   This won't be different from =print=, I just like this style of doing
   things (and a lot of people tend to prefer it over splitting strings).
@@ -86,12 +91,6 @@
 - [Sema]: =---no-default-handlers=
   If passed, do not include definitions for the functionality that Sema generates calls to, for example (i.e. =__dynarray_grow=).
 - [Lexer]: Disallow =_X= anywhere in identifiers (for mangled name compatibility)
-- [Parser/Sema]: Module versioning
-
-  Require MAJOR.MINOR.PATCH version in module declaration.
-  Require MAJOR.MINOR.PATCH version during module import.
-
-  The idea is, the "package.json" of Glint should be the file header. It should contain the declaration of the "package", as well as dependencies, including versions.
 
 * LangTest
 
@@ -102,5 +101,5 @@
 
 * RunTest
 
-- Delete generated gmeta files
+- [Glint] Delete generated gmeta files
   We should probably just delete all of them in the directory after we are done, or something (rather than try to delete each one as it's generated, like we do with other artifacts).
