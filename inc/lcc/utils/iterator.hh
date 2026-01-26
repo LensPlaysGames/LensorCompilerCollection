@@ -14,8 +14,12 @@ namespace lcc::utils {
 
 /// An iterator that checks for errors.
 template <typename ContainerType, typename IterType>
-requires (not std::is_reference_v<ContainerType> and not std::is_reference_v<IterType>)
-class CheckedIterator {
+requires (
+    not std::is_reference_v<ContainerType>
+    and not std::is_reference_v<IterType>
+)
+struct CheckedIterator {
+private:
     /// The container we’re iterating over.
     ContainerType* container;
 
@@ -43,7 +47,8 @@ class CheckedIterator {
     }
 
 public:
-    CheckedIterator(ContainerType& c, IterType it_) : container(std::addressof(c)), it(it_) {
+    CheckedIterator(ContainerType& c, IterType it_)
+        : container(std::addressof(c)), it(it_) {
         end = container->end();
     }
 
@@ -64,7 +69,10 @@ public:
 
     /// Compare two iterators.
     bool operator==(const CheckedIterator& other) const {
-        LCC_ASSERT(container == other.container, "Comparing iterators from different containers");
+        LCC_ASSERT(
+            container == other.container,
+            "Comparing iterators from different containers"
+        );
         Check();
         return it == other.it;
     }
@@ -74,7 +82,10 @@ public:
         Check();
         auto ret = *this;
         ret.it += offset;
-        LCC_ASSERT(ret.it <= end, "Adding offset to iterator would move past end");
+        LCC_ASSERT(
+            ret.it <= end,
+            "Adding offset to iterator would move past end"
+        );
         return ret;
     }
 
@@ -83,18 +94,27 @@ public:
         Check();
         auto ret = *this;
         ret.it -= offset;
-        LCC_ASSERT(ret.it >= container->begin(), "Subtracting offset from iterator would move before begin");
+        LCC_ASSERT(
+            ret.it >= container->begin(),
+            "Subtracting offset from iterator would move before begin"
+        );
         return ret;
     }
 };
 
 /// Checked iterator for vectors.
 template <typename T>
-using VectorIterator = CheckedIterator<std::vector<T>, typename std::vector<T>::iterator>;
+using VectorIterator
+    = CheckedIterator<
+        std::vector<T>,
+        typename std::vector<T>::iterator>;
 
 /// Checked const iterator for vectors.
 template <typename T>
-using VectorConstIterator = CheckedIterator<const std::vector<T>, typename std::vector<T>::const_iterator>;
+using VectorConstIterator
+    = CheckedIterator<
+        const std::vector<T>,
+        typename std::vector<T>::const_iterator>;
 
 #else
 template <typename IterType> using CheckedIterator = IterType;
