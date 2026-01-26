@@ -248,7 +248,14 @@ struct MIRMatcher {
 };
 
 [[nodiscard]]
-bool run_test(MIRMatcher& matcher, std::string_view test_source, const lcc::Target* target, const lcc::Format* format, int optimise_level, std::string_view optimisation_passes) {
+bool run_test(
+    MIRMatcher& matcher,
+    std::string_view test_source,
+    const lcc::Target* target,
+    const lcc::Format* format,
+    int optimise_level,
+    std::string_view optimisation_passes
+) {
     auto ctx = lcc::Context{
         target,
         format,
@@ -322,8 +329,10 @@ bool run_test(MIRMatcher& matcher, std::string_view test_source, const lcc::Targ
             }
         } else LCC_ASSERT(false, "Sorry, unhandled target architecture");
 
-        for (auto& mfunc : machine_ir)
-            allocate_registers(desc, mfunc);
+        for (auto& mfunc : machine_ir) {
+            if (not allocate_registers(desc, mfunc))
+                return false;
+        }
     }
 
     // Print Source MIR
