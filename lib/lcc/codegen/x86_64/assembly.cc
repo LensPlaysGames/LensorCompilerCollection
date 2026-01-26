@@ -88,12 +88,73 @@ auto ToString(MFunction& function, MOperand op) -> std::string {
     LCC_ASSERT(false, "Unhandled MOperand kind (index {})", op.index());
 }
 
+enum class StackFrameKind {
+    Generate,
+    Inherit,
+
+    COUNT
+};
+
+// Function Header
+void emit_stack_frame_entry(std::string& out, StackFrameKind k) {
+    switch (k) {
+        // push base pointer
+        // mov stack pointer to base pointer
+        case StackFrameKind::Generate:
+            out += "    push %rbp\n";
+
+            // Update CFA offset, as we now have changed the stack pointer (by 8).
+            // `.cfi_def_cfa_offset` updates CFA offset to new expression, but not register.
+            // `.cfi_offset` notifies saved register rbp location from CFA.
+            out +=
+                "    .cfi_def_cfa_offset 16\n"
+                "    .cfi_offset %rbp, -16\n";
+
+            out += "    mov %rsp, %rbp\n";
+
+            // Update CFA register, as we now have stored the value of RSP in RBP.
+            out += "    .cfi_def_cfa_register %rbp\n";
+
+            return;
+
+        case StackFrameKind::Inherit:
+            return;
+
+        case StackFrameKind::COUNT:
+            LCC_UNREACHABLE();
+    }
+}
+
+// Function Footer
+void emit_stack_frame_exit(std::string& out, StackFrameKind k) {
+    switch (k) {
+        // mov base pointer to stack pointer
+        // pop base pointer
+        case StackFrameKind::Generate:
+            out +=
+                "    mov %rbp, %rsp\n"
+                "    pop %rbp\n";
+
+            // Update CFA expression since 16(%rbp) is no longer accurate.
+            out += "    .cfi_def_cfa %rsp, 8\n";
+            return;
+
+        case StackFrameKind::Inherit:
+            return;
+
+        case StackFrameKind::COUNT:
+            LCC_UNREACHABLE();
+    }
+}
+
 void emit_gnu_att_assembly(
     const fs::path& output_path,
     Module* module,
     const MachineDescription& desc,
     std::vector<MFunction>& mir
 ) {
+    LCC_ASSERT(module and module->context());
+
     std::string out{};
 
     // If we ever add optional location information to the MIR (and some
@@ -149,16 +210,19 @@ void emit_gnu_att_assembly(
         for (auto n : function.names())
             out += fmt::format("{}:\n", safe_name(n.name));
 
-        out += "# Locals:\n";
-        for (auto [i, l] : vws::enumerate(function.locals())) {
-            out += fmt::format(
-                "# {}, {}(%rbp): {} ({} size, {} align)\n",
-                i,
-                function.local_offset(MOperandLocal{(u32) i, 0}),
-                l->allocated_type()->string(false),
-                l->allocated_type()->bytes(),
-                l->allocated_type()->align_bytes()
-            );
+        // READABILITY: Comments to denote locals and their offsets.
+        if (function.locals().size()) {
+            out += "# Locals:\n";
+            for (auto [i, l] : vws::enumerate(function.locals())) {
+                out += fmt::format(
+                    "# {}, {}(%rbp): {} ({} size, {} align)\n",
+                    i,
+                    function.local_offset(MOperandLocal{(u32) i, 0}),
+                    l->allocated_type()->string(false),
+                    l->allocated_type()->bytes(),
+                    l->allocated_type()->align_bytes()
+                );
+            }
         }
 
         // Keep in mind that debug lines are 1-indexed.
@@ -176,20 +240,10 @@ void emit_gnu_att_assembly(
         // CFA (CIE starts it as %rsp+8)
         out += "    .cfi_startproc\n";
 
-        // Function Header
-        // TODO: Different stack frame kinds.
-        out += "    push %rbp\n";
-        // Update CFA offset, as we now have changed the stack pointer (by 8).
-        // `.cfi_def_cfa_offset` updates CFA offset to new expression, but not register.
-        // `.cfi_offset` notifies saved register rbp location from CFA.
-        out +=
-            "    .cfi_def_cfa_offset 16\n"
-            "    .cfi_offset %rbp, -16\n";
+        // Calculate stack frame size; this is the sum of the size of all locals
+        // and the size of all spilled registers.
 
-        out += "    mov %rsp, %rbp\n";
-        // Update CFA register, as we now have stored the value of RSP in RBP.
-        out += "    .cfi_def_cfa_register %rbp\n";
-
+        // Sum locals sizes
         usz stack_frame_size = rgs::fold_left(
             vws::transform(function.locals(), [](AllocaInst* l) {
                 return l->allocated_type()->bytes();
@@ -197,7 +251,10 @@ void emit_gnu_att_assembly(
             0,
             std::plus{}
         );
+
+        // Sum spilled registers' sizes, keeping track of their frame offsets.
         std::unordered_map<usz, usz> spill_offsets{};
+        std::unordered_map<usz, MOperandRegister> spill_id_to_register{};
         for (auto& block : function.blocks()) {
             for (auto& instruction : block.instructions()) {
                 if (instruction.opcode() == +MInst::Kind::Spill) {
@@ -207,12 +264,40 @@ void emit_gnu_att_assembly(
                     auto i = std::get<MOperandImmediate>(
                         instruction.all_operands().at(1)
                     );
-                    LCC_ASSERT(r.size % 8 == 0, "Invalid spilled register size");
+                    LCC_ASSERT(
+                        r.size % 8 == 0,
+                        "Invalid spilled register size"
+                    );
                     stack_frame_size += r.size / 8;
                     spill_offsets[i.value] = stack_frame_size;
+
+                    spill_id_to_register[i.value] = r;
                 }
             }
         }
+
+        auto frame_kind = StackFrameKind::Inherit;
+        if (stack_frame_size)
+            frame_kind = StackFrameKind::Generate;
+
+        // READABILITY: Comments to denote spilled registers and their offsets.
+        if (spill_offsets.size()) {
+            out += "# Spilled Registers:\n";
+            for (auto [id, offset] : spill_offsets) {
+                if (spill_id_to_register.contains(id)) {
+                    auto r = spill_id_to_register.at(id);
+                    out += fmt::format(
+                        "# ID {}, %{}, -{}(%rbp)\n",
+                        id,
+                        ToString((RegisterId) r.value, r.size),
+                        offset
+                    );
+                } else out += fmt::format("# ID {}, -{}(%rbp)\n", id, offset);
+            }
+        }
+
+        emit_stack_frame_entry(out, frame_kind);
+
         if (stack_frame_size) {
             constexpr usz alignment = 16;
             stack_frame_size = utils::AlignTo(stack_frame_size, alignment);
@@ -346,15 +431,7 @@ void emit_gnu_att_assembly(
                 // ================================
                 usz registers_saved{0};
                 if (instruction.opcode() == +x86_64::Opcode::Return) {
-                    // Function Footer
-                    // TODO: Different stack frame kinds.
-                    out +=
-                        "    mov %rbp, %rsp\n"
-                        "    pop %rbp\n";
-
-                    // Update CFA expression since 16(%rbp) is no longer accurate.
-                    out += "    .cfi_def_cfa %rsp, 8\n";
-
+                    emit_stack_frame_exit(out, frame_kind);
                 } else if (instruction.opcode() == +x86_64::Opcode::Call) {
                     // TODO: FIXME We probably shouldn't emit machine instructions that aren't in the MIR...
                     // Save caller-saved registers, if necessary.
@@ -427,9 +504,20 @@ void emit_gnu_att_assembly(
                         offset = std::get<MOperandImmediate>(given_offset).value;
                     }
 
-                    if (offset)
-                        out += fmt::format(" {}, {}({})\n", ToString(function, lhs), offset, ToString(function, rhs));
-                    else out += fmt::format(" {}, ({})\n", ToString(function, lhs), ToString(function, rhs));
+                    if (offset) {
+                        out += fmt::format(
+                            " {}, {}({})\n",
+                            ToString(function, lhs),
+                            offset,
+                            ToString(function, rhs)
+                        );
+                    } else {
+                        out += fmt::format(
+                            " {}, ({})\n",
+                            ToString(function, lhs),
+                            ToString(function, rhs)
+                        );
+                    }
                     continue;
                 }
                 // ================================
