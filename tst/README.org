@@ -26,7 +26,7 @@ Header located in [[file:../inc/langtest/][include/langtest/]].
 
 The =langtest= cmake target will run all LangTest tests.
 
-- Glint :: Located in [[file:../lib/glint/tests/][lib/glint/tests/]].
+- Glint :: Located in [[file:./langtest/glint/][tst/langtest/glint/]].
 
 ** CodeTest
 
@@ -36,7 +36,7 @@ See [[file:../documentation/lcc/CodeTest.org][relevant documentation]].
 
 The =codetest= cmake target will run all CodeTest tests.
 
-- x86_64 :: Located in [[file:../lib/lcc/tests/x86_64][lib/lcc/tests/x86_64]].
+- x86_64 :: Located in [[file:./codetest/x86_64/][tst/codetest/x86_64/]].
 
 ** RunTest
 

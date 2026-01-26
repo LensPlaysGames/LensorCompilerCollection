@@ -17,7 +17,10 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 
 # Use mold as the default linker, if it exists.
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if (
+    CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+  )
     find_program(MOLD_LINKER "mold")
     if (MOLD_LINKER)
         add_link_options(-fuse-ld=mold)
@@ -36,10 +39,10 @@ project(lcctest)
 add_subdirectory("./../" "lcc" EXCLUDE_FROM_ALL)
 
 # LangTest
-add_subdirectory("./../lib/glint/tests/" "langtest_glint")
+add_subdirectory("./langtest/glint/" "langtest_glint")
 
 # CodeTest
-add_subdirectory("./../lib/lcc/tests/x86_64/" "codetest_x86_64")
+add_subdirectory("./codetest/x86_64/" "codetest_x86_64")
 
 add_custom_target(
   runtest
@@ -62,7 +65,7 @@ add_custom_target(
   DEPENDS
   glinttests
   WORKING_DIRECTORY
-  "${CMAKE_CURRENT_LIST_DIR}/../lib/glint/tests/"
+  "${CMAKE_CURRENT_LIST_DIR}/langtest/glint/"
   USES_TERMINAL
 )
 
@@ -73,7 +76,7 @@ add_custom_target(
   DEPENDS
   codetest_x86_64
   WORKING_DIRECTORY
-  "${CMAKE_CURRENT_LIST_DIR}/../lib/lcc/tests/x86_64/"
+  "${CMAKE_CURRENT_LIST_DIR}/codetest/x86_64/"
   USES_TERMINAL
 )
 
