@@ -303,6 +303,7 @@ add_library(
   inc/lcc/utils/aint.hh
   inc/lcc/utils/ast_printer.hh
   inc/lcc/utils/dependency_graph.hh
+  inc/lcc/utils/fractionals.hh
   inc/lcc/utils/generator.hh
   inc/lcc/utils/ir_printer.hh
   inc/lcc/utils/iterator.hh
@@ -336,6 +337,7 @@ add_library(
   lib/lcc/opt/opt.cc
   lib/lcc/platform.cc
   lib/lcc/utils.cc
+  lib/lcc/utils/fractionals.cc
   lib/lcc/utils/string_distance.cc
 )
 target_include_directories(liblcc PUBLIC inc)
