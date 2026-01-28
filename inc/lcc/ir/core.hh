@@ -7,6 +7,7 @@
 #include <lcc/location.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
+#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/generator.hh>
 #include <lcc/utils/iterator.hh>
 #include <lcc/utils/rtti.hh>
@@ -38,6 +39,7 @@ public:
     enum struct Kind {
         /// Values
         IntegerConstant,
+        FractionalConstant,
         ArrayConstant,
         Poison,
 
@@ -145,6 +147,7 @@ public:
             case VK::Block: return "Block";
             case VK::Function: return "Function";
             case VK::IntegerConstant: return "IntegerConstant";
+            case VK::FractionalConstant: return "FractionalConstant";
             case VK::ArrayConstant: return "ArrayConstant";
             case VK::Poison: return "Poison";
             case VK::GlobalVariable: return "GlobalVariable";
@@ -1966,6 +1969,24 @@ public:
     /// RTTI.
     [[nodiscard]]
     static auto classof(Value* v) -> bool { return v->kind() == Kind::IntegerConstant; }
+};
+
+/// Fractional value.
+class FractionalConstant : public Value {
+    FixedPointNumber _value;
+
+public:
+    explicit FractionalConstant(Type* ty, FixedPointNumber value)
+        : Value(Kind::FractionalConstant, ty),
+          _value(value) {}
+
+    /// Get the value.
+    [[nodiscard]]
+    auto value() const -> FixedPointNumber { return _value; }
+
+    /// RTTI.
+    [[nodiscard]]
+    static auto classof(Value* v) -> bool { return v->kind() == Kind::FractionalConstant; }
 };
 
 /// Packed array.

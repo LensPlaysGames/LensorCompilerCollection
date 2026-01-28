@@ -7,6 +7,7 @@
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/generator.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/utils/rtti.hh>
@@ -341,6 +342,7 @@ auto Inst::Children() -> Generator<Value**> {
         case Kind::Block:
         case Kind::Function:
         case Kind::IntegerConstant:
+        case Kind::FractionalConstant:
         case Kind::ArrayConstant:
         case Kind::Poison:
         case Kind::GlobalVariable:
@@ -775,6 +777,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Block:
             case Value::Kind::Function:
             case Value::Kind::IntegerConstant:
+            case Value::Kind::FractionalConstant:
             case Value::Kind::ArrayConstant:
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
@@ -1071,6 +1074,16 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::IntegerConstant:
                 return Format("{}{}", C(P::Literal), as<IntegerConstant>(v)->value());
 
+            case Value::Kind::FractionalConstant: {
+                auto f = as<FractionalConstant>(v)->value();
+                return Format(
+                    "{}{}.{}",
+                    C(P::Literal),
+                    f.whole,
+                    fractional_to_whole(f.fractional)
+                );
+            }
+
             case Value::Kind::Poison:
                 return Format("{}poison", C(P::Filler));
 
@@ -1214,6 +1227,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Block:
             case Value::Kind::Function:
             case Value::Kind::IntegerConstant:
+            case Value::Kind::FractionalConstant:
             case Value::Kind::ArrayConstant:
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:

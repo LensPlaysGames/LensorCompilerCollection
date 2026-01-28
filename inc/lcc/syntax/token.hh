@@ -4,6 +4,7 @@
 #include <lcc/core.hh>
 #include <lcc/diags.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/fractionals.hh>
 
 namespace lcc::syntax {
 
@@ -14,7 +15,7 @@ struct Token {
     Location location{};
     std::string text{};
     u64 integer_value{};
-    long double float_value{};
+    FixedPointNumber fractional_value{};
     bool artificial : 1 = false;
 };
 

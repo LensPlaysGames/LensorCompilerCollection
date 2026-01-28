@@ -116,6 +116,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::Block:
             case Value::Kind::Function:
             case Value::Kind::IntegerConstant:
+            case Value::Kind::FractionalConstant:
             case Value::Kind::ArrayConstant:
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
@@ -410,6 +411,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::Block:
             case Value::Kind::Function:
             case Value::Kind::IntegerConstant:
+            case Value::Kind::FractionalConstant:
             case Value::Kind::ArrayConstant:
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
@@ -564,6 +566,15 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
 
             case Value::Kind::IntegerConstant:
                 return Format("{}", as<IntegerConstant>(v)->value());
+
+            case Value::Kind::FractionalConstant: {
+                auto f = as<FractionalConstant>(v)->value();
+                return Format(
+                    "{}.{}",
+                    f.whole,
+                    fractional_to_whole(f.fractional)
+                );
+            }
 
             case Value::Kind::Poison:
                 return Format("poison");

@@ -119,6 +119,10 @@ auto wat_value(Module& m, Value* v) -> std::string {
             );
         }
 
+        case Value::Kind::FractionalConstant: {
+            LCC_TODO("Convert fractional constant to f32 or f64 WAT constant");
+        }
+
         case Value::Kind::GlobalVariable: {
             auto g = as<GlobalVariable>(v);
             return fmt::format("global.get {}", wat_global_name(g));
@@ -247,6 +251,7 @@ auto wat_inst(Module& m, Inst* i) -> std::string {
 
     switch (i->kind()) {
         case Value::Kind::IntegerConstant:
+        case Value::Kind::FractionalConstant:
         case Value::Kind::GlobalVariable:
         case Value::Kind::Block:
         case Value::Kind::Parameter:

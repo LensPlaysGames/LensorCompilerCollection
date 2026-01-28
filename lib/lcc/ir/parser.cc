@@ -4,6 +4,7 @@
 #include <lcc/ir/type.hh>
 #include <lcc/syntax/lexer.hh>
 #include <lcc/syntax/token.hh>
+#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
 
@@ -57,6 +58,7 @@ enum struct TokenKind {
     IntegerType,
     Global,
     Integer,
+    Fraction,
     Indent,
 
     Colon,
@@ -81,6 +83,7 @@ constexpr auto StringifyEnum(TokenKind t) -> std::string_view {
         case TokenKind::IntegerType: return "integer type";
         case TokenKind::Global: return "global";
         case TokenKind::Integer: return "integer";
+        case TokenKind::Fraction: return "fraction";
         case TokenKind::Indent: return "indentation";
         case TokenKind::Newline: return "newline";
         case TokenKind::Colon: return ":";
@@ -226,36 +229,75 @@ private:
     void SetValue(Inst* parent, Value*& val, IRValue v);
 
     template <typename... Args>
-    auto Error(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+    auto Error(
+        Location where,
+        enum ErrorId id,
+        fmt::format_string<Args...> fmt,
+        Args&&... args
+    ) -> Diag {
         return Diag::Error(
             context,
-            tok.location,
+            where,
             error_id_strings.at(+id).second,
             fmt,
             std::forward<Args>(args)...
         );
     }
+    template <typename... Args>
+    auto Error(
+        enum ErrorId id,
+        fmt::format_string<Args...> fmt,
+        Args&&... args
+    ) -> Diag {
+        return Error(tok.location, id, fmt, std::forward<Args>(args)...);
+    }
 
     template <typename... Args>
-    auto Warning(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+    auto Warning(
+        Location where,
+        enum ErrorId id,
+        fmt::format_string<Args...> fmt,
+        Args&&... args
+    ) -> Diag {
         return Diag::Warning(
             context,
-            tok.location,
+            where,
             error_id_strings.at(+id).second,
             fmt,
             std::forward<Args>(args)...
         );
     }
+    template <typename... Args>
+    auto Warning(
+        enum ErrorId id,
+        fmt::format_string<Args...> fmt,
+        Args&&... args
+    ) -> Diag {
+        return Warning(tok.location, id, fmt, std::forward<Args>(args)...);
+    }
 
     template <typename... Args>
-    auto Note(enum ErrorId id, fmt::format_string<Args...> fmt, Args&&... args) -> Diag {
+    auto Note(
+        Location loc,
+        enum ErrorId id,
+        fmt::format_string<Args...> fmt,
+        Args&&... args
+    ) -> Diag {
         return Diag::Note(
             context,
-            tok.location,
+            loc,
             error_id_strings.at(+id).second,
             fmt,
             std::forward<Args>(args)...
         );
+    }
+    template <typename... Args>
+    auto Note(
+        enum ErrorId id,
+        fmt::format_string<Args...> fmt,
+        Args&&... args
+    ) -> Diag {
+        return Note(tok.location, id, fmt, std::forward<Args>(args)...);
     }
 
     static auto IsIdentStart(u32 c) -> bool {
@@ -271,7 +313,8 @@ private:
 void lcc::parser::Parser::NextIdentifier() {
     tok.kind = TokenKind::Keyword;
     while (IsIdentContinue(lastc)) {
-        if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in identifier");
+        if (lastc > 0xff)
+            LCC_TODO("Handle unicode codepoint in identifier");
         tok.text += char(lastc);
         NextChar();
     }
@@ -284,9 +327,12 @@ void lcc::parser::Parser::NextNumber() {
             /// Yeet prefix.
             if (base != 10) NextChar();
 
+            tok.text.clear();
+
             /// Lex digits.
             while (IsValidDigit(lastc)) {
-                if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in number literal");
+                if (lastc > 0xff)
+                    LCC_TODO("Handle unicode codepoint in number literal");
                 tok.text += char(lastc);
                 NextChar();
             }
@@ -307,6 +353,7 @@ void lcc::parser::Parser::NextNumber() {
             /// Convert the number.
             char* end;
             errno = 0;
+            // TODO: Roll our own.
             tok.integer_value = (u64) std::strtoull(cstr, &end, base);
             if (errno == ERANGE) {
                 Error(
@@ -323,8 +370,33 @@ void lcc::parser::Parser::NextNumber() {
             }
         };
 
-    /// Record the start of the number.
-    tok.text.clear();
+    const auto ParseDecimalFraction =
+        [&]() {
+            LCC_ASSERT(
+                lastc == '.',
+                "ParseDecimalFraction called while not at `.`"
+            );
+
+            // Yeet "."
+            NextChar();
+
+            uint leading_zeroes{};
+            while (lastc == '0') {
+                ++leading_zeroes;
+                NextChar();
+            }
+
+            // ".00000..."
+            if (not IsDecimalDigit(lastc))
+                return DecimalFraction{0, 0};
+
+            ParseNumber("decimal_fraction", IsDecimalDigit, 10);
+
+            return DecimalFraction{
+                tok.integer_value,
+                leading_zeroes
+            };
+        };
 
     tok.integer_value = 0;
     tok.kind = TokenKind::Integer;
@@ -346,6 +418,17 @@ void lcc::parser::Parser::NextNumber() {
             ParseNumber("octal", IsOctalDigit, 8);
         else if (lastc == 'x' or lastc == 'X')
             ParseNumber("hexadecimal", IsHexDigit, 16);
+        else if (lastc == '.') {
+            // "0" "."
+            //      ^ Parser here
+
+            auto decimal_fraction = ParseDecimalFraction();
+            u64 fractional = whole_to_fractional(decimal_fraction);
+
+            tok.kind = TokenKind::Fraction;
+            tok.fractional_value.fractional = fractional;
+            tok.fractional_value.whole = 0;
+        }
 
         /// If the next character is a space or delimiter, then this is a literal 0.
         if (IsSpace(lastc)) return;
@@ -356,6 +439,17 @@ void lcc::parser::Parser::NextNumber() {
 
     /// Any other digit means we have a decimal number.
     ParseNumber("decimal", IsDecimalDigit, 10);
+
+    if (lastc == '.') {
+        u64 whole = tok.integer_value;
+
+        auto decimal_fraction = ParseDecimalFraction();
+        u64 fractional = whole_to_fractional(decimal_fraction);
+
+        tok.kind = TokenKind::Fraction;
+        tok.fractional_value.whole = whole;
+        tok.fractional_value.fractional = fractional;
+    }
 }
 
 void lcc::parser::Parser::NextToken() {
@@ -1258,6 +1352,15 @@ auto lcc::parser::Parser::ParseUntypedValue(Type* assumed_type) -> Result<IRValu
         );
         NextToken();
         return IRValue{i};
+    }
+
+    if (At(Tk::Fraction)) {
+        auto f = new (*mod) FractionalConstant(
+            assumed_type,
+            tok.fractional_value
+        );
+        NextToken();
+        return IRValue{f};
     }
 
     /// TODO: strings and array constants.

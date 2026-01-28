@@ -24,6 +24,7 @@ constexpr auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
         case Kind::Function:
         case Kind::Block:
         case Kind::IntegerConstant:
+        case Kind::FractionalConstant:
         case Kind::ArrayConstant:
         case Kind::Poison:
         case Kind::GlobalVariable:
@@ -126,6 +127,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Function:
                     case Value::Kind::Block:
                     case Value::Kind::IntegerConstant:
+                    case Value::Kind::FractionalConstant:
                     case Value::Kind::ArrayConstant:
                     case Value::Kind::Poison:
                     case Value::Kind::GlobalVariable:
@@ -390,6 +392,9 @@ auto Module::mir() -> std::vector<MFunction> {
                     uint(v->type()->bits()) //
                 };
 
+            case Value::Kind::FractionalConstant:
+                LCC_TODO("MIR generation from fractional constant");
+
             case Value::Kind::ArrayConstant:
                 LCC_TODO("MIR generation from array constant");
 
@@ -549,6 +554,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Function:
                     case Value::Kind::Block:
                     case Value::Kind::IntegerConstant:
+                    case Value::Kind::FractionalConstant:
                     case Value::Kind::ArrayConstant:
                     case Value::Kind::Poison:
                     case Value::Kind::GlobalVariable:
