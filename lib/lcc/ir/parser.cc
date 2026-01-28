@@ -51,6 +51,7 @@ static_assert(
 enum struct TokenKind {
     Invalid,
     Eof,
+
     Keyword,
     Temporary,
     IntegerType,

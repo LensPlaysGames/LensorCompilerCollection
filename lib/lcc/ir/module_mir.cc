@@ -391,7 +391,7 @@ auto Module::mir() -> std::vector<MFunction> {
                 };
 
             case Value::Kind::ArrayConstant:
-                LCC_ASSERT(false, "TODO: MIR generation from array constant");
+                LCC_TODO("MIR generation from array constant");
 
             case Value::Kind::Poison:
                 Diag::ICE("Cannot generate MIR from poison IR value");

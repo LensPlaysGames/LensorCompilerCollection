@@ -421,11 +421,13 @@ public:
         );
 
         // Absolute local operand (see definition of MOperand's base type).
-        if (needle == MOperandLocal::absolute_index) return 0;
+        if (needle == MOperandLocal::absolute_index)
+            return 0;
 
         isz offset = 0;
         for (usz index = 0; index <= needle; ++index)
             offset -= isz(_locals.at(index)->allocated_type()->bytes());
+
         return offset;
     }
 

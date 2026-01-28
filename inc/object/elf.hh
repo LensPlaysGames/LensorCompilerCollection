@@ -1,9 +1,10 @@
 #ifndef LOFF_ELF_HH
 #define LOFF_ELF_HH
 
-#include <lcc/utils.hh>
 #include <object/elf.h>
 #include <object/generic.hh>
+
+#include <lcc/utils.hh>
 
 #include <filesystem>
 #include <string_view>

@@ -1,9 +1,10 @@
-#include <fmt/format.h>
-#include <lcc/file.hh>
-#include <lcc/utils.hh>
 #include <object/elf.h>
 #include <object/elf.hh>
 #include <object/generic.hh>
+
+#include <fmt/format.h>
+#include <lcc/file.hh>
+#include <lcc/utils.hh>
 
 #include <filesystem>
 #include <string>
@@ -25,7 +26,8 @@ auto validate_header(const elf64_header& hdr) -> std::pair<bool, std::string> {
                 char(hdr.e_ident[EI_MAG1]),
                 char(hdr.e_ident[EI_MAG2]),
                 char(hdr.e_ident[EI_MAG3])
-            )};
+            )
+        };
     }
 
     if (hdr.e_ident[EI_VERSION] != 1) {
@@ -34,7 +36,8 @@ auto validate_header(const elf64_header& hdr) -> std::pair<bool, std::string> {
             fmt::format(
                 "Invalid ELF version. Expected 1, but got {}",
                 hdr.e_ident[EI_VERSION]
-            )};
+            )
+        };
     }
 
     if (hdr.e_ehsize != sizeof(elf64_header)) {
@@ -44,7 +47,8 @@ auto validate_header(const elf64_header& hdr) -> std::pair<bool, std::string> {
                 "Invalid ELF header size. Expected {}, but got {}",
                 sizeof(elf64_header),
                 hdr.e_ehsize
-            )};
+            )
+        };
     }
 
     if (hdr.e_shentsize != sizeof(elf64_shdr)) {
@@ -54,7 +58,8 @@ auto validate_header(const elf64_header& hdr) -> std::pair<bool, std::string> {
                 "Invalid ELF section header table entry size. Expected {}, but got {}",
                 sizeof(elf64_shdr),
                 hdr.e_shentsize
-            )};
+            )
+        };
     }
 
     return {true, "ok"};

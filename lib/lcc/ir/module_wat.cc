@@ -113,8 +113,7 @@ auto wat_value(Module& m, Value* v) -> std::string {
             if (v->type()->bits() <= 64)
                 return fmt::format("i64.const {}", integer_value);
 
-            LCC_ASSERT(
-                false,
+            Diag::ICE(
                 "WAT cannot handle integer constant of bitsize {}",
                 v->type()->bits()
             );
@@ -254,8 +253,7 @@ auto wat_inst(Module& m, Inst* i) -> std::string {
         case Value::Kind::ArrayConstant:
         case Value::Kind::Function:
         case Value::Kind::Poison: {
-            LCC_ASSERT(
-                false,
+            Diag::ICE(
                 "Not an instruction, therefore wat_inst() is invalid"
             );
         }

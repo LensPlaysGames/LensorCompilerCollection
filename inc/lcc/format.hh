@@ -25,14 +25,16 @@ public:
         // Emits `.lcc` files.
         LCC_SSA_IR,
 
-        // NOTE: No longer maintained.
-        // LLVM's Textual IR (as of LLVM 16.0.4)
+        // LLVM's Textual IR
+        // Emits `.ll` files.
         LLVM_TEXTUAL_IR,
 
         // WebAssembly Textual Format (s-expressions)
+        // Emits `.wat` files.
         WASM_TEXTUAL,
 
-        // GNU's `as` assembler. Emits `.s` files.
+        // GNU's `as` assembler.
+        // Emits `.s` files.
         GNU_AS_ATT_ASSEMBLY,
 
         // ELF object file; the Executable and Linkable Format

@@ -2,6 +2,9 @@
 
 * LCC
 
+- [IRTest]: IR -> IR testing facility
+  This will allow us to test optimisations, as well as make sure our IR parser is a working frontend (further than runtest).
+  We could also re-use the IR against IR matching code for LangTest's IR facilities.
 - [Register Allocation]: Register classes (floats/scalar)
   Unspecified and float
 
@@ -24,7 +27,7 @@
   #+end_example
 
 - [Register Allocation]: ISel should mark call instructions as clobbering a unique "volatile registers" register (similar to return register), such that RA knows whats up, and could even insert spills before and after the call if necessary.
-- [Test]: Convert old opt tests in =tst/= into RunTest tests.
+- [Test]: Convert old opt tests in =tst/= into IR tests.
 - [Backend/WASM]: Struct and array types
   WebAssembly 3.0 has composite types, =struct= and =array=.
   They need a bit of special handling, so it will be quite an extensive feature to implement (requiring overrides for storing and loading, variable initialisation, and more).

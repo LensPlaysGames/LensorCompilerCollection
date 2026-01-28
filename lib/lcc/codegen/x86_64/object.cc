@@ -150,7 +150,8 @@ static constexpr u8 rw_encoding(RegisterId id) {
 
         // Not actual registers.
         case RegisterId::RETURN:
-        case RegisterId::INVALID: break;
+        case RegisterId::INVALID:
+            break;
     }
     LCC_UNREACHABLE();
 }

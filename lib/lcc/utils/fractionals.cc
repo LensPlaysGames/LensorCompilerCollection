@@ -3,8 +3,8 @@
 namespace lcc {
 u64 whole_to_fractional(u64 whole) {
     u64 fractional{};
-    constexpr u64 one = 1;
-    constexpr u64 bitwidth = sizeof(fractional) * CHAR_BIT;
+    constexpr decltype(whole) one = 1;
+    constexpr decltype(whole) bitwidth = sizeof(fractional) * CHAR_BIT;
 
     // The decimal point in the input is placed just to the left of the
     // first *decimal* digit. To properly understand the scale of each digit,
@@ -12,7 +12,7 @@ u64 whole_to_fractional(u64 whole) {
     // input number (powers of 10).
     u64 divisor{10};
     {
-        u64 whole_copy{whole / 10};
+        decltype(whole) whole_copy{whole / 10};
         while (whole_copy) {
             divisor *= 10;
             whole_copy /= 10;
@@ -20,7 +20,7 @@ u64 whole_to_fractional(u64 whole) {
     }
 
     // For every digit
-    u64 place{1};
+    uint place{1};
     while (whole and place < bitwidth) {
         u64 fractional_for_digit{};
 

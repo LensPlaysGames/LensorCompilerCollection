@@ -1058,7 +1058,8 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 Args&&... args
             ) -> std::string {
             std::string val;
-            if (include_type) fmt::format_to(It(val), "{} ", Ty(v->type()));
+            if (include_type)
+                fmt::format_to(It(val), "{} ", Ty(v->type()));
             fmt::format_to(It(val), fmt, std::forward<Args>(args)...);
             return val;
         };

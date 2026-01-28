@@ -26,7 +26,10 @@ namespace {
 // NOTE: Does not handle empty string (because we want every input of this
 // function to produce the same output)
 auto safe_name(std::string in) -> std::string {
-    LCC_ASSERT(not in.empty(), "safe_name does not handle empty string input");
+    LCC_ASSERT(
+        not in.empty(),
+        "safe_name does not handle empty string input"
+    );
     // . in the middle of an identifier is not allowed
     std::replace(in.begin(), in.end(), '.', '_');
     return fmt::format("{}", in);

@@ -238,7 +238,13 @@ class GlobalVariable : public UseTrackingValue {
     Type* _allocated_type;
 
 public:
-    explicit GlobalVariable(Module* mod, Type* t, std::string name, Linkage linkage, Value* init);
+    explicit GlobalVariable(
+        Module* mod,
+        Type* t,
+        std::string name,
+        Linkage linkage,
+        Value* init
+    );
 
     [[nodiscard]]
     auto allocated_type() -> Type* { return _allocated_type; }
@@ -252,7 +258,11 @@ public:
     static auto classof(Value* v) -> bool { return v->kind() == Kind::GlobalVariable; }
 
     [[nodiscard]]
-    static auto CreateStringPtr(Module* mod, std::string name, std::string_view string_value) -> GlobalVariable*;
+    static auto CreateStringPtr(
+        Module* mod,
+        std::string name,
+        std::string_view string_value
+    ) -> GlobalVariable*;
 };
 
 /// IR instruction.

@@ -1,4 +1,5 @@
 #include <lcc/core.hh>
+#include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils/ir_printer.hh>
 
@@ -597,8 +598,12 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                     return Format(
                         "[{}]",
                         fmt::join(
-                            std::span<const char>(a->data(), a->size()) //
-                                | vws::transform([](auto c) { return fmt::format("i8 {}", u8(c)); }),
+                            vws::transform(
+                                std::span<const char>(a->data(), a->size()),
+                                [](const auto c) {
+                                    return fmt::format("i8 {}", u8(c));
+                                }
+                            ),
                             ", "
                         )
                     );

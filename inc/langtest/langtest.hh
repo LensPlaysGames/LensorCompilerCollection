@@ -64,7 +64,8 @@ struct Test {
         Sema
     } warning_point{WarningPoint::None};
 
-    // NOTE: You should also not check if context has an error after parsing.
+    // NOTE: You should also not check (analyse semantically) if context has
+    // an error after parsing.
     bool should_check() {
         switch (stop_point) {
             case StopPoint::Syntax: return false;

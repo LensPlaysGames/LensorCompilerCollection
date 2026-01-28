@@ -1,7 +1,7 @@
-#include <lcc/utils.hh>
-
 #include <object/elf.h>
 #include <object/generic.hh>
+
+#include <lcc/utils.hh>
 
 #include <algorithm>
 #include <cstdio>
