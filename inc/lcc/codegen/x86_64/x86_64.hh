@@ -82,6 +82,23 @@ enum struct RegisterId : u32 {
     RSP,
     RIP,
 
+    XMM0,
+    XMM1,
+    XMM2,
+    XMM3,
+    XMM4,
+    XMM5,
+    XMM6,
+    XMM7,
+    XMM8,
+    XMM9,
+    XMM10,
+    XMM11,
+    XMM12,
+    XMM13,
+    XMM14,
+    XMM15,
+
     // The function value return register: most likely RAX, but sometimes not.
     RETURN = 0x210,
 };
@@ -121,6 +138,12 @@ constexpr auto Special(usz size) -> std::string_view {
         case 8: return ConstexprFormat<"{}{}l", s[0], s[1]>();
     }
 }
+
+template <int x>
+constexpr auto SSEScalar() -> std::string_view {
+    return ConstexprFormat<"xmm{}", x>();
+}
+
 } // namespace regs
 
 constexpr auto ToString(Opcode op) -> std::string_view {
@@ -189,6 +212,22 @@ constexpr auto ToString(RegisterId id, usz size) -> std::string_view {
         case RegisterId::RBP: return Special<"bp">(size);
         case RegisterId::RSP: return Special<"sp">(size);
         case RegisterId::RIP: return Special<"ip">(size);
+        case RegisterId::XMM0: return SSEScalar<0>();
+        case RegisterId::XMM1: return SSEScalar<1>();
+        case RegisterId::XMM2: return SSEScalar<2>();
+        case RegisterId::XMM3: return SSEScalar<3>();
+        case RegisterId::XMM4: return SSEScalar<4>();
+        case RegisterId::XMM5: return SSEScalar<5>();
+        case RegisterId::XMM6: return SSEScalar<6>();
+        case RegisterId::XMM7: return SSEScalar<7>();
+        case RegisterId::XMM8: return SSEScalar<8>();
+        case RegisterId::XMM9: return SSEScalar<9>();
+        case RegisterId::XMM10: return SSEScalar<10>();
+        case RegisterId::XMM11: return SSEScalar<11>();
+        case RegisterId::XMM12: return SSEScalar<12>();
+        case RegisterId::XMM13: return SSEScalar<13>();
+        case RegisterId::XMM14: return SSEScalar<14>();
+        case RegisterId::XMM15: return SSEScalar<15>();
     }
     LCC_UNREACHABLE();
 }

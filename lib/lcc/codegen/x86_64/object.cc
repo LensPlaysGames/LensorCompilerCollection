@@ -146,7 +146,24 @@ static constexpr u8 rw_encoding(RegisterId id) {
             return 7;
 
         // Not encodable in rw.
-        case RegisterId::RIP: break;
+        case RegisterId::RIP:
+        case RegisterId::XMM0:
+        case RegisterId::XMM1:
+        case RegisterId::XMM2:
+        case RegisterId::XMM3:
+        case RegisterId::XMM4:
+        case RegisterId::XMM5:
+        case RegisterId::XMM6:
+        case RegisterId::XMM7:
+        case RegisterId::XMM8:
+        case RegisterId::XMM9:
+        case RegisterId::XMM10:
+        case RegisterId::XMM11:
+        case RegisterId::XMM12:
+        case RegisterId::XMM13:
+        case RegisterId::XMM14:
+        case RegisterId::XMM15:
+            break;
 
         // Not actual registers.
         case RegisterId::RETURN:
