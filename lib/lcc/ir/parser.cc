@@ -428,6 +428,7 @@ void lcc::parser::Parser::NextNumber() {
             tok.kind = TokenKind::Fraction;
             tok.fractional_value.fractional = fractional;
             tok.fractional_value.whole = 0;
+            return;
         }
 
         /// If the next character is a space or delimiter, then this is a literal 0.
