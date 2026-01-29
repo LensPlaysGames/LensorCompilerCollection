@@ -41,6 +41,8 @@ class Module {
     void _x86_64_msx64_lower_parameters();
     /// \see Module::lower()
     void _x86_64_msx64_lower_overlarge();
+    /// \see Module::lower()
+    void _x86_64_lower_float_constants();
 
 public:
     Module(Module&) = delete;
