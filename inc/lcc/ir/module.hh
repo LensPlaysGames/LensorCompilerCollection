@@ -16,8 +16,15 @@
 #include <vector>
 
 namespace lcc {
+
 /// An LCC IR module.
-class Module {
+/// A module is a self-contained description of a program, containing IR
+/// functions, global variable definitions, and extra sections to include
+/// in the object/executable.
+struct Module {
+    constexpr static usz first_virtual_register = 0x420;
+
+private:
     Context* _ctx{};
     std::string _name;
 
@@ -25,7 +32,7 @@ class Module {
     std::vector<GlobalVariable*> _vars;
     std::vector<Section> _extra_sections;
 
-    usz _virtual_register{0x420};
+    usz _virtual_register{first_virtual_register};
 
     /// Helper for lowering a store to a memcpy for x86_64
     /// \see Module::lower()
@@ -33,6 +40,9 @@ class Module {
     /// Helper for lowering an overlarge load for x86_64
     /// \see Module::lower()
     void _x86_64_lower_load(LoadInst*, Function*);
+    /// Helper for lowering float constants for x86_64
+    /// \see Module::lower()
+    void _x86_64_lower_float_constants();
     /// \see Module::lower()
     void _x86_64_sysv_lower_parameters();
     /// \see Module::lower()
@@ -41,8 +51,6 @@ class Module {
     void _x86_64_msx64_lower_parameters();
     /// \see Module::lower()
     void _x86_64_msx64_lower_overlarge();
-    /// \see Module::lower()
-    void _x86_64_lower_float_constants();
 
 public:
     Module(Module&) = delete;
@@ -145,6 +153,7 @@ public:
     [[nodiscard]]
     static auto Parse(Context* ctx, File& file) -> std::unique_ptr<Module>;
 };
+
 } // namespace lcc
 
 #endif // LCC_MODULE_HH

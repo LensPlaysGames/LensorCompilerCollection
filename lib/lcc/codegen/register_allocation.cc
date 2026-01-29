@@ -455,7 +455,7 @@ auto allocate_registers(
         AdjacencyList list{};
         list.index = usz(i);
         list.value = reg.value;
-        if (list.value < +MInst::Kind::ArchStart) {
+        if (list.value < +Module::first_virtual_register) {
             list.color = list.value;
             list.allocated = true;
         }
