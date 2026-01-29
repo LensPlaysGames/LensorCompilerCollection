@@ -49,6 +49,10 @@ u64 whole_to_fractional(DecimalFraction whole);
 // Given "0b0.010..." return whole number 25 (i.e. "0.25")
 DecimalFraction fractional_to_whole(u64 fractional);
 
+// Convert a fixed point fractional number into a binary32 float value (1
+// sign bit, 8 bit exponent, 23 bit mantissa/significand).
+u32 fixed_to_binary32_float(const FixedPointNumber&);
+
 } // namespace lcc
 
 template <>

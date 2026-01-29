@@ -138,4 +138,53 @@ DecimalFraction fractional_to_whole(u64 fractional) {
     return DecimalFraction{whole, leading_zeroes};
 }
 
+u32 fixed_to_binary32_float(const FixedPointNumber& f) {
+    bool negative{}; // TODO
+    // binary32 exponent bias is 127
+    u8 exponent{127};
+    auto mantissa{f.fractional};
+
+    auto whole{f.whole};
+
+    while (whole > 1) {
+        bool misfit = whole % 2;
+        whole /= 2;
+        mantissa /= 2;
+        if (misfit)
+            mantissa |= ((u64) 1) << 63;
+        ++exponent;
+    }
+
+    // If the mantissa is non-zero *and* the most significant bit isn't set,
+    // we have to adjust it until the most significant bit *was* just set...
+    if (not whole and mantissa) {
+        // If the top bit is not set, adjust mantissa and whole such that t
+        // Multiply until the top bit is set.
+        while (not (mantissa & ((u64) 1) << 63)) {
+            --exponent;
+            mantissa *= 2;
+        };
+        // Multiply the top bit, which was set, out of the mantissa. This discards
+        // the top "one" bit, as it is implicit in the binary32 format.
+        --exponent;
+        mantissa *= 2;
+    }
+
+    // Set exponent
+    u32 binary32_value{exponent};
+    binary32_value <<= 23;
+
+    // Set the least significant 23 bits using the most significant 23 bits of
+    // the mantissa.
+    binary32_value |= (u32) (mantissa >> (64 - 23));
+    // If the 24th most significant bit is set, round up...
+    if (mantissa & (((u64) 1) << (64 - 24)))
+        binary32_value |= 1;
+
+    if (negative)
+        binary32_value |= ((u32) 1) << 31;
+
+    return binary32_value;
+}
+
 } // namespace lcc
