@@ -36,6 +36,15 @@ struct Register {
     bool defining_use = false;
 };
 
+static auto ToString(Register::Category category) -> std::string_view {
+    switch (category) {
+        case Register::Category::DEFAULT: return "default";
+        case Register::Category::FLOAT: return "float";
+        case Register::Category::COUNT: break;
+    }
+    LCC_UNREACHABLE();
+}
+
 struct Immediate {
     usz value{};
     uint size{};
