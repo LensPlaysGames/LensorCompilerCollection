@@ -112,6 +112,7 @@ public:
     /// IR type caches.
     // TODO: Could these be smart pointers? If not, why?
     std::unordered_map<usz, Type*> integer_types;
+    std::unordered_map<usz, Type*> fractional_types;
     std::vector<Type*> array_types;
     std::vector<Type*> function_types;
     std::vector<Type*> struct_types;

@@ -106,6 +106,11 @@ auto Type::bits() const -> usz {
             return i->bitwidth();
         }
 
+        case Kind::Fractional: {
+            const auto& f = as<FractionalType>(this);
+            return f->bitwidth();
+        }
+
         case Kind::Array: {
             const auto& array = as<ArrayType>(this);
             return array->element_type()->bits() * array->length();
@@ -134,9 +139,18 @@ usz Type::align() const {
         case Kind::Pointer:
             return 64; // FIXME: Target-dependent pointer size
 
-        case Kind::Void: return 1; /// Alignment of 0 is invalid.
-        case Kind::Array: return as<ArrayType>(this)->element_type()->align();
-        case Kind::Integer: return as<IntegerType>(this)->bitwidth();
+        // Alignment of 0 is invalid, so void is one-aligned.
+        case Kind::Void: return 1;
+
+        case Kind::Array:
+            return as<ArrayType>(this)->element_type()->align();
+
+        case Kind::Integer:
+            return as<IntegerType>(this)->bitwidth();
+
+        case Kind::Fractional:
+            return as<FractionalType>(this)->bitwidth();
+
         case Kind::Struct: {
             auto s = as<StructType>(this);
 
@@ -180,6 +194,11 @@ auto Type::string(bool use_colour) const -> std::string {
         case Kind::Integer: {
             auto integer = as<IntegerType>(this);
             return fmt::format("{}i{}{}", C(P::Type), integer->bitwidth(), C(P::Reset));
+        }
+
+        case Kind::Fractional: {
+            auto fractional = as<FractionalType>(this);
+            return fmt::format("{}f{}{}", C(P::Type), fractional->bitwidth(), C(P::Reset));
         }
 
         case Kind::Function: {
@@ -247,14 +266,37 @@ IntegerType* IntegerType::Get(Context* ctx, usz bitwidth) {
     return out;
 }
 
+FractionalType* FractionalType::Get(Context* ctx, usz bitwidth) {
+    LCC_ASSERT(ctx);
+
+    // Look in ctx type cache.
+    const auto& found = std::find_if(
+        ctx->fractional_types.begin(),
+        ctx->fractional_types.end(),
+        [&](const std::pair<usz, Type*>& pair) {
+            return pair.first == bitwidth;
+        }
+    );
+    if (found != ctx->fractional_types.end())
+        return as<FractionalType>(found->second);
+
+    // Create new type and store in cache.
+    FractionalType* out = new (ctx) FractionalType(bitwidth);
+    ctx->fractional_types[bitwidth] = out;
+    return out;
+}
+
 ArrayType* ArrayType::Get(Context* ctx, usz length, Type* element_type) {
     LCC_ASSERT(ctx and element_type);
 
     // Look in ctx type cache.
-    const auto& found = rgs::find_if(ctx->array_types, [&](const Type* t) {
-        const ArrayType* a = as<ArrayType>(t);
-        return a->length() == length && a->element_type() == element_type;
-    });
+    const auto& found = rgs::find_if(
+        ctx->array_types,
+        [&](const Type* t) {
+            const ArrayType* a = as<ArrayType>(t);
+            return a->length() == length && a->element_type() == element_type;
+        }
+    );
     if (found != ctx->array_types.end())
         return as<ArrayType>(*found);
 

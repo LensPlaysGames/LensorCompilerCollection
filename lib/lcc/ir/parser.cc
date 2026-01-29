@@ -56,6 +56,7 @@ enum struct TokenKind {
     Keyword,
     Temporary,
     IntegerType,
+    FractionalType,
     Global,
     Integer,
     Fraction,
@@ -81,6 +82,7 @@ constexpr auto StringifyEnum(TokenKind t) -> std::string_view {
         case TokenKind::Keyword: return "keyword";
         case TokenKind::Temporary: return "temporary";
         case TokenKind::IntegerType: return "integer type";
+        case TokenKind::FractionalType: return "fractional type";
         case TokenKind::Global: return "global";
         case TokenKind::Integer: return "integer";
         case TokenKind::Fraction: return "fraction";
@@ -574,7 +576,7 @@ void lcc::parser::Parser::NextToken() {
             if (IsIdentStart(lastc)) {
                 NextIdentifier();
 
-                /// Try and parse a number after `i`.
+                /// Try and parse a number after `i` or `f`.
                 if (
                     tok.text.size() > 1
                     and tok.text[0] == 'i'
@@ -596,6 +598,29 @@ void lcc::parser::Parser::NextToken() {
                     /// If the identifier is something like `s64iam`, it's simply an identifier.
                     if (end != cstr + tok.text.size()) return;
                     tok.kind = TokenKind::IntegerType;
+                } else if (
+                    tok.text.size() > 1
+                    and tok.text[0] == 'f'
+                    and IsDecimalDigit(u32(tok.text[1]))
+                ) {
+                    const char* cstr = tok.text.c_str();
+
+                    // Convert the textual, decimal bitwidth to a binary number.
+                    char* end;
+                    errno = 0;
+                    tok.integer_value = (u64) std::strtoull(cstr + 1, &end, 10);
+                    if (errno == ERANGE) {
+                        Error(
+                            ErrorId::InvalidLiteral,
+                            "Bit width of fractional is too large."
+                        );
+                    }
+
+                    /// If the identifier is something like `s64iam`, it's simply an identifier.
+                    if (end != cstr + tok.text.size())
+                        return;
+
+                    tok.kind = TokenKind::FractionalType;
                 }
             } else if (IsDecimalDigit(lastc)) {
                 NextNumber();
@@ -1233,6 +1258,8 @@ auto lcc::parser::Parser::ParseType() -> Result<Type*> {
         base = Type::VoidTy;
     else if (At(Tk::IntegerType))
         base = IntegerType::Get(mod->context(), (usz) tok.integer_value);
+    else if (At(Tk::FractionalType))
+        base = FractionalType::Get(mod->context(), (usz) tok.integer_value);
     else if (Kw("struct")) {
         // Eat struct keyword
         NextToken();

@@ -17,6 +17,7 @@
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/ir_printer.hh>
 
 #include <object/generic.hh>
@@ -639,53 +640,11 @@ void Module::_x86_64_lower_float_constants() {
                         case Value::Kind::FractionalConstant: {
                             auto f = as<FractionalConstant>(c)->value();
 
-                            bool negative{}; // TODO
-                            // binary32 exponent bias is 127
-                            u8 exponent{127};
-                            auto mantissa{f.fractional};
-
-                            auto whole{f.whole};
-
-                            while (whole > 1) {
-                                bool misfit = whole % 2;
-                                whole /= 2;
-                                mantissa /= 2;
-                                if (misfit)
-                                    mantissa |= ((u64) 1) << 63;
-                                ++exponent;
-                            }
-
-                            // If the mantissa is non-zero *and* the most significant bit isn't set,
-                            // we have to adjust it until the most significant bit *was* just set...
-                            if (not whole and mantissa) {
-                                // If the top bit is not set, adjust mantissa and whole such that t
-                                // Multiply until the top bit is set.
-                                while (not (mantissa & ((u64) 1) << 63)) {
-                                    --exponent;
-                                    mantissa *= 2;
-                                };
-                                // Multiply the top bit, which was set, out of the mantissa. This discards
-                                // the top "one" bit, as it is implicit in the binary32 format.
-                                --exponent;
-                                mantissa *= 2;
-                            }
-
-                            // Set exponent
-                            u32 binary32_value{exponent};
-                            binary32_value <<= 23;
-
-                            // Set the least significant 23 bits using the most significant 23 bits of
-                            // the mantissa.
-                            binary32_value |= (u32) (mantissa >> (64 - 23));
-                            // If the 24th most significant bit is set, round up...
-                            if (mantissa & (((u64) 1) << (64 - 24)))
-                                binary32_value |= 1;
-
-                            if (negative)
-                                binary32_value |= ((u32) 1) << 31;
+                            auto binary32_value = fixed_to_binary32_float(f);
+                            constexpr usz bitwidth = 32;
 
                             auto float_global_name = fmt::format("fconst{:x}", binary32_value);
-                            auto float_global_type = IntegerType::Get(context(), 32);
+                            auto float_global_type = IntegerType::Get(context(), bitwidth);
                             auto float_init = new (*this) IntegerConstant(float_global_type, binary32_value);
                             auto float_global = new (*this) GlobalVariable(
                                 this,
@@ -695,9 +654,8 @@ void Module::_x86_64_lower_float_constants() {
                                 float_init
                             );
 
-                            // TODO: float type
                             auto load = new (*this) LoadInst(
-                                float_global_type,
+                                FractionalType::Get(context(), bitwidth),
                                 float_global,
                                 instruction->location()
                             );

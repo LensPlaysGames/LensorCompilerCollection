@@ -256,7 +256,8 @@ auto Module::mir() -> std::vector<MFunction> {
     };
 
     // Handle inlining of values into operands vs using register references.
-    const auto MOperandValueReference = [&](Function* f_ir, MFunction& f, Value* v) -> MOperand {
+    const auto MOperandValueReference
+        = [&](Function* f_ir, MFunction& f, Value* v) -> MOperand {
         // Find MInst if possible, add to use count.
         usz regsize{0};
         if (auto* inst = MInstByVirtualRegister(virts[v])) {

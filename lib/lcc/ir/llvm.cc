@@ -512,6 +512,10 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Type::Kind::Integer:
                 return fmt::format("i{}", as<IntegerType>(ty)->bits());
 
+            case Type::Kind::Fractional:
+                // TODO: Should we take bitwidth into account?
+                return "float";
+
             case Type::Kind::Array:
                 return fmt::format(
                     "[{} x {}]",

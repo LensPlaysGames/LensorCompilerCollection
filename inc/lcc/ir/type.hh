@@ -20,12 +20,41 @@ class Type {
 
 public:
     enum struct Kind {
+        // Uninitialized or Unknown Type
         Unknown,
+        // A pointer type has a value that contains a memory address.
+        // A value of pointer type may be loaded from.
         Pointer,
+        // A void type represents the absence of a value.
         Void,
+        // An array type has a value that represents N elements of the array's
+        // element type, contiguously. An array with a dimension (size) of two
+        // has two, uniquely addressable points where each of the element's values
+        // may be found.
+        // An array may contain any non-zero amount of elements.
+        // An array's elements may be of any *one* type.
+        // All element's in an array have the same size and alignment.
+        // @see ArrayConstant
         Array,
+        // A value that represents an IR function.
         Function,
+        // (ℤ) An integer type has a value that may represent any positive whole
+        // number, negative whole number, or zero, with no fractional parts.
+        // ..., -3, -2 -1, -0, 0, 1, 2, 3, ...
+        // @see IntegerConstant
+        // @see AddInst
         Integer,
+        // (ℚ) A fractional type has a value that represents a rational number.
+        // Rational numbers are numbers that may be represented as `p / q`, where
+        // `q` is non-zero.
+        // @see FractionalConstant
+        // @see AddInst
+        Fractional,
+        // An aggregate type has a value that represents it's constituent types
+        // contiguously. A struct with two `i32` members has two, uniquely
+        // addressable points where each of the member's values may be found.
+        // A struct may contain any amount of members.
+        // A struct's members may be of any type.
         Struct,
     };
 
@@ -157,6 +186,26 @@ public:
 
     /// RTTI.
     static bool classof(const Type* t) { return t->kind == Kind::Integer; }
+};
+
+class FractionalType : public Type {
+    friend class lcc::Init;
+    friend class lcc::Context;
+
+    usz _width;
+
+private:
+    constexpr FractionalType(usz width) : Type(Kind::Fractional), _width(width) {}
+
+public:
+    static auto Get(Context* ctx, usz width) -> FractionalType*;
+
+    usz bitwidth() const {
+        return _width;
+    }
+
+    /// RTTI.
+    static bool classof(const Type* t) { return t->kind == Kind::Fractional; }
 };
 
 class StructType : public Type {
