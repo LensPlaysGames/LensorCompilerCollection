@@ -688,9 +688,9 @@ void Module::lower() {
         } else if (context()->target()->is_cconv_ms()) {
             _x86_64_msx64_lower_parameters();
             _x86_64_msx64_lower_overlarge();
-        } else LCC_ASSERT(false, "Unhandled calling convention in x86_64 IR lowering");
+        } else Diag::ICE("Unhandled calling convention in x86_64 IR lowering");
     } else {
-        LCC_ASSERT(false, "TODO: Lowering of specified arch is not yet supported");
+        LCC_TODO("Lowering of specified arch is not yet supported");
     }
 }
 
@@ -799,7 +799,7 @@ void Module::emit(std::filesystem::path output_file_path) {
                     scalar_registers
                 );
 
-            } else LCC_ASSERT(false, "Sorry, unhandled target architecture");
+            } else Diag::ICE("Sorry, unhandled target architecture");
 
             for (auto& mfunc : machine_ir) {
                 (void) allocate_registers(desc, mfunc);
@@ -818,22 +818,28 @@ void Module::emit(std::filesystem::path output_file_path) {
                 }
             }
 
-            if (_ctx->option_stopat_mir()) std::exit(0);
+            if (_ctx->option_stopat_mir())
+                std::exit(0);
 
             if (_ctx->format()->format() == Format::GNU_AS_ATT_ASSEMBLY) {
                 if (_ctx->target()->is_arch_x86_64())
                     x86_64::emit_gnu_att_assembly(output_file_path, this, desc, machine_ir);
-                else LCC_ASSERT(false, "Unhandled code emission target, sorry");
+                else Diag::ICE("Unhandled code emission target, sorry");
             } else if (_ctx->format()->format() == Format::ELF_OBJECT) {
                 GenericObject gobj{};
                 if (_ctx->target()->is_arch_x86_64())
                     gobj = x86_64::emit_mcode_gobj(this, desc, machine_ir);
-                else LCC_ASSERT(false, "Unhandled code emission target, sorry");
+                else Diag::ICE("Unhandled code emission target, sorry");
 
                 fmt::print("{}\n", gobj.print());
 
                 FILE* f = fopen(output_file_path.string().data(), "wb");
-                if (not f) Diag::ICE("Could not open output file at {} for writing", output_file_path.string());
+                if (not f) {
+                    Diag::ICE(
+                        "Could not open output file at {} for writing",
+                        output_file_path.string()
+                    );
+                }
                 gobj.as_elf(f);
                 fclose(f);
 
