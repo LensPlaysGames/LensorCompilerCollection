@@ -569,6 +569,11 @@ auto allocate_registers(
     // We don't color hardware registers with other hardware registers,
     // so we don't count them.
     for (auto [category, k] : ks) {
+        LCC_ASSERT(
+            count > k,
+            "RA: Somehow, we didn't collect all registers, or something."
+            " Lens got this wrong before by setting the calling conventions register array size to an incorrect value."
+        );
         count -= k;
     }
 
@@ -593,14 +598,17 @@ auto allocate_registers(
 
         if (count) {
             /// Determine node with minimal spill cost.
-            usz min_cost = (usz) -1; /// (!)
+            usz min_cost = std::numeric_limits<usz>::max();
             usz node_to_spill = 0;
 
             for (auto& list : lists) {
-                if (should_skip_list(list)) continue;
+                if (should_skip_list(list))
+                    continue;
+
                 if (list.degree())
                     list.spill_cost = list.spill_cost / list.degree();
                 else list.spill_cost = 0;
+
                 if (list.degree() and list.spill_cost <= min_cost) {
                     min_cost = list.spill_cost;
                     node_to_spill = list.index;

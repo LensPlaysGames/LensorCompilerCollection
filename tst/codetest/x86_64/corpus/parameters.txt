@@ -28,6 +28,35 @@ func:
 memcpy:
 
 ================
+Memory Parameter Lowering: One f32
+================
+
+func (internal): glintcc void(f32 %0):
+  bb0:
+    %1 = alloca f32
+    store f32 %0 into %1
+    %2 = load f32 from %1
+    return
+
+--sysv--
+
+func:
+  bb0:
+    mov.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov.derefrhs xmm0.32 local(abs)+16
+    mov.dereflhs local(abs)+16 xmm0.32 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+================
 Memory Parameter Lowering: Two i64
 ================
 

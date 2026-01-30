@@ -286,6 +286,18 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto params_desc = cconv::msx64::parameter_description(f_ir);
                         auto param_info = params_desc.info.at(param->index());
                         switch (param_info.kind()) {
+                            case cconv::msx64::ParameterDescription::Parameter::Kinds::Float: {
+                                fmt::print(
+                                    stderr,
+                                    "Warning: msx64 float calling convention is not fully worked out\n"
+                                );
+                                return MOperandRegister(
+                                    +cconv::msx64::float_regs.at(param_info.arg_reg_index()),
+                                    uint(param->type()->bits()),
+                                    Register::Category::FLOAT
+                                );
+                            }
+
                             case cconv::msx64::ParameterDescription::Parameter::Kinds::SingleRegister:
                             // FIXME: Is this how PointerInRegister parameter is handled (here)?
                             // This may be the perfect spot to insert a dereference, if possible.
@@ -315,13 +327,13 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                 // x64 calling convention requires caller to designate 32 bytes on the
                                 // stack to save parameter registers into.
-                                i32 shadow_stack_size = 32;
+                                constexpr decltype(offset) shadow_stack_size = 32;
                                 offset += shadow_stack_size;
 
                                 // FIXME: I'm not sure if this should be stack_byte_offset (including size
                                 // of current parameter), or if it should be stack_byte_offset_used
                                 // (before the current parameter's size has been added).
-                                offset += i32(param_info.stack_byte_offset_used);
+                                offset += (decltype(offset)) param_info.stack_byte_offset_used;
                                 return MOperandLocal(
                                     MOperandLocal::absolute_index,
                                     offset
@@ -337,6 +349,13 @@ auto Module::mir() -> std::vector<MFunction> {
                                 return MOperandRegister(
                                     +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
                                     uint(param->type()->bits())
+                                );
+
+                            case Kinds::Scalar:
+                                return MOperandRegister(
+                                    +cconv::sysv::scalar_regs.at(param_info.arg_scalars_used),
+                                    uint(param->type()->bits()),
+                                    Register::Category::FLOAT
                                 );
 
                             case Kinds::DoubleRegister:
@@ -358,7 +377,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                 // FIXME: I'm not sure if this should be stack_byte_offset (including size
                                 // of current parameter), or if it should be stack_byte_offset_used
                                 // (before the current parameter's size has been added).
-                                offset += i32(param_info.stack_byte_offset_used);
+                                offset += (decltype(offset)) param_info.stack_byte_offset_used;
                                 return MOperandLocal(
                                     MOperandLocal::absolute_index,
                                     offset
@@ -379,7 +398,9 @@ auto Module::mir() -> std::vector<MFunction> {
                 if (found == f.locals().end()) {
                     v->print();
                     fmt::print("\n");
-                    Diag::ICE("MIR Generation: encountered reference to local before it has been declared");
+                    Diag::ICE(
+                        "MIR Generation: encountered reference to local before it has been declared"
+                    );
                 }
                 return MOperandLocal{u32(found - f.locals().begin())};
             }
@@ -625,7 +646,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         usz arg_stack_bytes_used = 0;
                         if (_ctx->target()->is_arch_x86_64()) {
-                            if (_ctx->target()->is_platform_windows()) {
+                            if (_ctx->target()->is_cconv_ms()) {
                                 std::vector<Type*> arg_types{};
                                 rgs::transform(
                                     call_ir->args(),
@@ -638,6 +659,19 @@ auto Module::mir() -> std::vector<MFunction> {
                                     auto param_info = param_desc.info.at(usz(arg_i));
                                     switch (param_info.kind()) {
                                         using Kinds = cconv::msx64::ParameterDescription::Parameter::Kinds;
+
+                                        case Kinds::Float: {
+                                            auto copy = MInst(
+                                                MInst::Kind::Copy,
+                                                {+cconv::msx64::float_regs.at(usz(arg_i)),
+                                                 uint(arg->type()->bits()),
+                                                 Register::Category::FLOAT}
+                                            );
+                                            copy.location(call_ir->location());
+                                            copy.add_operand(MOperandValueReference(function, f, arg));
+                                            bb.add_instruction(copy);
+                                        } break;
+
                                         case Kinds::SingleRegister:
                                         // FIXME: Is PointerInRegister handled like this?
                                         case Kinds::PointerInRegister: {

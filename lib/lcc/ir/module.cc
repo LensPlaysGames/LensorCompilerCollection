@@ -332,14 +332,17 @@ void Module::_x86_64_sysv_lower_parameters() {
             auto [parameter, param_info, param_t] :
             vws::zip(function->params(), param_desc.info, function_type->params())
         ) {
-            if (not param_info.is_memory()) continue;
+            if (not param_info.is_memory())
+                continue;
 
             // Update parameter type in function type signature
             param_t = Type::PtrTy;
 
             LCC_ASSERT(
                 parameter->users().size() == 1 and is<StoreInst>(parameter->users().at(0)),
-                "Expected memory parameter to be used by single store instruction into a preceding alloca..."
+                "Expected memory parameter to be used by single store instruction into a preceding alloca...\n"
+                "    %0 = <alloca> <parameter-type>\n"
+                "    store <parameter> into %0>"
             );
             auto store = as<StoreInst>(parameter->users().at(0));
 
@@ -750,6 +753,7 @@ void Module::emit(std::filesystem::path output_file_path) {
             if (_ctx->target()->is_arch_x86_64()) {
                 desc.return_register_to_replace = +x86_64::RegisterId::RETURN;
                 std::vector<usz> jeep_registers{};
+                std::vector<lcc::usz> scalar_registers{};
                 if (_ctx->target()->is_cconv_ms()) {
                     desc.return_register = +cconv::msx64::return_register;
                     // Just the volatile registers
@@ -758,7 +762,13 @@ void Module::emit(std::filesystem::path output_file_path) {
                         std::back_inserter(jeep_registers),
                         [](auto r) { return +r; }
                     );
-                } else {
+
+                    lcc::rgs::transform(
+                        lcc::cconv::msx64::volatile_float_regs,
+                        std::back_inserter(scalar_registers),
+                        [](auto r) { return lcc::operator+(r); }
+                    );
+                } else if (_ctx->target()->is_cconv_sysv()) {
                     desc.return_register = +cconv::sysv::return_register;
                     // Just the volatile registers
                     rgs::transform(
@@ -766,37 +776,24 @@ void Module::emit(std::filesystem::path output_file_path) {
                         std::back_inserter(jeep_registers),
                         [](auto r) { return +r; }
                     );
-                }
+                    lcc::rgs::transform(
+                        lcc::cconv::sysv::scalar_regs,
+                        std::back_inserter(scalar_registers),
+                        [](auto r) { return lcc::operator+(r); }
+                    );
+                } else Diag::ICE("Sorry, unhandled x86_64 calling convention");
+
                 LCC_ASSERT(
                     jeep_registers.size(),
                     "Must populate general purpose register list"
                 );
                 desc.registers.emplace_back(
                     +Register::Category::DEFAULT,
-                    jeep_registers
+                    std::move(jeep_registers)
                 );
-
-                std::vector<usz> scalar_registers{
-                    +x86_64::RegisterId::XMM0,
-                    +x86_64::RegisterId::XMM1,
-                    +x86_64::RegisterId::XMM2,
-                    +x86_64::RegisterId::XMM3,
-                    +x86_64::RegisterId::XMM4,
-                    +x86_64::RegisterId::XMM5,
-                    +x86_64::RegisterId::XMM6,
-                    +x86_64::RegisterId::XMM7,
-                    +x86_64::RegisterId::XMM8,
-                    +x86_64::RegisterId::XMM9,
-                    +x86_64::RegisterId::XMM10,
-                    +x86_64::RegisterId::XMM11,
-                    +x86_64::RegisterId::XMM12,
-                    +x86_64::RegisterId::XMM13,
-                    +x86_64::RegisterId::XMM14,
-                    +x86_64::RegisterId::XMM15
-                };
                 desc.registers.emplace_back(
                     +Register::Category::FLOAT,
-                    scalar_registers
+                    std::move(scalar_registers)
                 );
 
             } else Diag::ICE("Sorry, unhandled target architecture");

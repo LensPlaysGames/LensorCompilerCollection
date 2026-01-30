@@ -2,8 +2,10 @@
 #define LCC_CALLING_CONVENTION_MS_X64_HH
 
 #include <lcc/codegen/x86_64/x86_64.hh>
+#include <lcc/typedefs.hh>
 
 #include <array>
+#include <vector>
 
 namespace lcc::cconv::msx64 {
 
@@ -59,7 +61,14 @@ constexpr const std::array<x86_64::RegisterId, 4> arg_regs{
     x86_64::RegisterId::RCX,
     x86_64::RegisterId::RDX,
     x86_64::RegisterId::R8,
-    x86_64::RegisterId::R9 //
+    x86_64::RegisterId::R9
+};
+
+constexpr const std::array<x86_64::RegisterId, 4> float_regs{
+    x86_64::RegisterId::XMM0,
+    x86_64::RegisterId::XMM1,
+    x86_64::RegisterId::XMM2,
+    x86_64::RegisterId::XMM3
 };
 
 // The x64 ABI considers the registers RAX, RCX, RDX, R8, R9, R10, R11,
@@ -72,6 +81,7 @@ constexpr const std::array<x86_64::RegisterId, 4> arg_regs{
 // The x64 ABI considers registers RBX, RBP, RDI, RSI, RSP, R12, R13, R14,
 // R15, and XMM6-XMM15 nonvolatile. They must be saved and restored by a
 // function that uses them.
+// NOTE: This list should only contain jeep registers.
 constexpr const std::array<x86_64::RegisterId, 7> volatile_regs{
     x86_64::RegisterId::RAX,
     x86_64::RegisterId::RCX,
@@ -80,6 +90,15 @@ constexpr const std::array<x86_64::RegisterId, 7> volatile_regs{
     x86_64::RegisterId::R9,
     x86_64::RegisterId::R10,
     x86_64::RegisterId::R11,
+};
+
+constexpr const std::array<x86_64::RegisterId, 6> volatile_float_regs{
+    x86_64::RegisterId::XMM0,
+    x86_64::RegisterId::XMM1,
+    x86_64::RegisterId::XMM2,
+    x86_64::RegisterId::XMM3,
+    x86_64::RegisterId::XMM4,
+    x86_64::RegisterId::XMM5
 };
 
 enum class ParameterClass {
@@ -94,13 +113,15 @@ enum class ParameterClass {
 struct ParameterDescription {
     struct Parameter {
         ParameterClass location{};
+
         /// The amount of argument registers, total, taken up by parameters BEFORE
         /// (and NOT by) this parameter. This is the first index into the argument
         /// registers that is valid. The first index into the argument registers
-        /// that is /invalid/ is `arg_regs_used + arg_regs`
+        /// that is /invalid/ is `arg_regs_used + arg_floats_used + arg_regs`.
         usz arg_regs_used{};
         /// The amount of argument registers taken up by this parameter.
         usz arg_regs{};
+
         /// The index of the "stack slot" this parameter is stored within.
         /// Only valid for memory parameters.
         usz stack_slot_index{};
@@ -113,12 +134,27 @@ struct ParameterDescription {
         /// parameters.
         usz stack_byte_offset_used{};
 
+        /// The amount of float argument registers, total, taken up by parameters
+        /// BEFORE (and NOT by) this parameter. This is the first index into the
+        /// float argument registers that is valid. The first index into the float
+        /// argument registers that is /invalid/ is
+        /// `arg_floats_used + arg_floats_used + arg_floats`.
+        usz arg_floats_used{};
+        /// The amount of float argument registers taken up by this parameter.
+        usz arg_floats{};
+
         bool is_overlarge{false};
+
+        [[nodiscard]]
+        usz arg_reg_index() {
+            return arg_regs_used + arg_floats_used;
+        }
 
         enum class Kinds {
             SingleRegister,
             PointerInRegister,
             Stack,
+            Float,
         };
 
         [[nodiscard("Return value is meant to be used in a switch statement...")]]
@@ -128,6 +164,19 @@ struct ParameterDescription {
                     return Kinds::PointerInRegister;
                 return Kinds::SingleRegister;
             }
+            LCC_ASSERT(
+                arg_regs == 0,
+                "Invalid amount of argument registers for parameter"
+            );
+
+            if (arg_floats == 1)
+                return Kinds::Float;
+
+            LCC_ASSERT(
+                arg_floats == 0,
+                "Invalid amount of float registers for parameter"
+            );
+
             return Kinds::Stack;
         }
     };

@@ -1,5 +1,6 @@
 #include <lcc/calling_conventions/ms_x64.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
+#include <lcc/ir/type.hh>
 
 namespace lcc::cconv::msx64 {
 
@@ -14,7 +15,11 @@ auto parameter_description(std::vector<Type*> parameter_types)
     usz next_stack_slot_index{};
     for (auto [param_i, arg] : vws::enumerate(parameter_types)) {
         working_param.arg_regs_used += working_param.arg_regs;
+        working_param.arg_floats_used += working_param.arg_floats;
+
         working_param.arg_regs = 0;
+        working_param.arg_floats = 0;
+
         working_param.is_overlarge = arg->bits() > x86_64::GeneralPurposeBitwidth;
 
         // TODO: First four registers are passed in arguments, but, for types
@@ -30,7 +35,9 @@ auto parameter_description(std::vector<Type*> parameter_types)
         // be 16-byte aligned."
         if (usz(param_i) < arg_regs.size()) {
             working_param.location = ParameterClass::REGISTER;
-            working_param.arg_regs = 1;
+            if (is<FractionalType>(arg))
+                working_param.arg_floats = 1;
+            else working_param.arg_regs = 1;
         } else {
             working_param.location = ParameterClass::MEMORY;
             working_param.stack_slot_index = next_stack_slot_index;

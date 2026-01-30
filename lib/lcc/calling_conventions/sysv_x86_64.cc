@@ -1,12 +1,16 @@
 #include <lcc/calling_conventions/sysv_x86_64.hh>
 #include <lcc/ir/core.hh>
+#include <lcc/ir/type.hh>
 
 #include <algorithm>
 #include <ranges>
+#include <vector>
 
 namespace lcc {
 
-auto cconv::sysv::parameter_description(std::vector<Type*> parameter_types) -> ParameterDescription {
+auto cconv::sysv::parameter_description(
+    std::vector<Type*> parameter_types
+) -> ParameterDescription {
     // If we super-cared or measured this function as being really slow or
     // called over and over (which won't happen), we could implement a cache
     // on Function* here, or a name-based one.
@@ -19,12 +23,18 @@ auto cconv::sysv::parameter_description(std::vector<Type*> parameter_types) -> P
     usz next_stack_slot_index{};
     for (const auto* t : parameter_types) {
         working_param.arg_regs_used += working_param.arg_regs;
+        working_param.arg_scalars_used += working_param.arg_scalars;
         working_param.stack_slot_index = next_stack_slot_index;
 
         working_param.location = ParameterClass::REGISTER;
         working_param.arg_regs = 0;
+        working_param.arg_scalars = 0;
 
-        if (
+        // first eight floats go in scalar registers (xmm0-xmm7)
+        if (is<FractionalType>(t))
+            ++working_param.arg_scalars;
+
+        else if (
             t->bytes() <= x86_64::GeneralPurposeBytewidth
             and working_param.arg_regs_used < arg_regs.size()
         ) ++working_param.arg_regs;
@@ -48,7 +58,9 @@ auto cconv::sysv::parameter_description(std::vector<Type*> parameter_types) -> P
     return out;
 };
 
-auto cconv::sysv::parameter_description(Function* function) -> ParameterDescription {
+auto cconv::sysv::parameter_description(
+    Function* function
+) -> ParameterDescription {
     std::vector<Type*> parameter_types{};
     rgs::transform(
         function->params(),

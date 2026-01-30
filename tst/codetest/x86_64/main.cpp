@@ -313,6 +313,7 @@ bool run_test(
                 lcc::x86_64::RegisterId::RETURN
             );
             std::vector<lcc::usz> jeep_registers{};
+            std::vector<lcc::usz> scalar_registers{};
             if (ctx.target()->is_cconv_ms()) {
                 desc.return_register = lcc::operator+(
                     lcc::cconv::msx64::return_register
@@ -321,6 +322,11 @@ bool run_test(
                 lcc::rgs::transform(
                     lcc::cconv::msx64::volatile_regs,
                     std::back_inserter(jeep_registers),
+                    [](auto r) { return lcc::operator+(r); }
+                );
+                lcc::rgs::transform(
+                    lcc::cconv::msx64::volatile_float_regs,
+                    std::back_inserter(scalar_registers),
                     [](auto r) { return lcc::operator+(r); }
                 );
             } else {
@@ -333,6 +339,11 @@ bool run_test(
                     std::back_inserter(jeep_registers),
                     [](auto r) { return lcc::operator+(r); }
                 );
+                lcc::rgs::transform(
+                    lcc::cconv::sysv::scalar_regs,
+                    std::back_inserter(scalar_registers),
+                    [](auto r) { return lcc::operator+(r); }
+                );
             }
             LCC_ASSERT(
                 jeep_registers.size(),
@@ -342,25 +353,6 @@ bool run_test(
                 +lcc::Register::Category::DEFAULT,
                 jeep_registers
             );
-
-            std::vector<lcc::usz> scalar_registers{
-                lcc::operator+(lcc::x86_64::RegisterId::XMM0),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM1),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM2),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM3),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM4),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM5),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM6),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM7),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM8),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM9),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM10),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM11),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM12),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM13),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM14),
-                lcc::operator+(lcc::x86_64::RegisterId::XMM15)
-            };
             desc.registers.emplace_back(
                 +lcc::Register::Category::FLOAT,
                 scalar_registers
@@ -670,7 +662,7 @@ MIRInstructionMatcher parse_instruction_matcher(
         };
         SkipWhitespaceWithinLine();
 
-        if (operand.starts_with("r")) {
+        if (operand.starts_with("r") or operand.starts_with("xmm")) {
             lcc::Register r{};
 
             r.value = lcc::operator+(register_operand_value(operand));
@@ -696,6 +688,9 @@ MIRInstructionMatcher parse_instruction_matcher(
             local.offset = offset_value;
 
             out.operands.emplace_back(local);
+        } else if (operand.size()) {
+            fmt::print("ERROR! Expected operand, got `{}`\n", operand);
+            std::exit(1);
         }
     }
 
