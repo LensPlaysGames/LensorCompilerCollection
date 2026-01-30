@@ -309,25 +309,64 @@ bool run_test(
     {
         lcc::MachineDescription desc{};
         if (ctx.target()->is_arch_x86_64()) {
-            desc.return_register_to_replace = lcc::operator+(lcc::x86_64::RegisterId::RETURN);
+            desc.return_register_to_replace = lcc::operator+(
+                lcc::x86_64::RegisterId::RETURN
+            );
+            std::vector<lcc::usz> jeep_registers{};
             if (ctx.target()->is_cconv_ms()) {
-                desc.return_register = lcc::operator+(lcc::cconv::msx64::return_register);
+                desc.return_register = lcc::operator+(
+                    lcc::cconv::msx64::return_register
+                );
                 // Just the volatile registers
                 lcc::rgs::transform(
                     lcc::cconv::msx64::volatile_regs,
-                    std::back_inserter(desc.registers),
+                    std::back_inserter(jeep_registers),
                     [](auto r) { return lcc::operator+(r); }
                 );
             } else {
-                desc.return_register = lcc::operator+(lcc::cconv::sysv::return_register);
+                desc.return_register = lcc::operator+(
+                    lcc::cconv::sysv::return_register
+                );
                 // Just the volatile registers
                 lcc::rgs::transform(
                     lcc::cconv::sysv::volatile_regs,
-                    std::back_inserter(desc.registers),
+                    std::back_inserter(jeep_registers),
                     [](auto r) { return lcc::operator+(r); }
                 );
             }
-        } else LCC_ASSERT(false, "Sorry, unhandled target architecture");
+            LCC_ASSERT(
+                jeep_registers.size(),
+                "Must populate general purpose register list"
+            );
+            desc.registers.emplace_back(
+                +lcc::Register::Category::DEFAULT,
+                jeep_registers
+            );
+
+            std::vector<lcc::usz> scalar_registers{
+                lcc::operator+(lcc::x86_64::RegisterId::XMM0),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM1),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM2),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM3),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM4),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM5),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM6),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM7),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM8),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM9),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM10),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM11),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM12),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM13),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM14),
+                lcc::operator+(lcc::x86_64::RegisterId::XMM15)
+            };
+            desc.registers.emplace_back(
+                +lcc::Register::Category::FLOAT,
+                scalar_registers
+            );
+
+        } else lcc::Diag::ICE("Sorry, unhandled target architecture");
 
         for (auto& mfunc : machine_ir) {
             if (not allocate_registers(desc, mfunc))
@@ -381,10 +420,46 @@ lcc::x86_64::RegisterId register_operand_value(std::string_view operand) {
         return (lcc::x86_64::RegisterId::R14);
     if (operand.starts_with("r15"))
         return (lcc::x86_64::RegisterId::R15);
+
+    if (operand.starts_with("xmm0"))
+        return (lcc::x86_64::RegisterId::XMM0);
+    if (operand.starts_with("xmm1"))
+        return (lcc::x86_64::RegisterId::XMM1);
+    if (operand.starts_with("xmm2"))
+        return (lcc::x86_64::RegisterId::XMM2);
+    if (operand.starts_with("xmm3"))
+        return (lcc::x86_64::RegisterId::XMM3);
+    if (operand.starts_with("xmm4"))
+        return (lcc::x86_64::RegisterId::XMM4);
+    if (operand.starts_with("xmm5"))
+        return (lcc::x86_64::RegisterId::XMM5);
+    if (operand.starts_with("xmm6"))
+        return (lcc::x86_64::RegisterId::XMM6);
+    if (operand.starts_with("xmm7"))
+        return (lcc::x86_64::RegisterId::XMM7);
+    if (operand.starts_with("xmm8"))
+        return (lcc::x86_64::RegisterId::XMM8);
+    if (operand.starts_with("xmm9"))
+        return (lcc::x86_64::RegisterId::XMM9);
+    if (operand.starts_with("xmm10"))
+        return (lcc::x86_64::RegisterId::XMM10);
+    if (operand.starts_with("xmm11"))
+        return (lcc::x86_64::RegisterId::XMM11);
+    if (operand.starts_with("xmm12"))
+        return (lcc::x86_64::RegisterId::XMM12);
+    if (operand.starts_with("xmm13"))
+        return (lcc::x86_64::RegisterId::XMM13);
+    if (operand.starts_with("xmm14"))
+        return (lcc::x86_64::RegisterId::XMM14);
+    if (operand.starts_with("xmm15"))
+        return (lcc::x86_64::RegisterId::XMM15);
+
     return lcc::x86_64::RegisterId::INVALID;
 }
 
 lcc::usz register_operand_size(std::string_view operand) {
+    if (operand.ends_with(".128"))
+        return 128;
     if (operand.ends_with(".64"))
         return 64;
     if (operand.ends_with(".32"))
@@ -397,7 +472,10 @@ lcc::usz register_operand_size(std::string_view operand) {
 }
 
 [[nodiscard]]
-MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::usz& offset) {
+MIRInstructionMatcher parse_instruction_matcher(
+    std::span<char> contents,
+    lcc::usz& offset
+) {
     auto ToNewline = [&]() {
         // Eat everything until '\n'
         while (offset < contents.size() and contents[offset] != '\n')
@@ -414,19 +492,28 @@ MIRInstructionMatcher parse_instruction_matcher(std::span<char> contents, lcc::u
     };
 
     auto ToWhitespace = [&]() {
-        while (offset < contents.size() and not isspace(contents[offset]))
-            ++offset;
+        while (
+            offset < contents.size()
+            and not isspace(contents[offset])
+        ) ++offset;
     };
 
     auto ToWhitespaceOr = [&](std::string_view until_chars) {
-        while (offset < contents.size() and not isspace(contents[offset]) and not until_chars.contains(contents[offset]))
+        while (
+            offset < contents.size()
+            and not isspace(contents[offset])
+            and not until_chars.contains(contents[offset])
+        )
             ++offset;
     };
 
     auto SkipWhitespaceWithinLine = [&]() {
         // Skip all whitespace except newline
-        while (offset < contents.size() and isspace(contents[offset]) and contents[offset] != '\n')
-            ++offset;
+        while (
+            offset < contents.size()
+            and isspace(contents[offset])
+            and contents[offset] != '\n'
+        ) ++offset;
     };
 
     MIRInstructionMatcher out{};
@@ -624,13 +711,14 @@ MIRBlockMatcher parse_block_matcher(std::span<char> contents, lcc::usz& offset) 
     auto ConsumeFourSpaces = [&]() {
         if (offset + 3 >= contents.size())
             return false;
+
         if (
             contents[offset + 3] != ' '
             or contents[offset + 2] != ' '
             or contents[offset + 1] != ' '
             or contents[offset] != ' '
-        )
-            return false;
+        ) return false;
+
         offset += 4;
         return true;
     };
@@ -652,7 +740,8 @@ MIRBlockMatcher parse_block_matcher(std::span<char> contents, lcc::usz& offset) 
 
     auto ToColonCurrentLine = [&]() {
         while (offset < contents.size() and contents[offset] != ':') {
-            if (contents[offset] == '\n') return false;
+            if (contents[offset] == '\n')
+                return false;
             ++offset;
         }
         return true;
@@ -663,7 +752,9 @@ MIRBlockMatcher parse_block_matcher(std::span<char> contents, lcc::usz& offset) 
     auto block_name_begin = offset;
 
     if (not ToColonCurrentLine()) {
-        fmt::print("ERROR! Could not parse test matcher... (Expected colon ':' after block name)\n");
+        fmt::print(
+            "ERROR! Could not parse test matcher... (Expected colon ':' after block name)\n"
+        );
         std::exit(1);
     }
 
@@ -691,8 +782,10 @@ MIRFunctionMatcher parse_function_matcher(std::span<char> contents, lcc::usz& of
     auto ConsumeTwoSpaces = [&]() {
         if (offset + 1 >= contents.size())
             return false;
+
         if (contents[offset + 1] != ' ' or contents[offset] != ' ')
             return false;
+
         offset += 2;
         return true;
     };
@@ -714,7 +807,9 @@ MIRFunctionMatcher parse_function_matcher(std::span<char> contents, lcc::usz& of
 
     auto ToColonCurrentLine = [&]() {
         while (offset < contents.size() and contents[offset] != ':') {
-            if (contents[offset] == '\n') return false;
+            if (contents[offset] == '\n')
+                return false;
+
             ++offset;
         }
         return true;
@@ -726,7 +821,9 @@ MIRFunctionMatcher parse_function_matcher(std::span<char> contents, lcc::usz& of
     auto function_name_begin = offset;
 
     if (not ToColonCurrentLine()) {
-        fmt::print("ERROR! Could not parse test matcher... (Expected colon ':' after function name)\n");
+        fmt::print(
+            "ERROR! Could not parse test matcher... (Expected colon ':' after function name)\n"
+        );
         std::exit(1);
     }
 
@@ -751,7 +848,9 @@ MIRFunctionMatcher parse_function_matcher(std::span<char> contents, lcc::usz& of
     // another function. So, if we are certain there are not two spaces, but
     // we /are/ at a space, there is an indentation error in the test matcher.
     if (offset < contents.size() and contents[offset] == ' ') {
-        fmt::print("ERROR! Invalid indentation: Expected block or function name\n");
+        fmt::print(
+            "ERROR! Invalid indentation: Expected block or function name\n"
+        );
         std::exit(1);
     }
 
@@ -807,7 +906,9 @@ Test parse_test(std::vector<char>& inputs, lcc::usz& i) {
     };
     // Parse test name segment
     if (inputs.at(i) != '=') {
-        fmt::print("ERROR! Could not parse tests... (didn't find opening '=' line)\n");
+        fmt::print(
+            "ERROR! Could not parse tests... (didn't find opening '=' line)\n"
+        );
         std::exit(1);
     }
     // Eat opening '=' line
@@ -833,14 +934,20 @@ Test parse_test(std::vector<char>& inputs, lcc::usz& i) {
         if (specifier.starts_with(":skip")) {
             should_skip = true;
         } else {
-            fmt::print("ERROR! Invalid test specifier \"{}\"\n", specifier);
+            fmt::print(
+                "ERROR! Invalid test specifier \"{}\"\n",
+                specifier
+            );
             std::exit(1);
         }
     }
 
     // Eat closing '=' line
     if (i >= inputs.size() or inputs.at(i) != '=') {
-        fmt::print("ERROR! Invalid closing name line ('=') for test {}\n", test_name);
+        fmt::print(
+            "ERROR! Invalid closing name line ('=') for test {}\n",
+            test_name
+        );
         std::exit(1);
     }
     ToNextLine();
