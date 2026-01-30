@@ -621,10 +621,33 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
 
             case Value::Kind::FractionalConstant: {
                 auto f = as<FractionalConstant>(v)->value();
-                // FIXME: This doesn't work all the time
-                // 83223.01... "floating point constant invalid for type"
-                // but only for large whole numbers...
-                return Format("{}", f);
+                auto binary64 = fixed_to_binary64_float(f);
+                // LLVM float constants are ... "special".
+                if (v->type()->bits() <= 32) {
+                    // least significant 11 bits
+                    constexpr u64 least_sig11_bits = 0x07ff;
+                    // 11 bit exponent
+                    bool negative = binary64 >> 63;
+                    u16 exponent = (binary64 >> 52) & least_sig11_bits;
+                    u64 mantissa = binary64;
+                    mantissa <<= (64 - 23);
+                    if (mantissa) {
+                        while (not (mantissa & ((u64) 1) << 63)) {
+                            --exponent;
+                            mantissa *= 2;
+                        };
+                        // Multiply the top bit, which was set, out of the mantissa. This discards
+                        // the top "one" bit, as it is implicit in the binary64 format.
+                        --exponent;
+                        mantissa *= 2;
+                    }
+                    binary64 = exponent & least_sig11_bits;
+                    binary64 <<= 52;
+                    binary64 |= (mantissa >> (64 - 52));
+                    if (negative)
+                        binary64 |= ((u64) 1) << 63;
+                }
+                return Format("0x{:016X}", binary64);
             }
 
             case Value::Kind::Poison:

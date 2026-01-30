@@ -179,12 +179,62 @@ u32 fixed_to_binary32_float(const FixedPointNumber& f) {
     binary32_value |= (u32) (mantissa >> (64 - 23));
     // If the 24th most significant bit is set, round up...
     if (mantissa & (((u64) 1) << (64 - 24)))
-        binary32_value |= 1;
+        binary32_value += 1;
 
     if (negative)
         binary32_value |= ((u32) 1) << 31;
 
     return binary32_value;
+}
+
+u64 fixed_to_binary64_float(const FixedPointNumber& f) {
+    bool negative{}; // TODO
+    // binary64 exponent bias is 1023
+    u16 exponent{1023};
+    auto mantissa{f.fractional};
+
+    auto whole{f.whole};
+    while (whole > 1) {
+        bool misfit = whole % 2;
+        whole /= 2;
+        mantissa /= 2;
+        if (misfit)
+            mantissa |= ((u64) 1) << 63;
+        ++exponent;
+    }
+
+    // If the mantissa is non-zero *and* the most significant bit isn't set,
+    // we have to adjust it until the most significant bit *was* just set...
+    if (not whole and mantissa) {
+        // If the top bit is not set, adjust mantissa and whole such that t
+        // Multiply until the top bit is set.
+        while (not (mantissa & ((u64) 1) << 63)) {
+            --exponent;
+            mantissa *= 2;
+        };
+        // Multiply the top bit, which was set, out of the mantissa. This discards
+        // the top "one" bit, as it is implicit in the binary64 format.
+        --exponent;
+        mantissa *= 2;
+    }
+
+    // Set exponent
+    u64 binary64_value{
+        exponent & 0b0000'0111'1111'1111ull
+    };
+    binary64_value <<= 52;
+
+    // Set the least significant 52 bits using the most significant 52 bits of
+    // the mantissa.
+    binary64_value |= mantissa >> (64 - 52);
+    // If the 53rd most significant bit is set, round up...
+    if (mantissa & (((u64) 1) << (64 - 53)))
+        binary64_value += 1;
+
+    if (negative)
+        binary64_value |= ((u64) 1) << 63;
+
+    return binary64_value;
 }
 
 } // namespace lcc

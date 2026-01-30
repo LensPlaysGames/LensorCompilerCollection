@@ -53,6 +53,10 @@ DecimalFraction fractional_to_whole(u64 fractional);
 // sign bit, 8 bit exponent, 23 bit mantissa/significand).
 u32 fixed_to_binary32_float(const FixedPointNumber&);
 
+// Convert a fixed point fractional number into a binary64 float value (1
+// sign bit, 11 bit exponent, 52 bit mantissa/significand).
+u64 fixed_to_binary64_float(const FixedPointNumber&);
+
 } // namespace lcc
 
 template <>
