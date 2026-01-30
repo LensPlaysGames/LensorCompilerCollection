@@ -675,6 +675,7 @@ void Module::lower() {
     if (
         context()->format() == Format::lcc_ssa_ir
         or context()->format() == Format::llvm_textual_ir
+        or context()->format() == Format::wasm_textual
     ) return;
 
     // TODO: Static assert for handling all architectures, calling
