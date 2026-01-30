@@ -68,7 +68,8 @@ void lcc::platform::PrintBacktrace() {
     if constexpr (backtrace_addr2line) {
         // Sounds crazy, but since program counter points to one past the
         // executing instruction, we need to subtract one from every address...
-        for (int i = skip_value; i < n; ++i) trace[i] = (void*) ((std::uintptr_t) trace[i] - 1);
+        for (int i = skip_value; i < n; ++i)
+            trace[i] = (void*) ((std::uintptr_t) trace[i] - 1);
 
         std::span<void*> trace_view{&trace[skip_value], &trace[n]};
 
