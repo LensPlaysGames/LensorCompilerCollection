@@ -10,6 +10,7 @@
 #include <memory>
 #include <ranges>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <variant>
 #include <vector>
@@ -189,14 +190,14 @@ std::vector<RegisterPlusLiveValIndex> collect_vreg_operands(
     const MInst& inst
 ) {
     std::vector<RegisterPlusLiveValIndex> vreg_operands{};
-    if (inst.reg() >= +MInst::Kind::ArchStart) {
+    if (inst.reg() >= +Module::first_virtual_register) {
         auto reg = Register{inst.reg(), uint(inst.regsize())};
         vreg_operands.push_back({reg, live_idx_from_register(registers, reg)});
     }
     for (auto& op : inst.all_operands()) {
         if (std::holds_alternative<MOperandRegister>(op)) {
             auto reg = std::get<MOperandRegister>(op);
-            if (reg.value >= +MInst::Kind::ArchStart)
+            if (reg.value >= +Module::first_virtual_register)
                 vreg_operands.push_back({reg, live_idx_from_register(registers, reg)});
         }
     }
@@ -459,21 +460,20 @@ auto allocate_registers(
 
     // Helper function that ensures no duplicate registers show up in the
     // register list.
-    auto add_reg
-        = [&](usz id, usz size, usz category = +Register::Category::DEFAULT) {
-              auto found = rgs::find_if(
-                  registers,
-                  [&](Register& r) {
-                      return r.value == id;
-                  }
-              );
-              if (found == registers.end())
-                  registers.emplace_back(
-                      id,
-                      uint(size),
-                      (Register::Category) category
-                  );
-          };
+    auto add_reg = [&](usz id, usz size, usz category) {
+        auto found = rgs::find_if(
+            registers,
+            [&](Register& r) {
+                return r.value == id;
+            }
+        );
+        if (found == registers.end())
+            registers.emplace_back(
+                id,
+                uint(size),
+                (Register::Category) category
+            );
+    };
 
     // Hardware registers are passed in through the machine description.
     // Add all (relevant) hardware registers to the list of all registers.
@@ -556,13 +556,23 @@ auto allocate_registers(
 
     const auto should_skip_list = [&](AdjacencyList& list) {
         // Skip hardware registers, and registers already allocated a value.
-        return list.allocated or list.value < +MInst::Kind::ArchStart;
+        return list.allocated or list.value < +Module::first_virtual_register;
     };
 
-    usz k = desc.registers.size();
+    std::unordered_map<usz, usz> ks{};
+    for (auto register_category : desc.registers) {
+        ks[register_category.category] = register_category.registers.size();
+    }
+
+    // How many registers we need to color in, total.
+    usz count = registers.size();
     // We don't color hardware registers with other hardware registers,
     // so we don't count them.
-    usz count = registers.size() - k;
+    for (auto [category, k] : ks) {
+        count -= k;
+    }
+
+    // Until we've colored all necessary registers...
     while (count) {
         /// degree < k rule:
         ///   A graph G is k-colorable if, for every node N in G, the degree
@@ -572,7 +582,7 @@ auto allocate_registers(
             done = true;
             for (auto [i, list] : vws::enumerate(lists)) {
                 if (should_skip_list(list)) continue;
-                if (list.degree() < k) {
+                if (list.degree() < ks.at(list.category)) {
                     list.allocated = 1;
                     done = false;
                     count--;
@@ -613,7 +623,7 @@ auto allocate_registers(
         auto& list = lists.at(i);
 
         // Skip hardware registers (no need to color them).
-        if (list.value < +MInst::Kind::ArchStart)
+        if (list.value < +Module::first_virtual_register)
             continue;
 
         auto& register_interferences = list.regmask;
@@ -676,7 +686,10 @@ auto allocate_registers(
             // then insert "load from stack" (unspill) instructions at every use.
 
             // Get virtual register value we need to spill
-            LCC_ASSERT(register_interferences.size());
+            LCC_ASSERT(
+                register_interferences.size(),
+                "Cannot spill when no registers have been allocated"
+            );
             auto spilled_hardreg = *(register_interferences.begin());
 
             // Spilling hardware register 'spilled_hardreg'
@@ -795,17 +808,17 @@ auto allocate_registers(
             // TODO: Er, how do we get a (guaranteed) unique virtual register from here?
             usz new_vreg = 0x06942069;
             for (auto& block : function.blocks()) {
-                if (done) break;
+                if (done)
+                    break;
+
                 for (auto inst_i = block.instructions().size(); inst_i; --inst_i) {
                     auto& inst = block.instructions().at(inst_i - 1);
 
                     // We are done when we find the relevant spill instruction (it wouldn't
                     // make sense to unspill /before/ a spill, now would it?).
                     if (inst.opcode() == +MInst::Kind::Spill) {
-                        if (
-                            std::get<MOperandRegister>(inst.get_operand(0)).value
-                            == spilled_vreg
-                        ) {
+                        auto reg = std::get<MOperandRegister>(inst.get_operand(0));
+                        if (reg.value == spilled_vreg) {
                             done = true;
                             break;
                         }
@@ -883,13 +896,18 @@ auto allocate_registers(
     // colored hardware registers.
     for (auto& list : lists) {
         // Skip hardware registers (no need to color them).
-        if (list.value < +MInst::Kind::ArchStart) continue;
-        LCC_ASSERT(list.allocated, "AdjacencyList must have a color allocated");
+        if (list.value < +Module::first_virtual_register) continue;
+        LCC_ASSERT(
+            list.allocated,
+            "AdjacencyList must have a color allocated"
+        );
         usz vreg = list.value;
         usz color = list.color;
         for (auto& block : function.blocks()) {
             for (auto& instruction : block.instructions()) {
-                if (instruction.reg() == vreg) instruction.reg(color);
+                if (instruction.reg() == vreg)
+                    instruction.reg(color);
+
                 for (auto& op : instruction.all_operands()) {
                     if (std::holds_alternative<MOperandRegister>(op)) {
                         MOperandRegister reg = std::get<MOperandRegister>(op);
