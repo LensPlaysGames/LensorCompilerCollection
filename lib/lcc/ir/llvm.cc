@@ -1,6 +1,8 @@
 #include <lcc/core.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
+#include <lcc/ir/type.hh>
+#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/ir_printer.hh>
 
 #include <fmt/format.h>
@@ -15,8 +17,10 @@ constexpr std::string_view LLVMMemCpyIntrinsic = "llvm.memcpy.p0.p0.i64";
 
 struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
     void PrintHeader(Module* mod) {
-        Print("; Function Attrs: \n");
-        Print("declare void @{}(ptr, ptr, i64, i1)\n", LLVMMemCpyIntrinsic);
+        Print(
+            "declare void @{}(ptr, ptr, i64, i1)\n",
+            LLVMMemCpyIntrinsic
+        );
     }
 
     std::string GetStructName(StructType* struct_type) {
@@ -160,10 +164,28 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 return;
             }
 
-            case Value::Kind::Add: PrintBinary(i, "add"); return;
-            case Value::Kind::Sub: PrintBinary(i, "sub"); return;
-            case Value::Kind::Mul: PrintBinary(i, "mul"); return;
-            case Value::Kind::SDiv: PrintBinary(i, "sdiv"); return;
+            case Value::Kind::Add: {
+                if (is<FractionalType>(i->type()))
+                    PrintBinary(i, "fadd");
+                else PrintBinary(i, "add");
+                return;
+            }
+            case Value::Kind::Sub:
+                if (is<FractionalType>(i->type()))
+                    PrintBinary(i, "fsub");
+                else PrintBinary(i, "sub");
+                return;
+            case Value::Kind::Mul:
+                if (is<FractionalType>(i->type()))
+                    PrintBinary(i, "fmul");
+                else PrintBinary(i, "mul");
+                return;
+            case Value::Kind::SDiv:
+                if (is<FractionalType>(i->type()))
+                    PrintBinary(i, "fdiv");
+                else PrintBinary(i, "sdiv");
+                return;
+
             case Value::Kind::UDiv: PrintBinary(i, "udiv"); return;
             case Value::Kind::SRem: PrintBinary(i, "srem"); return;
             case Value::Kind::URem: PrintBinary(i, "urem"); return;
@@ -217,9 +239,22 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 /// Scuffed bitcast.
                 else {
                     auto idx = Index(i);
-                    Print("    %.{}.alloca = alloca {}, i64 1, align 1\n", idx, Ty(from));
-                    Print("    store {}, ptr %.{}.alloca, align 1\n", Val(c->operand()), idx);
-                    Print("    %{} = load {}, ptr %.{}.alloca, align 1", idx, Ty(to), idx);
+                    Print(
+                        "    %.{}.alloca = alloca {}, i64 1, align 1\n",
+                        idx,
+                        Ty(from)
+                    );
+                    Print(
+                        "    store {}, ptr %.{}.alloca, align 1\n",
+                        Val(c->operand()),
+                        idx
+                    );
+                    Print(
+                        "    %{} = load {}, ptr %.{}.alloca, align 1",
+                        idx,
+                        Ty(to),
+                        idx
+                    );
                 }
 
                 return;
@@ -509,12 +544,25 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             /// in the wild, it has to be a function pointer.
             case Type::Kind::Function: return "ptr";
 
-            case Type::Kind::Integer:
-                return fmt::format("i{}", as<IntegerType>(ty)->bits());
+            case Type::Kind::Integer: {
+                return fmt::format(
+                    "i{}",
+                    as<IntegerType>(ty)->bits()
+                );
+            }
 
-            case Type::Kind::Fractional:
-                // TODO: Should we take bitwidth into account?
-                return "float";
+            case Type::Kind::Fractional: {
+                auto f = as<FractionalType>(ty);
+
+                if (f->bitwidth() <= 32)
+                    return "float";
+
+                // FIXME: We don't support double constants yet
+                // if (f->bitwidth() <= 64)
+                //     return "double";
+
+                Diag::ICE("LLVM: Invalid bitwidth for fractional type");
+            }
 
             case Type::Kind::Array:
                 return fmt::format(
@@ -573,11 +621,10 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
 
             case Value::Kind::FractionalConstant: {
                 auto f = as<FractionalConstant>(v)->value();
-                return Format(
-                    "{}.{}",
-                    f.whole,
-                    fractional_to_whole(f.fractional)
-                );
+                // FIXME: This doesn't work all the time
+                // 83223.01... "floating point constant invalid for type"
+                // but only for large whole numbers...
+                return Format("{}", f);
             }
 
             case Value::Kind::Poison:
