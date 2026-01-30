@@ -2882,7 +2882,8 @@ auto lcc::glint::Type::types() const -> std::vector<Type*> {
 
         case Kind::Named:
         case Kind::Typeof:
-            LCC_ASSERT(false, "Type {} should have been replaced!", *this);
+            // Diag::ICE("Type {} should have been replaced!", *this);
+            return {};
     }
 
     LCC_UNREACHABLE();
