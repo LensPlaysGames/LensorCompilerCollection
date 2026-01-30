@@ -409,29 +409,50 @@ target_link_libraries(lcc PRIVATE liblcc)
 target_link_libraries(lcc PUBLIC glint)
 
 # Copy lcc.html, lcc.js, and lcc.wasm to `docs/` when emscripten.
-if (EMSCRIPTEN AND (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel"))
-  # TODO: Add file-level dependency to HTML template, so if it changes, we
-  # rebuild.
+if (EMSCRIPTEN)
+  # Add file-level dependency on HTML template, so if it changes, we
+  # actually use the updated template.
+  set_target_properties(
+    lcc
+    PROPERTIES
+    LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/res/lcc.in.html
+  )
+  # Copy lcc.svg to local build (so that a local web server will work).
   add_custom_command(
     TARGET lcc
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy
-    ${CMAKE_CURRENT_BINARY_DIR}/lcc.html
-    ${CMAKE_CURRENT_LIST_DIR}/docs/lcc.html
-    COMMAND ${CMAKE_COMMAND} -E copy
-    ${CMAKE_CURRENT_BINARY_DIR}/lcc.js
-    ${CMAKE_CURRENT_LIST_DIR}/docs/lcc.js
-    COMMAND ${CMAKE_COMMAND} -E copy
-    ${CMAKE_CURRENT_BINARY_DIR}/lcc.wasm
-    ${CMAKE_CURRENT_LIST_DIR}/docs/lcc.wasm
-    COMMENT "Copying generated files for gh-pages..."
+    ${CMAKE_CURRENT_LIST_DIR}/res/lcc.svg
+    ${CMAKE_CURRENT_BINARY_DIR}/lcc.svg
+    COMMENT "Copying resources for local build..."
   )
+  # For release builds, copy generated binaries and resources to LCC
+  # Playground hosted on Github Pages.
+  if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+    add_custom_command(
+      TARGET lcc
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy
+      ${CMAKE_CURRENT_BINARY_DIR}/lcc.html
+      ${CMAKE_CURRENT_LIST_DIR}/docs/lcc.html
+      COMMAND ${CMAKE_COMMAND} -E copy
+      ${CMAKE_CURRENT_BINARY_DIR}/lcc.js
+      ${CMAKE_CURRENT_LIST_DIR}/docs/lcc.js
+      COMMAND ${CMAKE_COMMAND} -E copy
+      ${CMAKE_CURRENT_BINARY_DIR}/lcc.wasm
+      ${CMAKE_CURRENT_LIST_DIR}/docs/lcc.wasm
+      COMMAND ${CMAKE_COMMAND} -E copy
+      ${CMAKE_CURRENT_LIST_DIR}/res/lcc.svg
+      ${CMAKE_CURRENT_LIST_DIR}/docs/lcc.svg
+      COMMENT "Copying generated files for gh-pages..."
+    )
+  endif()
 endif()
 
 if (BUILD_TESTING)
-  # TODO Write a test driver or something
-  # add_test()
-
-  # TODO
-  message(FATAL_ERROR "Testing has not yet been re-implemented")
+  message(
+    FATAL_ERROR
+    "CTest Testing has not yet been re-implemented
+    see ${CMAKE_CURRENT_LIST_DIR}/tst/README.org"
+  )
 endif()
