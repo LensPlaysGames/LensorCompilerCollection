@@ -1,0 +1,166 @@
+* Internal Structure and Dependencies
+
+NOTE: The current structure is roughly:
+#+begin_example
+OBJECT
+
+LCC CORE
+
+GLINT
+`-- LCC CORE
+
+LCC DRIVER
+|-- GLINT
+`-- LCC CORE
+#+end_example
+
+Proposed (roughly):
+#+begin_example
+OBJECT
+
+LCC CORE
+
+LCC SYNTAX
+`-- LCC CORE
+
+LCC IR
+`-- LCC CORE
+
+LCC OPTIMAL
+|-- LCC CORE
+`-- LCC IR
+
+LCC MIR
+`-- LCC CORE
+
+LCC GENERAL
+|-- LCC CORE
+|-- LCC MIR
+`-- LCC IR
+
+LCC INSTRUCTION SELECTION
+|-- LCC CORE
+`-- LCC MIR
+
+LCC REGISTER ALLOCATION
+|-- LCC CORE
+`-- LCC MIR
+
+EMIT_llvm_ir
+|-- LCC CORE
+`-- LCC IR
+
+EMIT_wat
+|-- LCC CORE
+`-- LCC IR
+
+INFOx86_64
+`-- LCC CORE
+
+EMIT_x86_64
+|-- LCC CORE
+|-- LCC MIR
+|-- INFOx86_64
+`-- OBJECT
+
+GLINT
+|-- LCC SYNTAX
+`-- LCC IR
+
+DRIVER
+|-- LCC CORE
+|-- LCC IR
+|-- LCC MIR
+|-- LCC GENERAL
+|-- LCC INSTRUCTION SELECTION
+|-- LCC REGISTER ALLOCATION
+|-- EMIT_x86_64
+`-- GLINT
+#+end_example
+
+** Object
+
+No dependencies.
+
+Generic Object File Format that can be translated to ELF, COFF, etc.
+
+** LCC Core
+
+No dependencies.
+Compilation context (containing target, format, options, etc).
+
+FIXME: Currently contains "utils", catch-all for "useful stuff".
+Separate this into meaningful utility libraries.
+
+** LCC Syntax
+
+Token and lexer types that can be used by any (every) frontend.
+
+** LCC IR
+
+Defines IR Module, Function, Block, Instruction, Type, etc.
+
+** LCC Optimal
+
+Converts IR to an "optimal" form.
+
+IN ir-function -> OUT ir-function
+
+** Emit LLVM IR
+
+Given an LCC IR Module, emits a textual LLVM IR Module.
+
+** Emit WAT (Textual WASM)
+
+Given an LCC IR Module, emits a textual WebAssembly Module.
+
+** LCC MIR
+
+Defines LCC Machine IR.
+A lot like IR, but, ya know, also not.
+
+** LCC General
+
+Transform LCC IR into LCC MIR.
+
+IN ir-function -> OUT mir-function
+
+** LCC Instruction Selection
+
+Converts generic VM instructions to hardware ISA instructions
+
+IN mir-function -> OUT mir-function
+
+** LCC Register Allocation
+
+Converts infinite amount of generic VM registers to fixed amount of hardware ISA registers.
+
+IN mir-function -> OUT mir-function
+
+** Info x86_64
+
+Just "static" data on x86_64.
+
+RegisterIds, Opcodes, Calling Conventions, etc.
+ToString() for all of the above, as well.
+
+** Emit x86_64
+
+Given valid x86_64 MIR, emit valid x86_64 code
+according to context format (assembly, elf, coff, etc).
+
+IN module -> OUT side effect (produce artifact)
+
+** Glint
+
+The Glint Programming Language Frontend.
+
+Produces IR from Glint source code.
+
+IN Glint Source -> OUT IR Module
+
+** Driver
+
+The official LCC driver program.
+
+Clumps compilers together, provides CLI for user options.

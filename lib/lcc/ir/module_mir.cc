@@ -287,10 +287,6 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto param_info = params_desc.info.at(param->index());
                         switch (param_info.kind()) {
                             case cconv::msx64::ParameterDescription::Parameter::Kinds::Float: {
-                                fmt::print(
-                                    stderr,
-                                    "Warning: msx64 float calling convention is not fully worked out\n"
-                                );
                                 return MOperandRegister(
                                     +cconv::msx64::float_regs.at(param_info.arg_reg_index()),
                                     uint(param->type()->bits()),
@@ -660,18 +656,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                     switch (param_info.kind()) {
                                         using Kinds = cconv::msx64::ParameterDescription::Parameter::Kinds;
 
-                                        case Kinds::Float: {
-                                            auto copy = MInst(
-                                                MInst::Kind::Copy,
-                                                {+cconv::msx64::float_regs.at(usz(arg_i)),
-                                                 uint(arg->type()->bits()),
-                                                 Register::Category::FLOAT}
-                                            );
-                                            copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function, f, arg));
-                                            bb.add_instruction(copy);
-                                        } break;
-
+                                        case Kinds::Float:
                                         case Kinds::SingleRegister:
                                         // FIXME: Is PointerInRegister handled like this?
                                         case Kinds::PointerInRegister: {
@@ -869,7 +854,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                     }
                                 }
                             }
-                        } else (LCC_ASSERT(false, "Unhandled architecture in gMIR generation from IR call"));
+                        } else Diag::ICE("Unhandled architecture in gMIR generation from IR call");
 
                         auto call = MInst(
                             MInst::Kind::Call,
@@ -878,7 +863,9 @@ auto Module::mir() -> std::vector<MFunction> {
                              register_category}
                         );
                         call.location(call_ir->location());
-                        call.add_operand(MOperandValueReference(function, f, call_ir->callee()));
+                        call.add_operand(
+                            MOperandValueReference(function, f, call_ir->callee())
+                        );
                         bb.add_instruction(call);
 
                         if (arg_stack_bytes_used) {

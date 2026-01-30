@@ -114,6 +114,13 @@ struct MIRInstructionMatcher {
                 auto local_got = std::get<lcc::MOperandLocal>(got);
                 auto local_expected = std::get<lcc::MOperandLocal>(expected);
                 if (local_got.index != local_expected.index) {
+                    std::string expected_index{};
+                    if (local_expected.index == lcc::MOperandLocal::absolute_index)
+                        expected_index = "absolute (`abs`)";
+                    else if (local_expected.index == lcc::MOperandLocal::bad_index)
+                        expected_index = "INVALID";
+                    else expected_index = fmt::format("{}", local_expected.index);
+
                     fmt::print(
                         "  Local index does not match expected...\n"
                         "    GOT {}, EXPECTED {}\n",
@@ -870,6 +877,7 @@ MIRMatcher parse_matcher(std::span<char> contents) {
     return parse_matcher(contents, offset);
 }
 
+// Calling Convention Matcher
 struct CCMatcher {
     const lcc::Target* target{};
     MIRMatcher matcher{};

@@ -512,6 +512,7 @@ void Module::_x86_64_msx64_lower_overlarge() {
 }
 
 void Module::_x86_64_msx64_lower_parameters() {
+    using ParamKind = cconv::msx64::ParameterDescription::Parameter::Kinds;
     for (auto function : code()) {
         FunctionType* function_type = as<FunctionType>(function->type());
         auto param_desc = cconv::msx64::parameter_description(function);
@@ -524,6 +525,29 @@ void Module::_x86_64_msx64_lower_parameters() {
             auto [parameter, param_info, param_t] :
             vws::zip(function->params(), param_desc.info, function_type->params())
         ) {
+            // So, floats are passed just in registers. We actually need to keep the
+            // alloca/store.
+            if (param_info.kind() == ParamKind::Float) {
+                // Just validate users of parameter are able to be handled
+                for (auto* user : parameter->users()) {
+                    auto store = cast<StoreInst>(user);
+                    LCC_ASSERT(
+                        store,
+                        "Unhandled instruction type in replacement of users of memory parameter"
+                    );
+
+                    LCC_ASSERT(
+                        is<Parameter>(store->val()),
+                        "Use of parameter in destination pointer of store instruction: we don't yet support this, sorry"
+                    );
+                    LCC_ASSERT(
+                        is<AllocaInst>(store->ptr()),
+                        "We only support storing parameter into pointer returned by AllocaInst, sorry"
+                    );
+                }
+                continue;
+            }
+
             // There is always a point in memory where we can find a parameter in
             // msx64 calling convention, so we can remove allocas and stores and
             // things like that for /all/ parameters.
@@ -572,7 +596,7 @@ void Module::_x86_64_msx64_lower_parameters() {
                     // pointer to the parameter (pptr), and we may be expecting just a ptr to
                     // the parameter from the users of the alloca.
                     Value* replacement{nullptr};
-                    if (param_info.kind() == cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister) {
+                    if (param_info.kind() == ParamKind::PointerInRegister) {
                         // For pointer-in-register parameters, replace the alloca with a *load* of
                         // a copy of the parameter. The alloca was a ptr to the parameter, and the
                         // parameter is a /ptr to/ a ptr to the parameter. This is because it
@@ -753,7 +777,7 @@ void Module::emit(std::filesystem::path output_file_path) {
             if (_ctx->target()->is_arch_x86_64()) {
                 desc.return_register_to_replace = +x86_64::RegisterId::RETURN;
                 std::vector<usz> jeep_registers{};
-                std::vector<lcc::usz> scalar_registers{};
+                std::vector<usz> scalar_registers{};
                 if (_ctx->target()->is_cconv_ms()) {
                     desc.return_register = +cconv::msx64::return_register;
                     // Just the volatile registers
@@ -805,12 +829,22 @@ void Module::emit(std::filesystem::path output_file_path) {
             if (_ctx->option_print_mir()) {
                 fmt::print("\nAfter RA\n");
                 if (_ctx->target()->is_arch_x86_64()) {
-                    for (auto& f : machine_ir)
-                        fmt::print("{}", PrintMFunctionImpl(f, x86_64::opcode_to_string));
+                    for (auto& f : machine_ir) {
+                        fmt::print(
+                            "{}",
+                            PrintMFunctionImpl(
+                                f,
+                                x86_64::opcode_to_string
+                            )
+                        );
+                    }
                 } else {
                     fmt::print(
                         "{}",
-                        fmt::join(vws::transform(machine_ir, PrintMFunction), "\n")
+                        fmt::join(
+                            vws::transform(machine_ir, PrintMFunction),
+                            "\n"
+                        )
                     );
                 }
             }
@@ -837,6 +871,7 @@ void Module::emit(std::filesystem::path output_file_path) {
                         output_file_path.string()
                     );
                 }
+
                 gobj.as_elf(f);
                 fclose(f);
 

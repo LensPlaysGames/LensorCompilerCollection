@@ -2,6 +2,9 @@
 
 * LCC
 
+- [Context]: Rename =frontend_options=
+  They could be used by backends as well super easily, and it'd be convenient.
+  Maybe just =has_option= and =set_option=?
 - [IRTest]: IR -> IR testing facility
   This will allow us to test optimisations, as well as make sure our IR parser is a working frontend (further than runtest).
   We could also re-use the IR against IR matching code for LangTest's IR facilities.

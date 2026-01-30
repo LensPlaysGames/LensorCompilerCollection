@@ -51,8 +51,8 @@ memcpy:
 
 func:
   bb0:
-    mov.derefrhs xmm0.32 local(abs)+16
-    mov.dereflhs local(abs)+16 xmm0.32 {CLOBBERS: op.1}
+    mov.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
+    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 

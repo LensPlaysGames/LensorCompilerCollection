@@ -748,6 +748,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
         LCC_UNREACHABLE();
     }
 };
+
 } // namespace
 } // namespace lcc
 
