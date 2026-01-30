@@ -1,0 +1,57 @@
+* Hardware Instruction Set Architectures
+
+This is just a small overview of the places where an ISA can slowly transform SSA IR into, ya know, whatever hardware does.
+
+** IR - Lowering
+
+IR Lowering is an LCC compilation step applied to every defined function within an IR module.
+
+The lowering step takes an IR function as input and may modify that IR function in place, if necessary.
+
+The idea is that, the IR is high level enough where it may be easier, semantically or literally, to operate at this higher level and remove or rewrite some of the more complex operations to ones that your ISA understands.
+
+For example, =x86_64= rewrites =load= and =store= operations larger than =64= bits (it's jeep registers' bitwidth) to either lots of loads and stores, or a call to =memcpy=. This prevents each backend from having to implement it's own unrolled =memcpy= implementation, or something.
+
+This is also where calling conventions may alter function signatures, split a value across multiple registers, and more. This allows the generalisation step to be much more "1:1".
+
+As you can see, some things are just easier to deal with at a higher level.
+
+** IR/MIR - Generalisation
+
+IR Generalisation is an LCC compilation step applied to every IR function within an IR module.
+
+The generalisation step takes an IR function as input and produces an MIR function as output.
+
+The idea here is, the IR is a strict three-address-code, and most ISA's in the real world are, well, /not/. MIR is a slightly different data structure that is much more generic, allowing to store arbitrary instruction opcodes, as well as have any amount of operands per instruction.
+
+The IR translates directly to MIR, in most cases. =%0 = add i32 0, 0= becomes =%v0 | m.add 0.32, 0.32=; as you can see, the IR's types are used to fill in data about certain operands (i.e. =i32= type makes the integer immediates =32= bits wide). Therefore, this step may be seen as a form of "type punning".
+
+This step is also where the IR's =Parameter= instructions get converted per calling convention to be properly accessed and used. Some calling conventions have strict rules about where and how parameters in the IR may be used; optimisations may break this invariant, even if a language produces "well meaning" IR. Therefore, calling conventions should /attempt/ to handle parameter values wherever they may appear (in practice, calling conventions are complicated and LCC devs are low on time, but we do our best).
+
+** MIR - Instruction Selection
+
+Selection is the LCC compilation step applied to every defined function within the MIR generated from an IR module.
+
+The selection step takes each MIR function as input and *generates an entirely new* MIR function as an output.
+
+MIR Selection is the process of selecting instructions from your ISA to represent the generic virtual machine instructions that the IR is converted into.
+
+So, the MIR generic VM instruction of =MInst::Kind::Add= may be represented as =x86_64::Opcode::Add=.
+
+Plus, your ISA may only support certain operand kinds or orders (i.e. =x86_64= doesn't allow adding two immediates into a register); instruction selection allows you to convert any amount of input instructions into any amount of output instructions. So, if you need to generate five instructions from one input instruction, you can, and, if you needed to, you could generate one instruction from five input instructions.
+
+** MIR - Register Allocation
+
+Register allocation is an LCC compilation step that is applied to each defined MIR function.
+
+The register allocation step takes each MIR defined function as input and may modify that MIR function in place, if necessary.
+
+The MIR generic VM has an /infinite/ amount of /virtual/ registers. /Virtual/ because each one may be of any size, and /infinite/ because there is no limit to how many you may have in use in a given function.
+
+Your ISA probably doesn't have infinite registers. This step reconciles that fact, converting the "infinite" /virtual/ register space into the finite /hardware/ register space.
+
+Basically, we take virtual registers of the form =v0=, and we convert them into whatever registers your hardware ISA has (i.e. =x86_64::RegisterId::RAX=).
+
+Do note that LCC's register allocation step has no semblance or understanding of register sizes, beyond passing the data through and copying it when a register is used. If your ISA has specific register sizes, you should fix that up in the IR lowering step (or you will have to in each backend, and, word of warning: I did exactly that and the nightmare of "zero sized registers" appearing /everywhere/ that ensued was not worth the perceived "simplicity").
+
+To accomplish this, there's some cool math that goes on (or not), but you don't really need to know that just to implement it for your ISA. All /you/ have to do is supply a machine description, containing some calling convention information, as well as the sets of registers and the relevant category.
