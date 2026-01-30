@@ -250,14 +250,50 @@ auto wat_value(Module& m, Value* v) -> std::string {
 auto wat_inst(Module& m, Inst* i) -> std::string {
     LCC_ASSERT(i);
 
+    // Ensure a string is wrapped in parentheses (begins with opening parens,
+    // ends with closing parens). Assumes input has matched parens.
+    const auto paren_wrap = [](std::string in) -> std::string {
+        if (in.size() and in.front() != '(') {
+            return fmt::format("({})", in);
+        }
+        return in;
+    };
+
     const auto binary = [&](std::string_view op) {
+        LCC_ASSERT(
+            i->type()->bits() <= 64,
+            "WAT: Overlarge type of binary instruction"
+        );
         auto b = as<BinaryInst>(i);
         return fmt::format(
             "({} {} {})",
             op,
-            wat_value(m, b->lhs()),
-            wat_value(m, b->rhs())
+            paren_wrap(wat_value(m, b->lhs())),
+            paren_wrap(wat_value(m, b->rhs()))
         );
+    };
+
+    const auto inst_type = [](Inst* inst) {
+        auto bitwidth = inst->type()->bits();
+        LCC_ASSERT(
+            bitwidth <= 64,
+            "WAT: Overlarge bitwidth: {} ({})",
+            *inst->type(),
+            bitwidth
+        );
+        // Bitwidth is either 32 or 64.
+        if (bitwidth <= 32)
+            bitwidth = 32;
+        else bitwidth = 64;
+
+        if (is<FractionalType>(inst->type()))
+            return fmt::format("f{}", bitwidth);
+
+        return fmt::format("i{}", bitwidth);
+    };
+
+    const auto inst_with_type = [&](std::string_view mnemonic) {
+        return fmt::format("{}.{}", inst_type(i), mnemonic);
     };
 
     switch (i->kind()) {
@@ -344,35 +380,38 @@ auto wat_inst(Module& m, Inst* i) -> std::string {
             return "return";
         }
 
-        case Value::Kind::Add: return binary("i32.add");
-        case Value::Kind::Sub: return binary("i32.sub");
-        case Value::Kind::Mul: return binary("i32.mul");
-        case Value::Kind::SDiv: return binary("i32.div_s");
-        case Value::Kind::UDiv: return binary("i32.div_u");
-        case Value::Kind::SRem: return binary("i32.rem_s");
-        case Value::Kind::URem: return binary("i32.rem_u");
-        case Value::Kind::And: return binary("i32.and");
-        case Value::Kind::Or: return binary("i32.or");
-        case Value::Kind::Eq: return binary("i32.eq");
-        case Value::Kind::Ne: return binary("i32.ne");
-        case Value::Kind::SLt: return binary("i32.lt_s");
-        case Value::Kind::SLe: return binary("i32.le_s");
-        case Value::Kind::SGt: return binary("i32.gt_s");
-        case Value::Kind::SGe: return binary("i32.ge_s");
-        case Value::Kind::ULt: return binary("i32.lt_u");
-        case Value::Kind::ULe: return binary("i32.le_u");
-        case Value::Kind::UGt: return binary("i32.gt_u");
-        case Value::Kind::UGe: return binary("i32.ge_u");
-        case Value::Kind::Xor: return binary("i32.xor");
-        case Value::Kind::Shl: return binary("i32.shl");
-        case Value::Kind::Sar: return binary("i32.shr_s");
-        case Value::Kind::Shr: return binary("i32.shr_u");
+        case Value::Kind::Add: return binary(inst_with_type("add"));
+        case Value::Kind::Sub: return binary(inst_with_type("sub"));
+        case Value::Kind::Mul: return binary(inst_with_type("mul"));
+        case Value::Kind::SDiv: return binary(inst_with_type("div_s"));
+        case Value::Kind::UDiv: return binary(inst_with_type("div_u"));
+        case Value::Kind::SRem: return binary(inst_with_type("rem_s"));
+        case Value::Kind::URem: return binary(inst_with_type("rem_u"));
+        case Value::Kind::And: return binary(inst_with_type("and"));
+        case Value::Kind::Or: return binary(inst_with_type("or"));
+        case Value::Kind::Eq: return binary(inst_with_type("eq"));
+        case Value::Kind::Ne: return binary(inst_with_type("ne"));
+        case Value::Kind::SLt: return binary(inst_with_type("lt_s"));
+        case Value::Kind::SLe: return binary(inst_with_type("le_s"));
+        case Value::Kind::SGt: return binary(inst_with_type("gt_s"));
+        case Value::Kind::SGe: return binary(inst_with_type("ge_s"));
+        case Value::Kind::ULt: return binary(inst_with_type("lt_u"));
+        case Value::Kind::ULe: return binary(inst_with_type("le_u"));
+        case Value::Kind::UGt: return binary(inst_with_type("gt_u"));
+        case Value::Kind::UGe: return binary(inst_with_type("ge_u"));
+        case Value::Kind::Xor: return binary(inst_with_type("xor"));
+        case Value::Kind::Shl: return binary(inst_with_type("shl"));
+        case Value::Kind::Sar: return binary(inst_with_type("shr_s"));
+        case Value::Kind::Shr: return binary(inst_with_type("shr_u"));
 
         case Value::Kind::Compl: {
             // WASM doesn't have a bitwise not; instead, they recommend XORing with
             // negative one (-1).
+            // TODO: Error if non-integer type.
             return fmt::format(
-                "(i32.xor (i32.const -1) {})",
+                "({} ({}.const -1) {})",
+                inst_with_type("xor"),
+                inst_type(i),
                 wat_value(m, as<UnaryInstBase>(i)->operand())
             );
         }
@@ -381,7 +420,9 @@ auto wat_inst(Module& m, Inst* i) -> std::string {
             // WASM doesn't have an integer negation; instead, they recommend
             // subtracting the integer from zero, letting wrapping handle things.
             return fmt::format(
-                "(i32.sub (i32.const 0) {})",
+                "({} ({}.const 0) {})",
+                inst_with_type("sub"),
+                inst_type(i),
                 wat_value(m, as<UnaryInstBase>(i)->operand())
             );
         }
