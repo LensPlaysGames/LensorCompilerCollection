@@ -316,6 +316,7 @@ with the braces' contents having the same indentation.
    :feature 'type
    `((declaration type: (identifier) @font-lock-type-face)
      ["enum" "struct" "sum" "union"] @font-lock-type-face
+     (type_enum underlying: (_) @font-lock-type-face)
      (type_array)      @font-lock-type-face
      (type_ffi)        @font-lock-type-face
      (type_pointer)    @font-lock-type-face
@@ -357,6 +358,9 @@ with the braces' contents having the same indentation.
 
    :feature 'delimiter
    `(["(" ")" "{" "}"] @font-lock-delimiter-face)
+
+   :feature 'error
+   `((ERROR) @font-lock-warning-face)
    ))
 
 (defcustom glint-ts-mode--format-nl-before-block-open nil
@@ -642,7 +646,7 @@ Available @ Directives:
          treesit-font-lock-feature-list
          '(( function comment string )
            ( keyword type )
-           ( number operator delimiter )
+           ( number operator delimiter error )
            ( variable )))
 
         (treesit-major-mode-setup))
