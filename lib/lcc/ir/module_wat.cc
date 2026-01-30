@@ -56,6 +56,13 @@ auto wat_type(Module& m, Type* t) -> std::string {
             LCC_ASSERT(false, "WAT Overlarge integer type");
         }
 
+        case Type::Kind::Fractional: {
+            auto f = as<FractionalType>(t);
+            if (f->bitwidth() <= 32) return "f32";
+            if (f->bitwidth() <= 64) return "f64";
+            LCC_ASSERT(false, "WAT Overlarge fractional type");
+        }
+
         // In WebAssembly, pointers are i32's that contain an offset into the linear memory region.
         case Type::Kind::Pointer: return "i32";
 

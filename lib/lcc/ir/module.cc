@@ -748,12 +748,13 @@ void Module::emit(std::filesystem::path output_file_path) {
             MachineDescription desc{};
             if (_ctx->target()->is_arch_x86_64()) {
                 desc.return_register_to_replace = +x86_64::RegisterId::RETURN;
+                std::vector<usz> jeep_registers{};
                 if (_ctx->target()->is_cconv_ms()) {
                     desc.return_register = +cconv::msx64::return_register;
                     // Just the volatile registers
                     rgs::transform(
                         cconv::msx64::volatile_regs,
-                        std::back_inserter(desc.registers),
+                        std::back_inserter(jeep_registers),
                         [](auto r) { return +r; }
                     );
                 } else {
@@ -761,10 +762,42 @@ void Module::emit(std::filesystem::path output_file_path) {
                     // Just the volatile registers
                     rgs::transform(
                         cconv::sysv::volatile_regs,
-                        std::back_inserter(desc.registers),
+                        std::back_inserter(jeep_registers),
                         [](auto r) { return +r; }
                     );
                 }
+                LCC_ASSERT(
+                    jeep_registers.size(),
+                    "Must populate general purpose register list"
+                );
+                desc.registers.emplace_back(
+                    +Register::Category::DEFAULT,
+                    jeep_registers
+                );
+
+                std::vector<usz> scalar_registers{
+                    +x86_64::RegisterId::XMM0,
+                    +x86_64::RegisterId::XMM1,
+                    +x86_64::RegisterId::XMM2,
+                    +x86_64::RegisterId::XMM3,
+                    +x86_64::RegisterId::XMM4,
+                    +x86_64::RegisterId::XMM5,
+                    +x86_64::RegisterId::XMM6,
+                    +x86_64::RegisterId::XMM7,
+                    +x86_64::RegisterId::XMM8,
+                    +x86_64::RegisterId::XMM9,
+                    +x86_64::RegisterId::XMM10,
+                    +x86_64::RegisterId::XMM11,
+                    +x86_64::RegisterId::XMM12,
+                    +x86_64::RegisterId::XMM13,
+                    +x86_64::RegisterId::XMM14,
+                    +x86_64::RegisterId::XMM15
+                };
+                desc.registers.emplace_back(
+                    +Register::Category::FLOAT,
+                    scalar_registers
+                );
+
             } else LCC_ASSERT(false, "Sorry, unhandled target architecture");
 
             for (auto& mfunc : machine_ir) {

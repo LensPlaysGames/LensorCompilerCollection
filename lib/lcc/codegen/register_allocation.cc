@@ -66,6 +66,8 @@ struct AdjacencyList {
     // Live index of this list.
     usz index;
 
+    usz category;
+
     // If a register value appears in this set, this list is said to interfere
     // with that register value.
     std::unordered_set<usz> regmask{};
@@ -126,6 +128,119 @@ usz live_idx_from_register(const std::vector<Register>& registers, Register r) {
     return live_idx_from_register_value(registers, r.value);
 }
 
+void remove_defining(std::vector<usz>& live_values, const MInst& inst) {
+    // If the defining use of a virtual register is an operand of this
+    // instruction, remove it from vector of live vals.
+    if (inst.is_defining())
+        std::erase(live_values, inst.reg());
+
+    for (auto& op : inst.all_operands()) {
+        if (std::holds_alternative<MOperandRegister>(op)) {
+            auto reg = std::get<MOperandRegister>(op);
+            if (reg.defining_use)
+                std::erase(live_values, reg.value);
+        }
+    }
+}
+
+void matrix_set_clobbers(
+    AdjacencyMatrix& matrix,
+    const std::vector<Register>& registers,
+    const std::vector<usz>& live_values,
+    const MInst& inst
+) {
+    // Register Clobbers
+    // Basically, a "clobbered register" has the affect that all live values
+    // will interfere with the clobber.
+    for (auto index : inst.operand_clobbers()) {
+        auto op = inst.get_operand(index);
+        if (std::holds_alternative<MOperandRegister>(op)) {
+            auto reg = std::get<MOperandRegister>(op);
+            auto live_idx = live_idx_from_register(registers, reg);
+            for (auto live : live_values) {
+                matrix.set(
+                    live_idx_from_register_value(registers, live),
+                    live_idx
+                );
+                // fmt::print("Clobber r{} interferes with live value r{}\n", reg.value, live);
+            }
+        }
+    }
+
+    for (auto r_id : inst.register_clobbers()) {
+        auto live_idx = live_idx_from_register_value(registers, r_id);
+        for (auto live : live_values) {
+            matrix.set(
+                live_idx_from_register_value(registers, live),
+                live_idx
+            );
+            // fmt::print("Clobber r{} interferes with live value r{}\n", reg.value, live);
+        }
+    }
+}
+
+struct RegisterPlusLiveValIndex {
+    Register reg;
+    usz idx;
+};
+
+std::vector<RegisterPlusLiveValIndex> collect_vreg_operands(
+    const std::vector<Register>& registers,
+    const MInst& inst
+) {
+    std::vector<RegisterPlusLiveValIndex> vreg_operands{};
+    if (inst.reg() >= +MInst::Kind::ArchStart) {
+        auto reg = Register{inst.reg(), uint(inst.regsize())};
+        vreg_operands.push_back({reg, live_idx_from_register(registers, reg)});
+    }
+    for (auto& op : inst.all_operands()) {
+        if (std::holds_alternative<MOperandRegister>(op)) {
+            auto reg = std::get<MOperandRegister>(op);
+            if (reg.value >= +MInst::Kind::ArchStart)
+                vreg_operands.push_back({reg, live_idx_from_register(registers, reg)});
+        }
+    }
+    return vreg_operands;
+}
+
+std::vector<usz> collect_clobbered_registers(
+    const MInst& inst
+) {
+    std::vector<usz> clobbered_regs{};
+
+    // Operand clobbers that happen to be registers.
+    for (auto index : inst.operand_clobbers()) {
+        auto& op = inst.all_operands().at(index);
+        if (std::holds_alternative<MOperandRegister>(op)) {
+            auto reg = std::get<MOperandRegister>(op);
+            clobbered_regs.push_back(reg.value);
+        }
+    }
+
+    // TODO: Should we also take register clobbers into account here?
+
+    return clobbered_regs;
+}
+
+void record_newly_live_values(
+    const std::vector<RegisterPlusLiveValIndex>& vreg_operands,
+    const MInst& inst,
+    std::vector<usz>& live_values
+) {
+    // If a virtual register is not live and is seen as an operand, it is
+    // added to the vector of live values.
+    for (auto r : vreg_operands) {
+        if (
+            not r.reg.defining_use
+            and rgs::find(live_values, r.reg.value) == live_values.end()
+        ) live_values.push_back(r.reg.value);
+    }
+    // Handle the case of a non-defining register operand in use of the
+    // instruction that defines that register.
+    if (inst.is_defining())
+        std::erase(live_values, inst.reg());
+}
+
 void collect_interferences_from_block(
     AdjacencyMatrix& matrix,
     const std::vector<Register>& registers,
@@ -150,70 +265,25 @@ void collect_interferences_from_block(
         // fmt::print("live after: {}\n", fmt::join(live_values, ", "));
 
         // If the defining use of a virtual register is an operand of this
-        // instruction, remove it from vector of live vals.
-        if (inst.is_defining())
-            std::erase(live_values, inst.reg());
-        for (auto& op : inst.all_operands()) {
-            if (std::holds_alternative<MOperandRegister>(op)) {
-                auto reg = std::get<MOperandRegister>(op);
-                if (reg.defining_use)
-                    std::erase(live_values, reg.value);
-            }
-        }
+        // instruction, remove it from live values.
+        remove_defining(live_values, inst);
 
         // fmt::print("live during: {}\n", fmt::join(live_values, ", "));
 
-        // Register Clobbers
-        // Basically, a "clobbered register" has the affect that all live values
-        // will interfere with the clobber.
-        for (auto index : inst.operand_clobbers()) {
-            auto op = inst.get_operand(index);
-            if (std::holds_alternative<MOperandRegister>(op)) {
-                auto reg = std::get<MOperandRegister>(op);
-                auto live_idx = live_idx_from_register(registers, reg);
-                for (auto live : live_values) {
-                    matrix.set(
-                        live_idx_from_register_value(registers, live),
-                        live_idx
-                    );
-                    // fmt::print("Clobber r{} interferes with live value r{}\n", reg.value, live);
-                }
-            }
-        }
-
-        for (auto r_id : inst.register_clobbers()) {
-            auto live_idx = live_idx_from_register_value(registers, r_id);
-            for (auto live : live_values) {
-                matrix.set(
-                    live_idx_from_register_value(registers, live),
-                    live_idx
-                );
-                // fmt::print("Clobber r{} interferes with live value r{}\n", reg.value, live);
-            }
-        }
+        // Make registers clobbered by this instruction's execution interfere with
+        // all live values; this is necessary because, if any value we later
+        // needed were in these registers, execution of this instruction would
+        // invalidate that value.
+        matrix_set_clobbers(matrix, registers, live_values, inst);
 
         // Collect all register operands from this instruction that are
         // used as operands somewhere in the function (i.e. within the list of
         // registers). Cache the index within the adjacency matrix so we don't
         // have to keep recomputing it.
-        typedef struct RegisterPlusLiveValIndex {
-            Register reg;
-            usz idx;
-        } MIROperandPlusLiveValIndex;
+        auto vreg_operands = collect_vreg_operands(registers, inst);
 
-        std::vector<MIROperandPlusLiveValIndex> vreg_operands{};
-
-        if (inst.reg() >= +MInst::Kind::ArchStart) {
-            auto reg = Register{inst.reg(), uint(inst.regsize())};
-            vreg_operands.push_back({reg, live_idx_from_register(registers, reg)});
-        }
-        for (auto& op : inst.all_operands()) {
-            if (std::holds_alternative<MOperandRegister>(op)) {
-                auto reg = std::get<MOperandRegister>(op);
-                if (reg.value >= +MInst::Kind::ArchStart)
-                    vreg_operands.push_back({reg, live_idx_from_register(registers, reg)});
-            }
-        }
+        // Collect clobbered registers
+        auto clobbered_regs = collect_clobbered_registers(inst);
 
         // Make all reg operands interfere with each other; if two different,
         // non-clobbered registers are used as inputs to an instruction, they must
@@ -226,17 +296,6 @@ void collect_interferences_from_block(
         //     MoveDereferenceLHS(v0, v1, 40) clobbers 1st operand
         // RESULT
         //     Both v0 and v1 interfere with both v3 and v7.
-
-        // Collect clobbered registers
-        std::vector<usz> clobbered_regs{};
-        for (auto index : inst.operand_clobbers()) {
-            auto& op = inst.all_operands().at(index);
-            if (std::holds_alternative<MOperandRegister>(op)) {
-                auto reg = std::get<MOperandRegister>(op);
-                clobbered_regs.push_back(reg.value);
-            }
-        }
-
         for (auto A : vreg_operands) {
             for (auto B : vreg_operands) {
                 // If either A or B is clobbered, do NOT set interference between the two.
@@ -263,22 +322,17 @@ void collect_interferences_from_block(
         // RESULT
         //     Both v0 and v1 interfere with both v3 and v7.
         for (auto r : vreg_operands) {
-            for (auto live : live_values)
-                matrix.set(r.idx, live_idx_from_register_value(registers, live));
+            for (auto live : live_values) {
+                matrix.set(
+                    r.idx,
+                    live_idx_from_register_value(registers, live)
+                );
+            }
         }
 
         // If a virtual register is not live and is seen as an operand, it is
         // added to the vector of live values.
-        for (auto r : vreg_operands) {
-            if (
-                not r.reg.defining_use
-                and rgs::find(live_values, r.reg.value) == live_values.end()
-            ) live_values.push_back(r.reg.value);
-        }
-        // Handle the case of a non-defining register operand in use of the
-        // instruction that defines that register.
-        if (inst.is_defining())
-            std::erase(live_values, inst.reg());
+        record_newly_live_values(vreg_operands, inst, live_values);
 
         // fmt::print("live before: {}\n", fmt::join(live_values, ", "));
 
@@ -405,21 +459,29 @@ auto allocate_registers(
 
     // Helper function that ensures no duplicate registers show up in the
     // register list.
-    auto add_reg = [&](usz id, usz size) {
-        auto found = rgs::find_if(
-            registers,
-            [&](Register& r) {
-                return r.value == id;
-            }
-        );
-        if (found == registers.end())
-            registers.push_back(Register{id, uint(size)});
-    };
+    auto add_reg
+        = [&](usz id, usz size, usz category = +Register::Category::DEFAULT) {
+              auto found = rgs::find_if(
+                  registers,
+                  [&](Register& r) {
+                      return r.value == id;
+                  }
+              );
+              if (found == registers.end())
+                  registers.emplace_back(
+                      id,
+                      uint(size),
+                      (Register::Category) category
+                  );
+          };
 
     // Hardware registers are passed in through the machine description.
     // Add all (relevant) hardware registers to the list of all registers.
-    for (auto [index, reg] : vws::enumerate(desc.registers))
-        add_reg(reg, 0);
+    for (auto register_category : desc.registers) {
+        for (auto reg : register_category.registers) {
+            add_reg(reg, 0, register_category.category);
+        }
+    }
 
     // Walk the MIR, and,
     //   A: for every instruction, add the result register to the list of
@@ -428,11 +490,11 @@ auto allocate_registers(
     //      register to the list of registers.
     for (auto& block : function.blocks()) {
         for (auto& inst : block.instructions()) {
-            add_reg(inst.reg(), inst.regsize());
+            add_reg(inst.reg(), inst.regsize(), inst.regcategory());
             for (auto& op : inst.all_operands()) {
                 if (std::holds_alternative<MOperandRegister>(op)) {
                     MOperandRegister reg = std::get<MOperandRegister>(op);
-                    add_reg(reg.value, reg.size);
+                    add_reg(reg.value, reg.size, +reg.category);
                 }
             }
         }
@@ -453,13 +515,21 @@ auto allocate_registers(
 
     for (auto [i, reg] : vws::enumerate(registers)) {
         AdjacencyList list{};
+        // The list index is equivalent to the index where the corresponding
+        // register may be found in the main list of registers.
         list.index = usz(i);
+        // The list value is equivalent to the corresponding register's value.
         list.value = reg.value;
+        // The list category is equivalent to the corresponding register's
+        // category.
+        list.category = +reg.category;
+        // Hardware registers do not need allocated; they are already "colored
+        // in".
         if (list.value < +Module::first_virtual_register) {
             list.color = list.value;
             list.allocated = true;
         }
-        lists.push_back(list);
+        lists.emplace_back(list);
     }
 
     for (auto [a_idx, a] : vws::enumerate(registers)) {
@@ -486,7 +556,7 @@ auto allocate_registers(
 
     const auto should_skip_list = [&](AdjacencyList& list) {
         // Skip hardware registers, and registers already allocated a value.
-        return list.value < +MInst::Kind::ArchStart or list.allocated;
+        return list.allocated or list.value < +MInst::Kind::ArchStart;
     };
 
     usz k = desc.registers.size();
@@ -570,7 +640,18 @@ auto allocate_registers(
         // Attempt to find a hardware register that is NOT marked as interfering
         // with the register associated with the current adjacency list.
         usz reg_value = 0;
-        for (auto reg : desc.registers) {
+        auto register_category = rgs::find_if(
+            desc.registers,
+            [&](const MachineDescription::RegistersPerCategory& r) {
+                return r.category == list.category;
+            }
+        );
+        LCC_ASSERT(
+            register_category != desc.registers.end(),
+            "Could not find register list corresponding to adjacency list category {}",
+            list.category
+        );
+        for (auto reg : (*register_category).registers) {
             if (not register_interferences.contains(reg)) {
                 reg_value = reg;
                 break;
@@ -782,6 +863,8 @@ auto allocate_registers(
 
             // With the new spill/unspill instructions inserted, retry register
             // allocation...
+            // FIXME: Unnecessarily grows stack. We could return a "retry" value and
+            // retry from the call site. But, this isn't a performance issue right now.
             return allocate_registers(desc, function);
         }
 

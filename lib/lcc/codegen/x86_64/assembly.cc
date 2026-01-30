@@ -7,10 +7,12 @@
 #include <lcc/core.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/fractionals.hh>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
+#include <climits>
 #include <filesystem>
 #include <functional>
 #include <ranges>
@@ -148,6 +150,12 @@ void emit_stack_frame_exit(std::string& out, StackFrameKind k) {
         case StackFrameKind::COUNT:
             LCC_UNREACHABLE();
     }
+}
+
+bool operand_is_float(MOperand& op) {
+    return std::holds_alternative<MOperandRegister>(op)
+       and std::get<MOperandRegister>(op).category
+               == Register::Category::FLOAT;
 }
 
 void emit_gnu_att_assembly(
@@ -553,25 +561,79 @@ void emit_gnu_att_assembly(
                 if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS) {
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
-                    if (std::holds_alternative<MOperandImmediate>(lhs)) {
-                        if (std::holds_alternative<MOperandLocal>(rhs)) {
-                            // Moving immediate into local (memory) requires mov suffix in GNU.
+                    if (
+                        std::holds_alternative<MOperandImmediate>(lhs)
+                        and std::holds_alternative<MOperandLocal>(rhs)
+                    ) {
+                        // Moving immediate into local (memory) requires mov suffix in GNU.
 
-                            // We use size of local to determine how big of a move to do.
-                            // auto local_index = std::get<MOperandLocal>(rhs).index;
-                            // auto* local = function.locals().at(local_index);
-                            // auto bitwidth = local->allocated_type()->bits();
+                        // We use size of immediate to determine how big of a move to do.
+                        auto bitwidth = std::get<MOperandImmediate>(lhs).size;
+                        switch (bitwidth) {
+                            default: LCC_ASSERT(false, "Invalid move (bitwidth {})", bitwidth);
 
-                            auto bitwidth = std::get<MOperandImmediate>(lhs).size;
-                            switch (bitwidth) {
-                                default: LCC_ASSERT(false, "Invalid move (bitwidth {})", bitwidth);
+                            case 64: out += 'q'; break;
+                            case 32: out += 'l'; break;
+                            case 16: out += 'w'; break;
+                            case 1:
+                            case 8: out += 'b'; break;
+                        }
+                    }
+                }
 
-                                case 64: out += 'q'; break;
-                                case 32: out += 'l'; break;
-                                case 16: out += 'w'; break;
-                                case 1:
-                                case 8: out += 'b'; break;
-                            }
+                // FLOAT: Move between floats uses movss or movsd
+                if (
+                    instruction.opcode() == +x86_64::Opcode::Move
+                    or instruction.opcode() == +x86_64::Opcode::MoveDereferenceLHS
+                    or instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS
+                ) {
+                    auto lhs = instruction.get_operand(0);
+                    auto rhs = instruction.get_operand(1);
+                    if (
+                        instruction.regcategory() == +Register::Category::FLOAT
+                        or operand_is_float(lhs) or operand_is_float(rhs)
+                    ) {
+                        usz bitwidth = 0;
+                        if (operand_is_float(lhs))
+                            bitwidth = std::get<MOperandRegister>(lhs).size;
+                        else if (operand_is_float(lhs))
+                            bitwidth = std::get<MOperandRegister>(rhs).size;
+                        else bitwidth = instruction.regsize();
+                        LCC_ASSERT(bitwidth);
+                        switch (bitwidth) {
+                            default:
+                                Diag::ICE(
+                                    "Float bitwidths must be 64 or 32 on x86_64..."
+                                );
+                            case 64: out += "sd"; break;
+                            case 32: out += "ss"; break;
+                        }
+                    }
+                }
+
+                // FLOAT: Basic "ss" or "sd" suffix
+                if (
+                    (instruction.opcode() == +x86_64::Opcode::Add
+                     or instruction.opcode() == +x86_64::Opcode::Sub
+                     or instruction.opcode() == +x86_64::Opcode::Multiply
+                     or instruction.opcode() == +x86_64::Opcode::SignedDivide)
+                    and instruction.all_operands().size() == 2
+                ) {
+                    auto lhs = instruction.get_operand(0);
+                    auto rhs = instruction.get_operand(1);
+                    if (operand_is_float(lhs) or operand_is_float(rhs)) {
+                        usz bitwidth = 0;
+                        if (operand_is_float(lhs))
+                            bitwidth = std::get<MOperandRegister>(lhs).size;
+                        else bitwidth = std::get<MOperandRegister>(rhs).size;
+                        LCC_ASSERT(bitwidth);
+                        switch (bitwidth) {
+                            default:
+                                Diag::ICE(
+                                    "Float bitwidths must be 64 or 32 on x86_64..."
+                                );
+                            case 64: out += "sd"; break;
+                            case 32: out += "ss"; break;
                         }
                     }
                 }

@@ -446,7 +446,16 @@ auto Module::mir() -> std::vector<MFunction> {
             case Value::Kind::UGe:
                 break;
         }
-        return MOperandRegister{virts[v], uint(regsize)};
+
+        auto register_category = Register::Category::DEFAULT;
+        if (is<FractionalType>(v->type()))
+            register_category = Register::Category::FLOAT;
+
+        return MOperandRegister{
+            virts[v],
+            uint(regsize),
+            register_category
+        };
     };
 
     // NOTE: We cannot add functions to the IR while iterating over them (use-
@@ -550,6 +559,10 @@ auto Module::mir() -> std::vector<MFunction> {
         for (auto [block_index, block] : vws::enumerate(function->blocks())) {
             auto& bb = f.blocks().at(usz(block_index));
             for (auto& instruction : block->instructions()) {
+                auto register_category = Register::Category::UNSPECIFIED;
+                if (is<FractionalType>(instruction->type()))
+                    register_category = Register::Category::FLOAT;
+
                 switch (instruction->kind()) {
                     // Non-instructions
                     case Value::Kind::Function:
@@ -567,7 +580,9 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto* copy_ir = as<CopyInst>(instruction);
                         auto copy = MInst(
                             MInst::Kind::Copy,
-                            {virts[instruction], uint(copy_ir->type()->bits())}
+                            {virts[instruction],
+                             uint(copy_ir->type()->bits()),
+                             register_category}
                         );
                         copy.location(copy_ir->location());
                         copy.add_operand(MOperandValueReference(function, f, copy_ir->operand()));
@@ -591,7 +606,9 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto phi = MInst(
                             MInst::Kind::Phi,
-                            {virts[instruction], uint(phi_ir->type()->bits())}
+                            {virts[instruction],
+                             uint(phi_ir->type()->bits()),
+                             register_category}
                         );
                         phi.location(phi_ir->location());
                         for (const auto& op : phi_ir->operands()) {
@@ -624,10 +641,9 @@ auto Module::mir() -> std::vector<MFunction> {
                                         case Kinds::PointerInRegister: {
                                             auto copy = MInst(
                                                 MInst::Kind::Copy,
-                                                {//
-                                                 +cconv::msx64::arg_regs.at(usz(arg_i)),
-                                                 x86_64::GeneralPurposeBitwidth
-                                                }
+                                                {+cconv::msx64::arg_regs.at(usz(arg_i)),
+                                                 x86_64::GeneralPurposeBitwidth,
+                                                 register_category}
                                             );
                                             copy.location(call_ir->location());
                                             copy.add_operand(MOperandValueReference(function, f, arg));
@@ -821,7 +837,9 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto call = MInst(
                             MInst::Kind::Call,
-                            {virts[instruction], uint(call_ir->function_type()->ret()->bits())}
+                            {virts[instruction],
+                             uint(call_ir->function_type()->ret()->bits()),
+                             register_category}
                         );
                         call.location(call_ir->location());
                         call.add_operand(MOperandValueReference(function, f, call_ir->callee()));
@@ -898,7 +916,11 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::GetElementPtr: {
                         auto* gep_ir = as<GEPInst>(instruction);
-                        Register reg{virts[instruction], uint(gep_ir->type()->bits())};
+                        Register reg{
+                            virts[instruction],
+                            uint(gep_ir->type()->bits()),
+                            register_category
+                        };
 
                         if (auto* idx = cast<IntegerConstant>(gep_ir->idx())) {
                             usz offset = gep_ir->base_type()->bytes() * (usz) idx->value().value();
@@ -1142,7 +1164,9 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto* load_ir = as<LoadInst>(instruction);
                         auto load = MInst(
                             MInst::Kind::Load,
-                            {virts[instruction], uint(load_ir->type()->bits())}
+                            {virts[instruction],
+                             uint(load_ir->type()->bits()),
+                             register_category}
                         );
                         load.location(load_ir->location());
                         load.add_operand(MOperandValueReference(function, f, load_ir->ptr()));
@@ -1209,7 +1233,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         if (ret_ir->has_value()) regsize = ret_ir->val()->type()->bits();
                         auto ret = MInst(
                             MInst::Kind::Return,
-                            {virts[instruction], uint(regsize)}
+                            {virts[instruction], uint(regsize), register_category}
                         );
                         ret.location(ret_ir->location());
                         if (ret_ir->has_value())
@@ -1225,7 +1249,12 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Neg:
                     case Value::Kind::Compl: {
                         auto* unary_ir = as<UnaryInstBase>(instruction);
-                        auto unary = MInst(ir_nary_inst_kind_to_mir(unary_ir->kind()), {virts[instruction], uint(unary_ir->type()->bits())});
+                        auto unary = MInst(
+                            ir_nary_inst_kind_to_mir(unary_ir->kind()),
+                            {virts[instruction],
+                             uint(unary_ir->type()->bits()),
+                             register_category}
+                        );
                         unary.location(unary_ir->location());
                         unary.add_operand(MOperandValueReference(function, f, unary_ir->operand()));
                         bb.add_instruction(unary);
@@ -1256,7 +1285,12 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::UGt:
                     case Value::Kind::UGe: {
                         auto* binary_ir = as<BinaryInst>(instruction);
-                        auto binary = MInst(ir_nary_inst_kind_to_mir(binary_ir->kind()), {virts[instruction], uint(binary_ir->type()->bits())});
+                        auto binary = MInst(
+                            ir_nary_inst_kind_to_mir(binary_ir->kind()),
+                            {virts[instruction],
+                             uint(binary_ir->type()->bits()),
+                             register_category}
+                        );
                         binary.location(binary_ir->location());
                         binary.add_operand(MOperandValueReference(function, f, binary_ir->lhs()));
                         binary.add_operand(MOperandValueReference(function, f, binary_ir->rhs()));

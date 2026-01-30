@@ -614,7 +614,12 @@ struct PatternList {
                     isz output_i = 0;
                     pattern::output::foreach ([&]<typename inst> {
                         // Use instruction's vreg from input of pattern.
-                        auto* output = new MInst(inst::opcode, {input.back()->reg(), uint(input.back()->regsize())});
+                        auto* output = new MInst(
+                            inst::opcode,
+                            {input.back()->reg(),
+                             uint(input.back()->regsize()),
+                             (::lcc::Register::Category) input.back()->regcategory()}
+                        );
                         // Use instruction's location from input of pattern.
                         output->location(input.back()->location());
 

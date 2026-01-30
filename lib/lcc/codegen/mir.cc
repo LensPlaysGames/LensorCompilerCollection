@@ -1,10 +1,17 @@
 #include <lcc/codegen/mir.hh>
+#include <lcc/core.hh>
 #include <lcc/ir/module.hh>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
 namespace lcc {
+
+static auto register_category_fmt(Register::Category category) -> std::string {
+    if (category != Register::Category::DEFAULT)
+        return fmt::format(" ({})", ToString(category));
+    return "";
+}
 
 [[nodiscard]]
 auto PrintMOperand(const MOperand& op) -> std::string {
@@ -19,10 +26,11 @@ auto PrintMOperand(const MOperand& op) -> std::string {
     if (std::holds_alternative<MOperandRegister>(op)) {
         auto reg = std::get<MOperandRegister>(op);
         return fmt::format(
-            "{}r{}.{}",
+            "{}r{}.{}{}",
             reg.defining_use ? "DEF:" : "",
             reg.value,
-            reg.size
+            reg.size,
+            register_category_fmt(reg.category)
         );
     }
     if (std::holds_alternative<MOperandLocal>(op)) {
@@ -70,10 +78,13 @@ auto PrintMInstImpl(const MInst& inst, auto&& inst_opcode) -> std::string {
         );
 
     return fmt::format(
-        "    {}r{}.{} | {}{}{}{}",
+        "    {}r{}.{}{} | {}{}{}{}",
         inst.is_defining() ? "DEF " : "",
         inst.reg(),
         inst.regsize(),
+        register_category_fmt(
+            (Register::Category) inst.regcategory()
+        ),
         inst.use_count() or MInst::is_terminator(MInst::Kind(inst.opcode())) ? "" : "Unused ",
         inst_opcode(inst.opcode()),
         inst.all_operands().empty() ? "" : " ",

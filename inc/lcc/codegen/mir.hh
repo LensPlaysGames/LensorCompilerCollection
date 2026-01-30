@@ -23,7 +23,7 @@ struct Register {
     // mainly used by the register allocator in order to assign from the
     // proper "pool" of registers. Really, if register category doesn't match,
     // the registers interfere (other than when unspecified).
-    enum class Category {
+    enum class Category : usz {
         UNSPECIFIED,
         DEFAULT = UNSPECIFIED,
         FLOAT,
@@ -181,10 +181,21 @@ public:
     usz reg() const { return _register.value; }
     [[nodiscard]]
     usz regsize() const { return _register.size; }
+    usz regcategory() const { return +_register.category; }
     bool is_defining() const { return _register.defining_use; }
 
     void reg(usz newRegister) { _register.value = newRegister; }
     void regsize(uint newSize) { _register.size = newSize; }
+    void regcategory(Register::Category newCategory) {
+        _register.category = newCategory;
+    }
+    void regcategory(usz newCategory) {
+        LCC_ASSERT(
+            newCategory < +Register::Category::COUNT,
+            "Invalid register category"
+        );
+        _register.category = (Register::Category) newCategory;
+    }
     void is_defining(bool newDefining) { _register.defining_use = newDefining; }
 
     [[nodiscard]]
