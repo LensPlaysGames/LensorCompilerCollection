@@ -78,6 +78,10 @@ DRIVER
 `-- GLINT
 #+end_example
 
+The proposed structure is meant to increase modularity (if you want to provide your own library for /one part/ of the compilation process, you should be able to do so). Currently, with everything in one library, it would require extensive rewrites for that to work properly.
+
+The increased modularity should also work to increase the separation between stages of the compiler, which are already inherently very tightly coupled.
+
 ** Object
 
 No dependencies.
@@ -87,7 +91,7 @@ Generic Object File Format that can be translated to ELF, COFF, etc.
 ** LCC Core
 
 No dependencies.
-Compilation context (containing target, format, options, etc).
+Defines compilation context (containing target, format, options, etc).
 
 FIXME: Currently contains "utils", catch-all for "useful stuff".
 Separate this into meaningful utility libraries.
