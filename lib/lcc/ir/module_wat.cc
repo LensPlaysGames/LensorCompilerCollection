@@ -127,7 +127,11 @@ auto wat_value(Module& m, Value* v) -> std::string {
         }
 
         case Value::Kind::FractionalConstant: {
-            LCC_TODO("Convert fractional constant to f32 or f64 WAT constant");
+            auto fractional_value = as<FractionalConstant>(v)->value();
+            if (v->type()->bits() <= 32)
+                return fmt::format("f32.const {}", fractional_value);
+
+            LCC_TODO("Convert fractional constant to f64 WAT constant");
         }
 
         case Value::Kind::GlobalVariable: {
