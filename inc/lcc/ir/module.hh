@@ -21,7 +21,8 @@ namespace lcc {
 /// A module is a self-contained description of a program, containing IR
 /// functions, global variable definitions, and extra sections to include
 /// in the object/executable.
-struct Module {
+class Module {
+public:
     constexpr static usz first_virtual_register = 0x420;
 
 private:
