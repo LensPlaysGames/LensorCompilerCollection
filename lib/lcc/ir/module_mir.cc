@@ -585,7 +585,9 @@ auto Module::mir() -> std::vector<MFunction> {
                              register_category}
                         );
                         copy.location(copy_ir->location());
-                        copy.add_operand(MOperandValueReference(function, f, copy_ir->operand()));
+                        copy.add_operand(
+                            MOperandValueReference(function, f, copy_ir->operand())
+                        );
                         bb.add_instruction(copy);
                     } break;
 
@@ -997,7 +999,10 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto* branch_ir = as<BranchInst>(instruction);
                         // A branch does not produce a useable value, and as such it's register
                         // size is zero.
-                        auto branch = MInst(MInst::Kind::Branch, {virts[instruction], 0});
+                        auto branch = MInst(
+                            MInst::Kind::Branch,
+                            {virts[instruction], 0}
+                        );
                         branch.location(branch_ir->location());
                         auto op = MOperandValueReference(function, f, branch_ir->target());
                         branch.add_operand(op);
@@ -1072,17 +1077,26 @@ auto Module::mir() -> std::vector<MFunction> {
                                 uint(store_ir->val()->type()->bits() - x86_64::GeneralPurposeBitwidth)
                             );
 
-                            auto store_a = MInst(MInst::Kind::Store, {virts[instruction], 0});
+                            auto store_a = MInst(
+                                MInst::Kind::Store,
+                                {virts[instruction], 0}
+                            );
                             store_a.location(store_ir->location());
                             store_a.add_operand(reg_a);
                             store_a.add_operand(MOperandValueReference(function, f, store_ir->ptr()));
 
-                            auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
+                            auto add_b = MInst(
+                                MInst::Kind::Add,
+                                {next_vreg(), 64}
+                            );
                             add_b.location(store_ir->location());
                             add_b.add_operand(MOperandValueReference(function, f, store_ir->ptr()));
                             add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
 
-                            auto store_b = MInst(MInst::Kind::Store, {virts[instruction], 0});
+                            auto store_b = MInst(
+                                MInst::Kind::Store,
+                                {virts[instruction], 0}
+                            );
                             store_b.location(store_ir->location());
                             store_b.add_operand(reg_b);
                             store_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
@@ -1153,7 +1167,10 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         // A store does not produce a useable value, and as such it's register
                         // size is zero.
-                        auto store = MInst(MInst::Kind::Store, {virts[instruction], 0});
+                        auto store = MInst(
+                            MInst::Kind::Store,
+                            {virts[instruction], 0}
+                        );
                         store.location(store_ir->location());
                         store.add_operand(MOperandValueReference(function, f, store_ir->val()));
                         store.add_operand(MOperandValueReference(function, f, store_ir->ptr()));
@@ -1224,9 +1241,11 @@ auto Module::mir() -> std::vector<MFunction> {
                                 bb.add_instruction(add_b);
                                 bb.add_instruction(load_a);
                                 bb.add_instruction(load_b);
-                                bb.add_instruction(MInst(MInst::Kind::Return, {0, 0}));
+                                bb.add_instruction(
+                                    MInst(MInst::Kind::Return, {0, 0})
+                                );
                                 break;
-                            } else LCC_ASSERT(false, "Unhandled target architecture in SysV multiple register return");
+                            } else Diag::ICE("Unhandled target architecture in SysV multiple register return");
                         }
 
                         usz regsize = 0;
@@ -1292,8 +1311,12 @@ auto Module::mir() -> std::vector<MFunction> {
                              register_category}
                         );
                         binary.location(binary_ir->location());
-                        binary.add_operand(MOperandValueReference(function, f, binary_ir->lhs()));
-                        binary.add_operand(MOperandValueReference(function, f, binary_ir->rhs()));
+                        binary.add_operand(
+                            MOperandValueReference(function, f, binary_ir->lhs())
+                        );
+                        binary.add_operand(
+                            MOperandValueReference(function, f, binary_ir->rhs())
+                        );
                         bb.add_instruction(binary);
                     } break;
                 }

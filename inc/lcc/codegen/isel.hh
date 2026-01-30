@@ -349,11 +349,26 @@ struct Inst {
             case OperandKind::ResizedRegister: {
                 auto op_result = input_operand_by_index(operand::index);
                 // FIXME: Which pattern? Possible to include it in error message somehow?
-                LCC_ASSERT(op_result, "Pattern has ill-formed ResizedRegister<{}, {}> operand: index greater than amount of operands in input.", operand::index, operand::size);
+                LCC_ASSERT(
+                    op_result,
+                    "Pattern has ill-formed ResizedRegister<{}, {}> operand: index greater than amount of operands in input.",
+                    operand::index,
+                    operand::size
+                );
                 auto op = *op_result;
-                LCC_ASSERT(std::holds_alternative<MOperandRegister>(op), "Pattern has ill-formed ResizedRegister<{}, {}> operand: index within bounds, but does not reference a register operand", operand::index, operand::size);
+                LCC_ASSERT(
+                    std::holds_alternative<MOperandRegister>(op),
+                    "Pattern has ill-formed ResizedRegister<{}, {}> operand: index within bounds, but does not reference a register operand",
+                    operand::index,
+                    operand::size
+                );
 
-                return MOperandRegister(std::get<MOperandRegister>(op).value, operand::size);
+                auto in_register = std::get<MOperandRegister>(op);
+                return MOperandRegister(
+                    in_register.value,
+                    operand::size,
+                    in_register.category
+                );
             }
 
             case OperandKind::NewVirtual: {
@@ -457,13 +472,21 @@ struct Inst {
                 for (auto instruction : input) {
                     if (i == needle) {
                         found = true;
-                        op = MOperandRegister(instruction->reg(), uint(instruction->regsize()));
+                        op = MOperandRegister(
+                            instruction->reg(),
+                            uint(instruction->regsize()),
+                            (::lcc::Register::Category) instruction->regcategory()
+                        );
                     }
                     if (found) break;
                     ++i;
                 }
 
-                LCC_ASSERT(found, "Pattern has ill-formed i<{}> operand: index greater than amount of instructions in input.", needle);
+                LCC_ASSERT(
+                    found,
+                    "Pattern has ill-formed i<{}> operand: index greater than amount of instructions in input.",
+                    needle
+                );
 
                 return op;
             }

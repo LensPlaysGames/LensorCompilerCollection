@@ -14,17 +14,23 @@ namespace lcc {
 // Mark defining uses of virtual registers within a single block.
 static void mark_defining_uses(std::vector<usz>& regs_seen, MBlock* block) {
     for (auto& inst : block->instructions()) {
-        if (inst.reg() >= +MInst::Kind::ArchStart and std::find(regs_seen.begin(), regs_seen.end(), inst.reg()) == regs_seen.end()) {
+        if (
+            inst.reg() >= +MInst::Kind::ArchStart
+            and std::find(regs_seen.begin(), regs_seen.end(), inst.reg()) == regs_seen.end()
+        ) {
             inst.is_defining(true);
-            regs_seen.push_back(inst.reg());
+            regs_seen.emplace_back(inst.reg());
         }
         for (auto& op : inst.all_operands()) {
             if (std::holds_alternative<MOperandRegister>(op)) {
                 auto reg = std::get<MOperandRegister>(op);
-                if (reg.value >= +MInst::Kind::ArchStart and std::find(regs_seen.begin(), regs_seen.end(), reg.value) == regs_seen.end()) {
+                if (
+                    reg.value >= +MInst::Kind::ArchStart
+                    and std::find(regs_seen.begin(), regs_seen.end(), reg.value) == regs_seen.end()
+                ) {
                     reg.defining_use = true;
                     op = reg;
-                    regs_seen.push_back(reg.value);
+                    regs_seen.emplace_back(reg.value);
                 }
             }
         }
@@ -44,10 +50,11 @@ static void calculate_defining_uses_for_block(
 
     /// Don't visit the same block thrice.
     if (std::find(visited.begin(), visited.end(), block) != visited.end()) {
-        if (std::find(doubly_visited.begin(), doubly_visited.end(), block) != doubly_visited.end())
-            return;
-        doubly_visited.push_back(block);
-    } else visited.push_back(block);
+        if (
+            std::find(doubly_visited.begin(), doubly_visited.end(), block) != doubly_visited.end()
+        ) return;
+        doubly_visited.emplace_back(block);
+    } else visited.emplace_back(block);
 
     // At each block of the function, starting at the entry, walk the
     // control flow. The first operand usage of a virtual register will

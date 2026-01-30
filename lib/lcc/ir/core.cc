@@ -305,15 +305,24 @@ ArrayType* ArrayType::Get(Context* ctx, usz length, Type* element_type) {
     return out;
 }
 
-StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, usz align_bits, std::string name) {
+StructType* StructType::Get(
+    Context* ctx,
+    std::vector<Type*> member_types,
+    usz align_bits,
+    std::string name
+) {
     LCC_ASSERT(ctx);
 
     // Look in ctx type cache.
     const auto& found = rgs::find_if(ctx->struct_types, [&](const Type* t) {
         const StructType* s = as<StructType>(t);
         return s->named()
-                 ? s->name() == name and rgs::equal(s->members(), member_types)
-                 : rgs::equal(as<StructType>(ctx->struct_types[usz(s->index())])->members(), member_types);
+                 ? s->name() == name
+                       and rgs::equal(s->members(), member_types)
+                 : rgs::equal(
+                       as<StructType>(ctx->struct_types[usz(s->index())])->members(),
+                       member_types
+                   );
     });
     if (found != ctx->struct_types.end())
         return as<StructType>(*found);
@@ -321,7 +330,12 @@ StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, usz a
     StructType* out;
     if (not name.empty())
         out = new (ctx) StructType(member_types, name);
-    else out = new (ctx) StructType(member_types, (long int) ctx->struct_types.size());
+    else {
+        out = new (ctx) StructType(
+            member_types,
+            (isz) ctx->struct_types.size()
+        );
+    }
 
     out->_align = align_bits;
 
@@ -376,7 +390,12 @@ bool Block::has_predecessor(Block* block) const {
 
 usz Block::id() const {
     if (not parent) return 0;
-    return usz(std::distance(parent->blocks().begin(), rgs::find(parent->blocks(), this)));
+    return usz(
+        std::distance(
+            parent->blocks().begin(),
+            rgs::find(parent->blocks(), this)
+        )
+    );
 }
 
 auto Inst::Children() -> Generator<Value**> {
@@ -491,7 +510,10 @@ void Inst::EraseImpl() {
     for (auto* usee : children()) RemoveUse(usee, this);
 
     /// Erase this instruction.
-    if (parent) parent->instructions().erase(rgs::find(parent->instructions(), this));
+    if (parent)
+        parent->instructions().erase(
+            rgs::find(parent->instructions(), this)
+        );
 }
 
 auto Inst::children() const -> Generator<Value*> {
@@ -520,7 +542,10 @@ void Inst::erase_cascade() {
 auto Inst::instructions_before_this() -> std::span<Inst*> {
     if (not parent) return {};
     auto it = rgs::find(parent->instructions(), this);
-    LCC_ASSERT(it != parent->instructions().end(), "Instruction not found in parent");
+    LCC_ASSERT(
+        it != parent->instructions().end(),
+        "Instruction not found in parent"
+    );
     return {parent->instructions().begin(), it};
 }
 
@@ -554,7 +579,10 @@ void Inst::replace_with(Value* v) {
 auto Block::create_phi(Type* type, Location loc) -> PhiInst* {
     LCC_ASSERT(type);
     auto phi = new (*parent->module()) PhiInst(type, loc);
-    auto it = rgs::find_if(inst_list, [](Inst* i) { return not is<PhiInst>(i); });
+    auto it = rgs::find_if(
+        inst_list,
+        [](Inst* i) { return not is<PhiInst>(i); }
+    );
     inst_list.insert(it, phi);
     phi->parent = this;
     return phi;
@@ -564,7 +592,8 @@ void Block::erase() {
     LCC_ASSERT(users().empty(), "Cannot remove used block");
 
     /// Erase all instructions in this block.
-    while (not inst_list.empty()) inst_list.back()->erase_cascade();
+    while (not inst_list.empty())
+        inst_list.back()->erase_cascade();
     auto it = rgs::find(parent->blocks(), this);
     parent->blocks().erase(it);
 }
@@ -615,7 +644,11 @@ void Block::merge(lcc::Block* b) {
     /// Set the parent for each instruction to this block and move
     /// them all over. Lastly, delete the block.
     for (auto i : b->inst_list) i->parent = this;
-    inst_list.insert(inst_list.end(), b->inst_list.begin(), b->inst_list.end());
+    inst_list.insert(
+        inst_list.end(),
+        b->inst_list.begin(),
+        b->inst_list.end()
+    );
     b->inst_list.clear();
     if (b->parent) b->erase();
 }
@@ -640,7 +673,8 @@ auto lcc::Block::successors() const -> Generator<Block*> {
         case Kind::CondBranch:
             auto br = as<CondBranchInst>(terminator());
             co_yield br->then_block();
-            if (br->else_block() != br->then_block()) co_yield br->else_block();
+            if (br->else_block() != br->then_block())
+                co_yield br->else_block();
             break;
     }
 }
@@ -658,7 +692,10 @@ auto lcc::Block::successor_count() const -> usz {
 
 void lcc::Inst::insert_before(Inst* to_insert) {
     LCC_ASSERT(to_insert);
-    LCC_ASSERT(block(), "Cannot insert before instruction that has no block reference");
+    LCC_ASSERT(
+        block(),
+        "Cannot insert before instruction that has no block reference"
+    );
     block()->insert_before(to_insert, this);
 }
 
@@ -692,7 +729,10 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         } else if (auto f = cast<FunctionType>(ty)) {
             auto ToString = [&](auto t) { return Ty(t); };
             auto separator = fmt::format("{}, ", C(P::Filler));
-            auto variadic = f->variadic() ? fmt::format(" {}variadic", C(P::Filler)) : "";
+            auto variadic
+                = f->variadic()
+                    ? fmt::format(" {}variadic", C(P::Filler))
+                    : "";
             return fmt::format(
                 "{}{}({}{}){}{}",
                 Ty(f->ret()),
@@ -862,10 +902,21 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                     Print("{}", Val(arg));
                 }
 
-                auto variadic = callee_ty->variadic() ? fmt::format(" {}variadic", C(P::Filler)) : "";
+                auto variadic
+                    = callee_ty->variadic()
+                        ? fmt::format(" {}variadic", C(P::Filler))
+                        : "";
 
-                if (callee_ty->ret()->is_void()) Print("{}){}", C(P::Filler), variadic);
-                else Print("{}){} -> {}", C(P::Filler), variadic, Ty(callee_ty->ret()));
+                if (callee_ty->ret()->is_void())
+                    Print("{}){}", C(P::Filler), variadic);
+                else {
+                    Print(
+                        "{}){} -> {}",
+                        C(P::Filler),
+                        variadic,
+                        Ty(callee_ty->ret())
+                    );
+                }
                 return;
             }
 
@@ -901,7 +952,9 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 auto* intrinsic = as<IntrinsicInst>(i);
                 auto operands = intrinsic->operands();
                 switch (intrinsic->intrinsic_kind()) {
-                    default: LCC_ASSERT(false, "Unimplemented intrinsic in LCC IR printer");
+                    default: Diag::ICE(
+                        "Unimplemented intrinsic in LCC IR printer"
+                    );
 
                     case IntrinsicKind::MemCopy: {
                         Print(
@@ -952,7 +1005,10 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                     "phi {}{}, {}",
                     Ty(phi->type()),
                     C(P::Filler),
-                    fmt::join(vws::transform(phi->operands(), FormatPHIVal), separator)
+                    fmt::join(
+                        vws::transform(phi->operands(), FormatPHIVal),
+                        separator
+                    )
                 );
                 return;
             }
@@ -1111,10 +1167,18 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
         switch (v->kind()) {
             case Value::Kind::Function:
-                return Format("{}@{}", C(P::Name), as<Function>(v)->names().at(0).name);
+                return Format(
+                    "{}@{}",
+                    C(P::Name),
+                    as<Function>(v)->names().at(0).name
+                );
 
             case Value::Kind::IntegerConstant:
-                return Format("{}{}", C(P::Literal), as<IntegerConstant>(v)->value());
+                return Format(
+                    "{}{}",
+                    C(P::Literal),
+                    as<IntegerConstant>(v)->value()
+                );
 
             case Value::Kind::FractionalConstant: {
                 auto f = as<FractionalConstant>(v)->value();
@@ -1130,7 +1194,11 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 return Format("{}poison", C(P::Filler));
 
             case Value::Kind::Parameter:
-                return Format("{}%{}", C(P::Temp), as<Parameter>(v)->index());
+                return Format(
+                    "{}%{}",
+                    C(P::Temp),
+                    as<Parameter>(v)->index()
+                );
 
             case Value::Kind::Block: {
                 return fmt::format(
@@ -1144,7 +1212,8 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
             case Value::Kind::GlobalVariable: {
                 std::string val;
-                if (include_type) fmt::format_to(It(val), "{}ptr ", C(P::Type));
+                if (include_type)
+                    fmt::format_to(It(val), "{}ptr ", C(P::Type));
                 fmt::format_to(
                     It(val),
                     "{}@{}",
@@ -1355,13 +1424,15 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         auto* v = const_cast<Value*>(const_value);
         LCCIRPrinter p{use_colour};
         if (auto* b = cast<Block>(v)) {
-            if (b->function()) p.SetFunctionIndices(b->function());
+            if (b->function())
+                p.SetFunctionIndices(b->function());
             p.PrintBlock(b);
         } else if (auto* f = cast<Function>(v)) {
             p.SetFunctionIndices(f);
             p.PrintFunction(f);
         } else if (auto* i = cast<Inst>(v)) {
-            if (i->block() and i->block()->function()) p.SetFunctionIndices(i->block()->function());
+            if (i->block() and i->block()->function())
+                p.SetFunctionIndices(i->block()->function());
             p.PrintInst(i);
         } else if (is<GlobalVariable>(v)) {
             p.PrintGlobal(as<GlobalVariable>(v));
