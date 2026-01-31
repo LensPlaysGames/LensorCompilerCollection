@@ -660,37 +660,45 @@ void Module::_x86_64_lower_float_constants() {
     for (auto function : code()) {
         for (auto block : function->blocks()) {
             for (size_t inst_i = 0; inst_i < block->instructions().size(); ++inst_i) {
-                auto*& instruction = block->instructions().at(inst_i);
+                auto instruction = block->instructions().at(inst_i);
+
+                std::unordered_map<Value*, Value*> child_replacements{};
+                for (auto child : instruction->children_of_kind<FractionalConstant>()) {
+                    auto f = child->value();
+
+                    auto binary32_value = fixed_to_binary32_float(f);
+                    constexpr usz bitwidth = 32;
+
+                    auto float_global_name = fmt::format("fconst{:x}", binary32_value);
+                    auto float_global_type = IntegerType::Get(context(), bitwidth);
+                    auto float_init = new (*this) IntegerConstant(float_global_type, binary32_value);
+                    auto float_global = new (*this) GlobalVariable(
+                        this,
+                        float_global_type,
+                        float_global_name,
+                        Linkage::Internal,
+                        float_init
+                    );
+
+                    auto load = new (*this) LoadInst(
+                        FractionalType::Get(context(), bitwidth),
+                        float_global,
+                        instruction->location()
+                    );
+
+                    instruction->insert_before(load);
+                    // insert_before will offset all (future) indices by one.
+                    ++inst_i;
+
+                    // Replace this child with a load instruction, when possible.
+                    child_replacements[child] = load;
+                }
+
                 instruction->replace_children([&](Value* c) -> Value* {
-                    switch (c->kind()) {
-                        default: return nullptr;
-                        case Value::Kind::FractionalConstant: {
-                            auto f = as<FractionalConstant>(c)->value();
+                    if (child_replacements.contains(c))
+                        return child_replacements.at(c);
 
-                            auto binary32_value = fixed_to_binary32_float(f);
-                            constexpr usz bitwidth = 32;
-
-                            auto float_global_name = fmt::format("fconst{:x}", binary32_value);
-                            auto float_global_type = IntegerType::Get(context(), bitwidth);
-                            auto float_init = new (*this) IntegerConstant(float_global_type, binary32_value);
-                            auto float_global = new (*this) GlobalVariable(
-                                this,
-                                float_global_type,
-                                float_global_name,
-                                Linkage::Internal,
-                                float_init
-                            );
-
-                            auto load = new (*this) LoadInst(
-                                FractionalType::Get(context(), bitwidth),
-                                float_global,
-                                instruction->location()
-                            );
-                            instruction->insert_before(load);
-
-                            return load;
-                        }
-                    }
+                    return nullptr;
                 });
             }
         }

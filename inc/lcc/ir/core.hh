@@ -386,18 +386,32 @@ public:
 
     /// Replace children of this instruction.
     ///
+    /// PLEASE DO NOT INSERT OR REMOVE INSTRUCTIONS IN THE CALLBACK.
+    /// If you need to do this, first iterate children(), inserting
+    /// instructions as needed, keeping a map of old child -> new child. Once
+    /// you iterated all children, call replace_children with a callback that
+    /// returns the mapped child, if present, or nullptr.
+    /// : std::unordered_map<Value*, Value*> child_replacements{};
+    /// : // ... iterate children, insert instructions, etc.
+    /// : instruction->replace_children([&](Value* c) -> Value* {
+    /// :     if (child_replacements.contains(c))
+    /// :         return child_replacements.at(c);
+    /// :     return nullptr;
+    /// : });
+    ///
     /// This iterates over all children of this instruction and
     /// calls a callback to determine whether each one of them
     /// should be replaced. If the callback returns a non-null
     /// Value*, the child is replaced.
     ///
+    ///
     /// \tparam InstType If provided, only children of this type
     ///     will be replaced.
     /// \param cb The callback to call for each child.
-    template <typename InstType = Value, typename Callable>
+    template <typename T = Value, typename Callable>
     void replace_children(Callable cb) {
         for (auto** child : Children()) {
-            auto c = cast<InstType>(*child);
+            auto c = cast<T>(*child);
             if (not c) continue;
             if (auto replacement = std::invoke(cb, c))
                 UpdateOperand(*child, replacement);
