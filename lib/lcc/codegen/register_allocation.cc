@@ -242,6 +242,90 @@ void record_newly_live_values(
         std::erase(live_values, inst.reg());
 }
 
+void collect_interferences_from_instruction(
+    AdjacencyMatrix& matrix,
+    const std::vector<Register>& registers,
+    std::vector<usz>& live_values,
+    std::vector<MBlock*>& visited,
+    std::vector<MBlock*>& doubly_visited,
+    MInst& inst
+) {
+    // fmt::print("{}\n", PrintMInstImpl(inst, x86_64::opcode_to_string));
+    // fmt::print("live after: {}\n", fmt::join(live_values, ", "));
+
+    // If the defining use of a virtual register is an operand of this
+    // instruction, remove it from live values.
+    remove_defining(live_values, inst);
+
+    // fmt::print("live during: {}\n", fmt::join(live_values, ", "));
+
+    // Make registers clobbered by this instruction's execution interfere with
+    // all live values; this is necessary because, if any value we later
+    // needed were in these registers, execution of this instruction would
+    // invalidate that value.
+    matrix_set_clobbers(matrix, registers, live_values, inst);
+
+    // Collect all register operands from this instruction that are
+    // used as operands somewhere in the function (i.e. within the list of
+    // registers). Cache the index within the adjacency matrix so we don't
+    // have to keep recomputing it.
+    auto vreg_operands = collect_vreg_operands(registers, inst);
+
+    // Collect clobbered registers
+    auto clobbered_regs = collect_clobbered_registers(inst);
+
+    // Make all reg operands interfere with each other; if two different,
+    // non-clobbered registers are used as inputs to an instruction, they must
+    // exist at the same time (at instruction execution), and therefore must
+    // interfere. For cases like `move %v0 into %v1` where v1 is marked as
+    // clobbered, v0 and v1 do not interfere.
+    // x86_64 GNU ASM
+    //     mov 40(%v0), %v1
+    // MIR Representation
+    //     MoveDereferenceLHS(v0, v1, 40) clobbers 1st operand
+    // RESULT
+    //     Both v0 and v1 interfere with both v3 and v7.
+    for (auto A : vreg_operands) {
+        for (auto B : vreg_operands) {
+            // If either A or B is clobbered, do NOT set interference between the two.
+            if (
+                rgs::find(clobbered_regs, A.reg.value) == clobbered_regs.end()
+                and rgs::find(clobbered_regs, B.reg.value) == clobbered_regs.end()
+            ) {
+                matrix.set(A.idx, B.idx);
+                // fmt::print(
+                //     "Non-clobbered register operands r{} and r{} interfere\n",
+                //     A.reg.value,
+                //     B.reg.value
+                // );
+            }
+        }
+    }
+
+    // Make all virtual register operands interfere with all currently live values
+    // Live Values: v3, v7
+    // x86_64 GNU ASM
+    //     mov 40(%v0), %v1
+    // MIR Representation
+    //     MoveDereferenceLHS(v0, v1, 40) clobbers 1st operand
+    // RESULT
+    //     Both v0 and v1 interfere with both v3 and v7.
+    for (auto r : vreg_operands) {
+        for (auto live : live_values) {
+            matrix.set(
+                r.idx,
+                live_idx_from_register_value(registers, live)
+            );
+        }
+    }
+
+    // If a virtual register is not live and is seen as an operand, it is
+    // added to the vector of live values.
+    record_newly_live_values(vreg_operands, inst, live_values);
+
+    // fmt::print("live before: {}\n", fmt::join(live_values, ", "));
+}
+
 void collect_interferences_from_block(
     AdjacencyMatrix& matrix,
     const std::vector<Register>& registers,
@@ -251,7 +335,14 @@ void collect_interferences_from_block(
     std::vector<MBlock*> doubly_visited,
     MBlock* block
 ) {
-    /// Don't visit the same block thrice.
+    // Don't visit the same block thrice.
+    // TODO: In reality, it's not that simple, but this is an approximation we
+    // are currently using and it *is* working.
+    // Preferably, this would better match the actual semantics; I *think*
+    // that would mean limiting the amount of times we visit a block to the
+    // amount of successors it has, but also at least once.
+    // Further TODO: Small diagram and explanation for why we need to visit
+    // blocks multiple times at all; why isn't one pass enough?
     if (rgs::find(visited, block) != visited.end()) {
         if (rgs::find(doubly_visited, block) != doubly_visited.end())
             return;
@@ -262,87 +353,21 @@ void collect_interferences_from_block(
     // track of all virtual registers that have been encountered but not
     // their defining use, as these are our "live values".
     for (auto& inst : vws::reverse(block->instructions())) {
-        // fmt::print("{}\n", PrintMInstImpl(inst, x86_64::opcode_to_string));
-        // fmt::print("live after: {}\n", fmt::join(live_values, ", "));
-
-        // If the defining use of a virtual register is an operand of this
-        // instruction, remove it from live values.
-        remove_defining(live_values, inst);
-
-        // fmt::print("live during: {}\n", fmt::join(live_values, ", "));
-
-        // Make registers clobbered by this instruction's execution interfere with
-        // all live values; this is necessary because, if any value we later
-        // needed were in these registers, execution of this instruction would
-        // invalidate that value.
-        matrix_set_clobbers(matrix, registers, live_values, inst);
-
-        // Collect all register operands from this instruction that are
-        // used as operands somewhere in the function (i.e. within the list of
-        // registers). Cache the index within the adjacency matrix so we don't
-        // have to keep recomputing it.
-        auto vreg_operands = collect_vreg_operands(registers, inst);
-
-        // Collect clobbered registers
-        auto clobbered_regs = collect_clobbered_registers(inst);
-
-        // Make all reg operands interfere with each other; if two different,
-        // non-clobbered registers are used as inputs to an instruction, they must
-        // exist at the same time (at instruction execution), and therefore must
-        // interfere. For cases like `move %v0 into %v1` where v1 is marked as
-        // clobbered, v0 and v1 do not interfere.
-        // x86_64 GNU ASM
-        //     mov 40(%v0), %v1
-        // MIR Representation
-        //     MoveDereferenceLHS(v0, v1, 40) clobbers 1st operand
-        // RESULT
-        //     Both v0 and v1 interfere with both v3 and v7.
-        for (auto A : vreg_operands) {
-            for (auto B : vreg_operands) {
-                // If either A or B is clobbered, do NOT set interference between the two.
-                if (
-                    rgs::find(clobbered_regs, A.reg.value) == clobbered_regs.end()
-                    and rgs::find(clobbered_regs, B.reg.value) == clobbered_regs.end()
-                ) {
-                    matrix.set(A.idx, B.idx);
-                    // fmt::print(
-                    //     "Non-clobbered register operands r{} and r{} interfere\n",
-                    //     A.reg.value,
-                    //     B.reg.value
-                    // );
-                }
-            }
-        }
-
-        // Make all virtual register operands interfere with all currently live values
-        // Live Values: v3, v7
-        // x86_64 GNU ASM
-        //     mov 40(%v0), %v1
-        // MIR Representation
-        //     MoveDereferenceLHS(v0, v1, 40) clobbers 1st operand
-        // RESULT
-        //     Both v0 and v1 interfere with both v3 and v7.
-        for (auto r : vreg_operands) {
-            for (auto live : live_values) {
-                matrix.set(
-                    r.idx,
-                    live_idx_from_register_value(registers, live)
-                );
-            }
-        }
-
-        // If a virtual register is not live and is seen as an operand, it is
-        // added to the vector of live values.
-        record_newly_live_values(vreg_operands, inst, live_values);
-
-        // fmt::print("live before: {}\n", fmt::join(live_values, ", "));
-
-    } // for inst
+        collect_interferences_from_instruction(
+            matrix,
+            registers,
+            live_values,
+            visited,
+            doubly_visited,
+            inst
+        );
+    }
 
     // Walk CFG backwards (follow predecessors)
 
     // No predecessors == entry block: done walking.
-    if (block->predecessors().empty()) return;
+    if (block->predecessors().empty())
+        return;
 
     // Follow all predecessors, resetting live values to what they are now
     // before each one.
@@ -353,7 +378,7 @@ void collect_interferences_from_block(
             matrix,
             registers,
             function,
-            live_values_copy,
+            std::move(live_values_copy),
             visited,
             doubly_visited,
             parent

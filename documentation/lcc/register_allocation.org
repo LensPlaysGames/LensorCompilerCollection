@@ -44,3 +44,15 @@ When =degree n > k=, the defining use of the virtual register has a spill instru
 However, every use of this virtual register still loads directly from the register; this is why you have to replace uses of the virtual register with unspill instructions having an operand of the previously spilled virtual register.
 
 Basically, with spilling and unspilling, register allocation gains the ability to modify the code, such that it is able to reduce =degree n= of a node in the graph, and ensure that, /eventually/, a solution that fits the =degree n < k= "rule" may be produced.
+
+** Operand Clobbers
+
+"Clobbers" is a silly term to mean "invalidates value".
+
+- Clobber :: To invalidate a value in a register (usually via instruction execution).
+
+We need to define this so that our register allocator is a bit smarter; with clobbers, it can understand =move= instructions without needing to know which opcodes for every architecture actually move things. This is done by setting clobbers on an instruction in the MIR.
+
+A clobber can be a register constant (i.e. =%rax=) or an operand reference (i.e. =operand zero=).
+
+When an instruction clobbers a register, it is known that the value in that register will be altered upon execution of this instruction.
