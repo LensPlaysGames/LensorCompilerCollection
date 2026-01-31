@@ -505,6 +505,7 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
 
         /// These never have side effects.
         case Expr::Kind::IntegerLiteral:
+        case Expr::Kind::FractionalLiteral:
         case Expr::Kind::StringLiteral:
         case Expr::Kind::OverloadSet:
         case Expr::Kind::NameRef:
@@ -2810,6 +2811,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         case Expr::Kind::TypeAliasDecl:
         /// There isn’t really a way these could be malformed.
         case Expr::Kind::IntegerLiteral:
+        case Expr::Kind::FractionalLiteral:
         case Expr::Kind::StringLiteral:
         /// These should only be created by sema and are thus no-ops.
         case Expr::Kind::Module:
@@ -3526,7 +3528,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::MinusMinus:
         case TokenKind::StarStar:
         case TokenKind::Ident:
-        case TokenKind::Number:
+        case TokenKind::Integer:
+        case TokenKind::Fractional:
         case TokenKind::String:
         case TokenKind::If:
         case TokenKind::Else:
@@ -5374,7 +5377,8 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::ColonColon:
         case TokenKind::RightArrow:
         case TokenKind::Ident:
-        case TokenKind::Number:
+        case TokenKind::Integer:
+        case TokenKind::Fractional:
         case TokenKind::String:
         case TokenKind::If:
         case TokenKind::Else:

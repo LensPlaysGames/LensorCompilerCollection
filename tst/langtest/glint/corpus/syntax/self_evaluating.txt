@@ -138,6 +138,50 @@ Integer, Multiple Digit Separator
 (block (integer_literal))
 
 ================
+Fractional "0.0"
+:syntax
+================
+
+0.0;
+
+---
+
+(block (fractional_literal))
+
+================
+Fractional "0."
+:syntax
+================
+
+0.;
+
+---
+
+(block (fractional_literal))
+
+================
+Fractional "0.01"
+:syntax
+================
+
+0.01;
+
+---
+
+(block (fractional_literal))
+
+================
+Fractional "100.9"
+:syntax
+================
+
+100.9;
+
+---
+
+(block (fractional_literal))
+
+================
 Boolean, true
 :syntax
 ================

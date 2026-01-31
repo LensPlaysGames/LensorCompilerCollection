@@ -205,8 +205,9 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
         // Expressions that never have children
         case Expr::Kind::EvaluatedConstant:
         case Expr::Kind::IntegerLiteral:
-        case Expr::Kind::NameRef:
+        case Expr::Kind::FractionalLiteral:
         case Expr::Kind::StringLiteral:
+        case Expr::Kind::NameRef:
         case Expr::Kind::Type:
             break;
 

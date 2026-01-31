@@ -115,6 +115,7 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
 
         // Self Evaluating...
         case Expr::Kind::IntegerLiteral:
+        case Expr::Kind::FractionalLiteral:
         case Expr::Kind::StringLiteral:
             return expr;
 
@@ -273,7 +274,8 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::ColonColon:
                 case TokenKind::RightArrow:
                 case TokenKind::Ident:
-                case TokenKind::Number:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
                 case TokenKind::String:
                 case TokenKind::ByteLiteral:
                 case TokenKind::If:
@@ -385,7 +387,8 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::MinusMinus:
                 case TokenKind::StarStar:
                 case TokenKind::Ident:
-                case TokenKind::Number:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
                 case TokenKind::String:
                 case TokenKind::If:
                 case TokenKind::Else:

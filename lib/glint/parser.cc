@@ -96,7 +96,8 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::StarStar:
         case Tk::RightArrow:
         case Tk::Ident:
-        case Tk::Number:
+        case Tk::Integer:
+        case Tk::Fractional:
         case Tk::String:
         case Tk::If:
         case Tk::Else:
@@ -195,7 +196,8 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         // Self-evaluating
         case Tk::True:
         case Tk::False:
-        case Tk::Number:
+        case Tk::Integer:
+        case Tk::Fractional:
         case Tk::ByteLiteral:
         case Tk::String:
         // Regular Expressions
@@ -1044,8 +1046,14 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         case Tk::LBrace: lhs = ParseBlock(); break;
 
         /// Integer literal.
-        case Tk::Number:
+        case Tk::Integer:
             lhs = new (*mod) IntegerLiteral(tok.integer_value, tok.location);
+            NextToken();
+            break;
+
+        /// Fractional literal (i.e. "0.0" and similar).
+        case Tk::Fractional:
+            lhs = new (*mod) FractionalLiteral(tok.fractional_value, tok.location);
             NextToken();
             break;
 

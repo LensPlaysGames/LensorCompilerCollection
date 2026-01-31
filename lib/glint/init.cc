@@ -21,6 +21,9 @@ public:
     static consteval auto glint_uint() noexcept {
         return BuiltinType{BuiltinType::K::UInt, {}};
     }
+    static consteval auto glint_float() noexcept {
+        return BuiltinType{BuiltinType::K::Float, {}};
+    }
     static consteval auto glint_overload_set() noexcept {
         return BuiltinType{BuiltinType::K::OverloadSet, {}};
     }
@@ -45,6 +48,7 @@ constinit auto glint_bool_ty = Init::glint_bool();
 constinit auto glint_byte_ty = Init::glint_byte();
 constinit auto glint_int_ty = Init::glint_int();
 constinit auto glint_uint_ty = Init::glint_uint();
+constinit auto glint_float_ty = Init::glint_float();
 constinit auto glint_overload_set_ty = Init::glint_overload_set();
 constinit auto glint_void_ty = Init::glint_void();
 constinit auto glint_void_ptr_ty = Init::glint_void_ptr(&glint_void_ty);
@@ -57,6 +61,7 @@ constinit Type* const Type::Bool = &glint_bool_ty;
 constinit Type* const Type::Byte = &glint_byte_ty;
 constinit Type* const Type::Int = &glint_int_ty;
 constinit Type* const Type::UInt = &glint_uint_ty;
+constinit Type* const Type::Float = &glint_float_ty;
 constinit Type* const Type::OverloadSet = &glint_overload_set_ty;
 constinit Type* const Type::Void = &glint_void_ty;
 constinit Type* const Type::VoidPtr = &glint_void_ptr_ty;

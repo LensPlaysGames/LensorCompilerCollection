@@ -209,17 +209,22 @@ void lcc::glint::Lexer::NextToken() {
             NextChar();
         } break;
 
+        // Identifier Escape
         case '\\': {
-            /// Yeet backslash;
+            // Yeet backslash
             NextChar();
 
-            /// Get identifier
+            // Get identifier
             tempset raw_mode = true;
             NextToken();
 
-            /// Convert it to text.
+            // If not already, convert it to text.
             if (tok.kind != TokenKind::Ident) {
                 switch (tok.kind) {
+                    default: {
+                        tok.text = ToString(tok.kind);
+                    } break;
+
                     case TokenKind::MacroArg: {
                         // Prepend dollar sign.
                         tok.text = fmt::format("${}", tok.text);
@@ -228,15 +233,16 @@ void lcc::glint::Lexer::NextToken() {
                         // Wrap in double quotes.
                         tok.text = fmt::format("\"{}\"", tok.text);
                     } break;
-                    case TokenKind::Number: {
+                    case TokenKind::Integer: {
                         // Convert number to string
                         tok.text = fmt::format("{}", tok.integer_value);
                     } break;
+                    case TokenKind::Fractional: {
+                        // Convert number to string
+                        tok.text = fmt::format("{}", tok.fractional_value);
+                    } break;
                     case TokenKind::ArbitraryInt: {
                         tok.text = fmt::format("{}{}", tok.text[0], tok.integer_value);
-                    } break;
-                    default: {
-                        tok.text = ToString(tok.kind);
                     } break;
                 }
             }
@@ -822,11 +828,38 @@ void lcc::glint::Lexer::NextNumber() {
         }
     };
 
+    const auto ParseDecimalFraction = [&]() {
+        LCC_ASSERT(
+            lastc == '.',
+            "ParseDecimalFraction called while not at `.`"
+        );
+
+        // Yeet "."
+        NextChar();
+
+        uint leading_zeroes{};
+        while (lastc == '0') {
+            ++leading_zeroes;
+            NextChar();
+        }
+
+        // ".00000..."
+        if (not IsDecimalDigit(lastc))
+            return DecimalFraction{0, 0};
+
+        ParseNumber("decimal_fraction", IsDecimalDigit, 10);
+
+        return DecimalFraction{
+            tok.integer_value,
+            leading_zeroes
+        };
+    };
+
     // Record the start of the number.
     tok.text.clear();
 
     tok.integer_value = 0;
-    tok.kind = TokenKind::Number;
+    tok.kind = TokenKind::Integer;
 
     // At least one leading zero.
     if (lastc == '0') {
@@ -849,6 +882,13 @@ void lcc::glint::Lexer::NextNumber() {
             ParseNumber("octal", IsOctalDigit, 8);
         else if (lastc == 'x' or lastc == 'X')
             ParseNumber("hexadecimal", IsHexDigit, 16);
+        else if (lastc == '.') {
+            auto decimal_fraction = ParseDecimalFraction();
+
+            tok.kind = TokenKind::Fractional;
+            tok.fractional_value = FixedPointNumber(0, decimal_fraction);
+            return;
+        }
 
         // If the next character is whitespace (or a delimiter), then this is just a zero.
         if (
@@ -872,6 +912,17 @@ void lcc::glint::Lexer::NextNumber() {
 
     // Any other digit means we have a decimal number.
     ParseNumber("decimal", IsDecimalDigit, 10);
+
+    if (lastc == '.') {
+        auto whole = tok.integer_value;
+        auto decimal_fraction = ParseDecimalFraction();
+
+        tok.kind = TokenKind::Fractional;
+        tok.fractional_value = FixedPointNumber(
+            whole,
+            decimal_fraction
+        );
+    }
 }
 
 void lcc::glint::Lexer::ExpandMacro(Macro& m) {
@@ -903,7 +954,7 @@ void lcc::glint::Lexer::ExpandMacro(Macro& m) {
                     /// Just set an int if parsing failed.
                     if (not expr) {
                         Token t;
-                        t.kind = TokenKind::Number;
+                        t.kind = TokenKind::Integer;
                         t.integer_value = 0;
                         bound_toks[param_tok.text] = t;
                         continue;
@@ -1165,9 +1216,18 @@ auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
         case TokenKind::MacroArg:
             return text == rhs.text;
 
-        case TokenKind::Number:
+        case TokenKind::Integer:
         case TokenKind::ByteLiteral:
             return integer_value == rhs.integer_value;
+
+        case TokenKind::Fractional: {
+            return std::memcmp(
+                       &fractional_value,
+                       &rhs.fractional_value,
+                       sizeof(fractional_value)
+                   )
+                == 0;
+        }
 
         case TokenKind::ArbitraryInt:
             return integer_value == rhs.integer_value and text == rhs.text;
@@ -1279,7 +1339,8 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
         case Tk::Eof: return "EOF";
         case Tk::Apply: return "apply";
         case Tk::Ident: return "identifier";
-        case Tk::Number: return "number";
+        case Tk::Integer: return "integer";
+        case Tk::Fractional: return "fractional";
         case Tk::String: return "string";
         case Tk::If: return "if";
         case Tk::Else: return "else";
@@ -1392,7 +1453,8 @@ auto lcc::glint::ToSource(
             );
 
         case Tk::Ident: return t.text;
-        case Tk::Number: return std::to_string(t.integer_value);
+        case Tk::Integer: return fmt::format("{}", t.integer_value);
+        case Tk::Fractional: return fmt::format("{}", t.fractional_value);
         case Tk::ByteLiteral: return fmt::format("`{}`", (char) t.integer_value);
         case Tk::String: return fmt::format("\"{}\"", t.text);
         case Tk::ArbitraryInt: {

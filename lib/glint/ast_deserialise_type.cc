@@ -25,13 +25,14 @@ void lcc::glint::Module::scope_walk(lcc::Context* ctx, Expr* e, Scope* current_s
         case Expr::Kind::CompoundLiteral:
         case Expr::Kind::EvaluatedConstant:
         case Expr::Kind::IntegerLiteral:
+        case Expr::Kind::FractionalLiteral:
+        case Expr::Kind::StringLiteral:
         case Expr::Kind::IntrinsicCall:
         case Expr::Kind::MemberAccess:
         case Expr::Kind::Module:
         case Expr::Kind::OverloadSet:
         case Expr::Kind::Return:
         case Expr::Kind::Sizeof:
-        case Expr::Kind::StringLiteral:
         case Expr::Kind::Type:
         case Expr::Kind::Unary:
         case Expr::Kind::Apply:
@@ -244,6 +245,7 @@ auto lcc::glint::Module::deserialise(
 
                 case Expr::Kind::EvaluatedConstant:
                 case Expr::Kind::IntegerLiteral:
+                case Expr::Kind::FractionalLiteral:
                 case Expr::Kind::StringLiteral:
                 case Expr::Kind::Type:
                     LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));

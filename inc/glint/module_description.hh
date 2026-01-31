@@ -136,6 +136,7 @@ struct ModuleDescription {
                 case K::For:
                 case K::Return:
                 case K::IntegerLiteral:
+                case K::FractionalLiteral:
                 case K::StringLiteral:
                 case K::CompoundLiteral:
                 case K::OverloadSet:

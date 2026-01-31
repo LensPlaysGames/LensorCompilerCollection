@@ -53,6 +53,12 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
             out = as<IntegerLiteral>(this)->value();
             return true;
 
+        case Kind::FractionalLiteral:
+            return unhandled_constant_expr();
+            // TODO: EvalResult needs to gain fixed point number capability
+            // out = as<FractionalLiteral>(this)->value();
+            // return true;
+
         case Kind::StringLiteral:
             out = as<StringLiteral>(this);
             return true;
@@ -215,7 +221,8 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::MacroArg:
                 case TokenKind::MinusEq:
                 case TokenKind::Ne:
-                case TokenKind::Number:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
                 case TokenKind::Or:
                 case TokenKind::Percent:
                 case TokenKind::PercentEq:
@@ -403,7 +410,8 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::MinusMinus:
                 case TokenKind::StarStar:
                 case TokenKind::Ident:
-                case TokenKind::Number:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
                 case TokenKind::String:
                 case TokenKind::If:
                 case TokenKind::Else:

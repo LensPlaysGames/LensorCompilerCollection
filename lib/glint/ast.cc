@@ -90,15 +90,26 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
         "Type {} has not been analysed; cannot get alignment",
         this->string(false)
     );
-    if (sema_errored()) return 1;
+
+    if (sema_errored())
+        return 1;
+
     switch (kind()) {
         case Kind::Builtin:
             switch (as<BuiltinType>(this)->builtin_kind()) {
                 using K = BuiltinType::BuiltinKind;
-                case K::Bool: return ctx->target()->glint.align_of_bool;
-                case K::Byte: return ctx->target()->glint.align_of_byte;
+                case K::Bool:
+                    return ctx->target()->glint.align_of_bool;
+
+                case K::Byte:
+                    return ctx->target()->glint.align_of_byte;
+
                 case K::UInt:
-                case K::Int: return ctx->target()->glint.align_of_int;
+                case K::Int:
+                    return ctx->target()->glint.align_of_int;
+
+                // binary32
+                case K::Float: return 32;
 
                 /// Alignment must not be 0, so return 1.
                 case K::Unknown:
@@ -135,8 +146,11 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
             LCC_UNREACHABLE();
 
         /// const_cast is ok because we’re just reading the underlying type.
-        case Kind::Enum:
-            return const_cast<EnumType*>(as<EnumType>(this))->underlying_type()->align(ctx);
+        case Kind::Enum: {
+            return const_cast<EnumType*>(as<EnumType>(this))
+                ->underlying_type()
+                ->align(ctx);
+        }
 
         /// Unresolved named type.
         case Kind::Named: return 1;
@@ -236,13 +250,18 @@ auto lcc::glint::Type::elem_ref() -> Type** {
 
 namespace {
 bool is_builtin(const lcc::glint::Type* t, lcc::glint::BuiltinType::BuiltinKind k) {
-    if (auto b = lcc::cast<lcc::glint::BuiltinType>(t)) return b->builtin_kind() == k;
+    if (auto b = lcc::cast<lcc::glint::BuiltinType>(t))
+        return b->builtin_kind() == k;
     return false;
 }
 } // namespace
 
-bool lcc::glint::Type::is_bool() const { return ::is_builtin(this, BuiltinType::BuiltinKind::Bool); }
-bool lcc::glint::Type::is_byte() const { return ::is_builtin(this, BuiltinType::BuiltinKind::Byte); }
+bool lcc::glint::Type::is_bool() const {
+    return ::is_builtin(this, BuiltinType::BuiltinKind::Bool);
+}
+bool lcc::glint::Type::is_byte() const {
+    return ::is_builtin(this, BuiltinType::BuiltinKind::Byte);
+}
 
 bool lcc::glint::Type::is_integer(bool include_bool) const {
     return is<IntegerType, FFIType>(this)
@@ -278,7 +297,9 @@ bool lcc::glint::Type::is_signed_int(const Context* ctx) const {
     return ::is_builtin(this, BuiltinType::BuiltinKind::Int);
 }
 
-bool lcc::glint::Type::is_unknown() const { return ::is_builtin(this, BuiltinType::BuiltinKind::Unknown); }
+bool lcc::glint::Type::is_unknown() const {
+    return ::is_builtin(this, BuiltinType::BuiltinKind::Unknown);
+}
 
 bool lcc::glint::Type::is_unsigned_int(const Context* ctx) const {
     if (auto i = lcc::cast<IntegerType>(this)) return not i->is_signed();
@@ -306,9 +327,13 @@ bool lcc::glint::Type::is_unsigned_int(const Context* ctx) const {
     return is_byte();
 }
 
-auto lcc::glint::Type::is_void() const -> bool { return ::is_builtin(this, BuiltinType::BuiltinKind::Void); }
+auto lcc::glint::Type::is_void() const -> bool {
+    return ::is_builtin(this, BuiltinType::BuiltinKind::Void);
+}
 /// Check if this is the builtin overload set type.
-auto lcc::glint::Type::is_overload_set() const -> bool { return ::is_builtin(this, BuiltinType::BuiltinKind::OverloadSet); };
+auto lcc::glint::Type::is_overload_set() const -> bool {
+    return ::is_builtin(this, BuiltinType::BuiltinKind::OverloadSet);
+};
 
 auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
     constexpr usz byte_bitwidth = 8;
@@ -322,10 +347,18 @@ auto lcc::glint::Type::size(const lcc::Context* ctx) const -> usz {
         case Kind::Builtin:
             switch (as<BuiltinType>(this)->builtin_kind()) {
                 using K = BuiltinType::BuiltinKind;
-                case K::Bool: return ctx->target()->glint.size_of_bool;
-                case K::Byte: return ctx->target()->glint.size_of_byte;
+                case K::Bool:
+                    return ctx->target()->glint.size_of_bool;
+
+                case K::Byte:
+                    return ctx->target()->glint.size_of_byte;
+
                 case K::UInt:
-                case K::Int: return ctx->target()->glint.size_of_int;
+                case K::Int:
+                    return ctx->target()->glint.size_of_int;
+
+                // binary32
+                case K::Float: return 32;
 
                 case K::Unknown:
                 case K::Void:
@@ -630,6 +663,11 @@ auto lcc::glint::Expr::CloneImpl(
             return new (mod) IntegerLiteral(i->value(), i->location());
         }
 
+        case Kind::FractionalLiteral: {
+            auto i = as<FractionalLiteral>(expr);
+            return new (mod) FractionalLiteral(i->value(), i->location());
+        }
+
         case Kind::StringLiteral: {
             auto s = as<StringLiteral>(expr);
             return new (mod) StringLiteral(
@@ -932,6 +970,7 @@ std::string lcc::glint::Expr::name() const {
         case Kind::For:
         case Kind::Return:
         case Kind::IntegerLiteral:
+        case Kind::FractionalLiteral:
         case Kind::StringLiteral:
         case Kind::CompoundLiteral:
         case Kind::OverloadSet:
@@ -1045,6 +1084,7 @@ std::string lcc::glint::Expr::name() const {
                         case BuiltinType::BuiltinKind::Byte: return "t_byte";
                         case BuiltinType::BuiltinKind::Int: return "t_int";
                         case BuiltinType::BuiltinKind::UInt: return "t_uint";
+                        case BuiltinType::BuiltinKind::Float: return "t_float";
                         case BuiltinType::BuiltinKind::Void: return "t_void";
                         case BuiltinType::BuiltinKind::OverloadSet: return "t_overloadset";
                     }
@@ -1084,6 +1124,7 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
         case Kind::TypeAliasDecl:
         case Kind::EnumeratorDecl:
         case Kind::IntegerLiteral:
+        case Kind::FractionalLiteral:
         case Kind::StringLiteral:
         case Kind::IntrinsicCall:
         case Kind::Module:
@@ -1230,6 +1271,7 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
         case Kind::TypeAliasDecl:
         case Kind::EnumeratorDecl:
         case Kind::IntegerLiteral:
+        case Kind::FractionalLiteral:
         case Kind::StringLiteral:
         case Kind::IntrinsicCall:
         case Kind::Module:
@@ -1365,6 +1407,7 @@ auto lcc::glint::Expr::langtest_name() const -> std::string {
         case Kind::For:
         case Kind::Return:
         case Kind::IntegerLiteral:
+        case Kind::FractionalLiteral:
         case Kind::StringLiteral:
         case Kind::CompoundLiteral:
         case Kind::OverloadSet:
@@ -1450,6 +1493,7 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
                 case lcc::glint::BuiltinType::BuiltinKind::Byte: return {"byte"};
                 case lcc::glint::BuiltinType::BuiltinKind::Int: return {"int"};
                 case lcc::glint::BuiltinType::BuiltinKind::UInt: return {"uint"};
+                case lcc::glint::BuiltinType::BuiltinKind::Float: return {"float"};
                 case lcc::glint::BuiltinType::BuiltinKind::Void: return {"void"};
             }
             LCC_UNREACHABLE();
@@ -1631,6 +1675,7 @@ auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
         case K::FuncDecl: return "function_declaration";
         case K::TemplatedFuncDecl: return "templated_function_declaration";
         case K::IntegerLiteral: return "integer_literal";
+        case K::FractionalLiteral: return "fractional_literal";
         case K::StringLiteral: return "string_literal";
         case K::CompoundLiteral: return "compound_literal";
         case K::OverloadSet: return "overload_set";
@@ -1805,6 +1850,9 @@ auto lcc::glint::Module::ToSource(const Expr& e) -> Result<std::string> {
 
         case Expr::Kind::IntegerLiteral:
             return fmt::format("{}", as<IntegerLiteral>(&e)->value());
+
+        case Expr::Kind::FractionalLiteral:
+            return fmt::format("{}", as<FractionalLiteral>(&e)->value());
 
         case Expr::Kind::StringLiteral:
             return fmt::format("\"{}\"", strings.at(as<StringLiteral>(&e)->string_index()));
@@ -2080,6 +2128,18 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             case K::IntegerLiteral: {
                 auto* i = as<lcc::glint::IntegerLiteral>(e);
                 PrintBasicHeader("IntegerLiteral", e);
+                out += fmt::format(
+                    " {}{} {}\n",
+                    C(key_detail_colour),
+                    i->value(),
+                    i->type()->string(use_colour)
+                );
+                return;
+            }
+
+            case K::FractionalLiteral: {
+                auto* i = as<lcc::glint::IntegerLiteral>(e);
+                PrintBasicHeader("FractionalLiteral", e);
                 out += fmt::format(
                     " {}{} {}\n",
                     C(key_detail_colour),
@@ -2583,6 +2643,7 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
                 case K::Byte: return fmt::format("{}byte{}", C(type_colour), C(Reset));
                 case K::Int: return fmt::format("{}int{}", C(type_colour), C(Reset));
                 case K::UInt: return fmt::format("{}uint{}", C(type_colour), C(Reset));
+                case K::Float: return fmt::format("{}float{}", C(type_colour), C(Reset));
                 case K::Unknown: return fmt::format("{}?{}", C(type_colour), C(Reset));
                 case K::Void: return fmt::format("{}void{}", C(type_colour), C(Reset));
                 case K::OverloadSet: return fmt::format("{}<overload set>{}", C(type_colour), C(Reset));

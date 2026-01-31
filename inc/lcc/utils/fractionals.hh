@@ -7,11 +7,6 @@
 
 namespace lcc {
 
-struct FixedPointNumber {
-    u64 whole{};
-    u64 fractional{};
-};
-
 struct DecimalFraction {
     u64 whole{};
     uint leading_zeroes{};
@@ -48,6 +43,16 @@ u64 whole_to_fractional(DecimalFraction whole);
 // Given "0b0.100..." return whole number 5  (i.e. "0.5")
 // Given "0b0.010..." return whole number 25 (i.e. "0.25")
 DecimalFraction fractional_to_whole(u64 fractional);
+
+struct FixedPointNumber {
+    u64 whole{};
+    u64 fractional{};
+
+    FixedPointNumber() = default;
+    FixedPointNumber(u64 whole_, DecimalFraction fractional_)
+        : whole(whole_),
+          fractional(whole_to_fractional(fractional_)) {}
+};
 
 // Convert a fixed point fractional number into a binary32 float value (1
 // sign bit, 8 bit exponent, 23 bit mantissa/significand).

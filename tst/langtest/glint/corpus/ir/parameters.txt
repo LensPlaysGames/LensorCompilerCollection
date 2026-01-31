@@ -24,7 +24,7 @@ main (exported): ccc i64(i32 %0, ptr %1, ptr %2):
     return i64 0
 
 ; actual test result
-_XGlintfooF1_B5_B3 (internal): glintcc void(i64 %0):
+_XGlintfooF1_B6_B3 (internal): glintcc void(i64 %0):
   bb0:
     %1 = alloca i64
     store i64 %0 into %1
@@ -56,7 +56,7 @@ main (exported): ccc i64(i32 %0, ptr %1, ptr %2):
     return i64 0
 
 ; actual test result
-_XGlintfooF2_B5_B3_B3 (internal): glintcc void(i64 %0, i64 %1):
+_XGlintfooF2_B6_B3_B3 (internal): glintcc void(i64 %0, i64 %1):
   bb0:
     %2 = alloca i64
     store i64 %0 into %2
@@ -90,7 +90,7 @@ main (exported): ccc i64(i32 %0, ptr %1, ptr %2):
     return i64 0
 
 ; actual test result
-_XGlintfooF3_B5_B3_B3_B3 (internal): glintcc void(i64 %0, i64 %1, i64 %2):
+_XGlintfooF3_B6_B3_B3_B3 (internal): glintcc void(i64 %0, i64 %1, i64 %2):
   bb0:
     %3 = alloca i64
     store i64 %0 into %3
@@ -125,7 +125,7 @@ main (exported): ccc i64(i32 %0, ptr %1, ptr %2):
     return i64 0
 
 ; actual test result
-_XGlintfooF4_B5_B3_B3_B3_B3 (internal): glintcc void(i64 %0, i64 %1, i64 %2, i64 %3):
+_XGlintfooF4_B6_B3_B3_B3_B3 (internal): glintcc void(i64 %0, i64 %1, i64 %2, i64 %3):
   bb0:
     %4 = alloca i64
     store i64 %0 into %4

@@ -131,6 +131,14 @@ auto Module::serialise_expr(
             write_t(u64(i->value().value()));
         } break;
 
+        // FractionalLiteral
+        //     value :FixedPointNumber
+        case Expr::Kind::FractionalLiteral: {
+            auto i = as<FractionalLiteral>(expr);
+            write_tag();
+            write_t(i->value());
+        } break;
+
         // StringLiteral
         //     length   :u32
         //     contents :u8[length]

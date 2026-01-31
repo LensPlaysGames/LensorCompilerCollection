@@ -30,12 +30,19 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             switch ((as<BuiltinType>(in))->builtin_kind()) {
                 case BuiltinType::BuiltinKind::Bool:
                     return lcc::Type::I1Ty;
+
                 case BuiltinType::BuiltinKind::Byte:
                 case BuiltinType::BuiltinKind::Int:
                 case BuiltinType::BuiltinKind::UInt:
                     return lcc::IntegerType::Get(ctx, in->size(ctx));
+
+                // binary32
+                case BuiltinType::BuiltinKind::Float:
+                    return lcc::FractionalType::Get(ctx, 32);
+
                 case BuiltinType::BuiltinKind::Void:
                     return lcc::Type::VoidTy;
+
                 case BuiltinType::BuiltinKind::OverloadSet:
                 case BuiltinType::BuiltinKind::Unknown:
                     Diag::ICE("Invalid builtin kind present during IR generation");
@@ -369,6 +376,14 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             generated_ir[expr] = literal;
         } break;
 
+        case K::FractionalLiteral: {
+            auto* literal = new (*module) lcc::FractionalConstant(
+                Convert(ctx, expr->type()),
+                as<FractionalLiteral>(expr)->value()
+            );
+            generated_ir[expr] = literal;
+        } break;
+
         case K::VarDecl: {
             const auto& decl = as<VarDecl>(expr);
 
@@ -549,7 +564,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             // reference a specific member of a sum type. Think of the difference
             // between T::x and T.x in C++; we are just using `.` for both.
             switch (unary_expr->op()) {
-                default: break;
+                default: break; // (!)
+
                 case TokenKind::Has: {
                     // The following
                     //   has bar.x;
@@ -702,7 +718,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::ColonColon:
                 case TokenKind::RightArrow:
                 case TokenKind::Ident:
-                case TokenKind::Number:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
                 case TokenKind::String:
                 case TokenKind::If:
                 case TokenKind::Else:
@@ -1032,7 +1049,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::RParen:
                 case TokenKind::Lambda:
                 case TokenKind::MacroArg:
-                case TokenKind::Number:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
                 case TokenKind::Return:
                 case TokenKind::String:
                 case TokenKind::Struct:

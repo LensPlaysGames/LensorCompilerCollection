@@ -6,6 +6,7 @@
 #include <lcc/syntax/token.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
+#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/result.hh>
 
 #include <glint/eval.hh>
@@ -143,7 +144,8 @@ enum struct TokenKind {
     RightArrow,  // ->
 
     Ident,
-    Number,
+    Integer,
+    Fractional,
     String,
     ByteLiteral,
 
@@ -859,6 +861,7 @@ public:
     static Type* const Byte;
     static Type* const Int;
     static Type* const UInt;
+    static Type* const Float;
     static Type* const Unknown;
     static Type* const Void;
     static Type* const VoidPtr;
@@ -903,6 +906,7 @@ public:
         Byte,
         Int,
         UInt,
+        Float,
         Void,
         OverloadSet,
     };
@@ -1601,6 +1605,7 @@ public:
         FuncDecl,
 
         IntegerLiteral,
+        FractionalLiteral,
         StringLiteral,
         CompoundLiteral,
         OverloadSet,
@@ -1810,6 +1815,31 @@ public:
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {
         return expr->kind() == Kind::IntegerLiteral;
+    }
+};
+
+class FractionalLiteral : public TypedExpr {
+    FixedPointNumber _value;
+
+public:
+    FractionalLiteral(FixedPointNumber value, Location location)
+        : TypedExpr(Kind::FractionalLiteral, location, Type::Float), _value(value) {
+        /// For now, there should be no way that the value could be out of range.
+        set_sema_done();
+    }
+
+    FractionalLiteral(FixedPointNumber value, Type* ty, Location location)
+        : TypedExpr(Kind::FractionalLiteral, location, ty), _value(value) {
+        /// For now, there should be no way that the value could be out of range.
+        set_sema_done();
+    }
+
+    [[nodiscard]]
+    auto value() const -> FixedPointNumber { return _value; }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::FractionalLiteral;
     }
 };
 

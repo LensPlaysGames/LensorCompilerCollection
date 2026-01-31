@@ -230,6 +230,21 @@ A binary number literal is prefixed with =0b=. =0b10= has the value of =10= in b
 
 Integer literals are always of =int= type.
 
+*** Fractionals
+
+Glint supports decimal fractional literal formats. The whole part of a decimal fractional literal may not begin with =0=.
+
+#+begin_src glint
+  0.0;
+  0.5;
+  1.0;
+  1.0005;
+  82921.5;
+  12398.812;
+#+end_src
+
+Fractional literals are always of =float= type.
+
 *** Bytes
 
 Glint makes no distinction between character and integer data types (unlike Pascal, and like C).
@@ -1074,6 +1089,8 @@ Just some extra information on the type sub-language. A lot of the first portion
   int;
   ;; architecture-sized unsigned integer. Same size as 'int'.
   uint;
+  ;; architecture-sized fractional number.
+  float;
   ;; Boolean: binary value 'true' or 'false'.
   bool;
   ;; The nothing type. Declares absence of something (i.e. a function that
