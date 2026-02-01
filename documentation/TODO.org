@@ -2,6 +2,8 @@
 
 * LCC
 
+- [Register Allocation]: Fixup return register handling
+  It's currently hard-coded pretty much to use an integer register. We need to make the psuedo-return register also take register category into account.
 - [Context]: Rename =frontend_options=
   They could be used by backends as well super easily, and it'd be convenient.
   Maybe just =has_option= and =set_option=?
