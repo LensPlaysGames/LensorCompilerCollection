@@ -2,7 +2,7 @@
 
 ;; Author: Lens_r
 ;; Maintainer: Lens_r
-;; Version: 0.2.6
+;; Version: 0.2.12
 ;; Package-Requires: ((emacs "29.1") (treesit))
 ;; Homepage: https://github.com/LensPlaysGames/LensorCompilerCollection
 ;; Keywords: glint, tree-sitter
@@ -315,8 +315,14 @@ with the braces' contents having the same indentation.
 
    :feature 'type
    `((declaration type: (identifier) @font-lock-type-face)
+     (declaration
+      name: (identifier) @font-lock-type-face
+      init: [(type_primitive) (type_struct) (type_enum) (type_array) (type_ffi)
+             (type_pointer) (type_pointer_to_pointer) (type_reference)])
+     (param_decl type: (identifier) @font-lock-type-face)
      ["enum" "struct" "sum" "union"] @font-lock-type-face
      (type_enum underlying: (_) @font-lock-type-face)
+     (type_function (identifier) @font-lock-type-face)
      (type_array)      @font-lock-type-face
      (type_ffi)        @font-lock-type-face
      (type_pointer)    @font-lock-type-face
