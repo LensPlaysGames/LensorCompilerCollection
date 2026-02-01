@@ -656,7 +656,18 @@ auto Module::mir() -> std::vector<MFunction> {
                                     switch (param_info.kind()) {
                                         using Kinds = cconv::msx64::ParameterDescription::Parameter::Kinds;
 
-                                        case Kinds::Float:
+                                        case Kinds::Float: {
+                                            auto copy = MInst(
+                                                MInst::Kind::Copy,
+                                                {+cconv::msx64::float_regs.at(usz(arg_i)),
+                                                 x86_64::GeneralPurposeBitwidth,
+                                                 register_category}
+                                            );
+                                            copy.location(call_ir->location());
+                                            copy.add_operand(MOperandValueReference(function, f, arg));
+                                            bb.add_instruction(copy);
+                                        } break;
+
                                         case Kinds::SingleRegister:
                                         // FIXME: Is PointerInRegister handled like this?
                                         case Kinds::PointerInRegister: {
@@ -777,80 +788,97 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
                                     auto param_info = param_desc.info.at(usz(arg_i));
-                                    if (param_info.is_single_register()) {
-                                        // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
-                                        auto copy = MInst(
-                                            MInst::Kind::Copy,
-                                            {
-                                                +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
-                                                uint(arg->type()->bits()) //
-                                            }
-                                        );
-                                        copy.location(call_ir->location());
-                                        copy.add_operand(MOperandValueReference(function, f, arg));
-                                        bb.add_instruction(copy);
-                                    } else if (param_info.is_double_register()) {
-                                        auto load_a = MInst(
-                                            MInst::Kind::Load,
-                                            {
-                                                +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
-                                                x86_64::GeneralPurposeBitwidth //
-                                            }
-                                        );
-                                        auto load_b = MInst(
-                                            MInst::Kind::Load,
-                                            {
-                                                +cconv::sysv::arg_regs.at(param_info.arg_regs_used + 1),
-                                                uint(arg->type()->bits() - x86_64::GeneralPurposeBitwidth) //
-                                            }
-                                        );
-                                        load_a.location(call_ir->location());
-                                        load_b.location(call_ir->location());
+                                    switch (param_info.kind()) {
+                                        case cconv::sysv::ParameterDescription::Parameter::Kinds::Memory:
+                                            break;
 
-                                        if (auto* load_arg = cast<LoadInst>(arg)) {
-                                            if (auto* alloca = cast<AllocaInst>(load_arg->ptr())) {
-                                                load_a.add_operand(MOperandValueReference(function, f, alloca));
+                                        case cconv::sysv::ParameterDescription::Parameter::Kinds::Scalar: {
+                                            // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
+                                            auto copy = MInst(
+                                                MInst::Kind::Copy,
+                                                {+cconv::sysv::scalar_regs.at(param_info.arg_scalars_used),
+                                                 uint(arg->type()->bits())}
+                                            );
+                                            copy.location(call_ir->location());
+                                            copy.add_operand(MOperandValueReference(function, f, arg));
+                                            bb.add_instruction(copy);
+                                        } break;
+
+                                        case cconv::sysv::ParameterDescription::Parameter::Kinds::SingleRegister: {
+                                            // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
+                                            auto copy = MInst(
+                                                MInst::Kind::Copy,
+                                                {+cconv::sysv::arg_regs.at(param_info.arg_regs_used),
+                                                 uint(arg->type()->bits())}
+                                            );
+                                            copy.location(call_ir->location());
+                                            copy.add_operand(MOperandValueReference(function, f, arg));
+                                            bb.add_instruction(copy);
+                                        } break;
+                                        case cconv::sysv::ParameterDescription::Parameter::Kinds::DoubleRegister: {
+                                            auto load_a = MInst(
+                                                MInst::Kind::Load,
+                                                {
+                                                    +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
+                                                    x86_64::GeneralPurposeBitwidth //
+                                                }
+                                            );
+                                            auto load_b = MInst(
+                                                MInst::Kind::Load,
+                                                {
+                                                    +cconv::sysv::arg_regs.at(param_info.arg_regs_used + 1),
+                                                    uint(arg->type()->bits() - x86_64::GeneralPurposeBitwidth) //
+                                                }
+                                            );
+                                            load_a.location(call_ir->location());
+                                            load_b.location(call_ir->location());
+
+                                            if (auto* load_arg = cast<LoadInst>(arg)) {
+                                                if (auto* alloca = cast<AllocaInst>(load_arg->ptr())) {
+                                                    load_a.add_operand(MOperandValueReference(function, f, alloca));
+
+                                                    auto add_b = MInst(
+                                                        MInst::Kind::Add,
+                                                        {next_vreg(), x86_64::GeneralPurposeBitwidth}
+                                                    );
+                                                    add_b.location(call_ir->location());
+                                                    add_b.add_operand(MOperandValueReference(function, f, alloca));
+                                                    add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
+
+                                                    load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
+                                                    bb.add_instruction(add_b);
+
+                                                    // In doing the copying and stuff, we have effectively loaded the thing
+                                                    // manually. So, we remove the load that was there before.
+                                                    bb.remove_inst_by_reg(virts[load_arg]);
+
+                                                } else {
+                                                    LCC_TODO(
+                                                        "Create a temporary, store into it, and then treat argument like any other alloca."
+                                                    );
+                                                }
+                                            } else if (arg->kind() == Value::Kind::Alloca) {
+                                                load_a.add_operand(MOperandValueReference(function, f, arg));
 
                                                 auto add_b = MInst(
                                                     MInst::Kind::Add,
                                                     {next_vreg(), x86_64::GeneralPurposeBitwidth}
                                                 );
                                                 add_b.location(call_ir->location());
-                                                add_b.add_operand(MOperandValueReference(function, f, alloca));
+                                                add_b.add_operand(MOperandValueReference(function, f, arg));
                                                 add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
 
                                                 load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
                                                 bb.add_instruction(add_b);
-
-                                                // In doing the copying and stuff, we have effectively loaded the thing
-                                                // manually. So, we remove the load that was there before.
-                                                bb.remove_inst_by_reg(virts[load_arg]);
-
                                             } else {
-                                                LCC_TODO(
-                                                    "Create a temporary, store into it, and then treat argument like any other alloca."
-                                                );
+                                                arg->print();
+                                                LCC_TODO("Handle gMIR lowering of SysV multiple register argument");
                                             }
-                                        } else if (arg->kind() == Value::Kind::Alloca) {
-                                            load_a.add_operand(MOperandValueReference(function, f, arg));
 
-                                            auto add_b = MInst(
-                                                MInst::Kind::Add,
-                                                {next_vreg(), x86_64::GeneralPurposeBitwidth}
-                                            );
-                                            add_b.location(call_ir->location());
-                                            add_b.add_operand(MOperandValueReference(function, f, arg));
-                                            add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
+                                            bb.add_instruction(load_a);
+                                            bb.add_instruction(load_b);
 
-                                            load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
-                                            bb.add_instruction(add_b);
-                                        } else {
-                                            arg->print();
-                                            LCC_TODO("Handle gMIR lowering of SysV multiple register argument");
-                                        }
-
-                                        bb.add_instruction(load_a);
-                                        bb.add_instruction(load_b);
+                                        } break;
                                     }
                                 }
                             }
