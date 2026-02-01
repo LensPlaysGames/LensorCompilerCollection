@@ -670,15 +670,22 @@ void Module::_x86_64_lower_float_constants() {
                     constexpr usz bitwidth = 32;
 
                     auto float_global_name = fmt::format("fconst{:x}", binary32_value);
-                    auto float_global_type = IntegerType::Get(context(), bitwidth);
-                    auto float_init = new (*this) IntegerConstant(float_global_type, binary32_value);
-                    auto float_global = new (*this) GlobalVariable(
-                        this,
-                        float_global_type,
-                        float_global_name,
-                        Linkage::Internal,
-                        float_init
-                    );
+                    GlobalVariable* float_global{};
+                    if (auto g = global_by_name(float_global_name))
+                        float_global = *g;
+                    else {
+                        g.diag().suppress();
+
+                        auto float_global_type = IntegerType::Get(context(), bitwidth);
+                        auto float_init = new (*this) IntegerConstant(float_global_type, binary32_value);
+                        float_global = new (*this) GlobalVariable(
+                            this,
+                            float_global_type,
+                            float_global_name,
+                            Linkage::Internal,
+                            float_init
+                        );
+                    }
 
                     auto load = new (*this) LoadInst(
                         FractionalType::Get(context(), bitwidth),

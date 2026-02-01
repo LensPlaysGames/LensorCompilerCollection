@@ -140,6 +140,11 @@ DecimalFraction fractional_to_whole(u64 fractional) {
 
 u32 fixed_to_binary32_float(const FixedPointNumber& f) {
     bool negative{}; // TODO
+
+    // Handle Zeroes
+    if (not f.whole and not f.fractional)
+        return negative ? 0x80000000 : 0;
+
     // binary32 exponent bias is 127
     u8 exponent{127};
     auto mantissa{f.fractional};

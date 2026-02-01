@@ -51,10 +51,15 @@ Function::Function(
     mod->add_function(this);
 }
 
-GlobalVariable::GlobalVariable(Module* mod, Type* t, std::string name, Linkage linkage, Value* init)
-    : UseTrackingValue(Value::Kind::GlobalVariable, Type::PtrTy),
-      _init(init),
-      _allocated_type(t) {
+GlobalVariable::GlobalVariable(
+    Module* mod,
+    Type* t,
+    std::string name,
+    Linkage linkage,
+    Value* init
+) : UseTrackingValue(Value::Kind::GlobalVariable, Type::PtrTy),
+    _init(init),
+    _allocated_type(t) {
     LCC_ASSERT(mod and t);
     _names.push_back({std::move(name), linkage});
     mod->add_var(this);

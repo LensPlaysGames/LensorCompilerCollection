@@ -114,6 +114,9 @@ public:
     }
 
     void add_function(Function* func) { _code.push_back(func); }
+    // NOTE: You probably don't need to call this manually.
+    // Just create a globalvariable using the constructor.
+    // NOTE: Does not de-duplicate. Assumes you know what you are doing.
     void add_var(GlobalVariable* var) { _vars.push_back(var); }
 
     void add_extra_section(const Section& section) {
@@ -126,6 +129,17 @@ public:
     [[nodiscard]]
     auto next_vreg() -> usz {
         return _virtual_register++;
+    }
+
+    [[nodiscard]]
+    auto global_by_name(std::string_view global_name) -> Result<GlobalVariable*> {
+        for (auto* v : vars()) {
+            for (auto n : v->names()) {
+                if (n.name == global_name)
+                    return v;
+            }
+        }
+        return Diag::Note("not found");
     }
 
     [[nodiscard]]
