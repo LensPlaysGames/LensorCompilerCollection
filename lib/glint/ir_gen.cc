@@ -734,6 +734,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Or:
                 case TokenKind::Int:
                 case TokenKind::UInt:
+                case TokenKind::Float:
                 case TokenKind::ArbitraryInt:
                 case TokenKind::Sizeof:
                 case TokenKind::Alignof:
@@ -929,14 +930,21 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                 case TokenKind::Slash: {
                     // Arithmetic Division
-                    if (binary_expr->lhs()->type()->is_signed_int(ctx) || binary_expr->rhs()->type()->is_signed_int(ctx))
-                        generated_ir[expr] = new (*module) SDivInst(lhs, rhs, expr->location());
+                    if (
+                        binary_expr->lhs()->type()->is_signed_int(ctx)
+                        or Type::Equal(Type::Float, binary_expr->lhs()->type())
+                        or binary_expr->rhs()->type()->is_signed_int(ctx)
+                        or Type::Equal(Type::Float, binary_expr->rhs()->type())
+                    ) generated_ir[expr] = new (*module) SDivInst(lhs, rhs, expr->location());
                     else generated_ir[expr] = new (*module) UDivInst(lhs, rhs, expr->location());
                 } break;
 
                 case TokenKind::Percent: {
                     // Arithmetic Modulus (remainder)
-                    if (binary_expr->lhs()->type()->is_signed_int(ctx) || binary_expr->rhs()->type()->is_signed_int(ctx))
+                    if (
+                        binary_expr->lhs()->type()->is_signed_int(ctx)
+                        or binary_expr->rhs()->type()->is_signed_int(ctx)
+                    )
                         generated_ir[expr] = new (*module) SRemInst(lhs, rhs, expr->location());
                     else generated_ir[expr] = new (*module) URemInst(lhs, rhs, expr->location());
                 } break;
@@ -1036,6 +1044,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::CULongLong:
                 case TokenKind::Int:
                 case TokenKind::UInt:
+                case TokenKind::Float:
                 case TokenKind::Invalid:
                 case TokenKind::LBrace:
                 case TokenKind::RBrace:

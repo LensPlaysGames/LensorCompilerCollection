@@ -110,6 +110,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::False:
         case Tk::Int:
         case Tk::UInt:
+        case Tk::Float:
         case Tk::ArbitraryInt:
         case Tk::Sizeof:
         case Tk::Alignof:
@@ -247,6 +248,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::CULongLong:
         case Tk::Int:
         case Tk::UInt:
+        case Tk::Float:
         case Tk::Void:
         case Tk::Struct:
         case Tk::Enum:
@@ -1008,6 +1010,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         case Tk::LBrack:
         case Tk::Struct:
         case Tk::UInt:
+        case Tk::Float:
         case Tk::Union:
         case Tk::Sum:
         case Tk::Void: {
@@ -2275,6 +2278,11 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
 
         case Tk::UInt:
             ty = BuiltinType::UInt(*mod, tok.location);
+            NextToken();
+            break;
+
+        case Tk::Float:
+            ty = BuiltinType::Float(*mod, tok.location);
             NextToken();
             break;
 

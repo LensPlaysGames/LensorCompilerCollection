@@ -291,6 +291,7 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::Or:
                 case TokenKind::Int:
                 case TokenKind::UInt:
+                case TokenKind::Float:
                 case TokenKind::ArbitraryInt:
                 case TokenKind::Sizeof:
                 case TokenKind::Alignof:
@@ -401,6 +402,7 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::False:
                 case TokenKind::Int:
                 case TokenKind::UInt:
+                case TokenKind::Float:
                 case TokenKind::ArbitraryInt:
                 case TokenKind::Sizeof:
                 case TokenKind::Alignof:

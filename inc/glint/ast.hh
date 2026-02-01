@@ -162,6 +162,7 @@ enum struct TokenKind {
     And,      // and
     Or,       // or
     Int,      // int
+    Float,    // float
     UInt,     // uint
     ArbitraryInt,
     Sizeof,
@@ -947,6 +948,8 @@ public:
     static auto Int(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Int, l); }
     [[nodiscard]]
     static auto UInt(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::UInt, l); }
+    [[nodiscard]]
+    static auto Float(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Float, l); }
     [[nodiscard]]
     static auto Void(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Void, l); }
 

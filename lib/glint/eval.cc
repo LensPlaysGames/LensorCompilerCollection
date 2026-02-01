@@ -254,6 +254,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::LBrackEq:
                 case TokenKind::True:
                 case TokenKind::UInt:
+                case TokenKind::Float:
                 case TokenKind::Union:
                 case TokenKind::Void:
                 case TokenKind::While:
@@ -424,6 +425,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::False:
                 case TokenKind::Int:
                 case TokenKind::UInt:
+                case TokenKind::Float:
                 case TokenKind::ArbitraryInt:
                 case TokenKind::Sizeof:
                 case TokenKind::Alignof:

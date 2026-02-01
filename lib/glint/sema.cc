@@ -1803,7 +1803,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             // NOTE: Just for forget-to-free diagnostics.
             // If returned value is a dynamic array, remove that dynamic array's
             // declaration from the list of dangling dynamic arrays.
-            if (r->value()->type()->is_dynamic_array()) {
+            if (
+                r->value() and r->value()->ok() and r->value()->type()->is_dynamic_array()
+            ) {
                 if (auto* nameref = cast<NameRefExpr>(r->value()))
                     std::erase(curr_func->dangling_dynarrays(), nameref->target());
             }
@@ -3356,7 +3358,10 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             LValueToRValue(&b->rhs());
 
             /// Both types must be integers.
-            if (not lhs_t->is_integer() or not rhs_t->is_integer()) {
+            if (
+                not (lhs_t->is_integer() or Type::Equal(Type::Float, lhs_t))
+                or not (rhs_t->is_integer() or Type::Equal(Type::Float, rhs_t))
+            ) {
                 // TODO: if (function-exists "_GlintOpOverload<OpString>") -> do that
 
                 Error(
@@ -3542,6 +3547,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::False:
         case TokenKind::Int:
         case TokenKind::UInt:
+        case TokenKind::Float:
         case TokenKind::ArbitraryInt:
         case TokenKind::Sizeof:
         case TokenKind::Alignof:
@@ -5393,6 +5399,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::Or:
         case TokenKind::Int:
         case TokenKind::UInt:
+        case TokenKind::Float:
         case TokenKind::ArbitraryInt:
         case TokenKind::Sizeof:
         case TokenKind::Alignof:

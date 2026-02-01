@@ -35,6 +35,7 @@ lcc::StringMap<Tk> keywords{
     {"byte", Tk::Byte},
     {"int", Tk::Int},
     {"uint", Tk::UInt},
+    {"float", Tk::Float},
     {"has", Tk::Has},
     {"cfor", Tk::For},
     {"for", Tk::RangedFor},
@@ -1281,6 +1282,7 @@ auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
         case TokenKind::Bool:
         case TokenKind::Int:
         case TokenKind::UInt:
+        case TokenKind::Float:
         case TokenKind::For:
         case TokenKind::RangedFor:
         case TokenKind::Return:
@@ -1351,6 +1353,7 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
         case Tk::Byte: return "byte";
         case Tk::Int: return "int";
         case Tk::UInt: return "uint";
+        case Tk::Float: return "float";
         case Tk::ArbitraryInt: return "sized integer";
         case Tk::Has: return "has";
         case Tk::For: return "for";
@@ -1525,6 +1528,7 @@ auto lcc::glint::ToSource(
         case Tk::Or: return {"or"};
         case Tk::Int: return {"int"};
         case Tk::UInt: return {"uint"};
+        case Tk::Float: return {"float"};
         case Tk::Sizeof: return {"sizeof"};
         case Tk::Alignof: return {"alignof"};
         case Tk::Has: return {"has"};
