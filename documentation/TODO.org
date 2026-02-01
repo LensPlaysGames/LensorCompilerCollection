@@ -8,6 +8,8 @@
 - [IRTest]: IR -> IR testing facility
   This will allow us to test optimisations, as well as make sure our IR parser is a working frontend (further than runtest).
   We could also re-use the IR against IR matching code for LangTest's IR facilities.
+- [MIRTest]: MIR -> MIR testing facility
+  This will allow us to test register allocation, instruction selection, among other things.
 - [Meta]: Move IR optimisations to their own library
   I want =libopt= to be a library LCC uses that operates on LCC IR; that way, other programs may be able to re-use the optimisations if they choose to target LCC IR (without having to use our driver).
 - [Meta]: Move LCC IR to it's own library (in it's own folder under =lib/=)
@@ -23,6 +25,15 @@
   #+end_example
 
 - [Register Allocation]: ISel should mark call instructions as clobbering a unique "volatile registers" register (similar to return register), such that RA knows whats up, and could even insert spills before and after the call if necessary.
+
+  We really, really need a better way of doing this... And we already have it! Spills! We just need to insert spills and unspills before and after calls, respectively. Also we should only (un)spill the volatile registers that are actually live at this point.
+
+  The problem is that our liveness calculations are done with virtual registers, so we can't insert spills/unspills at the time of calculation because we don't know what is in what hardware register (yet). So, we can't know if we need to spill a virtual register without first knowing what hardware register it is in :eyes:.
+
+  Okay, so, that's fine, we'll just do it after register allocation. However, now we aren't able to calculate liveness ranges, since a single register may be used to implement multiple virtual registers...
+
+  Okay, so, we need to /save/ the virtual registers that interfere with calls into the MInst itself, and then also color those properly once we know the virtual register to hardware register mapping. Then, we should be left with a list of "interferes with" hardware registers that we can spill/unspill... (sort of)
+
 - [Test]: Convert old opt tests in =tst/= into IR tests.
 - [Fractionals]: deconstruct binary32/64 to sign, exponent, and mantissa
 

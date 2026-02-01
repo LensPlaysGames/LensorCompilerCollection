@@ -446,6 +446,27 @@ void emit_gnu_att_assembly(
                 } else if (instruction.opcode() == +x86_64::Opcode::Call) {
                     // TODO: FIXME We probably shouldn't emit machine instructions that aren't in the MIR...
                     // Save caller-saved registers, if necessary.
+                    //
+                    // TODO: We really, really need a better way of doing this... And we
+                    // already have it! Spills! We just need to insert spills and unspills
+                    // before and after calls, respectively. Also we should only (un)spill the
+                    // volatile registers that are actually live at this point.
+                    //
+                    // The problem is that our liveness calculations are done with virtual
+                    // registers, so we can't insert spills/unspills at the time of
+                    // calculation because we don't know what is in what hardware register (yet).
+                    // So, we can't know if we need to spill a virtual register without first
+                    // knowing what hardware register it is in :eyes:.
+                    //
+                    // Okay, so, that's fine, we'll just do it after register allocation.
+                    // However, now we aren't able to calculate liveness ranges, since a
+                    // single register may be used to implement multiple virtual registers...
+                    //
+                    // Actual TODO: Okay, so, we need to /save/ the virtual registers that
+                    // interfere with calls into the MInst itself, and then also color those
+                    // properly once we know the virtual register to hardware register
+                    // mapping. Then, we should be left with a list of "interferes with"
+                    // hardware registers that we can spill/unspill... (sort of)
                     for (auto r : function.registers_used()) {
                         if (r == desc.return_register) continue;
                         // Instruction defines this register, no need to save it (since we are
