@@ -21,8 +21,11 @@ struct MachineDescription {
     usz return_register{};
     usz return_register_to_replace{};
 
-    // General Purpose Registers
     std::vector<RegistersPerCategory> registers{};
+
+    // For "preserve across calls"
+    std::vector<usz> volatile_registers{};
+    std::vector<usz> preserve_volatile_opcodes{};
 };
 
 auto allocate_registers(

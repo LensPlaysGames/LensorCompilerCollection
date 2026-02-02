@@ -3,6 +3,10 @@
 
 #include <lcc/utils.hh>
 
+// FIXME: This is a very stupid way to handle things, imo.
+// We should be able to switch on a target enum, or similar.
+// This nonsense is ridiculous. Whoever wrote it should be ashamed.
+
 namespace lcc {
 class Context;
 

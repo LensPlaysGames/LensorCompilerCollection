@@ -440,50 +440,8 @@ void emit_gnu_att_assembly(
                 // ================================
                 // INSTRUCTION PROLOGUE (some insts have preceding instructions)
                 // ================================
-                usz registers_saved{0};
                 if (instruction.opcode() == +x86_64::Opcode::Return) {
                     emit_stack_frame_exit(out, frame_kind);
-                } else if (instruction.opcode() == +x86_64::Opcode::Call) {
-                    // TODO: FIXME We probably shouldn't emit machine instructions that aren't in the MIR...
-                    // Save caller-saved registers, if necessary.
-                    //
-                    // TODO: We really, really need a better way of doing this... And we
-                    // already have it! Spills! We just need to insert spills and unspills
-                    // before and after calls, respectively. Also we should only (un)spill the
-                    // volatile registers that are actually live at this point.
-                    //
-                    // The problem is that our liveness calculations are done with virtual
-                    // registers, so we can't insert spills/unspills at the time of
-                    // calculation because we don't know what is in what hardware register (yet).
-                    // So, we can't know if we need to spill a virtual register without first
-                    // knowing what hardware register it is in :eyes:.
-                    //
-                    // Okay, so, that's fine, we'll just do it after register allocation.
-                    // However, now we aren't able to calculate liveness ranges, since a
-                    // single register may be used to implement multiple virtual registers...
-                    //
-                    // Actual TODO: Okay, so, we need to /save/ the virtual registers that
-                    // interfere with calls into the MInst itself, and then also color those
-                    // properly once we know the virtual register to hardware register
-                    // mapping. Then, we should be left with a list of "interferes with"
-                    // hardware registers that we can spill/unspill... (sort of)
-                    for (auto r : function.registers_used()) {
-                        if (r == desc.return_register) continue;
-                        // Instruction defines this register, no need to save it (since we are
-                        // writing to it).
-                        if (r == instruction.reg()) continue;
-                        out += fmt::format("    push %{}\n", ToString(x86_64::RegisterId{r}));
-                        ++registers_saved;
-                    }
-                    // If uneven, keep stack alignment...
-                    if (registers_saved % 2 != 0)
-                        out += "    sub $8, %rsp\n";
-
-                    // Save return register, if necessary.
-                    // TODO: CFA `.cfi_offset`
-                    if (instruction.use_count() and instruction.reg() and instruction.reg() != desc.return_register) {
-                        out += fmt::format("    push %{}\n", ToString(x86_64::RegisterId(desc.return_register)));
-                    }
                 }
 
                 // ================================
@@ -682,28 +640,15 @@ void emit_gnu_att_assembly(
                 // ================================
                 if (instruction.opcode() == +x86_64::Opcode::Call) {
                     // Move return value from return register to result register, if necessary.
-                    // Also restore return register, if necessary.
-                    if (instruction.use_count() and instruction.reg() and instruction.reg() != desc.return_register) {
+                    if (
+                        instruction.use_count() and instruction.reg()
+                        and instruction.reg() != desc.return_register
+                    ) {
                         out += fmt::format(
                             "    mov %{}, %{}\n",
                             ToString(x86_64::RegisterId(desc.return_register), instruction.regsize()),
                             ToString(x86_64::RegisterId(instruction.reg()), instruction.regsize())
                         );
-                        out += fmt::format("    pop %{}\n", ToString(x86_64::RegisterId(desc.return_register)));
-                    }
-
-                    // If uneven, keep stack alignment...
-                    if (registers_saved % 2 != 0)
-                        out += "    add $8, %rsp\n";
-
-                    // TODO: FIXME We probably shouldn't emit machine instructions that aren't in the MIR...
-                    // Restore caller-saved registers, if necessary.
-                    for (auto r : vws::reverse(function.registers_used())) {
-                        if (r == desc.return_register) continue;
-                        // Instruction defines this register, no need to save it (since we are
-                        // writing to it).
-                        if (r == instruction.reg()) continue;
-                        out += fmt::format("    pop %{}\n", ToString(x86_64::RegisterId{r}));
                     }
                 }
             }

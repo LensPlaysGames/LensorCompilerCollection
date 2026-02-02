@@ -45,6 +45,26 @@ constexpr const std::array<x86_64::RegisterId, 8> scalar_regs = {
     x86_64::RegisterId::XMM7
 };
 
+constexpr const std::array<x86_64::RegisterId, 17> all_volatile_regs = {
+    x86_64::RegisterId::RAX,
+    x86_64::RegisterId::RCX,
+    x86_64::RegisterId::RDX,
+    x86_64::RegisterId::RSI,
+    x86_64::RegisterId::RDI,
+    x86_64::RegisterId::R8,
+    x86_64::RegisterId::R9,
+    x86_64::RegisterId::R10,
+    x86_64::RegisterId::R11,
+    x86_64::RegisterId::XMM0,
+    x86_64::RegisterId::XMM1,
+    x86_64::RegisterId::XMM2,
+    x86_64::RegisterId::XMM3,
+    x86_64::RegisterId::XMM4,
+    x86_64::RegisterId::XMM5,
+    x86_64::RegisterId::XMM6,
+    x86_64::RegisterId::XMM7
+};
+
 enum class ParameterClass {
     INVALID,
 

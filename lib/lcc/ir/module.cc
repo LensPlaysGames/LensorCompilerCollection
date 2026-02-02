@@ -1,6 +1,7 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
+#include <lcc/calling_convention.hh>
 #include <lcc/calling_conventions/ms_x64.hh>
 #include <lcc/calling_conventions/sysv_x86_64.hh>
 #include <lcc/codegen/isel.hh>
@@ -23,6 +24,12 @@
 #include <object/generic.hh>
 
 #include <algorithm>
+#include <cstdlib>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 // NOTE: See module_mir.cc for Machine Instruction Representation (MIR)
 // generation.
@@ -788,57 +795,19 @@ void Module::emit(std::filesystem::path output_file_path) {
             }
 
             // Register Allocation
-            MachineDescription desc{};
-            if (_ctx->target()->is_arch_x86_64()) {
-                desc.return_register_to_replace = +x86_64::RegisterId::RETURN;
-                std::vector<usz> jeep_registers{};
-                std::vector<usz> scalar_registers{};
-                if (_ctx->target()->is_cconv_ms()) {
-                    desc.return_register = +cconv::msx64::return_register;
-                    // Just the volatile registers
-                    rgs::transform(
-                        cconv::msx64::volatile_regs,
-                        std::back_inserter(jeep_registers),
-                        [](auto r) { return +r; }
-                    );
-
-                    lcc::rgs::transform(
-                        lcc::cconv::msx64::volatile_float_regs,
-                        std::back_inserter(scalar_registers),
-                        [](auto r) { return lcc::operator+(r); }
-                    );
-                } else if (_ctx->target()->is_cconv_sysv()) {
-                    desc.return_register = +cconv::sysv::return_register;
-                    // Just the volatile registers
-                    rgs::transform(
-                        cconv::sysv::volatile_regs,
-                        std::back_inserter(jeep_registers),
-                        [](auto r) { return +r; }
-                    );
-                    lcc::rgs::transform(
-                        lcc::cconv::sysv::scalar_regs,
-                        std::back_inserter(scalar_registers),
-                        [](auto r) { return lcc::operator+(r); }
-                    );
-                } else Diag::ICE("Sorry, unhandled x86_64 calling convention");
-
-                LCC_ASSERT(
-                    jeep_registers.size(),
-                    "Must populate general purpose register list"
-                );
-                desc.registers.emplace_back(
-                    +Register::Category::DEFAULT,
-                    std::move(jeep_registers)
-                );
-                desc.registers.emplace_back(
-                    +Register::Category::FLOAT,
-                    std::move(scalar_registers)
-                );
-
-            } else Diag::ICE("Sorry, unhandled target architecture");
-
+            auto desc = cconv::machine_description(context());
             for (auto& mfunc : machine_ir) {
-                (void) allocate_registers(desc, mfunc);
+                if (not allocate_registers(desc, mfunc)) {
+                    std::string name{};
+                    if (mfunc.names().size())
+                        name = mfunc.names().at(0).name;
+                    else name = "<unnamed>";
+                    Diag::Error(
+                        "Failed to allocate registers for function\n"
+                        "    {}\n",
+                        name
+                    );
+                }
             }
 
             if (_ctx->option_print_mir()) {

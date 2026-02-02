@@ -741,7 +741,12 @@ auto lcc::parser::Parser::ParseCall(bool tail) -> Result<CallInst*> {
     }
 
     auto* call = new (*mod) CallInst(
-        FunctionType::Get(mod->context(), ret, std::move(arg_types), is_variadic),
+        FunctionType::Get(
+            mod->context(),
+            ret,
+            std::move(arg_types),
+            is_variadic
+        ),
         loc
     );
 

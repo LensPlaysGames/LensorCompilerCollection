@@ -891,6 +891,7 @@ auto allocate_registers(
                             usz(MInst::Kind::Unspill),
                             {new_vreg, (uint) spilled_vreg_size, {}, true}
                         );
+                        unspill.add_use(); // unspill shouldn't be "unused"; it has side effects
                         // Slot
                         unspill.add_operand(MOperandImmediate(spilled_vreg));
 
@@ -950,6 +951,132 @@ auto allocate_registers(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    for (auto& block : function.blocks()) {
+        for (usz inst_i = 0; inst_i < block.instructions().size(); ++inst_i) {
+            auto& inst = block.instructions().at(inst_i);
+            auto found = rgs::find(desc.preserve_volatile_opcodes, inst.opcode());
+            if (found == desc.preserve_volatile_opcodes.end())
+                continue;
+
+            // We need to preserve volatile registers here.
+
+            // fmt::print(
+            //     "Preserving volatile registers across `{}`\n",
+            //     PrintMInst(inst)
+            // );
+
+            // Look in the adjacency lists to map the list with the interfering color
+            // back to the virtual register the list is associated with.
+            auto inst_hardreg = inst.reg();
+            usz inst_vreg{0};
+            for (auto& l : lists) {
+                if (l.value != inst_hardreg and l.color == inst_hardreg) {
+                    inst_vreg = l.value;
+                    break;
+                }
+            }
+            LCC_ASSERT(
+                inst_vreg,
+                "Unable to resolve assigned hardware register back to virtual register for saving volatile register"
+            );
+
+            // TODO: A MInst should always contain the virtual register it represents,
+            // even after register allocation is complete for that instruction...
+            // TODO: This isn't even the right way to get the adjacencies (live
+            // values) we want. Really what we should have is a snapshot of the live
+            // values at the exit of this instruction's execution. If a volatile
+            // register was live before but isn't after, there's no need to preserve
+            // it.
+            auto adj_list = rgs::find_if(
+                lists,
+                [&](AdjacencyList& l) {
+                    return l.value == inst_vreg;
+                }
+            );
+            LCC_ASSERT(
+                adj_list != lists.end(),
+                "Could not find adjacency list corresponding to vreg {}",
+                inst_vreg
+            );
+
+            // Step 2: For every interference (adjacency)...
+            for (auto i_adj : adj_list->adjacencies) {
+                // fmt::print("  adj {}\n", i_adj);
+                auto interfering_adj_list = rgs::find_if(
+                    lists,
+                    [&](AdjacencyList& l) {
+                        return l.value == i_adj;
+                    }
+                );
+                LCC_ASSERT(
+                    interfering_adj_list != lists.end(),
+                    "Could not find adjacency list {}, interfering with {}",
+                    i_adj,
+                    inst.reg()
+                );
+
+                // If this interference happened to be allocated a volatile register...
+                auto interfering_is_volatile = rgs::contains(
+                    desc.volatile_registers,
+                    interfering_adj_list->color
+                );
+                // fmt::print("    volatile: {}\n", interfering_is_volatile);
+
+                if (not interfering_is_volatile)
+                    continue;
+
+                // A volatile register is in use at the time of a call instruction's
+                // execution; we need to preserve it across the call (as long as it isn't
+                // the result register itself).
+
+                // Skip result register (otherwise we'd clobber our function result out of
+                // existence).
+                if (interfering_adj_list->color == inst_hardreg)
+                    continue;
+
+                // fmt::print("  spilling...\n");
+
+                auto spill_slot = interfering_adj_list->value;
+                auto spilled_reg = interfering_adj_list->color;
+                // FIXME: register size (see spill handling above for awful solution)
+                uint spilled_regsize = 64;
+
+                // Insert a spill before
+                auto spill = MInst(usz(MInst::Kind::Spill), {});
+
+                // Copy value and size of virtual register
+                spill.add_operand(MOperandRegister(
+                    spilled_reg,
+                    spilled_regsize
+                ));
+                // Slot
+                spill.add_operand(MOperandImmediate(spill_slot));
+
+                // Insert spill instruction before index 'inst_i'.
+                block.instructions().insert(
+                    block.instructions().begin() + (isz) inst_i,
+                    spill
+                );
+                ++inst_i;
+
+                // Insert an unspill after
+                auto unspill = MInst(
+                    usz(MInst::Kind::Unspill),
+                    {spilled_reg, (uint) spilled_regsize, {}, true}
+                );
+                unspill.add_use(); // unspill shouldn't be "unused"; it has side effects
+                // Slot
+                unspill.add_operand(MOperandImmediate(spill_slot));
+
+                // Inserting unspill instruction after index 'inst_i'
+                block.instructions().insert(
+                    block.instructions().begin() + (isz) inst_i + 1,
+                    unspill
+                );
             }
         }
     }

@@ -162,7 +162,7 @@ public:
     }
 
     /// Parse a module from a source span.
-    [[nodiscard]]
+    [[nodiscard, deprecated("Please pass a context file instead of a source, so location reporting in errors may work")]]
     static auto Parse(Context* ctx, std::string_view source) -> std::unique_ptr<Module>;
     /// Parse a module from a file.
     [[nodiscard]]

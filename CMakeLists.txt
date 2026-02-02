@@ -271,6 +271,7 @@ target_link_libraries(object PRIVATE options)
 # Add the main lcc library.
 add_library(
   liblcc STATIC
+  inc/lcc/calling_convention.hh
   inc/lcc/calling_conventions/ms_x64.hh
   inc/lcc/calling_conventions/sysv_x86_64.hh
   inc/lcc/codegen/gnu_as_att_assembly.hh
@@ -313,6 +314,7 @@ add_library(
   inc/lcc/utils/rtti.hh
   inc/lcc/utils/string_distance.hh
   inc/lcc/utils/twocolumnlayouthelper.hh
+  lib/lcc/calling_convention.cc
   lib/lcc/calling_conventions/ms_x64.cc
   lib/lcc/calling_conventions/sysv_x86_64.cc
   lib/lcc/codegen/isel.cc
