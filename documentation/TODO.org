@@ -26,16 +26,6 @@
   LCC IR Frontend      depends on LCC IR
   #+end_example
 
-- [Register Allocation]: ISel should mark call instructions as clobbering a unique "volatile registers" register (similar to return register), such that RA knows whats up, and could even insert spills before and after the call if necessary.
-
-  We really, really need a better way of doing this... And we already have it! Spills! We just need to insert spills and unspills before and after calls, respectively. Also we should only (un)spill the volatile registers that are actually live at this point.
-
-  The problem is that our liveness calculations are done with virtual registers, so we can't insert spills/unspills at the time of calculation because we don't know what is in what hardware register (yet). So, we can't know if we need to spill a virtual register without first knowing what hardware register it is in :eyes:.
-
-  Okay, so, that's fine, we'll just do it after register allocation. However, now we aren't able to calculate liveness ranges, since a single register may be used to implement multiple virtual registers...
-
-  Okay, so, we need to /save/ the virtual registers that interfere with calls into the MInst itself, and then also color those properly once we know the virtual register to hardware register mapping. Then, we should be left with a list of "interferes with" hardware registers that we can spill/unspill... (sort of)
-
 - [Test]: Convert old opt tests in =tst/= into IR tests.
 - [Fractionals]: deconstruct binary32/64 to sign, exponent, and mantissa
 
@@ -50,6 +40,8 @@
 - [Emscripten]: Automatically install =res/lcc.svg=
 - [Driver]: =-gcc= compatibility layer: args after are parsed as GCC arguments
 - [Driver]: =--color-theme <file>= option to remap ANSI/VT100 emitted terminal codes to different colors (i.e. BoldRed -> Green) if you want green errors for some reason.
+- [Register Allocation]: Use liveness data to spill less volatile registers across calls
+  This will require saving a snapshot of the live values after certain instructions (call instructions) such that we know the virtual registers that were live, and then, once we have colored virtual registers in with hardware ones, we can know which of those interfering virtual registers ended up in a volatile register, and we know we have to save it. If it doesn't appear in the snapshot, it doesn't need to be preserved.
 
 * Glint
 
