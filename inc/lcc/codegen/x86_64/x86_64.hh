@@ -60,6 +60,17 @@ enum struct Opcode : u32 {
     SetByteIfLessSigned,             // setl (set if less)
     SetByteIfGreaterUnsigned,        // seta (set if above)
     SetByteIfGreaterSigned,          // setg (set if greater)
+
+    // You can re-order these, just not past the fences.
+    ScalarFloatFENCEBegin,
+    ScalarFloatMove,               // movss/movsd
+    ScalarFloatMoveDereferenceLHS, // movss/movsd
+    ScalarFloatMoveDereferenceRHS, // movss/movsd
+    ScalarFloatAdd,                // addss/addsd
+    ScalarFloatSub,                // subss/subsd
+    ScalarFloatMul,                // mulss/mulsd
+    ScalarFloatDiv,                // divss/divsd
+    ScalarFloatFENCEEnd,
 };
 
 enum struct RegisterId : u32 {
@@ -185,6 +196,16 @@ constexpr auto ToString(Opcode op) -> std::string_view {
         case Opcode::SetByteIfEqualOrLessSigned: return "setle";
         case Opcode::SetByteIfEqualOrGreaterUnsigned: return "setae";
         case Opcode::SetByteIfEqualOrGreaterSigned: return "setge";
+        case Opcode::ScalarFloatMoveDereferenceLHS:
+        case Opcode::ScalarFloatMoveDereferenceRHS:
+        case Opcode::ScalarFloatMove: return "movs";
+        case Opcode::ScalarFloatAdd: return "adds";
+        case Opcode::ScalarFloatSub: return "subs";
+        case Opcode::ScalarFloatMul: return "muls";
+        case Opcode::ScalarFloatDiv: return "divs";
+        case Opcode::ScalarFloatFENCEBegin:
+        case Opcode::ScalarFloatFENCEEnd:
+            LCC_UNREACHABLE();
     }
     LCC_UNREACHABLE();
 }

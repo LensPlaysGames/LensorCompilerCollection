@@ -661,7 +661,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                 MInst::Kind::Copy,
                                                 {+cconv::msx64::float_regs.at(usz(arg_i)),
                                                  x86_64::GeneralPurposeBitwidth,
-                                                 register_category}
+                                                 Register::Category::FLOAT}
                                             );
                                             copy.location(call_ir->location());
                                             copy.add_operand(MOperandValueReference(function, f, arg));
@@ -789,22 +789,24 @@ auto Module::mir() -> std::vector<MFunction> {
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
                                     auto param_info = param_desc.info.at(usz(arg_i));
                                     switch (param_info.kind()) {
-                                        case cconv::sysv::ParameterDescription::Parameter::Kinds::Memory:
+                                        using ParamKind = cconv::sysv::ParameterDescription::Parameter::Kinds;
+                                        case ParamKind::Memory:
                                             break;
 
-                                        case cconv::sysv::ParameterDescription::Parameter::Kinds::Scalar: {
-                                            // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
+                                        case ParamKind::Scalar: {
+                                            // TODO: May have to quantize arg->type()->bits() to 32, 64
                                             auto copy = MInst(
                                                 MInst::Kind::Copy,
                                                 {+cconv::sysv::scalar_regs.at(param_info.arg_scalars_used),
-                                                 uint(arg->type()->bits())}
+                                                 uint(arg->type()->bits()),
+                                                 Register::Category::FLOAT}
                                             );
                                             copy.location(call_ir->location());
                                             copy.add_operand(MOperandValueReference(function, f, arg));
                                             bb.add_instruction(copy);
                                         } break;
 
-                                        case cconv::sysv::ParameterDescription::Parameter::Kinds::SingleRegister: {
+                                        case ParamKind::SingleRegister: {
                                             // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
                                             auto copy = MInst(
                                                 MInst::Kind::Copy,
@@ -815,7 +817,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                             copy.add_operand(MOperandValueReference(function, f, arg));
                                             bb.add_instruction(copy);
                                         } break;
-                                        case cconv::sysv::ParameterDescription::Parameter::Kinds::DoubleRegister: {
+                                        case ParamKind::DoubleRegister: {
                                             auto load_a = MInst(
                                                 MInst::Kind::Load,
                                                 {

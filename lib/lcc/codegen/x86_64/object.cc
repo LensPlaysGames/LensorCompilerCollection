@@ -1083,8 +1083,17 @@ static void assemble_inst(
         case Opcode::SignedDivide:
         case Opcode::UnsignedDivide:
         case Opcode::Xor:
+        case Opcode::ScalarFloatMove:
+        case Opcode::ScalarFloatMoveDereferenceLHS:
+        case Opcode::ScalarFloatMoveDereferenceRHS:
+        case Opcode::ScalarFloatAdd:
+        case Opcode::ScalarFloatSub:
+        case Opcode::ScalarFloatMul:
+        case Opcode::ScalarFloatDiv:
             LCC_TODO("Assemble {}\n", PrintMInstImpl(inst, opcode_to_string));
 
+        case Opcode::ScalarFloatFENCEBegin:
+        case Opcode::ScalarFloatFENCEEnd:
         case Opcode::Poison: LCC_UNREACHABLE();
     }
 }

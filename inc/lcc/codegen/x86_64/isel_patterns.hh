@@ -332,7 +332,11 @@ using sdiv_imm_imm = Pattern<
 
 using sdiv_reg_reg = Pattern<
     InstList<
-        Inst<Clobbers<>, usz(MKind::SDiv), Register<>, Register<>>>,
+        Inst<
+            Clobbers<>,
+            usz(MKind::SDiv),
+            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
+            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
@@ -342,7 +346,11 @@ using sdiv_reg_reg = Pattern<
 
 using sdiv_reg_imm = Pattern<
     InstList<
-        Inst<Clobbers<>, usz(MKind::SDiv), Register<>, Immediate<>>>,
+        Inst<
+            Clobbers<>,
+            usz(MKind::SDiv),
+            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
+            Immediate<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
@@ -351,9 +359,79 @@ using sdiv_reg_imm = Pattern<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
 
 template <usz in, usz op>
+using float_reg_reg = Pattern<
+    InstList<
+        InstOfCategory<
+            usz(+::lcc::Register::Category::FLOAT),
+            Clobbers<>,
+            in,
+            RegisterOfCategory<+::lcc::Register::Category::FLOAT>,
+            RegisterOfCategory<+::lcc::Register::Category::FLOAT>>>,
+    InstList<
+        Inst<Clobbers<>, op, o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMove), o<1>, i<0>>>>;
+
+using float_div_reg_reg = float_reg_reg<usz(MKind::SDiv), usz(Opcode::ScalarFloatDiv)>;
+using float_add_reg_reg = float_reg_reg<usz(MKind::Add), usz(Opcode::ScalarFloatAdd)>;
+using float_sub_reg_reg = float_reg_reg<usz(MKind::Sub), usz(Opcode::ScalarFloatSub)>;
+using float_mul_reg_reg = float_reg_reg<usz(MKind::Mul), usz(Opcode::ScalarFloatMul)>;
+
+using float_store_reg_reg = Pattern<
+    InstList<Inst<
+        Clobbers<>,
+        usz(MKind::Store),
+        RegisterOfCategory<+::lcc::Register::Category::FLOAT>,
+        Register<>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMoveDereferenceRHS), o<0>, o<1>>>>;
+
+using float_store_reg_local = Pattern<
+    InstList<Inst<
+        Clobbers<>,
+        usz(MKind::Store),
+        RegisterOfCategory<+::lcc::Register::Category::FLOAT>,
+        Local<>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMoveDereferenceRHS), o<0>, o<1>>>>;
+
+using float_copy_reg = Pattern<
+    InstList<InstOfCategory<
+        usz(+::lcc::Register::Category::FLOAT),
+        Clobbers<>,
+        usz(MKind::Copy),
+        RegisterOfCategory<+::lcc::Register::Category::FLOAT>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMove), o<0>, i<0>>>>;
+
+using float_load_reg = Pattern<
+    InstList<InstOfCategory<
+        usz(+::lcc::Register::Category::FLOAT),
+        Clobbers<>,
+        usz(MKind::Load),
+        Register<>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMoveDereferenceLHS), o<0>, i<0>>>>;
+
+using float_load_global = Pattern<
+    InstList<InstOfCategory<
+        usz(+::lcc::Register::Category::FLOAT),
+        Clobbers<>,
+        usz(MKind::Load),
+        Global<>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMoveDereferenceLHS), o<0>, i<0>>>>;
+
+using float_load_local = Pattern<
+    InstList<InstOfCategory<
+        usz(+::lcc::Register::Category::FLOAT),
+        Clobbers<>,
+        usz(MKind::Load),
+        Local<>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMoveDereferenceLHS), o<0>, i<0>>>>;
+
+template <usz in, usz op>
 using rem_reg_reg = Pattern<
     InstList<
-        Inst<Clobbers<>, in, Register<>, Register<>>>,
+        Inst<
+            Clobbers<>,
+            in,
+            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
+            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
@@ -367,7 +445,11 @@ using urem_reg_reg = rem_reg_reg<usz(MKind::URem), usz(x86_64::Opcode::UnsignedD
 template <usz in, usz op>
 using rem_reg_imm = Pattern<
     InstList<
-        Inst<Clobbers<>, in, Register<>, Immediate<>>>,
+        Inst<
+            Clobbers<>,
+            in,
+            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
+            Immediate<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
@@ -579,6 +661,17 @@ using AllPatterns = PatternList<
 
     urem_reg_reg,
     urem_reg_imm,
+
+    float_add_reg_reg,
+    float_copy_reg,
+    float_div_reg_reg,
+    float_load_global,
+    float_load_local,
+    float_load_reg,
+    float_mul_reg_reg,
+    float_store_reg_local,
+    float_store_reg_reg,
+    float_sub_reg_reg,
 
     bitcast_imm,
 

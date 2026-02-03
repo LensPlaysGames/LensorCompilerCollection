@@ -967,17 +967,16 @@ auto allocate_registers(
 
                 result_register = inst.reg();
 
-                fmt::print(
-                    "Preserving volatile registers across `{}`\n",
-                    PrintMInst(inst)
-                );
+                // fmt::print(
+                //     "Preserving volatile registers across `{}`\n",
+                //     PrintMInst(inst)
+                // );
             }
 
             // TODO: What we should have is a snapshot of the live values at the exit
             // of this instruction's execution. If a volatile register was live before
             // but isn't after, there's no need to preserve it.
             for (auto r : function.registers_used()) {
-                fmt::print("    used: {}\n", r);
                 // If this happens to be a volatile register...
                 auto interfering_is_volatile = rgs::contains(
                     desc.volatile_registers,
@@ -994,12 +993,6 @@ auto allocate_registers(
 
                 // Skip result register (otherwise we'd clobber our function result out of
                 // existence).
-                fmt::print(
-                    "(used: {} == reg(): {}): {}\n",
-                    r,
-                    result_register,
-                    r == result_register
-                );
                 if (r == result_register)
                     continue;
 

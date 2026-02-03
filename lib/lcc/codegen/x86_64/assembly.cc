@@ -364,9 +364,14 @@ void emit_gnu_att_assembly(
                         instruction.all_operands().at(1)
                     );
                     LCC_ASSERT(r.size % 8 == 0, "Invalid spilled register size");
+                    auto mnemonic = std::string(ToString(Opcode(+x86_64::Opcode::MoveDereferenceRHS)));
+                    // Append "sd" to mnemonic if saving scalar
+                    // FIXME: is_scalar()
+                    if (r.value >= +x86_64::RegisterId::XMM0)
+                        mnemonic += "sd";
                     out += fmt::format(
                         "    {} {}, -{}(%rbp)\n",
-                        ToString(Opcode(+x86_64::Opcode::MoveDereferenceRHS)),
+                        mnemonic,
                         ToString(function, r),
                         spill_offsets.at(i.value)
                     );
@@ -380,9 +385,15 @@ void emit_gnu_att_assembly(
                     auto i = std::get<MOperandImmediate>(
                         instruction.all_operands().at(0)
                     );
+                    // Append "sd" to mnemonic if saving scalar
+                    // FIXME: is_scalar()
+                    auto mnemonic = std::string(ToString(Opcode(+x86_64::Opcode::MoveDereferenceLHS)));
+                    if (instruction.reg() >= +x86_64::RegisterId::XMM0)
+                        mnemonic += "sd";
+
                     out += fmt::format(
                         "    {} -{}(%rbp), {}\n",
-                        ToString(Opcode(+x86_64::Opcode::MoveDereferenceLHS)),
+                        mnemonic,
                         spill_offsets.at(i.value),
                         ToString(
                             function,
@@ -475,10 +486,62 @@ void emit_gnu_att_assembly(
                 out += ToString(Opcode(instruction.opcode()));
 
                 // ================================
+                // CUSTOM INSTRUCTION SUFFIX HANDLING
+                // ================================
+                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS) {
+                    auto lhs = instruction.get_operand(0);
+                    auto rhs = instruction.get_operand(1);
+                    if (
+                        std::holds_alternative<MOperandImmediate>(lhs)
+                        and std::holds_alternative<MOperandLocal>(rhs)
+                    ) {
+                        // Moving immediate into local (memory) requires mov suffix in GNU.
+
+                        // We use size of immediate to determine how big of a move to do.
+                        auto bitwidth = std::get<MOperandImmediate>(lhs).size;
+                        switch (bitwidth) {
+                            default: LCC_ASSERT(false, "Invalid move (bitwidth {})", bitwidth);
+
+                            case 64: out += 'q'; break;
+                            case 32: out += 'l'; break;
+                            case 16: out += 'w'; break;
+                            case 1:
+                            case 8: out += 'b'; break;
+                        }
+                    }
+                }
+
+                // FLOAT: "ss" or "sd" suffix
+                else if (
+                    (instruction.opcode() > +x86_64::Opcode::ScalarFloatFENCEBegin
+                     and instruction.opcode() < +x86_64::Opcode::ScalarFloatFENCEEnd)
+                    and instruction.all_operands().size() == 2
+                ) {
+                    auto lhs = instruction.get_operand(0);
+                    auto rhs = instruction.get_operand(1);
+                    if (operand_is_float(lhs) or operand_is_float(rhs)) {
+                        usz bitwidth = 0;
+                        if (operand_is_float(lhs))
+                            bitwidth = std::get<MOperandRegister>(lhs).size;
+                        else bitwidth = std::get<MOperandRegister>(rhs).size;
+                        LCC_ASSERT(bitwidth);
+                        switch (bitwidth) {
+                            default:
+                                Diag::ICE(
+                                    "Float bitwidths must be 64 or 32 on x86_64..."
+                                );
+                            case 64: out += 'd'; break;
+                            case 32: out += 's'; break;
+                        }
+                    }
+                }
+
+                // ================================
                 // CUSTOM OPERAND HANDLING (dereference register operand on rhs of move)
                 // ================================
                 if (
-                    instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS
+                    (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS
+                     or instruction.opcode() == +x86_64::Opcode::ScalarFloatMoveDereferenceRHS)
                     and std::holds_alternative<MOperandRegister>(instruction.get_operand(1))
                 ) {
                     auto lhs = instruction.get_operand(0);
@@ -510,11 +573,13 @@ void emit_gnu_att_assembly(
                     }
                     continue;
                 }
+
                 // ================================
                 // CUSTOM OPERAND HANDLING (dereference register operand on lhs of move)
                 // ================================
                 if (
-                    instruction.opcode() == +x86_64::Opcode::MoveDereferenceLHS
+                    (instruction.opcode() == +x86_64::Opcode::MoveDereferenceLHS
+                     or instruction.opcode() == +x86_64::Opcode::ScalarFloatMoveDereferenceLHS)
                     and std::holds_alternative<MOperandRegister>(instruction.get_operand(0))
                 ) {
                     auto lhs = instruction.get_operand(0);
@@ -532,89 +597,6 @@ void emit_gnu_att_assembly(
                         out += fmt::format(" {}({}), {}\n", offset, ToString(function, lhs), ToString(function, rhs));
                     else out += fmt::format(" ({}), {}\n", ToString(function, lhs), ToString(function, rhs));
                     continue;
-                }
-
-                // ================================
-                // CUSTOM INSTRUCTION SUFFIX HANDLING
-                // ================================
-                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS) {
-                    auto lhs = instruction.get_operand(0);
-                    auto rhs = instruction.get_operand(1);
-                    if (
-                        std::holds_alternative<MOperandImmediate>(lhs)
-                        and std::holds_alternative<MOperandLocal>(rhs)
-                    ) {
-                        // Moving immediate into local (memory) requires mov suffix in GNU.
-
-                        // We use size of immediate to determine how big of a move to do.
-                        auto bitwidth = std::get<MOperandImmediate>(lhs).size;
-                        switch (bitwidth) {
-                            default: LCC_ASSERT(false, "Invalid move (bitwidth {})", bitwidth);
-
-                            case 64: out += 'q'; break;
-                            case 32: out += 'l'; break;
-                            case 16: out += 'w'; break;
-                            case 1:
-                            case 8: out += 'b'; break;
-                        }
-                    }
-                }
-
-                // FLOAT: Move between floats uses movss or movsd
-                if (
-                    instruction.opcode() == +x86_64::Opcode::Move
-                    or instruction.opcode() == +x86_64::Opcode::MoveDereferenceLHS
-                    or instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS
-                ) {
-                    auto lhs = instruction.get_operand(0);
-                    auto rhs = instruction.get_operand(1);
-                    if (
-                        instruction.regcategory() == +Register::Category::FLOAT
-                        or operand_is_float(lhs) or operand_is_float(rhs)
-                    ) {
-                        usz bitwidth = 0;
-                        if (operand_is_float(lhs))
-                            bitwidth = std::get<MOperandRegister>(lhs).size;
-                        else if (operand_is_float(lhs))
-                            bitwidth = std::get<MOperandRegister>(rhs).size;
-                        else bitwidth = instruction.regsize();
-                        LCC_ASSERT(bitwidth);
-                        switch (bitwidth) {
-                            default:
-                                Diag::ICE(
-                                    "Float bitwidths must be 64 or 32 on x86_64..."
-                                );
-                            case 64: out += "sd"; break;
-                            case 32: out += "ss"; break;
-                        }
-                    }
-                }
-
-                // FLOAT: Basic "ss" or "sd" suffix
-                if (
-                    (instruction.opcode() == +x86_64::Opcode::Add
-                     or instruction.opcode() == +x86_64::Opcode::Sub
-                     or instruction.opcode() == +x86_64::Opcode::Multiply
-                     or instruction.opcode() == +x86_64::Opcode::SignedDivide)
-                    and instruction.all_operands().size() == 2
-                ) {
-                    auto lhs = instruction.get_operand(0);
-                    auto rhs = instruction.get_operand(1);
-                    if (operand_is_float(lhs) or operand_is_float(rhs)) {
-                        usz bitwidth = 0;
-                        if (operand_is_float(lhs))
-                            bitwidth = std::get<MOperandRegister>(lhs).size;
-                        else bitwidth = std::get<MOperandRegister>(rhs).size;
-                        LCC_ASSERT(bitwidth);
-                        switch (bitwidth) {
-                            default:
-                                Diag::ICE(
-                                    "Float bitwidths must be 64 or 32 on x86_64..."
-                                );
-                            case 64: out += "sd"; break;
-                            case 32: out += "ss"; break;
-                        }
-                    }
                 }
 
                 // ================================

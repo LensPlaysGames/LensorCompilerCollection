@@ -24,8 +24,8 @@ struct Register {
     // proper "pool" of registers. Really, if register category doesn't match,
     // the registers interfere (other than when unspecified).
     enum class Category : usz {
-        UNSPECIFIED,
-        DEFAULT = UNSPECIFIED,
+        DEFAULT,
+        UNSPECIFIED = DEFAULT,
         FLOAT,
 
         COUNT

@@ -38,6 +38,8 @@ enum struct OperandKind {
     Sizeof,
 
     Register,
+    // Generally used for specifying in the input pattern.
+    RegisterOfCategory,
     // For use in the output of patterns when a temporary register is needed.
     NewVirtual,
     // References an input register operand but changes the size.
@@ -97,7 +99,21 @@ struct Register {
     using sz = _size;
     using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Register;
-    static constexpr i64 immediate = 0;
+    static constexpr i64 immediate = +::lcc::Register::Category::UNSPECIFIED;
+    static constexpr usz index = 0;
+    static constexpr usz value = val;
+    static constexpr usz size = 0;
+    static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
+};
+
+template <usz register_category, usz val = 0, typename _size = Immediate<>>
+struct RegisterOfCategory {
+    using sz = _size;
+    using offset = Immediate<>;
+    static constexpr OperandKind kind = OperandKind::RegisterOfCategory;
+    static constexpr i64 immediate = register_category;
     static constexpr usz index = 0;
     static constexpr usz value = val;
     static constexpr usz size = 0;
@@ -261,11 +277,15 @@ struct r {
 
 template <typename clobbers_, usz opcode_, typename... operands>
 struct Inst {
+public:
     using clobbers = clobbers_;
 
     static constexpr usz opcode = opcode_;
 
     static constexpr usz operand_count = sizeof...(operands);
+
+    static constexpr usz output_register_category
+        = +::lcc::Register::Category::DEFAULT;
 
     static constexpr void foreach_operand(auto&& lambda) {
         (lambda.template operator()<operands>(), ...);
@@ -321,6 +341,7 @@ struct Inst {
                 return MOperandImmediate((usz) size);
             }
 
+            case OperandKind::RegisterOfCategory:
             case OperandKind::Register: {
                 uint size{};
                 switch (operand::sz::kind) {
@@ -343,8 +364,13 @@ struct Inst {
                     size != 0,
                     "Zero-sized register is not allowed!"
                 );
-                return MOperandRegister(operand::value, size);
-            }
+
+                return MOperandRegister(
+                    operand::value,
+                    size,
+                    (::lcc::Register::Category) operand::immediate
+                );
+            } break;
 
             case OperandKind::ResizedRegister: {
                 auto op_result = input_operand_by_index(operand::index);
@@ -495,6 +521,11 @@ struct Inst {
     }
 };
 
+template <usz category_, typename clobbers_, usz opcode_, typename... operands>
+struct InstOfCategory : public Inst<clobbers_, opcode_, operands...> {
+    static constexpr usz output_register_category = category_;
+};
+
 template <typename... instructions>
 struct InstList {
     static constexpr usz size() {
@@ -557,6 +588,11 @@ struct PatternList {
                     instructions.push_back(old_block.instructions().data() + instructions_handled);
                 }
 
+                // fmt::print("Looking at instruction window:\n");
+                // for (auto inst : instructions) {
+                //     fmt::print("    {}\n", PrintMInst(*inst));
+                // }
+
                 bool to_be_handled = true;
                 While<Patterns...>(to_be_handled, [&]<typename pattern>() {
                     // If the input pattern is longer than the current amount of instructions,
@@ -580,6 +616,11 @@ struct PatternList {
                             return;
                         }
 
+                        if (instruction->regcategory() != inst::output_register_category) {
+                            pattern_matches = false;
+                            return;
+                        }
+
                         // Ensure operand amount and kinds match the input pattern.
                         bool operands_match = false;
                         if (inst::operand_count == instruction->all_operands().size()) {
@@ -598,7 +639,10 @@ struct PatternList {
                                 if (std::holds_alternative<MOperandImmediate>(operand)) {
                                     operands_match = op::kind == OperandKind::Immediate;
                                 } else if (std::holds_alternative<MOperandRegister>(operand)) {
-                                    operands_match = op::kind == OperandKind::Register;
+                                    auto r = std::get<MOperandRegister>(operand);
+                                    operands_match = (op::kind == OperandKind::Register
+                                                      or op::kind == OperandKind::RegisterOfCategory)
+                                                 and op::immediate == +r.category;
                                 } else if (std::holds_alternative<MOperandLocal>(operand)) {
                                     operands_match = op::kind == OperandKind::Local;
                                 } else if (std::holds_alternative<MOperandGlobal>(operand)) {
