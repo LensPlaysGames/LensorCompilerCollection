@@ -2138,13 +2138,13 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             }
 
             case K::FractionalLiteral: {
-                auto* i = as<lcc::glint::IntegerLiteral>(e);
+                auto* f = as<lcc::glint::FractionalLiteral>(e);
                 PrintBasicHeader("FractionalLiteral", e);
                 out += fmt::format(
                     " {}{} {}\n",
                     C(key_detail_colour),
-                    i->value(),
-                    i->type()->string(use_colour)
+                    f->value(),
+                    f->type()->string(use_colour)
                 );
                 return;
             }
