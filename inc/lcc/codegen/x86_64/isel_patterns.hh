@@ -435,6 +435,19 @@ using float_load_local = Pattern<
         Local<>>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMoveDereferenceLHS), o<0>, i<0>>>>;
 
+using float_ret_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Return), RegisterOfCategory<+::lcc::Register::Category::FLOAT>>>,
+    InstList<
+        Inst<
+            Clobbers<c<1>>,
+            usz(Opcode::ScalarFloatMove),
+            o<0>,
+            RegisterOfCategory<
+                +::lcc::Register::Category::FLOAT,
+                usz(RegId::RETURN),
+                Sizeof<0>>>,
+        Inst<Clobbers<>, usz(Opcode::Return)>>>;
+
 template <usz in, usz op>
 using rem_reg_reg = Pattern<
     InstList<
@@ -680,6 +693,7 @@ using AllPatterns = PatternList<
     float_load_local,
     float_load_reg,
     float_mul_reg_reg,
+    float_ret_reg,
     float_store_reg_local,
     float_store_reg_reg,
     float_sub_reg_reg,
