@@ -263,6 +263,11 @@ void emit_gnu_att_assembly(
             std::plus{}
         );
 
+        if (stack_frame_size) {
+            constexpr usz alignment = 16;
+            stack_frame_size = utils::AlignTo(stack_frame_size, alignment);
+        }
+
         // Sum spilled registers' sizes, keeping track of their frame offsets.
         std::unordered_map<usz, usz> spill_offsets{};
         std::unordered_map<usz, MOperandRegister> spill_id_to_register{};
@@ -275,6 +280,11 @@ void emit_gnu_att_assembly(
                     auto i = std::get<MOperandImmediate>(
                         instruction.all_operands().at(1)
                     );
+
+                    // Unique spills only
+                    if (spill_offsets.contains(i.value))
+                        continue;
+
                     LCC_ASSERT(
                         r.size % 8 == 0,
                         "Invalid spilled register size"
@@ -330,7 +340,8 @@ void emit_gnu_att_assembly(
                 // moves between the same register, effectively doing nothing.
                 // Since these instructions do nothing, we just don't emit them.
                 if (
-                    instruction.opcode() == +x86_64::Opcode::Move
+                    (instruction.opcode() == +x86_64::Opcode::Move
+                     or instruction.opcode() == +x86_64::Opcode::ScalarFloatMove)
                     and is_reg_reg(instruction)
                 ) {
                     auto [lhs, rhs] = extract_reg_reg(instruction);

@@ -371,7 +371,18 @@ using float_reg_reg = Pattern<
         Inst<Clobbers<>, op, o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMove), o<1>, i<0>>>>;
 
-using float_div_reg_reg = float_reg_reg<usz(MKind::SDiv), usz(Opcode::ScalarFloatDiv)>;
+using float_div_reg_reg = Pattern<
+    InstList<
+        InstOfCategory<
+            usz(+::lcc::Register::Category::FLOAT),
+            Clobbers<>,
+            usz(MKind::SDiv),
+            RegisterOfCategory<+::lcc::Register::Category::FLOAT>,
+            RegisterOfCategory<+::lcc::Register::Category::FLOAT>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatDiv), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMove), o<0>, i<0>>>>;
+
 using float_add_reg_reg = float_reg_reg<usz(MKind::Add), usz(Opcode::ScalarFloatAdd)>;
 using float_sub_reg_reg = float_reg_reg<usz(MKind::Sub), usz(Opcode::ScalarFloatSub)>;
 using float_mul_reg_reg = float_reg_reg<usz(MKind::Mul), usz(Opcode::ScalarFloatMul)>;
