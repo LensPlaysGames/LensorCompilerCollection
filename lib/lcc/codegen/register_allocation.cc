@@ -455,15 +455,27 @@ auto allocate_registers(
     // register according to the current calling convention"; this avoids
     // having to write different instruction selection patterns for every
     // single calling convention.
+    const auto return_register_by_category = [&](usz category) {
+        for (auto regcategory : desc.return_registers) {
+            if (regcategory.category == category)
+                return regcategory.registers.at(0);
+        }
+        fmt::print(
+            stderr,
+            "Could not find return register for category {}\n",
+            +category
+        );
+        LCC_UNREACHABLE();
+    };
     for (auto& block : function.blocks()) {
         for (auto& inst : block.instructions()) {
             if (inst.reg() == desc.return_register_to_replace)
-                inst.reg(desc.return_register);
+                inst.reg(return_register_by_category(inst.regcategory()));
             for (auto& op : inst.all_operands()) {
                 if (std::holds_alternative<MOperandRegister>(op)) {
                     MOperandRegister reg = std::get<MOperandRegister>(op);
                     if (reg.value == desc.return_register_to_replace) {
-                        reg.value = desc.return_register;
+                        reg.value = return_register_by_category(+reg.category);
                         op = reg;
                     }
                 }

@@ -2,8 +2,6 @@
 
 * LCC
 
-- [Register Allocation]: Fixup return register handling
-  It's currently hard-coded pretty much to use an integer register. We need to make the psuedo-return register also take register category into account.
 - [Context]: Rename =frontend_options=
   They could be used by backends as well super easily, and it'd be convenient.
   Maybe just =has_option= and =set_option=?
@@ -12,6 +10,11 @@
   We could also re-use the IR against IR matching code for LangTest's IR facilities.
 - [MIRTest]: MIR -> MIR testing facility
   This will allow us to test register allocation, instruction selection, among other things.
+- [Test Coverage]: floats
+  - Glint float lexing/parsing
+  - LCC IR float lexing/parsing
+  - float return value register allocation
+  - float parameter register allocation
 - [Meta]: Move IR optimisations to their own library
   I want =libopt= to be a library LCC uses that operates on LCC IR; that way, other programs may be able to re-use the optimisations if they choose to target LCC IR (without having to use our driver).
 - [Meta]: Move LCC IR to it's own library (in it's own folder under =lib/=)

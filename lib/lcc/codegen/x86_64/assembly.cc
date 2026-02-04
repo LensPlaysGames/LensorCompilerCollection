@@ -631,15 +631,31 @@ void emit_gnu_att_assembly(
                 // ================================
                 // INSTRUCTION EPILOGUE (some insts have instructions following)
                 // ================================
+                const auto return_register_by_category = [&](usz category) {
+                    for (auto regcategory : desc.return_registers) {
+                        if (regcategory.category == category)
+                            return regcategory.registers.at(0);
+                    }
+                    fmt::print(
+                        stderr,
+                        "Could not find return register for category {}\n",
+                        +category
+                    );
+                    LCC_UNREACHABLE();
+                };
+
                 if (instruction.opcode() == +x86_64::Opcode::Call) {
                     // Move return value from return register to result register, if necessary.
                     if (
                         instruction.use_count() and instruction.reg()
-                        and instruction.reg() != desc.return_register
+                        and instruction.reg() != return_register_by_category(instruction.regcategory())
                     ) {
                         out += fmt::format(
                             "    mov %{}, %{}\n",
-                            ToString(x86_64::RegisterId(desc.return_register), instruction.regsize()),
+                            ToString(
+                                x86_64::RegisterId(return_register_by_category(instruction.regcategory())),
+                                instruction.regsize()
+                            ),
                             ToString(x86_64::RegisterId(instruction.reg()), instruction.regsize())
                         );
                     }

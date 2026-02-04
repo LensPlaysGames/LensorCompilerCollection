@@ -18,7 +18,7 @@ struct MachineDescription {
     // Replace occurences of "return register to replace" with given "return
     // register". This means ISel doesn't have to write different patterns per
     // calling convention.
-    usz return_register{};
+    std::vector<RegistersPerCategory> return_registers{};
     usz return_register_to_replace{};
 
     std::vector<RegistersPerCategory> registers{};

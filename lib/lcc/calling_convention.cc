@@ -20,7 +20,12 @@ auto machine_description(Context* context) -> MachineDescription {
         std::vector<usz> scalar_registers{};
         std::vector<usz> volatile_registers{};
         if (context->target()->is_cconv_ms()) {
-            desc.return_register = +cconv::msx64::return_register;
+            desc.return_registers.emplace_back(
+                MachineDescription::RegistersPerCategory{
+                    +Register::Category::DEFAULT,
+                    {+x86_64::RegisterId::RAX}
+                }
+            );
             // Just the volatile registers
             rgs::transform(
                 cconv::msx64::volatile_regs,
@@ -46,7 +51,18 @@ auto machine_description(Context* context) -> MachineDescription {
                 [](auto r) { return lcc::operator+(r); }
             );
         } else if (context->target()->is_cconv_sysv()) {
-            desc.return_register = +cconv::sysv::return_register;
+            desc.return_registers.emplace_back(
+                MachineDescription::RegistersPerCategory{
+                    +Register::Category::DEFAULT,
+                    {+x86_64::RegisterId::RAX, +x86_64::RegisterId::RDX}
+                }
+            );
+            desc.return_registers.emplace_back(
+                MachineDescription::RegistersPerCategory{
+                    +Register::Category::FLOAT,
+                    {+x86_64::RegisterId::XMM0}
+                }
+            );
             // Just the volatile registers
             rgs::transform(
                 cconv::sysv::volatile_regs,
