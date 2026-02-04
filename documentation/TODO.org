@@ -45,6 +45,8 @@
 
 * Glint
 
+- [Control Flow]: =continue=, =break=
+  Possibly even named loops and the ability to break/continue from specific ones from nested loops...
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
 - [Cereal]: Flesh out binary AST format
 - [Parser/Sema]: Switch on value

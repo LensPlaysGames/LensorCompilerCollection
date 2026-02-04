@@ -84,6 +84,13 @@ See 'treesit-simple-indent-presets' for more info."
      ) ;; rule-end
 
     ( ;; rule-begin
+     ;; CALL EXPRESSION CAUSES INDENT (for arguments, basically).
+     (or (parent-is "call")) ;; matcher
+     parent-bol ;; anchor
+     glint-ts-mode-indent-offset ;; offset
+     ) ;; rule-end
+
+    ( ;; rule-begin
      ;; CFOR KEYWORD CAUSES DOUBLE INDENT FOR INIT, CONDITION, INCREMENT
      (and (parent-is "cfor") (not (field-is "body")))
      standalone-parent ;; anchor
