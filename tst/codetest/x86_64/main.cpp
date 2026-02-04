@@ -1,7 +1,6 @@
 #include <fmt/format.h>
 
-#include <lcc/calling_conventions/ms_x64.hh>
-#include <lcc/calling_conventions/sysv_x86_64.hh>
+#include <lcc/calling_convention.hh>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
@@ -314,59 +313,7 @@ bool run_test(
     // Register Allocation
     // lMIR -> lMIR
     {
-        lcc::MachineDescription desc{};
-        if (ctx.target()->is_arch_x86_64()) {
-            desc.return_register_to_replace = lcc::operator+(
-                lcc::x86_64::RegisterId::RETURN
-            );
-            std::vector<lcc::usz> jeep_registers{};
-            std::vector<lcc::usz> scalar_registers{};
-            if (ctx.target()->is_cconv_ms()) {
-                desc.return_register = lcc::operator+(
-                    lcc::cconv::msx64::return_register
-                );
-                // Just the volatile registers
-                lcc::rgs::transform(
-                    lcc::cconv::msx64::volatile_regs,
-                    std::back_inserter(jeep_registers),
-                    [](auto r) { return lcc::operator+(r); }
-                );
-                lcc::rgs::transform(
-                    lcc::cconv::msx64::volatile_float_regs,
-                    std::back_inserter(scalar_registers),
-                    [](auto r) { return lcc::operator+(r); }
-                );
-            } else {
-                desc.return_register = lcc::operator+(
-                    lcc::cconv::sysv::return_register
-                );
-                // Just the volatile registers
-                lcc::rgs::transform(
-                    lcc::cconv::sysv::volatile_regs,
-                    std::back_inserter(jeep_registers),
-                    [](auto r) { return lcc::operator+(r); }
-                );
-                lcc::rgs::transform(
-                    lcc::cconv::sysv::scalar_regs,
-                    std::back_inserter(scalar_registers),
-                    [](auto r) { return lcc::operator+(r); }
-                );
-            }
-            LCC_ASSERT(
-                jeep_registers.size(),
-                "Must populate general purpose register list"
-            );
-            desc.registers.emplace_back(
-                +lcc::Register::Category::DEFAULT,
-                jeep_registers
-            );
-            desc.registers.emplace_back(
-                +lcc::Register::Category::FLOAT,
-                scalar_registers
-            );
-
-        } else lcc::Diag::ICE("Sorry, unhandled target architecture");
-
+        lcc::MachineDescription desc = lcc::cconv::machine_description(&ctx);
         for (auto& mfunc : machine_ir) {
             if (not allocate_registers(desc, mfunc))
                 return false;
@@ -596,6 +543,20 @@ MIRInstructionMatcher parse_instruction_matcher(
         out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfGreaterUnsigned);
     else if (instruction_opcode == "setg")
         out.opcode = lcc::operator+(lcc::x86_64::Opcode::SetByteIfGreaterSigned);
+    else if (instruction_opcode == "movss" or instruction_opcode == "movsd")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::ScalarFloatMove);
+    else if (instruction_opcode == "movss.dereflhs" or instruction_opcode == "movsd.dereflhs")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::ScalarFloatMoveDereferenceLHS);
+    else if (instruction_opcode == "movss.derefrhs" or instruction_opcode == "movsd.derefrhs")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::ScalarFloatMoveDereferenceRHS);
+    else if (instruction_opcode == "addss" or instruction_opcode == "addsd")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::ScalarFloatAdd);
+    else if (instruction_opcode == "subss" or instruction_opcode == "subsd")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::ScalarFloatSub);
+    else if (instruction_opcode == "mulss" or instruction_opcode == "mulsd")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::ScalarFloatMul);
+    else if (instruction_opcode == "divss" or instruction_opcode == "divsd")
+        out.opcode = lcc::operator+(lcc::x86_64::Opcode::ScalarFloatDiv);
     else {
         fmt::print(
             "ERROR! Parsed invalid instruction opcode {}",

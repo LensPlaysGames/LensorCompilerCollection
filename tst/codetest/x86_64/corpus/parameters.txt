@@ -42,8 +42,8 @@ func (internal): glintcc void(f32 %0):
 
 func:
   bb0:
-    mov.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 
@@ -51,8 +51,8 @@ memcpy:
 
 func:
   bb0:
-    mov.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 
@@ -76,8 +76,8 @@ func:
   bb0:
     mov.derefrhs rdi.32 local(0)+0 {CLOBBERS: op.1}
     mov.dereflhs local(0)+0 rax.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm0.32 local(1)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm0.32 local(1)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 
@@ -87,8 +87,8 @@ func:
   bb0:
     mov.derefrhs rcx.64 local(abs)+16
     mov.dereflhs local(abs)+16 rax.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm1.32 local(0)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm1.32 local(0)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 
@@ -110,10 +110,10 @@ func (internal): glintcc void(f32 %0, f32 %1):
 
 func:
   bb0:
-    mov.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 
@@ -121,10 +121,10 @@ memcpy:
 
 func:
   bb0:
-    mov.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 
@@ -185,12 +185,12 @@ func (internal): glintcc void(f32 %0, f32 %1, f32 %2):
 
 func:
   bb0:
-    mov.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm2.32 local(2)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(2)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm2.32 local(2)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(2)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 
@@ -198,12 +198,12 @@ memcpy:
 
 func:
   bb0:
-    mov.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm2.32 local(2)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(2)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm2.32 local(2)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(2)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 
@@ -275,14 +275,14 @@ func (internal): glintcc void(f32 %0, f32 %1, f32 %2, f32 %3):
 
 func:
   bb0:
-    mov.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm2.32 local(2)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(2)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm3.32 local(3)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(3)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm2.32 local(2)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(2)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm3.32 local(3)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(3)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 
@@ -290,14 +290,14 @@ memcpy:
 
 func:
   bb0:
-    mov.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm2.32 local(2)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(2)+0 xmm0.32 {CLOBBERS: op.1}
-    mov.derefrhs xmm3.32 local(3)+0 {CLOBBERS: op.1}
-    mov.dereflhs local(3)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm0.32 local(0)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(0)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm1.32 local(1)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(1)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm2.32 local(2)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(2)+0 xmm0.32 {CLOBBERS: op.1}
+    movss.derefrhs xmm3.32 local(3)+0 {CLOBBERS: op.1}
+    movss.dereflhs local(3)+0 xmm0.32 {CLOBBERS: op.1}
     ret
 memcpy:
 
