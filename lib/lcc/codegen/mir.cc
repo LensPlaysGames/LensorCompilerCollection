@@ -55,7 +55,7 @@ auto PrintMOperand(const MOperand& op) -> std::string {
 auto MInstOpcodeToString(usz opcode) -> std::string {
     return opcode < +MInst::Kind::ArchStart
              ? ToString(static_cast<MInst::Kind>(opcode))
-             : fmt::format("{}", opcode);
+             : fmt::format("code.{}", opcode);
 }
 
 [[nodiscard]]
@@ -77,8 +77,9 @@ auto PrintMInstImpl(const MInst& inst, auto&& inst_opcode) -> std::string {
             fmt::join(vws::transform(inst.all_operands(), PrintMOperand), " ")
         );
 
+    // FIXME: lmao
     return fmt::format(
-        "    {}r{}.{}{} | {}{}{}{}",
+        "    {}r{}.{}{} | {}{}{}{}{}{}{}{}{}",
         inst.is_defining() ? "DEF " : "",
         inst.reg(),
         inst.regsize(),
@@ -88,7 +89,20 @@ auto PrintMInstImpl(const MInst& inst, auto&& inst_opcode) -> std::string {
         inst.use_count() or MInst::is_terminator(MInst::Kind(inst.opcode())) ? "" : "Unused ",
         inst_opcode(inst.opcode()),
         inst.all_operands().empty() ? "" : " ",
-        fmt::join(vws::transform(inst.all_operands(), PrintMOperand), " ")
+        fmt::join(vws::transform(inst.all_operands(), PrintMOperand), " "),
+        (inst.operand_clobbers().empty() and inst.register_clobbers().empty()) ? "" : " {CLOBBERS: ",
+        fmt::join(
+            vws::transform(inst.operand_clobbers(), [&](usz operand_index) {
+                return fmt::format("op.{}", operand_index);
+            }),
+            ", "
+        ),
+        inst.register_clobbers().empty() ? "" : ", ",
+        fmt::join(vws::transform(inst.register_clobbers(), [&](usz clobbered_register) {
+                      return fmt::format("r.{}", clobbered_register);
+                  }),
+                  ", "),
+        (inst.operand_clobbers().empty() and inst.register_clobbers().empty()) ? "" : "}"
     );
 }
 
