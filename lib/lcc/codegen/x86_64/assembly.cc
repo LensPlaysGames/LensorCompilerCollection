@@ -25,6 +25,14 @@ namespace lcc::x86_64 {
 
 namespace {
 
+static constexpr auto comment_begin = ";#";
+
+auto comment(std::string_view in) {
+    while (in.ends_with('\n'))
+        in.remove_suffix(1);
+    return fmt::format("{} {}\n", comment_begin, in);
+}
+
 // NOTE: Does not handle empty string (because we want every input of this
 // function to produce the same output)
 auto safe_name(std::string in) -> std::string {
@@ -223,15 +231,17 @@ void emit_gnu_att_assembly(
 
         // READABILITY: Comments to denote locals and their offsets.
         if (function.locals().size()) {
-            out += "# Locals:\n";
+            out += comment("Locals:");
             for (auto [i, l] : vws::enumerate(function.locals())) {
-                out += fmt::format(
-                    "# {}, {}(%rbp): {} ({} size, {} align)\n",
-                    i,
-                    function.local_offset(MOperandLocal{(u32) i, 0}),
-                    l->allocated_type()->string(false),
-                    l->allocated_type()->bytes(),
-                    l->allocated_type()->align_bytes()
+                out += comment(
+                    fmt::format(
+                        "{}, {}(%rbp): {} ({} size, {} align)",
+                        i,
+                        function.local_offset(MOperandLocal{(u32) i, 0}),
+                        l->allocated_type()->string(false),
+                        l->allocated_type()->bytes(),
+                        l->allocated_type()->align_bytes()
+                    )
                 );
             }
         }
@@ -303,17 +313,19 @@ void emit_gnu_att_assembly(
 
         // READABILITY: Comments to denote spilled registers and their offsets.
         if (spill_offsets.size()) {
-            out += "# Spilled Registers:\n";
+            out += comment("Spilled Registers:");
             for (auto [id, offset] : spill_offsets) {
                 if (spill_id_to_register.contains(id)) {
                     auto r = spill_id_to_register.at(id);
-                    out += fmt::format(
-                        "# ID {}, %{}, -{}(%rbp)\n",
-                        id,
-                        ToString((RegisterId) r.value, r.size),
-                        offset
+                    out += comment(
+                        fmt::format(
+                            "ID {}, %{}, -{}(%rbp)",
+                            id,
+                            ToString((RegisterId) r.value, r.size),
+                            offset
+                        )
                     );
-                } else out += fmt::format("# ID {}, -{}(%rbp)\n", id, offset);
+                } else out += comment(fmt::format("ID {}, -{}(%rbp)\n", id, offset));
             }
         }
 
@@ -348,6 +360,7 @@ void emit_gnu_att_assembly(
                     if (lhs.value == rhs.value)
                         continue;
                 }
+
                 // ================================
                 // QUICK PATH OPTIMISATION (simple jump threading)
                 // ================================
@@ -362,6 +375,39 @@ void emit_gnu_att_assembly(
                         continue;
                 }
 
+                // ================================
+                // COPY
+                // ================================
+                if (instruction.opcode() == +MInst::Kind::Copy) {
+                    // Move register operand into result register.
+                    auto& src = std::get<MOperandRegister>(
+                        instruction.all_operands().at(0)
+                    );
+                    LCC_ASSERT(src.size % 8 == 0, "Invalid copied source register size");
+
+                    auto dst = Register{
+                        instruction.reg(),
+                        (uint) instruction.regsize(),
+                        (Register::Category) instruction.regcategory(),
+                        instruction.is_defining()
+                    };
+                    LCC_ASSERT(dst.size % 8 == 0, "Invalid copied destination register size");
+
+                    auto mnemonic = std::string(ToString(Opcode(+x86_64::Opcode::Move)));
+                    if (src.value >= +x86_64::RegisterId::XMM0) {
+                        if (src.size > 32)
+                            mnemonic += "sd";
+                        else mnemonic += "ss";
+                    }
+                    out += fmt::format(
+                        "    {} {}, {}  {} COPY\n",
+                        mnemonic,
+                        ToString(function, src),
+                        ToString(function, dst),
+                        comment_begin
+                    );
+                    continue;
+                }
                 // ================================
                 // SPILL
                 // ================================
@@ -381,10 +427,11 @@ void emit_gnu_att_assembly(
                     if (r.value >= +x86_64::RegisterId::XMM0)
                         mnemonic += "sd";
                     out += fmt::format(
-                        "    {} {}, -{}(%rbp)\n",
+                        "    {} {}, -{}(%rbp)  {} SPILL\n",
                         mnemonic,
                         ToString(function, r),
-                        spill_offsets.at(i.value)
+                        spill_offsets.at(i.value),
+                        comment_begin
                     );
                     continue;
                 }
@@ -403,13 +450,14 @@ void emit_gnu_att_assembly(
                         mnemonic += "sd";
 
                     out += fmt::format(
-                        "    {} -{}(%rbp), {}\n",
+                        "    {} -{}(%rbp), {}  {} UNSPILL\n",
                         mnemonic,
                         spill_offsets.at(i.value),
                         ToString(
                             function,
                             MOperandRegister(instruction.reg(), (uint) instruction.regsize())
-                        )
+                        ),
+                        comment_begin
                     );
                     continue;
                 }
@@ -473,12 +521,15 @@ void emit_gnu_att_assembly(
                     auto loc = instruction.location();
                     if (loc.seekable(module->context()) and not loc.equal_position(last_location)) {
                         auto l = loc.seek_line_column(module->context());
-                        out += fmt::format(
-                            "# FILE {} ({}), LINE {}, COLUMN {}\n",
-                            loc.file_id,
-                            fs::absolute(module->context()->files().at(loc.file_id)->path()).string(),
-                            l.line,
-                            l.col
+                        out += comment(
+                            fmt::format(
+                                "FILE {} ({}), LINE {}, COLUMN {}",
+                                loc.file_id,
+                                fs::absolute(module->context()->files().at(loc.file_id)->path())
+                                    .string(),
+                                l.line,
+                                l.col
+                            )
                         );
                         out += fmt::format(
                             "    .loc {} {} {}\n",
@@ -627,39 +678,6 @@ void emit_gnu_att_assembly(
                     ++i;
                 }
                 out += '\n';
-
-                // ================================
-                // INSTRUCTION EPILOGUE (some insts have instructions following)
-                // ================================
-                const auto return_register_by_category = [&](usz category) {
-                    for (auto regcategory : desc.return_registers) {
-                        if (regcategory.category == category)
-                            return regcategory.registers.at(0);
-                    }
-                    fmt::print(
-                        stderr,
-                        "Could not find return register for category {}\n",
-                        +category
-                    );
-                    LCC_UNREACHABLE();
-                };
-
-                if (instruction.opcode() == +x86_64::Opcode::Call) {
-                    // Move return value from return register to result register, if necessary.
-                    if (
-                        instruction.use_count() and instruction.reg()
-                        and instruction.reg() != return_register_by_category(instruction.regcategory())
-                    ) {
-                        out += fmt::format(
-                            "    mov %{}, %{}\n",
-                            ToString(
-                                x86_64::RegisterId(return_register_by_category(instruction.regcategory())),
-                                instruction.regsize()
-                            ),
-                            ToString(x86_64::RegisterId(instruction.reg()), instruction.regsize())
-                        );
-                    }
-                }
             }
         }
 

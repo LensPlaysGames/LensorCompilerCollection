@@ -17,7 +17,7 @@ using RegId = lcc::x86_64::RegisterId;
 
 using bitcast_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Bitcast), Immediate<>>>,
-    InstList<Inst<Clobbers<>, usz(Opcode::Move), o<0>, i<0>>>>;
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using ret = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Return)>>,
@@ -54,7 +54,7 @@ using load_reg = load_some_op<Register<>>;
 template <typename store_op>
 using store_some_op_local = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Store), store_op, Local<>>>,
-    InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), o<0>, o<1>>>>;
+    InstList<Inst<Clobbers<>, usz(Opcode::MoveDereferenceRHS), o<0>, o<1>>>>;
 
 using store_reg_local = store_some_op_local<Register<>>;
 using store_imm_local = store_some_op_local<Immediate<>>;
@@ -65,8 +65,8 @@ using store_imm_local = store_some_op_local<Immediate<>>;
 using store_local_local = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Store), Local<>, Local<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::MoveDereferenceLHS), o<0>, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), v<0, 1>, o<1>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceLHS), o<0>, v<0, 1>>,
+        Inst<Clobbers<>, usz(Opcode::MoveDereferenceRHS), v<0, 1>, o<1>>>>;
 
 // store immediate 'imm' into register 'r':
 //   mov $imm, %tmp
@@ -74,18 +74,18 @@ using store_local_local = Pattern<
 using store_imm_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Store), Immediate<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), v<0, 0>, o<1>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::MoveDereferenceRHS), v<0, 0>, o<1>>>>;
 
 using store_imm_global = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Store), Immediate<>, Global<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), v<0, 0>, o<1>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::MoveDereferenceRHS), v<0, 0>, o<1>>>>;
 
 using store_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Store), Register<>, Register<>>>,
-    InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), o<0>, o<1>>>>;
+    InstList<Inst<Clobbers<>, usz(Opcode::MoveDereferenceRHS), o<0>, o<1>>>>;
 
 template <typename copy_op>
 using copy_some_op = Pattern<
@@ -106,7 +106,7 @@ using copy_local = copy_mem_op<Local<>>;
 template <typename callee>
 using simple_call = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Call), callee>>,
-    InstList<Inst<Clobbers<>, usz(Opcode::Call), o<0>>>>;
+    InstList<Inst<Clobbers<r<usz(RegId::RETURN)>>, usz(Opcode::Call), o<0>>>>;
 
 using simple_function_call = simple_call<Function<>>;
 
@@ -134,59 +134,59 @@ using not_reg = Pattern<
 using sar_imm_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Sar), Immediate<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), o<1>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightArithmetic), o<1>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using shr_imm_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shr), Immediate<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), o<1>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightLogical), o<1>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using shl_imm_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shl), Immediate<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::ShiftLeft), o<1>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftLeft), o<1>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using sar_imm_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Sar), Immediate<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(RegId::RCX), Immediate<32>>>,
-        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), Register<usz(RegId::RCX), Immediate<8>>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(RegId::RCX), Immediate<32>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightArithmetic), Register<usz(RegId::RCX), Immediate<8>>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using shr_imm_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shr), Immediate<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(RegId::RCX), Immediate<32>>>,
-        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), Register<usz(RegId::RCX), Immediate<8>>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(RegId::RCX), Immediate<32>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightLogical), Register<usz(RegId::RCX), Immediate<8>>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using shl_imm_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shl), Immediate<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(RegId::RCX), Immediate<32>>>,
-        Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(RegId::RCX), Immediate<8>>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(RegId::RCX), Immediate<32>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftLeft), Register<usz(RegId::RCX), Immediate<8>>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 // FIXME: If immediate's value doesn't fit into 8 bits, we can't encode it like this.
 using sar_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Sar), Register<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightArithmetic), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using shr_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shr), Register<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightLogical), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using shl_reg_imm = Pattern<
@@ -198,43 +198,43 @@ using shl_reg_imm = Pattern<
 using sar_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Sar), Register<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), Immediate<32>>>, // 32 bits to clear dependencies
-        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), Register<usz(RegId::RCX), Immediate<8>>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), Immediate<32>>>, // 32 bits to clear dependencies
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightArithmetic), Register<usz(RegId::RCX), Immediate<8>>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using shr_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shr), Register<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), Immediate<32>>>, // 32 bits to clear dependencies
-        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), Register<usz(RegId::RCX), Immediate<8>>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), Immediate<32>>>, // 32 bits to clear dependencies
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightLogical), Register<usz(RegId::RCX), Immediate<8>>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using shl_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shl), Register<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), Immediate<32>>>, // 32 bits to clear dependencies
-        Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(RegId::RCX), Immediate<8>>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), Immediate<32>>>, // 32 bits to clear dependencies
+        Inst<Clobbers<c<1>>, usz(Opcode::ShiftLeft), Register<usz(RegId::RCX), Immediate<8>>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 template <usz inst_kind, usz out_opcode>
 using binary_commutative_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, inst_kind, Register<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, out_opcode, o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, out_opcode, o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using and_reg_reg = binary_commutative_reg_reg<usz(MKind::And), usz(Opcode::And)>;
 using and_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::And), Register<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::And), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::And), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using or_reg_reg = binary_commutative_reg_reg<usz(MKind::Or), usz(Opcode::Or)>;
 using or_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Or), Register<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Or), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Or), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 // A global is actually an lvalue (ptr to global). When adding to a
@@ -243,7 +243,7 @@ using or_reg_imm = Pattern<
 using add_global_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Global<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
 
 // NOTE: We cannot use i<0> (output register of first instruction) to
@@ -253,71 +253,74 @@ using add_global_imm = Pattern<
 using add_global_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Global<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::LoadEffectiveAddress), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Add), o<1>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using add_local_imm_1 = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
-    InstList<Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), OffsetLocal<o<0>, o<1>>, i<0>>>>;
+    InstList<Inst<
+        Clobbers<c<1>>,
+        usz(Opcode::LoadEffectiveAddress),
+        OffsetLocal<o<0>, o<1>>,
+        i<0>>>>;
 
 using add_local_imm_2 = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
 
 using add_reg_reg = binary_commutative_reg_reg<usz(MKind::Add), usz(Opcode::Add)>;
 using add_imm_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<1>, i<0>>,
-        Inst<Clobbers<>, usz(Opcode::Add), o<0>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Add), o<0>, i<0>>>>;
 
 using add_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Register<>, Immediate<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
-        Inst<Clobbers<>, usz(Opcode::Add), o<1>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
 
 using add_imm_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Immediate<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
-        Inst<Clobbers<>, usz(Opcode::Add), o<1>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
 
 using mul_reg_reg = binary_commutative_reg_reg<usz(MKind::Mul), usz(Opcode::Multiply)>;
 
 using mul_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Mul), Register<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Multiply), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Multiply), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using mul_imm_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Mul), Immediate<>, Register<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Multiply), o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Multiply), o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using mul_imm_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Mul), Immediate<>, Immediate<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
-        Inst<Clobbers<>, usz(Opcode::Multiply), o<1>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Multiply), o<1>, i<0>>>>;
 
 using sub_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Sub), Register<>, Register<>>>,
     InstList<
         // NOTE: GNU ordering of operands
-        Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Sub), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using sub_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Sub), Register<>, Immediate<>>>,
     InstList<
-        // NOTE: GNU ordering of operands
-        Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Sub), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using sdiv_imm_imm = Pattern<
@@ -368,7 +371,7 @@ using float_reg_reg = Pattern<
             RegisterOfCategory<+::lcc::Register::Category::FLOAT>,
             RegisterOfCategory<+::lcc::Register::Category::FLOAT>>>,
     InstList<
-        Inst<Clobbers<>, op, o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, op, o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMove), o<1>, i<0>>>>;
 
 using float_div_reg_reg = Pattern<
@@ -393,7 +396,7 @@ using float_store_reg_reg = Pattern<
         usz(MKind::Store),
         RegisterOfCategory<+::lcc::Register::Category::FLOAT>,
         Register<>>>,
-    InstList<Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMoveDereferenceRHS), o<0>, o<1>>>>;
+    InstList<Inst<Clobbers<>, usz(Opcode::ScalarFloatMoveDereferenceRHS), o<0>, o<1>>>>;
 
 using float_store_reg_local = Pattern<
     InstList<Inst<
@@ -401,7 +404,7 @@ using float_store_reg_local = Pattern<
         usz(MKind::Store),
         RegisterOfCategory<+::lcc::Register::Category::FLOAT>,
         Local<>>>,
-    InstList<Inst<Clobbers<c<1>>, usz(Opcode::ScalarFloatMoveDereferenceRHS), o<0>, o<1>>>>;
+    InstList<Inst<Clobbers<>, usz(Opcode::ScalarFloatMoveDereferenceRHS), o<0>, o<1>>>>;
 
 using float_copy_reg = Pattern<
     InstList<InstOfCategory<
@@ -584,13 +587,13 @@ using ne_imm_imm = cmp_imm_imm<MKind::Ne, Opcode::SetByteIfNotEqual>;
 
 using z_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::ZExt), Register<>>>,
-    InstList<Inst<Clobbers<>, usz(Opcode::MoveZeroExtended), o<0>, i<0>>>>;
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveZeroExtended), o<0>, i<0>>>>;
 
 using z_ext_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::ZExt), Immediate<>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::MoveZeroExtended), v<0, 0>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::MoveZeroExtended), v<0, 0>, i<0>>>>;
 
 // clang-format off
 // This doesn't really work, as far as I can tell. Not exactly sure yet,
@@ -602,7 +605,7 @@ using collapse_local_reg_move_reg = Pattern<
         Inst<Clobbers<>, +x86_64::Opcode::MoveDereferenceLHS, o<1>, Register<>>
     >,
     InstList<
-        Inst<Clobbers<>, +x86_64::Opcode::MoveDereferenceLHS, o<0>, o<3>>
+        Inst<Clobbers<c<1>>, +x86_64::Opcode::MoveDereferenceLHS, o<0>, o<3>>
     >
 >;
 
@@ -665,7 +668,7 @@ using AllPatterns = PatternList<
     add_reg_imm,
     add_imm_imm,
     add_local_imm_1,
-    add_local_imm_2,
+    // add_local_imm_2,
     add_global_imm,
 
     mul_reg_reg,

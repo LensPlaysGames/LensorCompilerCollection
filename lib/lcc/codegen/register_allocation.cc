@@ -17,6 +17,8 @@
 
 namespace lcc {
 
+constexpr bool RA_PRINT = false;
+
 struct AdjacencyMatrix {
     std::unique_ptr<bool[]> data;
     usz size;
@@ -132,14 +134,32 @@ usz live_idx_from_register(const std::vector<Register>& registers, Register r) {
 void remove_defining(std::vector<usz>& live_values, const MInst& inst) {
     // If the defining use of a virtual register is an operand of this
     // instruction, remove it from vector of live vals.
-    if (inst.is_defining())
+    if (inst.is_defining()) {
         std::erase(live_values, inst.reg());
+        if constexpr (RA_PRINT) {
+            fmt::print(
+                "{}  ; IS NO LONGER LIVE\n",
+                PrintMOperand(Register(
+                    inst.reg(),
+                    (uint) inst.regsize(),
+                    (Register::Category) inst.regcategory()
+                ))
+            );
+        }
+    }
 
     for (auto& op : inst.all_operands()) {
         if (std::holds_alternative<MOperandRegister>(op)) {
             auto reg = std::get<MOperandRegister>(op);
-            if (reg.defining_use)
+            if (reg.defining_use) {
                 std::erase(live_values, reg.value);
+                if constexpr (RA_PRINT) {
+                    fmt::print(
+                        "{}  ; IS NO LONGER LIVE\n",
+                        PrintMOperand(reg)
+                    );
+                }
+            }
         }
     }
 }
@@ -163,7 +183,13 @@ void matrix_set_clobbers(
                     live_idx_from_register_value(registers, live),
                     live_idx
                 );
-                // fmt::print("Clobber r{} interferes with live value r{}\n", reg.value, live);
+                if constexpr (RA_PRINT) {
+                    fmt::print(
+                        "Clobber r{} interferes with live value r{}\n",
+                        reg.value,
+                        live
+                    );
+                }
             }
         }
     }
@@ -175,7 +201,13 @@ void matrix_set_clobbers(
                 live_idx_from_register_value(registers, live),
                 live_idx
             );
-            // fmt::print("Clobber r{} interferes with live value r{}\n", reg.value, live);
+            if constexpr (RA_PRINT) {
+                fmt::print(
+                    "Clobber r{} interferes with live value r{}\n",
+                    r_id,
+                    live
+                );
+            }
         }
     }
 }
@@ -191,8 +223,15 @@ std::vector<RegisterPlusLiveValIndex> collect_vreg_operands(
 ) {
     std::vector<RegisterPlusLiveValIndex> vreg_operands{};
     if (inst.reg() >= +Module::first_virtual_register) {
-        auto reg = Register{inst.reg(), uint(inst.regsize())};
-        vreg_operands.push_back({reg, live_idx_from_register(registers, reg)});
+        auto reg = Register{
+            inst.reg(),
+            uint(inst.regsize()),
+            (Register::Category) inst.regcategory()
+        };
+        reg.defining_use = inst.is_defining();
+        vreg_operands.push_back(
+            {reg, live_idx_from_register(registers, reg)}
+        );
     }
     for (auto& op : inst.all_operands()) {
         if (std::holds_alternative<MOperandRegister>(op)) {
@@ -234,12 +273,28 @@ void record_newly_live_values(
         if (
             not r.reg.defining_use
             and rgs::find(live_values, r.reg.value) == live_values.end()
-        ) live_values.push_back(r.reg.value);
+        ) {
+            live_values.push_back(r.reg.value);
+            if constexpr (RA_PRINT) {
+                fmt::print("{}  ; IS NOW LIVE\n", PrintMOperand(r.reg));
+            }
+        }
     }
     // Handle the case of a non-defining register operand in use of the
     // instruction that defines that register.
-    if (inst.is_defining())
+    if (inst.is_defining()) {
         std::erase(live_values, inst.reg());
+        if constexpr (RA_PRINT) {
+            fmt::print(
+                "{}  ; IS ACTUALLY NOT LIVE\n",
+                PrintMOperand(Register(
+                    inst.reg(),
+                    (uint) inst.regsize(),
+                    (Register::Category) inst.regcategory()
+                ))
+            );
+        }
+    }
 }
 
 void collect_interferences_from_instruction(
@@ -250,8 +305,10 @@ void collect_interferences_from_instruction(
     std::vector<MBlock*>& doubly_visited,
     MInst& inst
 ) {
-    // fmt::print("{}\n", PrintMInstImpl(inst, x86_64::opcode_to_string));
-    // fmt::print("live after: {}\n", fmt::join(live_values, ", "));
+    if constexpr (RA_PRINT) {
+        fmt::print("{}\n", PrintMInstImpl(inst, x86_64::opcode_to_string));
+        fmt::print("live after: {}\n", fmt::join(live_values, ", "));
+    }
 
     // If the defining use of a virtual register is an operand of this
     // instruction, remove it from live values.
@@ -286,18 +343,28 @@ void collect_interferences_from_instruction(
     // RESULT
     //     Both v0 and v1 interfere with both v3 and v7.
     for (auto A : vreg_operands) {
+        // If either A or B is defining or clobbered, do NOT set interference
+        // between the two.
+        if (
+            A.reg.defining_use
+            or rgs::contains(clobbered_regs, A.reg.value)
+        ) continue;
         for (auto B : vreg_operands) {
-            // If either A or B is clobbered, do NOT set interference between the two.
             if (
-                rgs::find(clobbered_regs, A.reg.value) == clobbered_regs.end()
-                and rgs::find(clobbered_regs, B.reg.value) == clobbered_regs.end()
-            ) {
-                matrix.set(A.idx, B.idx);
-                // fmt::print(
-                //     "Non-clobbered register operands r{} and r{} interfere\n",
-                //     A.reg.value,
-                //     B.reg.value
-                // );
+                B.reg.defining_use
+                or rgs::contains(clobbered_regs, B.reg.value)
+            ) continue;
+
+            // Otherwise, A and B are just "regular" virtual register operands,
+            // meaning they should interfere.
+
+            matrix.set(A.idx, B.idx);
+            if constexpr (RA_PRINT) {
+                fmt::print(
+                    "Non-clobbered register operands {} and {} interfere\n",
+                    PrintMOperand(A.reg),
+                    PrintMOperand(B.reg)
+                );
             }
         }
     }
@@ -316,6 +383,13 @@ void collect_interferences_from_instruction(
                 r.idx,
                 live_idx_from_register_value(registers, live)
             );
+            if constexpr (RA_PRINT) {
+                fmt::print(
+                    "Virtual register operand {} and live value r{} interfere\n",
+                    PrintMOperand(r.reg),
+                    live
+                );
+            }
         }
     }
 
@@ -323,7 +397,8 @@ void collect_interferences_from_instruction(
     // added to the vector of live values.
     record_newly_live_values(vreg_operands, inst, live_values);
 
-    // fmt::print("live before: {}\n", fmt::join(live_values, ", "));
+    if constexpr (RA_PRINT)
+        fmt::print("live before: {}\n", fmt::join(live_values, ", "));
 }
 
 void collect_interferences_from_block(
@@ -469,8 +544,11 @@ auto allocate_registers(
     };
     for (auto& block : function.blocks()) {
         for (auto& inst : block.instructions()) {
+            // Replace return register in result register.
             if (inst.reg() == desc.return_register_to_replace)
                 inst.reg(return_register_by_category(inst.regcategory()));
+
+            // Replace return register in register operands.
             for (auto& op : inst.all_operands()) {
                 if (std::holds_alternative<MOperandRegister>(op)) {
                     MOperandRegister reg = std::get<MOperandRegister>(op);
@@ -479,6 +557,12 @@ auto allocate_registers(
                         op = reg;
                     }
                 }
+            }
+
+            // Replace return register in register clobbers.
+            for (auto& clobber : inst.register_clobbers()) {
+                if (clobber == desc.return_register_to_replace)
+                    clobber = return_register_by_category(inst.regcategory());
             }
         }
     }
@@ -920,6 +1004,8 @@ auto allocate_registers(
                 }
             }
 
+            // fmt::print("After RA Spill:\n{}\n", PrintMFunction(function));
+
             // With the new spill/unspill instructions inserted, retry register
             // allocation...
             // FIXME: Unnecessarily grows stack. We could return a "retry" value and
@@ -969,15 +1055,20 @@ auto allocate_registers(
 
     for (auto& block : function.blocks()) {
         for (usz inst_i = 0; inst_i < block.instructions().size(); ++inst_i) {
-            usz result_register{};
+            Register result_register{};
             {
                 auto& inst = block.instructions().at(inst_i);
-                auto found = rgs::find(desc.preserve_volatile_opcodes, inst.opcode());
-                if (found == desc.preserve_volatile_opcodes.end())
+
+                if (not rgs::contains(desc.preserve_volatile_opcodes, inst.opcode()))
                     continue;
                 // We need to preserve volatile registers here.
 
-                result_register = inst.reg();
+                result_register = Register{
+                    inst.reg(),
+                    (uint) inst.regsize(),
+                    (Register::Category) inst.regcategory(),
+                    inst.is_defining()
+                };
 
                 // fmt::print(
                 //     "Preserving volatile registers across `{}`\n",
@@ -1005,7 +1096,7 @@ auto allocate_registers(
 
                 // Skip result register (otherwise we'd clobber our function result out of
                 // existence).
-                if (r == result_register)
+                if (r == result_register.value)
                     continue;
 
                 // fmt::print("  spilling...\n");
@@ -1034,7 +1125,25 @@ auto allocate_registers(
                 );
                 ++inst_i;
 
-                // Insert an unspill after
+                // Don't clobber the result register out of existence by unspilling...
+                if (result_register.value) {
+                    auto return_register = return_register_by_category((usz) result_register.category);
+                    if (result_register.value != return_register) {
+                        auto move = MInst(
+                            usz(MInst::Kind::Copy),
+                            result_register
+                        );
+                        move.add_operand(MOperandRegister(return_register, result_register.size, result_register.category));
+                        block.instructions().insert(
+                            block.instructions().begin() + (isz) inst_i + 1,
+                            move
+                        );
+                        ++inst_i;
+                    }
+                }
+
+                // Insert an unspill before the next instruction that does not contain a
+                // reference to the result register as a register operand.
                 auto unspill = MInst(
                     usz(MInst::Kind::Unspill),
                     {spilled_reg, (uint) spilled_regsize, {}, true}
@@ -1048,6 +1157,7 @@ auto allocate_registers(
                     block.instructions().begin() + (isz) inst_i + 1,
                     unspill
                 );
+                ++inst_i;
             }
         }
     }
