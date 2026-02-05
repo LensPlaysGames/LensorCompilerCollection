@@ -3,6 +3,7 @@
 
 #include <lcc/codegen/mir.hh>
 #include <lcc/context.hh>
+#include <lcc/diags.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
@@ -10,6 +11,7 @@
 
 #include <unordered_map>
 #include <variant>
+#include <vector>
 
 namespace lcc {
 namespace isel {
