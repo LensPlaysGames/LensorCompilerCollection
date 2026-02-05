@@ -37,6 +37,9 @@
   - Normalize mantissa, adjusting exponent
 
 
+- [Output]: Debug output for MIR
+  Basically, generalised IR ("fresh" MIR) is three address code. The problem is that a lot of machines in real life are two address code, and the destination register is one of the operands (in GNU style, the last/second).
+  I want to be able to print MIR without having the "result register" printed when the machine that the code the MIR is representing has no notion of that.
 - [Backend/WASM]: Struct and array types
   WebAssembly 3.0 has composite types, =struct= and =array=.
   They need a bit of special handling, so it will be quite an extensive feature to implement (requiring overrides for storing and loading, variable initialisation, and more).
