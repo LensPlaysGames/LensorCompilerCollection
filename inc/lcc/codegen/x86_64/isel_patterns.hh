@@ -103,12 +103,14 @@ using copy_mem_op = Pattern<
 using copy_global = copy_mem_op<Global<>>;
 using copy_local = copy_mem_op<Local<>>;
 
-template <typename callee>
-using simple_call = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Call), callee>>,
+using simple_function_call = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Call), Function<>>>,
     InstList<Inst<Clobbers<r<usz(RegId::RETURN)>>, usz(Opcode::Call), o<0>>>>;
 
-using simple_function_call = simple_call<Function<>>;
+using float_function_call = Pattern<
+    InstList<
+        InstOfCategory<+::lcc::Register::Category::FLOAT, Clobbers<>, usz(MKind::Call), Function<>>>,
+    InstList<Inst<Clobbers<r<usz(RegId::RETURN)>>, usz(Opcode::Call), o<0>>>>;
 
 template <typename callee>
 using simple_branch = Pattern<
@@ -700,6 +702,7 @@ using AllPatterns = PatternList<
     float_store_reg_local,
     float_store_reg_reg,
     float_sub_reg_reg,
+    float_function_call,
 
     bitcast_imm,
 
