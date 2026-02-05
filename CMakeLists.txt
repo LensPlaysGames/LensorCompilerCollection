@@ -10,6 +10,16 @@ set(
 )
 
 set(
+  USE_LTO TRUE
+  CACHE BOOL
+  "Whether or not to utilise link time optimisation (LTO).
+  You should probably enable this for most release builds, as it
+  increases code performance while decreasing code size (generally).
+  However, you should probably disable this for your development build
+  tree, as it may add a lot of extra time to each build invocation."
+)
+
+set(
   USE_COLOUR TRUE
   CACHE BOOL
   "Whether or not to tell the compiler to use color for emitting
@@ -51,17 +61,38 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
   endif()
 endif()
 
+if (USE_LTO)
+  # Do link time optimisation
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-flto)
+    add_link_options(-flto)
+  endif()
+  if (MSVC)
+    add_compile_options(/GL)
+    add_link_options(/LTCG)
+  endif()
+endif()
+
 # Output HTML as well as JS if compiling with emscripten (for wasm)
 if (EMSCRIPTEN)
-  # Disable "native" optimisation
+  # Disable "native" optimisation.
+  # The web isn't native anywhere we are building.
   set(NATIVE_OPT FALSE)
   # Ask Emscripten to please generate HTML.
   set(CMAKE_EXECUTABLE_SUFFIX ".html")
+  # Reduce binary size: Don't include setjmp/longjmp handling.
+  add_compile_options(-sSUPPORT_LONGJMP=0)
+  # Reduce binary size: Don't include assertion handling.
+  add_link_options(-sASSERTIONS=0)
+  # Reduce binary size: Use Emscripten's smaller malloc.
+  add_link_options(-sMALLOC="emmalloc")
+  # Use the closure javascript compiler.
+  add_link_options(--closure 1)
   # Custom HTML template file.
   add_link_options(--shell-file ${CMAKE_CURRENT_LIST_DIR}/res/lcc.in.html)
   # Increase the stack size; some languages use a recursive descent parsing
   # algorithm that means the stack isn't always necessarily small.
-  add_link_options(-sSTACK_SIZE=1048576)
+  add_link_options(-sSTACK_SIZE=262144)
   # Do not automatically run LCC when the script is loaded; without
   # arguments, it's not all that useful, anyway.
   add_link_options(-sINVOKE_RUN=0)
