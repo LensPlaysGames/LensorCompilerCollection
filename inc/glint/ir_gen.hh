@@ -6,6 +6,7 @@
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils/rtti.hh>
+
 #include <memory>
 #include <unordered_map>
 
