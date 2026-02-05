@@ -48,6 +48,14 @@
 
 * Glint
 
+- [QoL]: Ability to iterate a container you are editing while iterating it
+  #+begin_src glint
+    for x in container, {
+      if x.value,
+        container[x.value] += !{ ... }; ;; (!) This should _NOT_ segfault the next loop iteration
+    };
+  #+end_src
+  Basically, if we are looping over a container, and it is modified, we need to adjust the loop code to take that into account. Ideally, we would update the "current" iterator reference (=x= in the above example) after every modification that requires it (possible resize).
 - [Control Flow]: =continue=, =break=
   Possibly even named loops and the ability to break/continue from specific ones from nested loops...
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
