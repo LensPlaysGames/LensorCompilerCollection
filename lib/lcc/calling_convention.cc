@@ -8,6 +8,10 @@
 #include <lcc/diags.hh>
 #include <lcc/target.hh>
 
+#include <algorithm>
+#include <iterator>
+#include <vector>
+
 namespace lcc::cconv {
 
 auto machine_description(Context* context) -> MachineDescription {
@@ -24,6 +28,12 @@ auto machine_description(Context* context) -> MachineDescription {
                 MachineDescription::RegistersPerCategory{
                     +Register::Category::DEFAULT,
                     {+x86_64::RegisterId::RAX}
+                }
+            );
+            desc.return_registers.emplace_back(
+                MachineDescription::RegistersPerCategory{
+                    +Register::Category::FLOAT,
+                    {+x86_64::RegisterId::XMM0}
                 }
             );
             // Just the volatile registers
@@ -74,6 +84,7 @@ auto machine_description(Context* context) -> MachineDescription {
                 std::back_inserter(scalar_registers),
                 [](auto r) { return lcc::operator+(r); }
             );
+            // All volatile registers
             lcc::rgs::transform(
                 lcc::cconv::sysv::all_volatile_regs,
                 std::back_inserter(volatile_registers),
