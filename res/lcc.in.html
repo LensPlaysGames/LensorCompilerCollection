@@ -502,6 +502,10 @@
                       "#",
                       outputElement.value
                   );
+                  outputElement.value = strip_lines_beginning_with_from(
+                      ";",
+                      outputElement.value
+                  );
               }
               if (shouldStripDotLines) {
                   outputElement.value = strip_lines_beginning_with_from(
