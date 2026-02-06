@@ -1,0 +1,23 @@
+================
+Return Register: i64
+================
+
+func (internal): ccc i64():
+  bb0:
+    return i64 420
+
+--sysv--
+
+func:
+  bb0:
+    mov 420.64 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
+
+--ms--
+
+func:
+  bb0:
+    mov 420.64 rax.64 {CLOBBERS: op.1}
+    ret
+memcpy:
