@@ -9,8 +9,14 @@
 #include <type_traits>
 #include <vector>
 
+// If debug iterators haven't been asked for, but we are doing a debug
+// build, use debug iterators.
+#if ! defined(LCC_DEBUG_ITERATORS) && ! defined(NDEBUG)
+#    define LCC_DEBUG_ITERATORS
+#endif
+
 namespace lcc::utils {
-#if defined(__EMSCRIPTEN__) || ! defined(NDEBUG) || defined(LCC_DEBUG_ITERATORS)
+#if defined(LCC_DEBUG_ITERATORS)
 
 /// An iterator that checks for errors.
 template <typename ContainerType, typename IterType>
@@ -117,9 +123,30 @@ using VectorConstIterator
         typename std::vector<T>::const_iterator>;
 
 #else
-template <typename IterType> using CheckedIterator = IterType;
-template <typename T> using VectorIterator = typename std::vector<T>::iterator;
-template <typename T> using VectorConstIterator = typename std::vector<T>::const_iterator;
+template <typename IterType>
+using CheckedIterator = IterType;
+
+template <typename ContainerType, typename IterType>
+requires (
+    not std::is_reference_v<ContainerType>
+    and not std::is_reference_v<IterType>
+)
+struct PassthroughIterator : public IterType {
+    PassthroughIterator(ContainerType& _, IterType it_)
+        : IterType(it_) {}
+};
+
+template <typename T>
+using VectorIterator
+    = PassthroughIterator<
+        std::vector<T>,
+        typename std::vector<T>::iterator>;
+
+template <typename T>
+using VectorConstIterator
+    = PassthroughIterator<
+        const std::vector<T>,
+        typename std::vector<T>::const_iterator>;
 #endif
 } // namespace lcc::utils
 

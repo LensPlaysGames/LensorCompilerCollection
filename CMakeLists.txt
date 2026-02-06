@@ -26,6 +26,14 @@ set(
   diagnostics (i.e. via '-fdiagnostics-color=always')."
 )
 
+set(
+  LCC_USE_DEBUG_ITERATORS FALSE
+  CACHE BOOL
+  "Whether or not to use checked container iterators.
+  NOTE: Debug iterators are always in use in non-release builds (NDEBUG
+  not defined)."
+)
+
 # ============================================================================
 #  Global CMake Variables
 # ============================================================================
@@ -82,6 +90,7 @@ if (EMSCRIPTEN)
   set(CMAKE_EXECUTABLE_SUFFIX ".html")
   # Reduce binary size: Don't include setjmp/longjmp handling.
   add_compile_options(-sSUPPORT_LONGJMP=0)
+  # NOTE: EVAL_CTORS doesn't work well
   # Reduce binary size: Don't include assertion handling.
   add_link_options(-sASSERTIONS=0)
   # Reduce binary size: Use Emscripten's smaller malloc.
@@ -375,6 +384,10 @@ add_library(
 )
 target_include_directories(liblcc PUBLIC inc)
 set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
+
+if(LCC_USE_DEBUG_ITERATORS)
+  target_compile_definitions(liblcc PRIVATE LCC_DEBUG_ITERATORS)
+endif()
 
 # Link main lcc library with generic object library.
 target_link_libraries(liblcc PUBLIC object)
