@@ -1,0 +1,107 @@
+================
+Add Fractional, Fractional
+================
+
+1.0 + 0.1;
+
+---
+
+(block
+ (binary_add
+  (fractional_literal) (fractional_literal))
+ (return (integer_literal))
+
+================
+Subtract Fractional, Fractional
+================
+
+1.0 - 0.1;
+
+---
+
+(block
+ (binary_subtract
+  (fractional_literal) (fractional_literal))
+ (return (integer_literal))
+
+================
+Multiply Fractional, Fractional
+================
+
+1.0 * 0.1;
+
+---
+
+(block
+ (binary_multiply
+  (fractional_literal) (fractional_literal))
+ (return (integer_literal)))
+
+================
+Divide Fractional, Fractional
+================
+
+1.0 / 0.1;
+
+---
+
+(block
+ (binary_divide
+  (fractional_literal) (fractional_literal))
+ (return (integer_literal)))
+
+================
+Add Fractional, Integer
+:fail_check
+================
+
+1.0 + 0;
+
+================
+Add Integer, Fractional
+:fail_check
+================
+
+1 + 1.0;
+
+================
+Subtract Fractional, Integer
+:fail_check
+================
+
+1.0 - 0;
+
+================
+Subtract Integer, Fractional
+:fail_check
+================
+
+0 - 1.0;
+
+================
+Multiply Fractional, Integer
+:fail_check
+================
+
+1.0 * 0;
+
+================
+Multiply Integer, Fractional
+:fail_check
+================
+
+0 * 1.0;
+
+================
+Divide Fractional, Integer
+:fail_check
+================
+
+1.0 / 1;
+
+================
+Divide Integer, Fractional
+:fail_check
+================
+
+1 / 1.0;
