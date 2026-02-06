@@ -511,9 +511,20 @@ Since byte literals are of =byte= type, they get printed "verbatim". The followi
 
 *** Glint Exercise
 
-TODO
-# "what is the output of the program?"
-# "what would the output of the program be if 'x' was '3'?"
+#+begin_src glint -n
+  x :: 42 + 27;
+  print x, " gallons of milk on the wall...\n"
+#+end_src
+
+1. What is the output of the above program?
+  :answer:
+  "69 gallons of milk on the wall...\n"
+  :end:
+
+2. What /would/ the output of the above program be, if =x= were initialized to =3=?
+  :answer:
+  "3 gallons of milk on the wall...\n"
+  :end:
 
 ** Arrays
 
@@ -969,7 +980,7 @@ Often, you want to use a template more than once; for convenience, a Glint progr
   identity 69420;
 #+end_src
 
-# TODO: example of binary read
+# TODO: example of an actually useful template.
 
 ** Function Overloading
 
@@ -1002,11 +1013,11 @@ TODO: syntax example
 # operator[] ?
 # __op_subscript?
 
-** Templated Functions and Templated Types
+** Templated Types
 
-You do not ever need to implement a vector in Glint, as there is the dynamic array type built-in to the language. However, vectors are simple to understand, and widespread enough that I believe this to be the best (as in least-confusing) example to give.
+# You do not ever need to implement a vector in Glint, as there is the dynamic array type built-in to the language. However, vectors are simple to understand, and widespread enough that I believe this to be the best (as in least-confusing) example to give.
 
-A templated type is like a template expression that defines a type.
+A templated type is a template expression that defines a type.
 
 #+begin_src glint
   vector :: struct (T : type) {
@@ -1018,8 +1029,13 @@ A templated type is like a template expression that defines a type.
   my_vec_of_int : vector int;
 #+end_src
 
-A templated function is like a template expression that defines a function.
-The catch here is that the template arguments are all types (because, well, templating a function on a value seems an awful lot like you may just want to use a parameter instead =:^)=). Because of that, the syntax has removed the =(T1 : type, T2 : type)= boilerplate in favor of automagically generating them from the amount of unique =auto= types in the signature. Notice the =auto= type allows for partial definition of a type, just like C++20's concepts.
+** Templated Functions
+
+A templated function is /like/ a template expression that defines a function declaration.
+
+The catch here is that the template arguments are all types (because, well, templating a function on a value seems an awful lot like you may just want to use a parameter instead =:^)=). Because of that, the syntax has removed the =(T1 : type, T2 : type)= boilerplate in favor of automagically generating them from the amount of unique =auto= types in the signature.
+
+The =auto= type allows for partial definition of a type, just like C++20's concepts.
 
 #+begin_src glint
   vector_push : void(vec : (vector auto.element).ref, val : auto.element) {
@@ -1035,7 +1051,7 @@ Now, upon invocation of =vector_push=, the compiler will first look for a define
 
 #+begin_src glint
   vector_push :: template(element : type)
-    vector_push_impl : void(vec : vector element, val : element)
+    vector_push_impl : void(vec : (vector element), val : element)
       ...;
 
   ;; Invocations could be thought of like this
@@ -1076,7 +1092,9 @@ In practice, this most often makes the symbol associated with the variable "visi
   foo; ;; equals int 69
 #+end_src
 
-TODO: Mention Glint compiler not being able to find module metadata.
+When building a Glint program that imports other Glint programs, the compiler needs to know details about the imported module. These details are stored in a built module interface (BMI) known as =.gmeta= files. These files contain Glint module metadata that is loaded by the compiler when a module is imported. This metadata includes the name of the module, exported declarations (types, functions, templates, etc). This metadata is required to be able to properly ensure the Glint program importing the module is using it as expected.
+
+When you build a module =Foo=, the =Foo.gmeta= file will be generated (alongside any output you've asked LCC to generate from the IR that the Glint frontend generates). When building a program that imports Glint module =Foo=, the compiler searches it's include directories (specified via =-I= on the command line) for the =Foo.gmeta= metadata file. If this file cannot be found in any of the include directories, or if it is of an unexpected file format, the Glint compiler issues an error and stops compilation, as it cannot continue to build a program that imports a module it knows nothing about.
 
 * Types
 
@@ -1119,7 +1137,33 @@ FFI stands for Foreign Function Interface. These types allow you to define varia
 
 ** Arbitrary Integers
 
-TODO
+Instead of having lots of different integer types that relate to different ranges of numbers they may represent, we have a single "arbitrary integer" type where you are able to set the bitwidth manually.
+
+Arbitrary integers may be signed or unsigned.
+
+An unsigned arbitrary integer starts with =u=.
+
+A signed arbitrary integer starts with =s=.
+
+The bitwidth is specified directly following the sign specifier.
+
+Here are some valid arbitrary integer types.
+#+begin_src glint
+  s64;
+  s32;
+  s16;
+  s8;
+
+  u64;
+  u32;
+  u16;
+  u8;
+
+  u5;
+  s9;
+  s69;
+  ;; ...
+#+end_src
 
 ** Types with One Element
 
