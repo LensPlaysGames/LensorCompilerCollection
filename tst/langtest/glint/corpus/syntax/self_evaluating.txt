@@ -331,3 +331,67 @@ Byte Literal, Missing closing `
 :fail_parse
 ================
 `°;
+
+================
+Fractional Literal, 1.0
+:syntax
+================
+1.0;
+---
+
+(block (fractional_literal))
+
+================
+Fractional Literal, 0.0
+:syntax
+================
+0.0;
+---
+
+(block (fractional_literal))
+
+================
+Fractional Literal, 0.0001
+:syntax
+================
+0.0001;
+---
+
+(block (fractional_literal))
+
+================
+Fractional Literal, .0001
+:fail_parse
+================
+.0001;
+---
+
+(block (fractional_literal))
+
+================
+Fractional Literal, 1.0001
+:syntax
+================
+1.0001;
+---
+
+(block (fractional_literal))
+
+================
+Fractional Literal, 123456789.123456789
+:syntax
+================
+123456789.123456789;
+---
+
+(block (fractional_literal))
+
+================
+Fractional Literal, 1.a
+:fail_parse
+================
+1.a
+---
+
+(block (fractional_literal))
+
