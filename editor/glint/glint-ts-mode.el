@@ -2,7 +2,7 @@
 
 ;; Author: Lens_r
 ;; Maintainer: Lens_r
-;; Version: 0.2.12
+;; Version: 0.2.13
 ;; Package-Requires: ((emacs "29.1") (treesit))
 ;; Homepage: https://github.com/LensPlaysGames/LensorCompilerCollection
 ;; Keywords: glint, tree-sitter
@@ -85,7 +85,7 @@ See 'treesit-simple-indent-presets' for more info."
 
     ( ;; rule-begin
      ;; CALL EXPRESSION CAUSES INDENT (for arguments, basically).
-     (or (parent-is "call")) ;; matcher
+     (or (parent-is "call") (parent-is "print")) ;; matcher
      parent-bol ;; anchor
      glint-ts-mode-indent-offset ;; offset
      ) ;; rule-end
@@ -327,20 +327,18 @@ with the braces' contents having the same indentation.
       init: [(type_primitive) (type_struct) (type_enum) (type_array) (type_ffi)
              (type_pointer) (type_pointer_to_pointer) (type_reference)])
      (param_decl type: (identifier) @font-lock-type-face)
-     ["enum" "struct" "sum" "union"] @font-lock-type-face
      (type_enum underlying: (_) @font-lock-type-face)
      (type_function (identifier) @font-lock-type-face)
-     (type_array)      @font-lock-type-face
-     (type_ffi)        @font-lock-type-face
-     (type_pointer)    @font-lock-type-face
-     (type_primitive)  @font-lock-type-face
-     (type_reference)  @font-lock-type-face
-     (type_pointer_to_pointer)    @font-lock-type-face)
+     ["enum" "struct" "sum" "union"
+      (type_array) (type_ffi) (type_primitive)
+      (type_pointer) (type_reference)
+      (type_pointer_to_pointer)]
+     @font-lock-type-face)
 
    :feature 'number
-   `((integer_literal) @font-lock-number-face
-     (bool_literal)    @font-lock-number-face
-     (byte_literal)    @font-lock-number-face)
+   `([(integer_literal) (bool_literal)
+      (byte_literal) (fractional_literal)]
+     @font-lock-number-face)
 
    :feature 'string
    `((string_literal) @font-lock-string-face)
