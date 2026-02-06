@@ -649,15 +649,45 @@ MIRInstructionMatcher parse_instruction_matcher(
 
             local.index = lcc::u32(i);
 
-            // Parse numberf after '+'
+            // Parse number after '+'
             auto plus_location = operand.find('+');
             auto offset_value = std::stoi(operand.substr(plus_location));
 
             local.offset = offset_value;
 
             out.operands.emplace_back(local);
+        } else if (operand.size() and isdigit(operand.front())) {
+            // Looks like "3.32"
+            // 3  -> immediate value
+            // 32 -> immediate bitwidth
+            lcc::MOperandImmediate imm{};
+            // Parse number after "imm("
+            imm.value = std::stoull(operand);
+            // Parse number after '.'
+            auto dot_location = operand.find('.');
+            if (dot_location == std::string::npos) {
+                fmt::print(
+                    stderr,
+                    "ERROR! Expected bitwidth following `.` in immediate operand, got `{}`\n"
+                    "  Like `420.64` or `69.32`",
+                    operand
+                );
+                std::exit(1);
+            }
+            auto bitwidth_string = operand.substr(dot_location + 1);
+            auto bitwidth_value = std::stoul(
+                bitwidth_string
+            );
+
+            imm.size = (uint) bitwidth_value;
+
+            out.operands.emplace_back(imm);
         } else if (operand.size()) {
-            fmt::print("ERROR! Expected operand, got `{}`\n", operand);
+            fmt::print(
+                stderr,
+                "ERROR! Expected operand, got `{}`\n",
+                operand
+            );
             std::exit(1);
         }
     }
