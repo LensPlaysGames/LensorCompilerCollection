@@ -15,6 +15,7 @@ struct Options {
     bool ir{false};
     bool stopat_ir{false};
     bool emit_sarif{false};
+    bool link{false};
 
     lcc::Context::OptionPrintStats print_stats{false};
     lcc::Context::OptionPrintAST ast{false};
@@ -35,6 +36,8 @@ struct Options {
     std::string language{"default"};
     std::string format{"default"};
     std::string target{"default"};
+
+    bool use_colour() const;
 };
 
 auto parse(int argc, const char** argv) -> Options;

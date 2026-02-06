@@ -2,6 +2,7 @@
 #include <version.hh>
 
 #include <lcc/context.hh>
+#include <lcc/utils/platform.hh>
 #include <lcc/utils/string_distance.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
 
@@ -16,28 +17,29 @@ namespace cli {
 
 namespace {
 std::vector<std::string> known_arguments{
-    "-v",
-    "--version",
+    "--aluminium"
     "--ast",
+    "--color",
+    "--diags-backtrace",
     "--ir",
     "--mir",
-    "--stats",
-    "--diags-backtrace",
-    "--sarif",
-    "--stopat-lex",
-    "--stopat-syntax",
-    "--stopat-sema",
-    "--stopat-ir",
-    "--stopat-mir",
-    "--aluminium"
-    "-I",
-    "-o",
-    "-O",
     "--passes",
-    "--color",
-    "-x",
-    "-t",
+    "--sarif",
+    "--stats",
+    "--stopat-ir",
+    "--stopat-lex",
+    "--stopat-mir",
+    "--stopat-sema",
+    "--stopat-syntax",
+    "--version",
+    "-I",
+    "-O",
+    "-b",
     "-f",
+    "-o",
+    "-t",
+    "-v",
+    "-x",
 };
 } // namespace
 
@@ -47,6 +49,7 @@ void help() {
     fmt::print("USAGE: lcc [FLAGS] [OPTIONS] [SOURCE FILES...]\n");
     fmt::print("FLAGS:\n");
     fmt::print("{}", TwoColumnLayoutHelper{{
+        {"  -b", "Build *and link* input file(s)\n"},
         {"  -v", "Enable verbose output\n"},
         {"  --version", "Print compiler version information, then exit\n"},
         {"  --ast", "Print AST in human-readable format\n"},
@@ -144,6 +147,8 @@ auto parse(int argc, const char** argv) -> Options {
             o.diag_backtrace = lcc::Context::DiagBacktrace;
         else if (arg == "--sarif")
             o.emit_sarif = true;
+        else if (arg == "-b")
+            o.link = true;
 
         else if (arg == "-I") {
             // Add a directory to the include search paths
@@ -262,6 +267,12 @@ auto parse(int argc, const char** argv) -> Options {
         }
     }
     return o;
+}
+
+bool Options::use_colour() const {
+    if (color == "always") return true;
+    if (color == "never") return false;
+    return lcc::platform::StdoutIsTerminal() or lcc::platform::StderrIsTerminal();
 }
 
 } // namespace cli
