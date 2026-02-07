@@ -1,0 +1,59 @@
+* Glint Programming Language Feature Proposals
+
+** [Tooling]: =report=, =warning=, and =error= Toggles
+
+*** Where This Feature Fits
+
+This feature could be an extension to the base language, or seen as a QoL feature that is "expected" by users, but not required or part of the language.
+
+*** What This Feature Does
+
+The Glint Programmer has the capability to request the compiler to generate diagnostics at specific syntax or semantics, as well as report when certain syntax or semantics occur.
+
+These capability requests could be done in =LCC= via "triple-dash" options.
+
+*** Examples
+
+- =---report/default-init= :: Emit a detailed line of output upon default initialisation occurring.
+
+  =report= could also be =warning= or =error=; in these cases, a line of output is not emitted; instead, a diagnostic (of the requested type) containing the detailed info as a message is emitted.
+
+- =---error/global-init= :: Make it a program error (preventing further compilation) to initialise a global with a runtime value (requiring global constructors to be called).
+
+  This sort of thing would be useful to prevent hard-to-debug bugs in low level code like kernels, where the execution environment is non-standard.
+
+** [Language]: =freestanding= Toggle
+
+*** Where This Feature Fits
+
+This feature can be seen as limiting /output/ to a subset of the regular capabilities of Glint. This would involve cooperation from any transformations done by semantic analysis or LCC IR generation, as they couldn't insert calls to =memcpy=, or similar.
+
+*** What This Feature Does
+
+The Glint Programmer has the capability to request the language does not "expect" any sort of surrounding execution environment; the language tooling cannot assume there will be an OS, a libc, etc. at the time of target code execution.
+
+** [Language]: (REQUIRED) Anti-(Iterator Invalidation)
+
+*** Where This Feature Fits
+
+Glint's semantic analysis stage.
+
+*** What This Feature Does
+
+For WIP compiler implementations, making this a program error is "fine".
+
+For actual Glint compilers, this should "automagically detect and fix" iterator invalidation.
+
+*** Examples
+
+#+begin_src glint
+  for x in container, {
+    if x.value,
+      container[x.value] += !{ ... };
+    ;; (!) This should _NOT_ segfault the next loop iteration
+  };
+#+end_src
+
+In the above example, appending to =container= via =+== /may/ reallocate the underlying memory for the container. While =container.data= /is/ updated, our range iterator variable that Glint inserts for us to generate a proper =for= loop /is not/.
+
+This proposal changes that. Glint would "detect" that we are looping over =container=, "detect" that =container= is modified in such a way that may reallocate it's underlying memory (causing iterator invalidation), and "fix" it via either using an index and recalculating the loop iterator from =container.data= every loop iteration, or by inserting assignments of the loop iterator to the value of =container.data= after every modification that may cause a reallocation.
