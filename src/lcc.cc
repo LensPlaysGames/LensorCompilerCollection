@@ -20,7 +20,6 @@
 #include <cstring> // strerror
 #include <filesystem>
 #include <fmt/format.h>
-#include <format>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -235,7 +234,10 @@ auto read_file_contents(
     return contents;
 }
 
-void do_link(std::vector<std::string> input_paths, std::string_view output_path) {
+void do_link(
+    std::vector<std::string> input_paths,
+    std::string_view output_path
+) {
     if (input_paths.empty())
         lcc::Diag::ICE("link: No input paths");
     if (output_path.empty())
@@ -403,13 +405,15 @@ auto main(int argc, const char** argv) -> int {
 
     context.add_include_directory(".");
     for (const auto& directory : options.include_directories) {
-        if (options.verbose) fmt::print("Added input directory: {}\n", directory);
+        if (options.verbose)
+            fmt::print("Added input directory: {}\n", directory);
         context.add_include_directory(directory);
     }
 
     for (const auto& option : options.frontend_options) {
-        if (options.verbose) fmt::print("Added frontend option: {}\n", option);
-        context.add_frontend_option(option);
+        if (options.verbose)
+            fmt::print("Added frontend option: {}\n", option);
+        context.add_option(option);
     }
 
     auto configured_output_file_path = options.output_filepath;
@@ -489,11 +493,11 @@ auto main(int argc, const char** argv) -> int {
             GenerateOutputFile(context, input_file, output_file_path, options);
         }
 
-        if (context.has_error()) return 1;
+        if (context.has_error())
+            return 1;
 
-        if (options.link) {
+        if (options.link)
             do_link(output_paths, configured_output_file_path);
-        }
     }
 
     return 0;

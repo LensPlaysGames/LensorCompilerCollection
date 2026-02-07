@@ -4664,7 +4664,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         );
 
         const bool debug_templates
-            = context and context->has_frontend_option("debug-templates");
+            = context and context->has_option("debug-templates");
         if (debug_templates) {
             fmt::print(
                 "Deduced function type: {}\n",

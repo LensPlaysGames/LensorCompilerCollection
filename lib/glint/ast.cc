@@ -3107,7 +3107,7 @@ auto lcc::glint::TemplatedFuncDecl::make_instantiation(
     _instantiation_cache[signature] = instantiation;
 
     const bool debug_templates
-        = context.has_frontend_option("debug-templates");
+        = context.has_option("debug-templates");
 
     if (debug_templates) {
         fmt::print(

@@ -4,6 +4,8 @@
 namespace lcc {
 class File;
 class Init;
+class Target;
+class Format;
 class Context;
 class Module;
 class Value;

@@ -19,8 +19,6 @@
 #endif
 
 namespace lcc {
-class Target;
-class Format;
 
 class Context {
 public:
@@ -101,9 +99,9 @@ private:
 
     std::vector<std::string> _include_directories{};
 
-    // Options passed to the frontend
+    // User Options
     // (conventionally with prefixed triple dash `---`)
-    std::vector<std::string> _frontend_options{};
+    std::vector<std::string> __options{};
 
     /// Called once the first time a context is created.
     static void InitialiseLCCData();
@@ -253,26 +251,34 @@ public:
         _include_directories.push_back(std::move(dir));
     }
 
-    auto frontend_options() const -> const decltype(_frontend_options)& {
-        return _frontend_options;
+    auto frontend_options() const -> const decltype(__options)& {
+        return __options;
     }
 
-    void add_frontend_option(std::string_view option) {
-        if (option.starts_with("---"))
-            option.remove_prefix(3);
-        _frontend_options.emplace_back(option);
+    static constexpr std::string_view without_dashes(std::string_view in) {
+        if (in.starts_with("---"))
+            return in.substr(0, in.size() - 3);
+        return in;
     }
 
-    bool has_frontend_option(std::string_view option) {
-        if (option.starts_with("---"))
-            option.remove_prefix(3);
-        return rgs::contains(_frontend_options, option);
+    void add_option(std::string_view option) {
+        __options.emplace_back(
+            without_dashes(option)
+        );
+    }
+
+    bool has_option(std::string_view option) {
+        return rgs::contains(
+            __options,
+            without_dashes(option)
+        );
     }
 
 private:
     /// Register a file in the context.
     auto make_file(fs::path name, std::vector<char>&& contents) -> File&;
 };
+
 } // namespace lcc
 
 #endif // LCC_CONTEXT_HH
