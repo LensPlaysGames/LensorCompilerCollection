@@ -27,7 +27,7 @@ auto lcc::glint::Module::serialise(
         return ModuleDescription::TypeIndex(indices.at(ty));
 
     LCC_ASSERT(
-        cache.size() < 0xffff,
+        cache.size() < std::numeric_limits<ModuleDescription::TypeIndex>::max(),
         "Too many types, cannot serialise in binary metadata format version 1"
     );
     current.push_back(ty);
@@ -428,11 +428,12 @@ auto lcc::glint::Module::serialise(
             }
         } break;
 
+        case Type::Kind::Type: {
+            write_tag();
+        } break;
+
         case Type::Kind::Typeof:
             Diag::ICE("Encountered TypeofType during serialisation. Bad sema, bad!");
-
-        case Type::Kind::Type:
-            Diag::ICE("Encountered TypeType during serialisation. Bad sema, bad!");
     }
 
     LCC_ASSERT(
@@ -441,6 +442,8 @@ auto lcc::glint::Module::serialise(
     );
 
     std::erase(current, ty);
+
+    // fmt::print("Serialised type: {}\n", ty->string(true));
 
     auto type_index = ModuleDescription::TypeIndex(cache.size());
 

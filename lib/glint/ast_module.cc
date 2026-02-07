@@ -103,6 +103,7 @@ auto lcc::glint::Module::intern(std::string_view str) -> usz {
 }
 
 namespace lcc::glint {
+
 void calculate_indices(
     std::unordered_map<Type*, ModuleDescription::TypeIndex>& out,
     usz& index,
@@ -128,6 +129,7 @@ void calculate_indices(
         case glint::Type::Kind::FFIType:
         case glint::Type::Kind::Named:
         case glint::Type::Kind::Integer:
+        case glint::Type::Kind::Type:
             break;
 
         // Types that always have a single child.
@@ -176,9 +178,6 @@ void calculate_indices(
 
         case glint::Type::Kind::Typeof:
             Diag::ICE("Encountered TypeofType during serialisation. Bad sema, bad!");
-
-        case glint::Type::Kind::Type:
-            Diag::ICE("Encountered TypeType during serialisation. Bad sema, bad!");
     };
 
     // Finally, visit the type itself.
@@ -186,7 +185,13 @@ void calculate_indices(
     ++index;
 }
 
-void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& out, usz& index, Expr* expr) {
+void calculate_indices(
+    std::unordered_map<Expr*, ModuleDescription::ExprIndex>& out,
+    usz& index,
+    std::unordered_map<Type*, ModuleDescription::TypeIndex>& type_out,
+    usz& type_index,
+    Expr* expr
+) {
     // Don't visit an expr twice.
     if (out.contains(expr)) return;
 
@@ -197,19 +202,23 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
     out.emplace(expr, -1);
 
     const auto recurse = [&](Expr* e) {
-        calculate_indices(out, index, e);
+        calculate_indices(out, index, type_out, type_index, e);
     };
 
     // Visit expression's children, first.
     switch (expr->kind()) {
         // Expressions that never have children
         case Expr::Kind::EvaluatedConstant:
-        case Expr::Kind::IntegerLiteral:
         case Expr::Kind::FractionalLiteral:
         case Expr::Kind::StringLiteral:
-        case Expr::Kind::NameRef:
-        case Expr::Kind::Type:
             break;
+
+        // No children, but encodes type.
+        case Expr::Kind::IntegerLiteral:
+        case Expr::Kind::Type:
+        case Expr::Kind::NameRef: {
+            calculate_indices(type_out, type_index, expr->type());
+        } break;
 
         // Expressions that may have a single child.
         case Expr::Kind::Return: {
@@ -227,11 +236,13 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
         case Expr::Kind::MemberAccess: {
             auto m = as<MemberAccessExpr>(expr);
             recurse(m->object());
+            calculate_indices(type_out, type_index, m->type());
         } break;
 
         case Expr::Kind::Cast: {
             auto c = as<CastExpr>(expr);
             recurse(c->operand());
+            calculate_indices(type_out, type_index, c->type());
         } break;
 
         case Expr::Kind::Sizeof: {
@@ -291,6 +302,8 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
             recurse(c->callee());
             for (auto e : c->args())
                 recurse(e);
+
+            calculate_indices(type_out, type_index, c->type());
         } break;
 
         case Expr::Kind::IntrinsicCall: {
@@ -302,6 +315,8 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
             auto c = as<CompoundLiteral>(expr);
             for (auto e : c->children())
                 recurse(e);
+
+            calculate_indices(type_out, type_index, c->type());
         } break;
 
         case Expr::Kind::Block: {
@@ -325,6 +340,14 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
 
         } break;
 
+        case Expr::Kind::VarDecl: {
+            auto v = as<VarDecl>(expr);
+            if (v->init())
+                recurse(v->init());
+
+            calculate_indices(type_out, type_index, v->type());
+        } break;
+
         case Expr::Kind::Module:
         case Expr::Kind::EnumeratorDecl:
         case Expr::Kind::FuncDecl:
@@ -332,9 +355,8 @@ void calculate_indices(std::unordered_map<Expr*, ModuleDescription::TypeIndex>& 
         case Expr::Kind::OverloadSet:
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::TypeDecl:
-        case Expr::Kind::VarDecl:
             expr->print(true);
-            LCC_TODO("Implement serialisation of preceding expression AST\n");
+            LCC_TODO("Implement traversal of preceding expression AST\n");
     };
 
     // Finally, visit the expression itself.
@@ -366,10 +388,10 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
     // know "where" it will end up (at least, enough about where it will end
     // up to write a type index).
     std::unordered_map<Type*, ModuleDescription::TypeIndex> type_indices{};
+    usz type_index{0};
     {
-        usz index{0};
         for (auto* decl : exports()) {
-            calculate_indices(type_indices, index, decl->type());
+            calculate_indices(type_indices, type_index, decl->type());
 
             if (
                 ModuleDescription::DeclarationHeader::get_kind(decl)
@@ -377,8 +399,9 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
             ) {
                 auto* v = as<VarDecl>(decl);
                 LCC_ASSERT(v->init(), "Named Template has NULL body");
-                for (auto template_parameter : as<TemplateExpr>(v->init())->params())
-                    calculate_indices(type_indices, index, template_parameter.type);
+                auto* t = as<TemplateExpr>(v->init());
+                for (auto template_parameter : t->params())
+                    calculate_indices(type_indices, type_index, template_parameter.type);
             }
         }
     }
@@ -388,7 +411,7 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
     // up to write an expression index).
     std::unordered_map<Expr*, ModuleDescription::ExprIndex> expr_indices{};
     {
-        usz index{0};
+        usz expr_index{0};
         for (auto* decl : exports()) {
             if (
                 ModuleDescription::DeclarationHeader::get_kind(decl)
@@ -396,22 +419,32 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
             ) {
                 auto* v = as<VarDecl>(decl);
                 LCC_ASSERT(v->init(), "Named Template has NULL body");
-                calculate_indices(expr_indices, index, v->init());
+                calculate_indices(
+                    expr_indices,
+                    expr_index,
+                    type_indices,
+                    type_index,
+                    v->init()
+                );
             }
         }
     }
 
     std::vector<Type*> type_cache{};
     std::vector<Type*> type_current{};
+    type_cache.reserve(type_indices.size());
+    type_current.reserve(type_indices.size());
 
     std::vector<Expr*> expr_cache{};
     std::vector<Expr*> expr_current{};
+    expr_cache.reserve(expr_indices.size());
+    expr_current.reserve(expr_indices.size());
 
     for (auto* decl : exports()) {
         // Decl: DeclHeader, length :u8, name :u8[length]
 
         // Prepare declaration header
-        ModuleDescription::TypeIndex type_index = serialise(
+        ModuleDescription::TypeIndex decl_type_index = serialise(
             types_data,
             type_cache,
             type_current,
@@ -420,7 +453,7 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
         );
         ModuleDescription::DeclarationHeader decl_hdr{
             u16(ModuleDescription::DeclarationHeader::get_kind(decl)),
-            type_index
+            decl_type_index
         };
 
         if (decl_hdr.kind == +ModuleDescription::DeclarationHeader::Kind::TEMPLATE) {
@@ -433,12 +466,18 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
                     template_parameter.type
                 );
             };
+            auto type_context = TypeSerialisationContext(
+                types_data,
+                type_cache,
+                type_current,
+                type_indices
+            );
             decl_hdr.expr_index = serialise_expr(
                 exprs_data,
                 expr_cache,
                 expr_current,
                 expr_indices,
-                type_indices,
+                type_context,
                 as<VarDecl>(decl)->init()
             );
         }
@@ -515,10 +554,10 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
     // Convert header to byte representation that is easy to serialise.
     auto hdr_bytes = lcc::utils::to_bytes(hdr);
 
-    for (auto e : expr_cache) {
-        fmt::print("Serialised expression:\n");
-        e->print(true);
-    }
+    // for (auto e : expr_cache) {
+    //     fmt::print("Serialised expression:\n");
+    //     e->print(true);
+    // }
 
     std::vector<u8> out{};
     out.insert(out.end(), hdr_bytes.begin(), hdr_bytes.end());

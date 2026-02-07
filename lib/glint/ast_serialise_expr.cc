@@ -12,7 +12,7 @@ auto Module::serialise_expr(
     std::vector<Expr*>& cache,
     std::vector<Expr*>& current,
     std::unordered_map<Expr*, u16> indices,
-    std::unordered_map<Type*, u16> type_indices,
+    Module::TypeSerialisationContext& type_context,
     Expr* expr
 ) -> lcc::u16 {
     using lcc::utils::to_bytes;
@@ -75,11 +75,24 @@ auto Module::serialise_expr(
             return ModuleDescription::TypeIndex(-1);
 
         LCC_ASSERT(
-            type_indices.contains(t),
+            type_context.indices.contains(t),
             "Type {} is not present within AoT-calculated indices",
             *t
         );
-        return type_indices.at(t);
+
+        auto t_index = serialise(
+            type_context.out,
+            type_context.cache,
+            type_context.current,
+            type_context.indices,
+            t
+        );
+        LCC_ASSERT(
+            t_index == type_context.indices.at(t),
+            "Mismatch in AoT index calculation and actual serialisation"
+        );
+
+        return type_context.indices.at(t);
     };
 
     const auto recurse = [&](Expr* e) -> void {
@@ -88,7 +101,7 @@ auto Module::serialise_expr(
             "You called write_tag() before traversing children; this is /not/ post-order traversal"
         );
         LCC_ASSERT(e, "Cannot serialise NULL expression");
-        (void) serialise_expr(out, cache, current, indices, type_indices, e);
+        (void) serialise_expr(out, cache, current, indices, type_context, e);
     };
 
     switch (expr->kind()) {
@@ -102,7 +115,7 @@ auto Module::serialise_expr(
             write_tag();
 
             // type :TypeIndex
-            write_t(ModuleDescription::TypeIndex(type_at(expr->type())));
+            write_t(type_at(expr->type()));
 
             // length :u16
             write_t(u16(n->name().size()));
@@ -118,7 +131,7 @@ auto Module::serialise_expr(
             write_tag();
 
             // type :TypeIndex
-            write_t(ModuleDescription::TypeIndex(type_at(expr->type())));
+            write_t(type_at(expr->type()));
         } break;
 
         // IntegerLiteral
@@ -127,7 +140,7 @@ auto Module::serialise_expr(
         case Expr::Kind::IntegerLiteral: {
             auto i = as<IntegerLiteral>(expr);
             write_tag();
-            write_t(ModuleDescription::TypeIndex(type_at(expr->type())));
+            write_t(type_at(expr->type()));
             write_t(u64(i->value().value()));
         } break;
 
@@ -151,9 +164,28 @@ auto Module::serialise_expr(
         } break;
 
         case Expr::Kind::EvaluatedConstant: {
-            // auto c = as<ConstantExpr>(expr);
+            auto c = as<ConstantExpr>(expr);
             // TODO: static assert for types of constant expression
-            LCC_TODO("Serialise constant expression");
+            if (c->value().is_int()) {
+                auto i = c->value().as_int().value();
+                // Encode as Integer Literal
+                u8 tag = u8(Expr::Kind::IntegerLiteral);
+                out.push_back(tag);
+                tag_written = true;
+                write_t(type_at(expr->type()));
+                write_t(u64(i));
+            } else if (c->value().is_string()) {
+                auto s = c->value().as_string();
+                auto& str = strings.at(s->string_index());
+                // Encode as String Literal
+                u8 tag = u8(Expr::Kind::StringLiteral);
+                out.push_back(tag);
+                tag_written = true;
+                write_t(u32(str.size()));
+                write_each(std::string_view(str));
+            } else if (c->value().is_null()) {
+                LCC_TODO("Serialise constant expression containing NULL");
+            } else Diag::ICE("Unhandled constant expression value kind");
         } break;
 
         // ReturnExpr
@@ -163,8 +195,12 @@ auto Module::serialise_expr(
             if (r->value())
                 recurse(r->value());
 
+            auto value_index = ModuleDescription::bad_expr_index;
+            if (r->value())
+                value_index = indices.at(r->value());
+
             write_tag();
-            write_t(ModuleDescription::ExprIndex(indices.at(r->value())));
+            write_t(value_index);
         } break;
 
         // TemplateExpr
@@ -206,6 +242,7 @@ auto Module::serialise_expr(
         } break;
 
         // MemberAccessExpr
+        //     type :TypeIndex
         //     object :ExprIndex
         //     name_length :u16
         //     name :u8[name_length]
@@ -214,8 +251,8 @@ auto Module::serialise_expr(
             recurse(m->object());
 
             write_tag();
+            write_t(type_at(m->type()));
             write_t(indices.at(m->object()));
-
             write_t(u16(m->name().size()));
             write_each(m->name());
         } break;
@@ -293,12 +330,14 @@ auto Module::serialise_expr(
             if (i->otherwise())
                 recurse(i->otherwise());
 
+            auto else_expr = ModuleDescription::bad_expr_index;
+            if (i->otherwise())
+                else_expr = indices.at(i->otherwise());
+
             write_tag();
             write_t(indices.at(i->condition()));
             write_t(indices.at(i->then()));
-            if (i->otherwise())
-                write_t(indices.at(i->otherwise()));
-            else write_t(ModuleDescription::bad_expr_index);
+            write_t(else_expr);
         } break;
 
         // WhileExpr
@@ -334,11 +373,24 @@ auto Module::serialise_expr(
         } break;
 
         // Expressions that have a variable amount of children.
+
+        // CallExpr
+        //     type :TypeIndex
+        //     callee :ExprIndex
+        //     arg_count :u16
+        //     args :ExprIndex[arg_count]
         case Expr::Kind::Call: {
             auto c = as<CallExpr>(expr);
             recurse(c->callee());
             for (auto e : c->args())
                 recurse(e);
+
+            write_tag();
+            write_t(type_at(c->type()));
+            write_t(indices.at(c->callee()));
+            write_t(u16(c->args().size()));
+            for (auto e : c->args())
+                write_t(indices.at(e));
         } break;
 
         case Expr::Kind::IntrinsicCall: {
@@ -346,14 +398,24 @@ auto Module::serialise_expr(
             LCC_TODO("Implement serialisation of intrinsic call");
         } break;
 
+        // CompoundLiteral
+        //     type :TypeIndex
+        //     count :u16
+        //     expressions :ExprIndex[count]
         case Expr::Kind::CompoundLiteral: {
             auto c = as<CompoundLiteral>(expr);
             for (auto e : c->children())
                 recurse(e);
+
+            write_tag();
+            write_t(type_at(c->type()));
+            write_t(u16(c->children().size()));
+            for (auto e : c->children())
+                write_t(indices.at(e));
         } break;
 
         // BlockExpr
-        //     count :u8
+        //     count :u16
         //     expressions :ExprIndex[count]
         case Expr::Kind::Block: {
             auto b = as<BlockExpr>(expr);
@@ -361,13 +423,13 @@ auto Module::serialise_expr(
                 recurse(e);
 
             write_tag();
-            write_t(u8(b->children().size()));
+            write_t(u16(b->children().size()));
             for (auto e : b->children())
                 write_t(indices.at(e));
         } break;
 
         // GroupExpr
-        //     count       :u8
+        //     count       :u16
         //     expressions :ExprIndex[count]
         case Expr::Kind::Group: {
             auto g = as<GroupExpr>(expr);
@@ -375,7 +437,7 @@ auto Module::serialise_expr(
                 recurse(e);
 
             write_tag();
-            write_t(u8(g->expressions().size()));
+            write_t(u16(g->expressions().size()));
             for (auto e : g->expressions())
                 write_t(indices.at(e));
         } break;
@@ -395,6 +457,7 @@ auto Module::serialise_expr(
         } break;
 
         // VarDecl
+        //     type :TypeIndex
         //     name_length :u8
         //     name :u8[name_length]
         //     linkage :u8
@@ -405,6 +468,8 @@ auto Module::serialise_expr(
                 recurse(v->init());
 
             write_tag();
+
+            write_t(type_at(v->type()));
 
             write_t(v->name().size());
             write_each(v->name());

@@ -111,11 +111,18 @@ auto lcc::glint::Module::deserialise(
 
     // Copy the header from the binary metadata blob.
     ModuleDescription::Header hdr{};
-    std::memcpy(&hdr, module_metadata_blob.data(), sizeof(ModuleDescription::Header));
+    std::memcpy(
+        &hdr,
+        module_metadata_blob.data(),
+        sizeof(ModuleDescription::Header)
+    );
 
     // Verify header has expected values.
     if (hdr.version != 1) {
-        fmt::print("ERROR: Could not deserialise: Invalid version {} in header\n", hdr.version);
+        fmt::print(
+            "ERROR: Could not deserialise: Invalid version {} in header\n",
+            hdr.version
+        );
         return false;
     }
     if (
@@ -123,7 +130,16 @@ auto lcc::glint::Module::deserialise(
         or hdr.magic[1] != ModuleDescription::magic_byte1
         or hdr.magic[2] != ModuleDescription::magic_byte2
     ) {
-        fmt::print("ERROR: Could not deserialise: Invalid magic bytes in header: {} {} {}\n", hdr.magic[0], hdr.magic[1], hdr.magic[2]);
+        fmt::print(
+            "ERROR: Could not deserialise: "
+            "Invalid magic bytes in header: {} {} {} (expected {} {} {})\n",
+            hdr.magic[0],
+            hdr.magic[1],
+            hdr.magic[2],
+            ModuleDescription::magic_byte0,
+            ModuleDescription::magic_byte1,
+            ModuleDescription::magic_byte2
+        );
         return false;
     }
 
@@ -157,6 +173,9 @@ auto lcc::glint::Module::deserialise(
             // TODO: Ensure kind is within range/a valid kind.
             auto kind = Expr::Kind(tag);
             switch (kind) {
+                case Expr::Kind::EvaluatedConstant:
+                    Diag::ICE("Evaluated constant should be binary encoded as some sort of literal");
+
                 /// deserialise
                 /// NameRefExpr
                 ///     type   :TypeIndex
@@ -171,28 +190,6 @@ auto lcc::glint::Module::deserialise(
                     std::string deserialised_name{};
                     for (u32 i = 0; i < length; ++i)
                         deserialised_name += char(module_metadata_blob.at(expr_offset++));
-
-                    // NameRefExpr needs a scope; what the hell kind of scope is a
-                    // deserialised name supposed to be looked up in?
-                    //
-                    // I guess we could just create a scope for each module and say that's
-                    // where all names get looked up... But, I'm not sure how they'd ever get
-                    // resolved (i.e. what declarations would populate the scope?).
-                    //
-                    // This is a mess!
-                    //
-                    // Basically, my thoughts are I need to either serialise scope information
-                    // along with expressions (ugh), or I need to reason about this such that
-                    // I'm able to create scopes while deserialising properly.
-                    //
-                    // Okay, so because of post-order traversal, I don't think that creating
-                    // scopes /as/ we deserialise is that realistic. I think what /is/
-                    // realistic is deserialising without scope information, and then going
-                    // through afterward and building them and fixing up scope references.
-                    // Just iterate the deserialised expression and keep track of a "current
-                    // scope", and any namerefexpr we encounter gets it's scope set to that
-                    // scope. Block expressions, template expressions, function definitions,
-                    // etc. would all update "current scope" to a new scope.
 
                     auto n = new (*this) NameRefExpr(
                         deserialised_name,
@@ -243,8 +240,20 @@ auto lcc::glint::Module::deserialise(
                     exprs.insert(exprs.begin() + expr_index, t);
                 } break;
 
-                case Expr::Kind::EvaluatedConstant:
-                case Expr::Kind::IntegerLiteral:
+                // deserialise
+                // IntegerLiteral
+                //     type :TypeIndex
+                //     value :u64
+                case Expr::Kind::IntegerLiteral: {
+                    auto t_index = read_t(ModuleDescription::TypeIndex());
+                    auto value = read_t(u64());
+
+                    auto i = new (*this) IntegerLiteral(value, Type::Unknown, {});
+                    fixups.emplace_back(i->type_ref(), t_index);
+
+                    exprs.insert(exprs.begin() + expr_index, i);
+                } break;
+
                 case Expr::Kind::FractionalLiteral:
                 case Expr::Kind::StringLiteral:
                 case Expr::Kind::Type:
@@ -866,16 +875,21 @@ auto lcc::glint::Module::deserialise(
         }
     }
 
+    // for (auto [i, t] : vws::enumerate(types)) {
+    //     if (i < types_zero_index) continue;
+    //     fmt::print("Deserialised type: {}\n", t->string(true));
+    // }
+
     // Now that types are deserialised, go back through deserialised
     // expressions and resolve types.
     for (auto f : fixups)
         *f.fixup = type_at(f.index);
 
-    for (auto e : exprs) {
-        // TODO: Analyse?
-        fmt::print("Deserialised expression (after type fixups):\n");
-        e->print(true);
-    }
+    // for (auto e : exprs) {
+    //     // TODO: Analyse?
+    //     fmt::print("Deserialised expression (after type fixups):\n");
+    //     e->print(true);
+    // }
 
     // Starting after the header, begin parsing declarations. Stop after
     // parsing the amount of declarations specified in the header.

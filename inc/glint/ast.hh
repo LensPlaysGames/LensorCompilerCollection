@@ -354,6 +354,13 @@ public:
         Type*
     ) -> lcc::u16;
 
+    struct TypeSerialisationContext {
+        std::vector<u8>& out;
+        std::vector<Type*>& cache;
+        std::vector<Type*>& current;
+        const std::unordered_map<Type*, u16>& indices;
+    };
+
     [[nodiscard]]
     auto serialise_expr(
         std::vector<u8>& out,
@@ -361,7 +368,7 @@ public:
         std::vector<Expr*>& current,
         // indices calculated ahead of time
         std::unordered_map<Expr*, u16> indices,
-        std::unordered_map<Type*, u16> type_indices,
+        TypeSerialisationContext& type_context,
         Expr*
     ) -> lcc::u16;
 
