@@ -115,6 +115,7 @@
 - [Sema]: =---no-default-handlers=
   If passed, do not include definitions for the functionality that Sema generates calls to, for example (i.e. =__dynarray_grow=).
 - [Lexer]: Disallow =_X= anywhere in identifiers (for mangled name compatibility)
+- [Feature]: Compiler removes unnecessary type annotations (i.e. where deduction is possible)
 
 * LangTest
 
