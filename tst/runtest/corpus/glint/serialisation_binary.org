@@ -1,0 +1,27 @@
+* (De)Serialise Binary
+
+Test serialisation and deserialisation of binary expressions.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_binary;
+
+  x 1;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_binary;
+  export x :: template(e : expr)
+    e + e;
+#+end_src
+
+#+NAME: status
+#+begin_example
+2
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+

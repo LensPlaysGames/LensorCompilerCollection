@@ -1,0 +1,26 @@
+* (De)Serialise IntegerLiteral
+
+Test serialisation and deserialisation of integer literal expressions.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_integerliteral;
+
+  x 420;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_integerliteral;
+  export x :: template(e : expr)
+    69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

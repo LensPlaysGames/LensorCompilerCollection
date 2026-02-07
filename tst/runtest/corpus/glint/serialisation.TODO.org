@@ -1,0 +1,72 @@
+* Serialisation Tests Still TODO
+
+- serialisation_if_noelse.org
+  ~if 0, 1;~
+- serialisation_if_else.org
+  ~if 0, 1 else 2;~
+- serialisation_if_expr.org
+  ~foo := if 0, 1 else 2;~
+- serialisation_cfor.org
+  ~cfor i :: 0; i < 1; i += 1; i;~
+- serialisation_rangedfor.org
+  #+begin_src glint
+    c : [byte];
+    for i in c, i;
+  #+end_src
+- serialisation_voidcall_noargs.org
+  #+begin_src glint
+    foo : void() 69;
+
+    foo();
+  #+end_src
+- serialisation_voidcall_args.org
+  #+begin_src glint
+    foo : void(a : int, b : int) a + b;
+
+    foo 1, 2;
+  #+end_src
+- serialisation_call_noargs.org
+  #+begin_src glint
+    foo : int() 69;
+
+    foo();
+  #+end_src
+- serialisation_call_args.org
+  #+begin_src glint
+    foo : int(a : int, b : int) a + b;
+
+    foo 42, 27;
+  #+end_src
+- serialisation_compound_literal.org
+  #+begin_src glint
+    !{69};
+  #+end_src
+- serialisation_block.org
+  #+begin_src glint
+    {42; 69};
+  #+end_src
+- serialisation_group.org
+  #+begin_src glint
+    (42; 69);
+  #+end_src
+- serialisation_vardecl.org
+  #+begin_src glint
+    a :: 42;
+  #+end_src
+- serialisation_funcdecl.org
+  #+begin_src glint
+    a : int() 42;
+  #+end_src
+- serialisation_funcdecl_params.org
+  #+begin_src glint
+    a : int(b : int) 42 + b;
+  #+end_src
+- serialisation_template_funcdecl.org
+  #+begin_src glint
+    a : int(b : auto) 42 + b;
+  #+end_src
+- serialisation_typedecl.org
+  #+begin_src glint
+    struct { a : int; };
+  #+end_src
+- serialisation_typealiasdecl.org

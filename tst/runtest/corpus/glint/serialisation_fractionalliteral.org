@@ -1,0 +1,24 @@
+* (De)Serialise FractionalLiteral
+
+Test serialisation and deserialisation of fractional literal expressions.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_fractional;
+  x 420;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_fractional;
+  export x :: template(e : expr) 2.0;
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

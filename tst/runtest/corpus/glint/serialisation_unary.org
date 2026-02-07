@@ -1,0 +1,27 @@
+* (De)Serialise Unary
+
+Test serialisation and deserialisation of unary expressions.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_unary;
+
+  x 0;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_unary;
+  export x :: template(e : expr)
+    not e;
+#+end_src
+
+#+NAME: status
+#+begin_example
+1
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+

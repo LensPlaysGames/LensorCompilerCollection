@@ -1,0 +1,28 @@
+* (De)Serialise Return With Value
+
+Test serialisation and deserialisation of a return expression with a value.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_return_novalue;
+
+  x 69;
+
+  42;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_return_novalue;
+  export x :: template(e : expr)
+    return e;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

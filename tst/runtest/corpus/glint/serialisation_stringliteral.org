@@ -1,0 +1,27 @@
+* (De)Serialise StringLiteral
+
+Test serialisation and deserialisation of string literal expressions.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_stringliteral;
+
+  print (x 420), `\n`;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_stringliteral;
+  export x :: template(e : expr)
+    "I am a string literal";
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+I am a string literal
+#+end_example
