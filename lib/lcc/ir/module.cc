@@ -840,12 +840,16 @@ void Module::emit(std::filesystem::path output_file_path) {
                 if (_ctx->target()->is_arch_x86_64())
                     x86_64::emit_gnu_att_assembly(output_file_path, this, desc, machine_ir);
                 else Diag::ICE("Unhandled code emission target, sorry");
-            } else if (_ctx->format()->format() == Format::ELF_OBJECT) {
+            } else if (
+                _ctx->format()->format() == Format::ELF_OBJECT
+                or _ctx->format()->format() == Format::COFF_OBJECT
+            ) {
                 GenericObject gobj{};
                 if (_ctx->target()->is_arch_x86_64())
                     gobj = x86_64::emit_mcode_gobj(this, desc, machine_ir);
                 else Diag::ICE("Unhandled code emission target, sorry");
 
+                // TODO: if print requested...
                 fmt::print("{}\n", gobj.print());
 
                 FILE* f = fopen(output_file_path.string().data(), "wb");
@@ -856,11 +860,15 @@ void Module::emit(std::filesystem::path output_file_path) {
                     );
                 }
 
-                gobj.as_elf(f);
+                if (_ctx->format()->format() == Format::ELF_OBJECT)
+                    gobj.as_elf(f);
+                else if (_ctx->format()->format() == Format::COFF_OBJECT)
+                    gobj.as_coff(f);
+                else Diag::ICE("Unhandled generic object output format");
+
                 fclose(f);
 
             } else if (_ctx->format()->format() == Format::COFF_OBJECT) {
-                LCC_TODO("Emit COFF object from generic object format");
             }
         } break;
     }

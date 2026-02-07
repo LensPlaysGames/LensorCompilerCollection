@@ -3,8 +3,12 @@
 
 #include <fmt/format.h>
 #include <lcc/ir/core.hh>
+#include <lcc/typedefs.hh>
 #include <lcc/utils.hh>
 
+#include <climits>
+#include <initializer_list>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -47,7 +51,7 @@ public:
         // Common Sections: `.text`
         EXECUTABLE,
 
-        MAX = sizeof(decltype(attributes)) // NONE ALLOWED PAST THIS
+        MAX = sizeof(decltype(attributes)) * CHAR_BIT // NONE ALLOWED PAST THIS
     };
 
     bool attribute(Attribute n) const {
@@ -55,7 +59,9 @@ public:
     }
 
     bool attribute(Attribute n, bool new_value) {
-        attributes |= u64(1) << int(n);
+        if (new_value)
+            attributes |= u64(1) << int(n);
+        else attributes &= ~(u64(1) << int(n));
         return new_value;
     }
 
@@ -63,12 +69,25 @@ public:
         LCC_ASSERT(is_fill, "Cannot access length unless section is_fill");
         return _length;
     }
+    auto length() const {
+        LCC_ASSERT(is_fill, "Cannot access length unless section is_fill");
+        return _length;
+    }
     auto& value() {
+        LCC_ASSERT(is_fill, "Cannot access length unless section is_fill");
+        return _value;
+    }
+    auto value() const {
         LCC_ASSERT(is_fill, "Cannot access length unless section is_fill");
         return _value;
     }
 
     auto& contents() {
+        LCC_ASSERT(not is_fill, "Cannot append to contents unless section !is_fill");
+        return _contents;
+    }
+
+    auto& contents() const {
         LCC_ASSERT(not is_fill, "Cannot append to contents unless section !is_fill");
         return _contents;
     }
@@ -138,7 +157,7 @@ public:
                     // Loop over 16 bytes starting at `i`.
                     for (usz index = i; index < i + 16; ++index) {
                         char c = char(_contents[index]);
-                        if (c < ' ' || c > '~') c = '.';
+                        if (c < ' ' or c > '~') c = '.';
                         out += fmt::format("{}", c);
                     }
                     out += "|\n";
@@ -161,7 +180,7 @@ public:
                 for (usz index = i; index < i + 16; ++index) {
                     if (index < size) {
                         char c = char(_contents[index]);
-                        if (c < ' ' || c > '~') c = '.';
+                        if (c < ' ' or c > '~') c = '.';
                         out += fmt::format("{}", c);
                     } else out += '.';
                 }
@@ -251,15 +270,19 @@ constexpr isz align_to(isz value, isz alignment) {
 }
 
 struct GenericObject {
-    std::vector<Section> sections;
-    std::vector<Symbol> symbols;
-    std::vector<Relocation> relocations;
+    std::vector<Section> sections{};
+    std::vector<Symbol> symbols{};
+    std::vector<Relocation> relocations{};
 
     Section& section(std::string_view name) {
         auto found = rgs::find_if(sections, [&](const Section& s) {
             return std::string_view(s.name) == name;
         });
-        LCC_ASSERT(found != sections.end(), "Could not find section with name {}", name);
+        LCC_ASSERT(
+            found != sections.end(),
+            "Could not find section with name {}",
+            name
+        );
         return *found;
     }
     auto section(std::string_view name) const -> const Section& {
@@ -275,23 +298,34 @@ struct GenericObject {
 
             size_t data_offset = initialized_data.contents().size();
             for (auto n : var->names()) {
-                const bool imported = n.linkage == Linkage::Imported || n.linkage == Linkage::Reexported;
-                const bool exported = n.linkage == Linkage::Exported || n.linkage == Linkage::Reexported;
+                const bool imported
+                    = n.linkage == Linkage::Imported or n.linkage == Linkage::Reexported;
+                const bool exported
+                    = n.linkage == Linkage::Exported or n.linkage == Linkage::Reexported;
 
-                LCC_ASSERT(not imported, "Cannot handle an *imported* global /with an initializer/");
+                LCC_ASSERT(
+                    not imported,
+                    "Cannot handle an *imported* global /with an initializer/"
+                );
 
                 // Write init to .data section
-                Symbol::Kind kind = exported
-                                      ? Symbol::Kind::EXPORT
-                                      : Symbol::Kind::STATIC;
+                Symbol::Kind kind
+                    = exported
+                        ? Symbol::Kind::EXPORT
+                        : Symbol::Kind::STATIC;
 
-                symbols.push_back({kind, n.name, ".data", data_offset});
+                symbols.push_back(
+                    {kind, n.name, ".data", data_offset}
+                );
             }
 
             switch (var->init()->kind()) {
                 case Value::Kind::IntegerConstant: {
                     auto integer_constant = as<IntegerConstant>(var->init());
-                    LCC_ASSERT(integer_constant->type()->bytes() <= 8, "Oversized integer constant");
+                    LCC_ASSERT(
+                        integer_constant->type()->bytes() <= 8,
+                        "Oversized integer constant"
+                    );
                     // FIXME: Big/Little endianness handling.
                     u64 value = integer_constant->value().value();
                     for (usz i = 0; i < integer_constant->type()->bytes(); ++i) {
@@ -306,12 +340,19 @@ struct GenericObject {
                 } break;
 
                 default:
-                    LCC_ASSERT(false, "Sorry, but global variable initialisation with value kind {} is not supported.", Value::ToString(var->init()->kind()));
+                    LCC_ASSERT(
+                        false,
+                        "Sorry, but global variable initialisation with value kind {} is not supported.",
+                        Value::ToString(var->init()->kind())
+                    );
             }
         } else {
             for (auto n : var->names()) {
-                const bool imported = n.linkage == Linkage::Imported || n.linkage == Linkage::Reexported;
-                [[maybe_unused]] const bool exported = n.linkage == Linkage::Exported || n.linkage == Linkage::Reexported;
+                const bool imported
+                    = n.linkage == Linkage::Imported or n.linkage == Linkage::Reexported;
+                [[maybe_unused]]
+                const bool exported
+                    = n.linkage == Linkage::Exported or n.linkage == Linkage::Reexported;
 
                 if (imported) {
                     // Create symbol referencing externally-defined value.
@@ -355,6 +396,9 @@ struct GenericObject {
 
     // Write this generic object file in ELF format into the given file.
     void as_elf(FILE* f);
+
+    // Write this generic object file in COFF format into the given file.
+    void as_coff(FILE* f);
 };
 
 } // namespace lcc

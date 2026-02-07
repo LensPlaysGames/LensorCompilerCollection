@@ -299,11 +299,14 @@ endif()
 # Generic object library (convertible to ELF and COFF, currently)
 add_library(
   object STATIC
+  inc/object/coff.h
   inc/object/elf.h
   inc/object/elf.hh
   inc/object/generic.hh
   lib/object/elf.cc
   lib/object/generic.cc
+  lib/object/generic_to_coff.cc
+  lib/object/generic_to_elf.cc
 )
 target_include_directories(object PUBLIC inc)
 target_link_libraries(object PRIVATE options)
