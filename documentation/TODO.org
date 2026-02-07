@@ -55,6 +55,7 @@
   Basically, if we are looping over a container, and it is modified, we need to adjust the loop code to take that into account. Ideally, we would update the "current" iterator reference (=x= in the above example) after every modification that requires it (possible resize).
 - [Control Flow]: =continue=, =break=
   Possibly even named loops and the ability to break/continue from specific ones from nested loops...
+- [Parser/Sema]: Named scopes
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
 - [Cereal]: Flesh out binary AST format
 - [Parser/Sema]: Switch on value
@@ -98,7 +99,6 @@
   Behind =---case-insensitive= flag?
   Or =---case-sensitive=?
 - [Parser/Sema]: Recursive Lambda
-- [Parser/Sema]: Named scopes
 - [Module]: =---ast-binary= to emit binary representation of AST
 
   My thought is that a build system could hash the AST instead of the source, so that trivial changes in whitespace or formatting would not actually cause an invalidation.
@@ -117,9 +117,12 @@
 * LangTest
 
 - [Deduplication]: Better facilities for parsing lang tests.
+  I want a generic way to split a LangTest-like file (i.e. ~====~ fences around lines with names and =:= specifiers followed by a block of arbitrary text delimited by a =---= fence, followed by more arbitrary text).
+  Then, in LangTest, we can just parse the test into these known chunks and extract the relevant information from each.
 - [LangTest]: fail test specifier given an expected error id in brackets
   i.e. =:fail_sema["invalid-literal/integer"]= or something to make sure the /expected/ diagnostic is emitted, not just a similar one.
 - Write an IR LangTest implementation.
+  NOTE: Sort of not applicable because IR parser does not build an AST.
 
 * RunTest
 
