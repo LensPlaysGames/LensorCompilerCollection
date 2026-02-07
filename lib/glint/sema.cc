@@ -2198,17 +2198,15 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 v->set_sema_done();
 
             if (v->ok() and not v->init()) {
-                // ---error/default-init argument to error on default initialization
-                // occuring.
-                //
-                // if (context->has_frontend_option("error/default-init")) {
-                //     Error(
-                //         ErrorId::Miscellaneous,
-                //         "Default Initialization Occured"
-                //     );
-                //     v->set_sema_errored();
-                //     return false;
-                // }
+                // TODO: Handle warning/, report/
+                if (context->has_option("error/default-init")) {
+                    Error(
+                        v->location(),
+                        "Default Initialization Occured"
+                    );
+                    v->set_sema_errored();
+                    return false;
+                }
 
                 auto initializer = DefaultInitialize(v);
                 if (not Analyse(&initializer))
