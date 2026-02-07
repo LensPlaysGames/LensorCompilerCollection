@@ -501,7 +501,8 @@ static void assemble_inst(
                     reg.size
                 );
 
-                if (reg.size == 16) text += prefix16;
+                if (reg.size == 16)
+                    text += prefix16;
                 if (reg_topbit(reg))
                     text += rex_byte(false, false, false, reg_topbit(reg));
                 text += 0x58 + rd_encoding(reg);
@@ -556,7 +557,8 @@ static void assemble_inst(
                 if (dst.size == 1 or dst.size == 8)
                     op -= 8; // op = 0xb0 + rb_encoding(dst);
 
-                if (dst.size == 16) text += prefix16;
+                if (dst.size == 16)
+                    text += prefix16;
                 if (dst.size == 64 or reg_topbit(dst))
                     text += rex_byte(dst.size == 64, false, false, reg_topbit(dst));
                 text += op;
@@ -607,7 +609,7 @@ static void assemble_inst(
                 u8 modrm = modrm_byte(0b11, regbits(dst), regbits(src));
 
                 if (dst.size == 16) text += prefix16;
-                if (dst.size == 64 || reg_topbit(src) || reg_topbit(dst))
+                if (dst.size == 64 or reg_topbit(src) or reg_topbit(dst))
                     text += rex_byte(dst.size == 64, reg_topbit(dst), false, reg_topbit(src));
                 text += {op, modrm};
                 // TODO: mcode_sib_if_r12 ??
@@ -665,7 +667,8 @@ static void assemble_inst(
 
                 u8 modrm = modrm_byte(0b10, regbits(reg), regbits(RegisterId::RBP));
 
-                if (reg.size == 16) text += prefix16;
+                if (reg.size == 16)
+                    text += prefix16;
                 if (reg.size == 64 or reg_topbit(reg))
                     text += rex_byte(reg.size == 64, reg_topbit(reg), false, false);
                 text += {op, modrm};
@@ -710,8 +713,9 @@ static void assemble_inst(
 
                 u8 modrm = modrm_byte(0b11, regbits(dst), regbits(src));
 
-                if (dst.size == 16) text += prefix16;
-                if (dst.size == 64 || reg_topbit(src) || reg_topbit(dst))
+                if (dst.size == 16)
+                    text += prefix16;
+                if (dst.size == 64 or reg_topbit(src) or reg_topbit(dst))
                     text += rex_byte(dst.size == 64, reg_topbit(dst), false, reg_topbit(src));
                 text += {op, modrm};
                 // TODO: mcode_sib_if_r12 ??
@@ -813,7 +817,7 @@ static void assemble_inst(
                 u8 modrm = modrm_byte(0b10, regbits(reg), regbits(RegisterId::RBP));
 
                 if (reg.size == 16) text += prefix16;
-                if (reg.size == 64 || reg_topbit(reg))
+                if (reg.size == 64 or reg_topbit(reg))
                     text += rex_byte(reg.size == 64, reg_topbit(reg), false, false);
                 text += {op, modrm};
                 text += as_bytes(i32(offset));
@@ -849,14 +853,67 @@ static void assemble_inst(
 
         case Opcode::Compare: {
             // GNU syntax (src, dst operands)
-            //       0x38 /r | CMP r8, r/m8   | MR
+            //       0x38 /r | CMP r8,  r/m8  | MR
             //  0x66 0x39 /r | CMP r16, r/m16 | MR
             //       0x39 /r | CMP r32, r/m32 | MR
             // REX.W 0x39 /r | CMP r64, r/m64 | MR
             // "MR" means that the source operand goes in reg field of modrm and the
             // destination operand goes in the r/m field.
-            if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x38, text);
-            else Diag::ICE(
+            if (is_reg_reg(inst))
+                opcode_slash_r(gobj, func, inst, 0x38, text);
+            else if (is_imm_reg(inst)) {
+                auto [imm, reg] = extract_imm_reg(inst);
+                // If reg == rax, use 0x3c/0x3d opcodes
+                if (reg.value == +x86_64::RegisterId::RAX) {
+                    //       0x3c ib | CMP AL,  imm8   | I
+                    //  0x66 0x3d iw | CMP AX,  imm16  | I
+                    //       0x3d id | CMP EAX, imm32  | I
+                    // REX.W 0x3d id | CMP RAX, imm32  | I
+                    if (reg.size <= 8) {
+                        u8 op = 0x3c;
+                        text += {op, (u8) imm.value};
+                    } else if (reg.size <= 16) {
+                        u8 op = 0x3d;
+                        text += op;
+                        text += as_bytes((i16) imm.value);
+                    } else if (reg.size <= 32) {
+                        u8 op = 0x3d;
+                        text += op;
+                        text += as_bytes((i32) imm.value);
+                    } else if (reg.size <= 64) {
+                        u8 op = 0x3d;
+                        text += {rexw_byte(), op};
+                        text += as_bytes((i32) imm.value);
+                    } else Diag::ICE("Invalid register size");
+                } else {
+                    //       0x80 /7 ib | CMP r/m8,  imm8  | MI
+                    //  0x66 0x81 /7 iw | CMP r/m16, imm16 | MI
+                    //       0x81 /7 id | CMP r/m32, imm32 | MI
+                    // REX.W 0x81 /7 id | CMP r/m64, imm32 | MI
+                    //
+                    //  0x66 0x83 /7 ib | CMP r/m16, imm8 | MI
+                    //       0x83 /7 ib | CMP r/m32, imm8 | MI
+                    // REX.W 0x83 /7 ib | CMP r/m64, imm8 | MI
+                    if (reg.size <= 8) {
+                        // Use 0x80/0x83
+                        LCC_TODO("0x80/0x83 opcode assembly");
+                    } else if (reg.size <= 32) {
+                        // 0x81
+                        constexpr u8 op = 0x81;
+                        u8 modrm = modrm_byte(0b11, 7, regbits(reg));
+
+                        if (reg.size == 16)
+                            text += prefix16;
+                        if (reg.size == 64 or reg_topbit(reg))
+                            text += rex_byte(reg.size == 64, reg_topbit(reg), false, false);
+                        text += {op, modrm};
+                        if (reg.size <= 16)
+                            text += as_bytes((i16) imm.value);
+                        else text += as_bytes((i32) imm.value);
+
+                    } else Diag::ICE("Invalid register size");
+                }
+            } else Diag::ICE(
                 "Sorry, unhandled form\n    {}\n",
                 PrintMInstImpl(inst, opcode_to_string)
             );
@@ -868,7 +925,8 @@ static void assemble_inst(
             //  0x66 0x85 /r | TEST r8, r/m8 | MR
             //       0x85 /r | TEST r8, r/m8 | MR
             // REX.W 0x85 /r | TEST r8, r/m8 | MR
-            if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x84, text);
+            if (is_reg_reg(inst))
+                opcode_slash_r(gobj, func, inst, 0x84, text);
             else Diag::ICE(
                 "Sorry, unhandled form\n    {}\n",
                 PrintMInstImpl(inst, opcode_to_string)
@@ -1017,7 +1075,8 @@ static void assemble_inst(
             //  0x66 0x29 /r | SUB r16, r/m16 | MR
             //       0x29 /r | SUB r32, r/m32 | MR
             // REX.W 0x29 /r | SUB r64, r/m64 | MR
-            if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x28, text);
+            if (is_reg_reg(inst))
+                opcode_slash_r(gobj, func, inst, 0x28, text);
             // GNU syntax (src, dst operands)
             //   REX 0x80 /5 ib | SUB imm8, r/m8   | IM
             //       0x81 /5 iw | SUB imm16, r/m16 | IM
@@ -1028,7 +1087,8 @@ static void assemble_inst(
                 // likely are bugs.
                 auto [imm, reg] = extract_imm_reg(inst);
 
-                if (imm.size > 64) Diag::ICE("Over-large immediate size ({} bits)\n", imm.size);
+                if (imm.size > 64)
+                    Diag::ICE("Over-large immediate size ({} bits)\n", imm.size);
 
                 u8 op = 0x81;
                 if (imm.size <= 8) op = 0x80;
@@ -1111,6 +1171,7 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
     assemble_inst(gobj, func, push_rbp, text);
     assemble_inst(gobj, func, mov_rsp_into_rbp, text);
 
+    // TODO: Spilled register slots
     usz stack_frame_size = rgs::fold_left(
         vws::transform(func.locals(), [](AllocaInst* l) {
             return l->allocated_type()->bytes();
