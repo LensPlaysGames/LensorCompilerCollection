@@ -116,6 +116,7 @@
 - [Fix]: Compound literal initialiser should act as if it was cast to var type.
   Current:  =bar : T T !{42};=
   Proposed: =bar : T !{42};=
+
 * LangTest
 
 - [Deduplication]: Better facilities for parsing lang tests.

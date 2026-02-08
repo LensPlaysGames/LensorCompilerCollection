@@ -248,6 +248,7 @@ void do_link(
     if (not cc) cc = "gcc";
 
     // Build link command.
+    // TODO: Pass along include directories.
     auto link_command = fmt::format(
         "{} {} -o {}",
         cc,
