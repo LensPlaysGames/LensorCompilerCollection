@@ -44,6 +44,7 @@
     --type: #2cabff;
 }
 
+
 body {color: var(--fg); background-color: var(--bg);}
 .org-bold-italic {font-weight: bold; font-style: italic;}
 .org-bold {font-weight: bold;}
@@ -76,7 +77,7 @@ body {color: var(--fg); background-color: var(--bg);}
 .org-warning-1{color: var(--error);}
 .org-type{color: var(--type);}
 
-
+
 /* Basic Org Styling */
 #postamble p, #preamble p { font-size: 90%; margin: .2em; }
 .title {
@@ -128,6 +129,7 @@ body {color: var(--fg); background-color: var(--bg);}
 textarea { overflow-x: auto; }
 .linenr { font-size: smaller }
 
+
 /* Tables, Figures, Equations */
 table { border-collapse:collapse; }
 caption.t-above { caption-side: top; }
@@ -158,6 +160,7 @@ dt { font-weight: bold; }
     vertical-align: middle;
 }
 
+
 /* Embedded Source Code */
 pre {
     border: 1px solid var(--comment);

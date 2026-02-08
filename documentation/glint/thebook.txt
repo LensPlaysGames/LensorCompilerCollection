@@ -21,9 +21,10 @@ _________________
 ..... 4. Glint Exercise
 .. 2. Simple Values
 ..... 1. Integers
-..... 2. Bytes
-..... 3. Boolean
-..... 4. Strings
+..... 2. Fractionals
+..... 3. Bytes
+..... 4. Boolean
+..... 5. Strings
 .. 3. Variables
 ..... 1. Declaration Forms
 ..... 2. Type Decay
@@ -59,8 +60,9 @@ _________________
 .. 11. Templates
 .. 12. Function Overloading
 .. 13. Operator Overloading
-.. 14. Templated Functions and Templated Types
-.. 15. Modules
+.. 14. Templated Types
+.. 15. Templated Functions
+.. 16. Modules
 ..... 1. Writing A Module Vs A Program
 ..... 2. Exporting Variables
 ..... 3. Importing Modules
@@ -413,7 +415,25 @@ _________________
   Integer literals are always of `int' type.
 
 
-2.2.2 Bytes
+2.2.2 Fractionals
+-----------------
+
+  Glint supports decimal fractional literal formats. The whole part of a
+  decimal fractional literal may not begin with `0'.
+
+  ,----
+  | 0.0;
+  | 0.5;
+  | 1.0;
+  | 1.0005;
+  | 82921.5;
+  | 12398.812;
+  `----
+
+  Fractional literals are always of `float' type.
+
+
+2.2.3 Bytes
 -----------
 
   Glint makes no distinction between character and integer data types
@@ -435,7 +455,7 @@ _________________
   Byte literals are always of `byte' type.
 
 
-2.2.3 Boolean
+2.2.4 Boolean
 -------------
 
   Logical values that denote veracity of an expression.
@@ -445,7 +465,7 @@ _________________
   Boolean values are always of `s1' (one-bit signed integer) type.
 
 
-2.2.4 Strings
+2.2.5 Strings
 -------------
 
   A string allows the Glint programmer to include (textual) data
@@ -790,7 +810,15 @@ _________________
 2.5.1 Glint Exercise
 --------------------
 
-  TODO
+  ,----
+  | 1  x :: 42 + 27;
+  | 2  print x, " gallons of milk on the wall...\n"
+  `----
+
+  1. What is the output of the above program?
+
+  2. What /would/ the output of the above program be, if `x' were
+     initialized to `3'?
 
 
 2.6 Arrays
@@ -1478,15 +1506,10 @@ _________________
   TODO: syntax example
 
 
-2.14 Templated Functions and Templated Types
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2.14 Templated Types
+~~~~~~~~~~~~~~~~~~~~
 
-  You do not ever need to implement a vector in Glint, as there is the
-  dynamic array type built-in to the language. However, vectors are
-  simple to understand, and widespread enough that I believe this to be
-  the best (as in least-confusing) example to give.
-
-  A templated type is like a template expression that defines a type.
+  A templated type is a template expression that defines a type.
 
   ,----
   | vector :: struct (T : type) {
@@ -1498,14 +1521,22 @@ _________________
   | my_vec_of_int : vector int;
   `----
 
-  A templated function is like a template expression that defines a
-  function.  The catch here is that the template arguments are all types
-  (because, well, templating a function on a value seems an awful lot
-  like you may just want to use a parameter instead `:^)'). Because of
-  that, the syntax has removed the `(T1 : type, T2 : type)' boilerplate
-  in favor of automagically generating them from the amount of unique
-  `auto' types in the signature. Notice the `auto' type allows for
-  partial definition of a type, just like C++20's concepts.
+
+2.15 Templated Functions
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+  A templated function is /like/ a template expression that defines a
+  function declaration.
+
+  The catch here is that the template arguments are all types (because,
+  well, templating a function on a value seems an awful lot like you may
+  just want to use a parameter instead `:^)'). Because of that, the
+  syntax has removed the `(T1 : type, T2 : type)' boilerplate in favor
+  of automagically generating them from the amount of unique `auto'
+  types in the signature.
+
+  The `auto' type allows for partial definition of a type, just like
+  C++20's concepts.
 
   ,----
   | vector_push : void(vec : (vector auto.element).ref, val : auto.element) {
@@ -1526,7 +1557,7 @@ _________________
 
   ,----
   | vector_push :: template(element : type)
-  |   vector_push_impl : void(vec : vector element, val : element)
+  |   vector_push_impl : void(vec : (vector element), val : element)
   |     ...;
   | 
   | ;; Invocations could be thought of like this
@@ -1538,10 +1569,10 @@ _________________
   place of `auto' in the parameters.
 
 
-2.15 Modules
+2.16 Modules
 ~~~~~~~~~~~~
 
-2.15.1 Writing A Module Vs A Program
+2.16.1 Writing A Module Vs A Program
 ------------------------------------
 
   A Glint program is a collection of Glint source code that may be
@@ -1559,7 +1590,7 @@ _________________
   modules may import programs.
 
 
-2.15.2 Exporting Variables
+2.16.2 Exporting Variables
 --------------------------
 
   A Glint module may export any amount of variables, such that those
@@ -1585,7 +1616,7 @@ _________________
   operate on, and interact with the variable.
 
 
-2.15.3 Importing Modules
+2.16.3 Importing Modules
 ------------------------
 
   ,----
@@ -1594,7 +1625,24 @@ _________________
   | foo; ;; equals int 69
   `----
 
-  TODO: Mention Glint compiler not being able to find module metadata.
+  When building a Glint program that imports other Glint programs, the
+  compiler needs to know details about the imported module. These
+  details are stored in a built module interface (BMI) known as `.gmeta'
+  files. These files contain Glint module metadata that is loaded by the
+  compiler when a module is imported. This metadata includes the name of
+  the module, exported declarations (types, functions, templates,
+  etc). This metadata is required to be able to properly ensure the
+  Glint program importing the module is using it as expected.
+
+  When you build a module `Foo', the `Foo.gmeta' file will be generated
+  (alongside any output you've asked LCC to generate from the IR that
+  the Glint frontend generates). When building a program that imports
+  Glint module `Foo', the compiler searches it's include directories
+  (specified via `-I' on the command line) for the `Foo.gmeta' metadata
+  file. If this file cannot be found in any of the include directories,
+  or if it is of an unexpected file format, the Glint compiler issues an
+  error and stops compilation, as it cannot continue to build a program
+  that imports a module it knows nothing about.
 
 
 3 Types
@@ -1614,6 +1662,8 @@ _________________
   | int;
   | ;; architecture-sized unsigned integer. Same size as 'int'.
   | uint;
+  | ;; architecture-sized fractional number.
+  | float;
   | ;; Boolean: binary value 'true' or 'false'.
   | bool;
   | ;; The nothing type. Declares absence of something (i.e. a function that
@@ -1649,7 +1699,36 @@ _________________
 3.3 Arbitrary Integers
 ~~~~~~~~~~~~~~~~~~~~~~
 
-  TODO
+  Instead of having lots of different integer types that relate to
+  different ranges of numbers they may represent, we have a single
+  "arbitrary integer" type where you are able to set the bitwidth
+  manually.
+
+  Arbitrary integers may be signed or unsigned.
+
+  An unsigned arbitrary integer starts with `u'.
+
+  A signed arbitrary integer starts with `s'.
+
+  The bitwidth is specified directly following the sign specifier.
+
+  Here are some valid arbitrary integer types.
+  ,----
+  | s64;
+  | s32;
+  | s16;
+  | s8;
+  | 
+  | u64;
+  | u32;
+  | u16;
+  | u8;
+  | 
+  | u5;
+  | s9;
+  | s69;
+  | ;; ...
+  `----
 
 
 3.4 Types with One Element

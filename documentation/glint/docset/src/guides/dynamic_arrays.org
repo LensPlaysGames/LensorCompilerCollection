@@ -1,0 +1,60 @@
+* Glint's Built-in Dynamic Array Type
+
+Glint's dynamic array type allows the Glint programmer to have a collection of some other type, contiguous in memory, without worrying /too much/ about where that memory comes from or goes to.
+
+If you are familiar with C++, think =std::vector<T>=.
+
+If you are familiar with Rust, think =Vec=;
+
+If you are familiar with any LISP, think, well, =()= =:^)=.
+
+** Initialisation
+
+#+begin_src glint
+  ;; Define a dynamic array with elements of type `T`.
+  array : [T];
+#+end_src
+
+#+begin_src glint
+  ;; Define a dynamic array with elements of type `T`, able to hold at least
+  ;; `N` elements.
+  ;; If `N` is not a variable, this will create a *fixed* array.
+  N :: 8;
+  array : [T N];
+#+end_src
+
+*** Non-standard (non-zeroed) default initialisation
+
+Normally, when any other type is default-initialised in Glint, it is zeroed out. All bytes that constitute the value of that type are set to the zero value (no bits set).
+
+Dynamic arrays are different: memory is allocated, and a pointer to that memory is stored in the dynamic array (accessible at =array.data=, =array[index]=). The capacity of that memory is also stored in the dynamic array (accessible at =array.capacity=).
+
+*** From Other Types
+
+**** From Fixed Array
+
+**** From Array View
+
+**** From Pointer and Size
+
+** Modification
+
+*** Prepend/Append
+
+#+begin_src glint
+  ;; Append
+  array[index] += element; ;; @array[array.size] is now element
+  ;; Prepend
+  array[index] ~= element; ;; @array[0] is now element
+#+end_src
+
+*** Insert At Index
+
+#+begin_src glint
+  ;; Insert
+  array[index] += element;
+#+end_src
+
+** Delete Requirement
+
+It is a program error to initialise a dynamic array without subsequently using the unary negation operator on it, i.e. =-array=. You should do this from the same scope you defined the dynamic array in.

@@ -146,7 +146,6 @@ Return the absolute file path of the generated HTML."
        ;; Convert each guide to HTML.
        (let
            ((guide-html-path (docset-org-to-html guide-path)))
-         (docset-install-html guide-html-path)
          ;; Create an entry in search database.
          ;; TODO: Extract title from org source.
          (docset-db-search-entry db
