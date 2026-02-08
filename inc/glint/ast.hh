@@ -1855,6 +1855,7 @@ public:
 
 class StringLiteral : public TypedExpr {
     usz _index;
+    Module* _module;
 
 public:
     /// Intern the given string and create a string literal for it.
@@ -1862,6 +1863,9 @@ public:
 
     [[nodiscard]]
     auto string_index() const -> usz { return _index; }
+
+    [[nodiscard]]
+    auto origin_module() const -> Module* { return _module; }
 
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {

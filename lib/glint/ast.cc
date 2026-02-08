@@ -29,19 +29,18 @@ lcc::glint::StringLiteral::StringLiteral(
     std::string_view value,
     Location location
 ) : TypedExpr{
-        // clang-format off
         Kind::StringLiteral,
         location,
-        new(mod) ReferenceType(
-            new(mod) ArrayType(
+        new (mod) ReferenceType(
+            new (mod) ArrayType(
                 BuiltinType::Byte(mod),
-                new(mod) IntegerLiteral(value.size() + 1, location),
+                new (mod) IntegerLiteral(value.size() + 1, location),
                 location
             ),
             location
         ),
     },
-    _index{mod.intern(value)} {} // clang-format on
+    _index{mod.intern(value)}, _module(&mod) {}
 
 auto lcc::glint::Scope::declare(
     Context* ctx,
@@ -670,9 +669,14 @@ auto lcc::glint::Expr::CloneImpl(
 
         case Kind::StringLiteral: {
             auto s = as<StringLiteral>(expr);
+            LCC_ASSERT(
+                s->origin_module(),
+                "Cannot clone StringLiteral that does not have an originating module\n"
+                "StringLiteral's are interned, meaning they are deduplicated per module."
+            );
             return new (mod) StringLiteral(
                 mod,
-                mod.strings.at(s->string_index()),
+                s->origin_module()->strings.at(s->string_index()),
                 s->location()
             );
         }
