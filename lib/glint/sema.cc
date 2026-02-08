@@ -63,10 +63,12 @@ auto lcc::glint::Sema::ConvertImpl(
     };
 
     // Any type can be converted to void.
-    if (to->is_void()) return NoOp;
+    if (to->is_void())
+        return NoOp;
 
     // Any type can be converted to auto.
-    if (TemplatedFuncDecl::is_auto(*to)) return NoOp;
+    if (TemplatedFuncDecl::is_auto(*to))
+        return NoOp;
 
     // Any type can be converted to itself.
     if (Type::Equal(from, to)) {
@@ -82,12 +84,20 @@ auto lcc::glint::Sema::ConvertImpl(
 
     // Casting to a supplanted member can be done from an lvalue.
     // TODO: When sum types are supplant-able, add that here too.
-    if (from->strip_references()->is_struct() and to->strip_references()->is_struct()) {
-        auto members = as<StructType>(from->strip_pointers_and_references())->members();
+    if (
+        from->strip_references()->is_struct()
+        and to->strip_references()->is_struct()
+    ) {
+        auto from_stripped = from->strip_pointers_and_references();
+        auto members = as<StructType>(from_stripped)->members();
         for (auto m : members) {
             if (m.supplanted and Type::Equal(m.type, to->strip_references())) {
                 if constexpr (PerformConversion) {
-                    *expr_ptr = new (mod) MemberAccessExpr(*expr_ptr, m.name, from->location());
+                    *expr_ptr = new (mod) MemberAccessExpr(
+                        *expr_ptr,
+                        m.name,
+                        from->location()
+                    );
                     (void) Analyse(expr_ptr);
                 }
                 return Score(1);
@@ -102,7 +112,8 @@ auto lcc::glint::Sema::ConvertImpl(
                       and from->elem()->is_array();
     if ((from->is_array() or from_array_ref) and to->is_view()) {
         auto* from_elem = from->elem();
-        if (from_array_ref) from_elem = from_elem->elem();
+        if (from_array_ref)
+            from_elem = from_elem->elem();
 
         // TODO: If fixed array isn't an lvalue, then we need to create a
         // temporary and everything for it (I think).
@@ -155,7 +166,8 @@ auto lcc::glint::Sema::ConvertImpl(
         // the first element.
         auto* arr = cast<ArrayType>(from->elem());
         if (arr and Type::Equal(arr->element_type(), to->elem())) {
-            if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
+            if constexpr (PerformConversion)
+                InsertImplicitCast(expr_ptr, to);
             return Score(1);
         }
 
@@ -171,18 +183,23 @@ auto lcc::glint::Sema::ConvertImpl(
 
     // Function types can be converted to their corresponding function pointer
     // types.
-    if (from->is_function() and to->is_pointer() and Type::Equal(to->elem(), from)) {
+    if (
+        from->is_function() and to->is_pointer()
+        and Type::Equal(to->elem(), from)
+    ) {
         if constexpr (PerformConversion)
             InsertImplicitCast(expr_ptr, to);
         return NoOp;
     }
 
     // Try deproceduring (convert a function into a call to that function).
-    if (Deproceduring(expr_ptr)) return Score(1);
+    if (Deproceduring(expr_ptr))
+        return Score(1);
 
     // Now check if the types are equal. In many cases, lvalue-to-rvalue
     // conversion is all we need.
-    if (Type::Equal(from, to)) return NoOp;
+    if (Type::Equal(from, to))
+        return NoOp;
 
     // Pointer to pointer conversions.
     if (from->is_pointer() and to->is_pointer()) {
