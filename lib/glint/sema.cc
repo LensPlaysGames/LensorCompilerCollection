@@ -19,7 +19,6 @@
 #include <filesystem>
 #include <functional>
 #include <iterator>
-#include <numeric>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -862,6 +861,7 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
             import_ref.name,
             Module::IsAModule
         );
+        // import_ref now "owns" this module...
         import_ref.module = imported_mod;
         // "Copy" global scope to imported module, since they will access the same
         // globals in the same program.
@@ -4232,15 +4232,20 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 // Don't format fixed byte arrays (like string literals)
                 // print x:[byte 4] -> puts x[0]
                 bool arg_is_fixed_array_of_byte
-                    = arg->type()->strip_references()->is_array() and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
+                    = arg->type()->strip_references()->is_array()
+                  and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
                 if (arg_is_fixed_array_of_byte) {
-                    auto subscript = new (mod) BinaryExpr(TokenKind::LBrack, arg, new (mod) IntegerLiteral(0, {}), {});
-                    auto puts_call = new (mod) CallExpr(
-                        new (mod) NameRefExpr("puts", mod.global_scope(), expr->location()),
-                        {subscript},
+                    auto size = as<ArrayType>(arg->type()->strip_references())->dimension();
+                    // Don't print (implicit) trailing NULL byte for string literals...
+                    if (is<StringLiteral>(arg))
+                        size -= 1;
+                    auto print_call = new (mod) CallExpr(
+                        named_template("putchar_each"),
+                        {arg,
+                         new (mod) IntegerLiteral(size, {})},
                         expr->location()
                     );
-                    exprs.emplace_back(puts_call);
+                    exprs.emplace_back(print_call);
                     continue;
                 }
 
