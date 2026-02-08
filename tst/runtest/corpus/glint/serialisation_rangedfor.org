@@ -1,0 +1,31 @@
+* (De)Serialise Ranged For Loop
+
+Test serialisation and deserialisation of ranged =for= loops.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_rangedfor;
+
+  c : [byte];
+  x c;
+  -c;
+
+  69;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_rangedfor;
+  export x :: template(e : expr)
+    for i in e, 0;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+

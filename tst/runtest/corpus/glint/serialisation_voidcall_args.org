@@ -1,0 +1,33 @@
+* (De)Serialise Void Call, With Arguments
+
+Test serialisation and deserialisation of call expressions that return void with arguments.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_voidcall_args;
+
+  foo : void(a : int, b : int)
+    print "foo";
+
+  x 0;
+
+  42;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_voidcall_args;
+
+  export x :: template(e : expr)
+    foo 27, 42;
+#+end_src
+
+#+NAME: status
+#+begin_example
+42
+#+end_example
+
+#+NAME: output
+#+begin_example
+foo
+#+end_example

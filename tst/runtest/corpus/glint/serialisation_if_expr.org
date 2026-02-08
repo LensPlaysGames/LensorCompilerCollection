@@ -1,0 +1,29 @@
+* (De)Serialise If Expression
+
+Test serialisation and deserialisation of if expressions that return a value.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_if_else;
+
+  a :: x 420;
+
+  a;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_if_else;
+  export x :: template(e : expr)
+    if 0, e else 69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+

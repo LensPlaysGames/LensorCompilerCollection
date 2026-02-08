@@ -1,0 +1,27 @@
+* (De)Serialise If, With Else
+
+Test serialisation and deserialisation of if expressions *with* an otherwise clause.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_if_else;
+
+  x 420;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_if_else;
+  export x :: template(e : expr)
+    if 0, e else 69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+

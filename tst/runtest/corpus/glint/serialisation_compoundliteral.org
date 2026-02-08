@@ -1,0 +1,26 @@
+* (De)Serialise CompoundLiteral
+
+Test serialisation and deserialisation of compound literal expressions.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_compoundliteral;
+
+  x 420;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_compoundliteral;
+  export x :: template(e : expr)
+    !{69};
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

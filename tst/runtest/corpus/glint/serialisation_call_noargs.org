@@ -1,0 +1,30 @@
+* (De)Serialise Call, No Arguments
+
+Test serialisation and deserialisation of call expressions that return a value with no arguments.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_call_noargs;
+
+  foo : int()
+    69;
+
+  x 0;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_call_noargs;
+
+  export x :: template(e : expr)
+    foo();
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

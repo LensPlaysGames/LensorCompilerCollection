@@ -1,0 +1,33 @@
+* (De)Serialise Void Call, No Arguments
+
+Test serialisation and deserialisation of call expressions that return void with no arguments.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_voidcall_noargs;
+
+  foo : void()
+    print "foo";
+
+  x 0;
+
+  69;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_voidcall_noargs;
+
+  export x :: template(e : expr)
+    foo();
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+foo
+#+end_example
