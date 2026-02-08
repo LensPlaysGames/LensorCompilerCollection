@@ -10,7 +10,7 @@ Test serialisation and deserialisation of a member access expressions.
     foo : int;
   };
 
-  bar : T !{42};
+  bar : T T !{42};
 
   x bar;
 #+end_src

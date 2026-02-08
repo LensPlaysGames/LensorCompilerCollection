@@ -203,6 +203,63 @@ auto lcc::glint::Module::deserialise(
                     exprs.insert(exprs.begin() + expr_index, n);
                 } break;
 
+                // deserialise
+                // IntegerLiteral
+                //     type :TypeIndex
+                //     value :u64
+                case Expr::Kind::IntegerLiteral: {
+                    auto t_index = read_t(ModuleDescription::TypeIndex());
+                    auto value = read_t(u64());
+
+                    auto i = new (*this) IntegerLiteral(value, Type::Unknown, {});
+                    fixups.emplace_back(i->type_ref(), t_index);
+
+                    exprs.insert(exprs.begin() + expr_index, i);
+                } break;
+
+                // FractionalLiteral
+                //     value :FixedPointNumber
+                case Expr::Kind::FractionalLiteral: {
+                    auto value = read_t(FixedPointNumber());
+                    auto f = new (*this) FractionalLiteral(value, {});
+                    exprs.insert(exprs.begin() + expr_index, f);
+                } break;
+
+                // StringLiteral
+                //     length   :u32
+                //     contents :u8[length]
+                case Expr::Kind::StringLiteral: {
+                    auto length = read_t(u32());
+                    LCC_ASSERT(
+                        expr_offset + length < module_metadata_blob.size(),
+                        "Invalid StringLiteral length: exceeds bounds of binary metadata blob."
+                    );
+                    // FIXME: We could probably just construct a string_view instead of
+                    // building a string.
+                    std::string deserialised_name{};
+                    for (decltype(length) i = 0; i < length; ++i)
+                        deserialised_name += char(module_metadata_blob.at(expr_offset++));
+
+                    // This currently doesn't work, because the string gets interned into
+                    // the /imported/ module, but we need this expression to act as if it is a
+                    // part of the module /importing it/. Otherwise, we wouldn't need to (de)
+                    // serialise the expression ever, if it wasn't going to be used in the
+                    // context of the module importing it.
+                    auto s = new (*this) StringLiteral(*this, deserialised_name, {});
+                    exprs.insert(exprs.begin() + expr_index, s);
+                } break;
+
+                // TypeExpr:
+                //     type :TypeIndex
+                case Expr::Kind::Type: {
+                    auto t_index = read_t(ModuleDescription::TypeIndex());
+
+                    auto t = new (*this) TypeExpr(*this, Type::Unknown, {});
+                    fixups.emplace_back(t->contained_type_ref(), t_index);
+
+                    exprs.insert(exprs.begin() + expr_index, t);
+                } break;
+
                 // TemplateExpr
                 //     body :ExprIndex
                 //     param_count :u8
@@ -240,30 +297,82 @@ auto lcc::glint::Module::deserialise(
                     exprs.insert(exprs.begin() + expr_index, t);
                 } break;
 
-                // deserialise
-                // IntegerLiteral
-                //     type :TypeIndex
-                //     value :u64
-                case Expr::Kind::IntegerLiteral: {
-                    auto t_index = read_t(ModuleDescription::TypeIndex());
-                    auto value = read_t(u64());
+                // ReturnExpr
+                //     value :ExprIndex (-1 if not present)
+                case Expr::Kind::Return: {
+                    auto e_index = read_t(ModuleDescription::ExprIndex());
+                    Expr* r_value{};
+                    if (e_index != ModuleDescription::bad_expr_index)
+                        r_value = exprs.at(e_index);
 
-                    auto i = new (*this) IntegerLiteral(value, Type::Unknown, {});
-                    fixups.emplace_back(i->type_ref(), t_index);
-
-                    exprs.insert(exprs.begin() + expr_index, i);
+                    auto r = new (*this) ReturnExpr(r_value, {});
+                    exprs.insert(exprs.begin() + expr_index, r);
                 } break;
 
-                case Expr::Kind::FractionalLiteral:
-                case Expr::Kind::StringLiteral:
-                case Expr::Kind::Type:
-                    LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));
+                // ApplyExpr
+                //     function :ExprIndex
+                //     arglists_count :u8
+                //     arglists :ExprIndex[arglists_count]
+                case Expr::Kind::Apply: {
+                    auto callee_index = read_t(ModuleDescription::ExprIndex());
+                    auto arglists_count = read_t(u8());
+                    std::vector<Expr*> arglists{};
+                    for (u8 i = 0; i < arglists_count; ++i) {
+                        auto arglist_index = read_t(ModuleDescription::ExprIndex());
+                        arglists.emplace_back(exprs.at(arglist_index));
+                    }
 
-                case Expr::Kind::Return:
-                    LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));
+                    auto callee = exprs.at(callee_index);
 
-                case Expr::Kind::MemberAccess:
-                case Expr::Kind::Cast:
+                    auto a = new (*this) ApplyExpr(callee, arglists, {});
+                    exprs.insert(exprs.begin() + expr_index, a);
+                } break;
+
+                // MemberAccessExpr
+                //     type :TypeIndex
+                //     object :ExprIndex
+                //     name_length :u16
+                //     name :u8[name_length]
+                case Expr::Kind::MemberAccess: {
+                    auto t_index = read_t(ModuleDescription::TypeIndex());
+                    auto object_index = read_t(ModuleDescription::ExprIndex());
+                    auto name_length = read_t(u16());
+                    std::string name{};
+                    for (decltype(name_length) i = 0; i < name_length; ++i)
+                        name += char(module_metadata_blob.at(expr_offset++));
+
+                    auto object = exprs.at(object_index);
+
+                    auto m = new (*this) MemberAccessExpr(object, name, {});
+                    if (t_index != ModuleDescription::bad_type_index)
+                        fixups.emplace_back(m->type_ref(), t_index);
+
+                    exprs.insert(exprs.begin() + expr_index, m);
+                } break;
+
+                // CastExpr
+                //     cast_kind :u8
+                //     to :TypeIndex
+                //     from :ExprIndex
+                case Expr::Kind::Cast: {
+                    auto cast_kind = read_t(u8());
+                    auto to_type_index = read_t(ModuleDescription::TypeIndex());
+                    auto from_expr_index = read_t(ModuleDescription::ExprIndex());
+
+                    // TODO: Verify cast_kind
+
+                    auto from_expr = exprs.at(from_expr_index);
+                    auto c = new (*this) CastExpr(
+                        from_expr,
+                        nullptr,
+                        (CastKind) cast_kind,
+                        {}
+                    );
+                    fixups.emplace_back(c->type_ref(), to_type_index);
+
+                    exprs.insert(exprs.begin() + expr_index, c);
+                } break;
+
                 case Expr::Kind::Sizeof:
                 case Expr::Kind::Alignof:
                 case Expr::Kind::Unary:
@@ -273,7 +382,6 @@ auto lcc::glint::Module::deserialise(
                 case Expr::Kind::If:
                 case Expr::Kind::While:
                 case Expr::Kind::For:
-                case Expr::Kind::Apply:
                     LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));
 
                 case Expr::Kind::Call:
