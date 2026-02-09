@@ -31,6 +31,7 @@
 ;;; Code:
 
 (require 'sqlite)
+(require 'ox)
 
 (defun docset-install--zeal (docset-path)
   ;; TODO: Ensure path is a directory that ends in ".docset"

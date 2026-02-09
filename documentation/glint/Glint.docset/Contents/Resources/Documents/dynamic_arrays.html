@@ -3,18 +3,18 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-02-08 Sun 13:02 -->
+<!-- 2026-02-09 Mon 12:32 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>&lrm;</title>
-<meta name="author" content="Rylan Kellogg" />
+<meta name="author" content="Lens_r" />
 <meta name="generator" content="Org Mode" />
 <link rel="stylesheet" href="all.css">
 </head>
 <body>
 <div id="content" class="content">
-<div id="outline-container-orgd8a7aed" class="outline-2">
-<h2 id="orgd8a7aed"><span class="section-number-2">1.</span> Glint's Built-in Dynamic Array Type</h2>
+<div id="outline-container-org97a040e" class="outline-2">
+<h2 id="org97a040e"><span class="section-number-2">1.</span> Glint's Built-in Dynamic Array Type</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 Glint's dynamic array type allows the Glint programmer to have a collection of some other type, contiguous in memory, without worrying <i>too much</i> about where that memory comes from or goes to.
@@ -32,8 +32,8 @@ If you are familiar with Rust, think <code>Vec</code>;
 If you are familiar with any LISP, think, well, <code>()</code> <code>:^)</code>.
 </p>
 </div>
-<div id="outline-container-org7c3ce5d" class="outline-3">
-<h3 id="org7c3ce5d"><span class="section-number-3">1.1.</span> Initialisation</h3>
+<div id="outline-container-org5957b3c" class="outline-3">
+<h3 id="org5957b3c"><span class="section-number-3">1.1.</span> Initialisation</h3>
 <div class="outline-text-3" id="text-1-1">
 <div class="org-src-container">
 <pre class="src src-glint"><span class="org-comment">;; Define a dynamic array with elements of type `T`.</span>
@@ -50,8 +50,8 @@ array <span class="org-operator">:</span> <span class="org-type">[T N]</span>;
 </pre>
 </div>
 </div>
-<div id="outline-container-org5de6043" class="outline-4">
-<h4 id="org5de6043"><span class="section-number-4">1.1.1.</span> Non-standard (non-zeroed) default initialisation</h4>
+<div id="outline-container-org0a6876e" class="outline-4">
+<h4 id="org0a6876e"><span class="section-number-4">1.1.1.</span> Non-standard (non-zeroed) default initialisation</h4>
 <div class="outline-text-4" id="text-1-1-1">
 <p>
 Normally, when any other type is default-initialised in Glint, it is zeroed out. All bytes that constitute the value of that type are set to the zero value (no bits set).
@@ -62,25 +62,25 @@ Dynamic arrays are different: memory is allocated, and a pointer to that memory 
 </p>
 </div>
 </div>
-<div id="outline-container-orgd0e650c" class="outline-4">
-<h4 id="orgd0e650c"><span class="section-number-4">1.1.2.</span> From Other Types</h4>
+<div id="outline-container-org4e0a1e6" class="outline-4">
+<h4 id="org4e0a1e6"><span class="section-number-4">1.1.2.</span> From Other Types</h4>
 <div class="outline-text-4" id="text-1-1-2">
 </div>
 <ol class="org-ol">
-<li><a id="org93505c7"></a>From Fixed Array<br /></li>
+<li><a id="org3ecaf3f"></a>From Fixed Array<br /></li>
 
-<li><a id="org51ee26c"></a>From Array View<br /></li>
+<li><a id="org4324935"></a>From Array View<br /></li>
 
-<li><a id="orgf1b1136"></a>From Pointer and Size<br /></li>
+<li><a id="org0175976"></a>From Pointer and Size<br /></li>
 </ol>
 </div>
 </div>
-<div id="outline-container-orged4079b" class="outline-3">
-<h3 id="orged4079b"><span class="section-number-3">1.2.</span> Modification</h3>
+<div id="outline-container-org69114d0" class="outline-3">
+<h3 id="org69114d0"><span class="section-number-3">1.2.</span> Modification</h3>
 <div class="outline-text-3" id="text-1-2">
 </div>
-<div id="outline-container-orgf7bbe5e" class="outline-4">
-<h4 id="orgf7bbe5e"><span class="section-number-4">1.2.1.</span> Prepend/Append</h4>
+<div id="outline-container-org4cdb40f" class="outline-4">
+<h4 id="org4cdb40f"><span class="section-number-4">1.2.1.</span> Prepend/Append</h4>
 <div class="outline-text-4" id="text-1-2-1">
 <div class="org-src-container">
 <pre class="src src-glint"><span class="org-comment">;; Append</span>
@@ -91,8 +91,8 @@ array[index] <span class="org-operator">~=</span> element; <span class="org-comm
 </div>
 </div>
 </div>
-<div id="outline-container-orgb4e01a8" class="outline-4">
-<h4 id="orgb4e01a8"><span class="section-number-4">1.2.2.</span> Insert At Index</h4>
+<div id="outline-container-org377ca31" class="outline-4">
+<h4 id="org377ca31"><span class="section-number-4">1.2.2.</span> Insert At Index</h4>
 <div class="outline-text-4" id="text-1-2-2">
 <div class="org-src-container">
 <pre class="src src-glint"><span class="org-comment">;; Insert</span>
@@ -102,8 +102,8 @@ array[index] <span class="org-operator">+=</span> element;
 </div>
 </div>
 </div>
-<div id="outline-container-org2ba6251" class="outline-3">
-<h3 id="org2ba6251"><span class="section-number-3">1.3.</span> Delete Requirement</h3>
+<div id="outline-container-org6a0cc15" class="outline-3">
+<h3 id="org6a0cc15"><span class="section-number-3">1.3.</span> Delete Requirement</h3>
 <div class="outline-text-3" id="text-1-3">
 <p>
 It is a program error to initialise a dynamic array without subsequently using the unary negation operator on it, i.e. <code>-array</code>. You should do this from the same scope you defined the dynamic array in.

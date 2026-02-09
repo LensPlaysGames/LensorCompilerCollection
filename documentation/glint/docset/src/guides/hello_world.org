@@ -1,0 +1,7 @@
+* Glint's Hello, World!
+
+#+begin_src glint
+  print "Hello, World!\n";
+#+end_src
+
+Yep, that's it =:^)=.
