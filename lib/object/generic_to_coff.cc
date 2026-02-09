@@ -252,7 +252,8 @@ void GenericObject::as_coff(FILE* f) {
 
     // Now that all the section's sizes are known, we know the offsets of
     // section's relocation entries.
-    // Map of section position to relocation entries.
+    // Map of section position (1-based position within index table) to
+    // a list of associated relocation entries.
     std::unordered_map<
         int16_t,
         std::vector<coff_relocation_entry>>
@@ -288,7 +289,7 @@ void GenericObject::as_coff(FILE* f) {
 
         // FIXME: r.symbol.byte_offset? r.addend? It's been too long, and I don't
         // have Windows or ReactOS.
-        coff_relocation.reference_address = -4;
+        coff_relocation.reference_address = (int32_t) (r.symbol.byte_offset + r.addend);
 
         coff_relocation.symbol_index = (uint32_t) sym_index;
 
@@ -304,7 +305,7 @@ void GenericObject::as_coff(FILE* f) {
             strings,
             [](const auto& s) { return s.size() + 1; }
         ),
-        4,
+        4, // empty COFF string table is 4 bytes long...
         std::plus{}
     );
     // 18 -> sizeof coff_symbol_entry (without padding)
