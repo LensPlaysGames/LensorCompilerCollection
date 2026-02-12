@@ -96,6 +96,40 @@ auto ConvertFileExtensionToOutputFormat(
         .string();
 }
 
+void print_module_stats(lcc::Module* m) {
+    if (not m) return;
+    lcc::usz block_count{};
+    lcc::usz inst_count{};
+    lcc::usz most_inst_in_block{};
+    lcc::usz most_block_in_function{};
+    for (auto f : m->code()) {
+        if (f->blocks().size() > most_block_in_function)
+            most_block_in_function = f->blocks().size();
+
+        block_count += f->blocks().size();
+
+        for (auto b : f->blocks()) {
+            if (b->instructions().size() > most_inst_in_block)
+                most_inst_in_block = b->instructions().size();
+
+            inst_count += b->instructions().size();
+        }
+    }
+    fmt::print(
+        "{}",
+        TwoColumnLayoutHelper{
+            {{"\nIR Module Stats:\n", ""},
+             {"  Function Count:", fmt::format("{}\n", m->code().size())},
+             {"  Block Count:", fmt::format("{}\n", block_count)},
+             {"  Instruction Count:", fmt::format("{}\n", inst_count)},
+             {"  Most Blocks in Function:", fmt::format("{}\n", most_block_in_function)},
+             {"  Most Instructions in Block:", fmt::format("{}\n", most_inst_in_block)},
+             {"  Global Count:", fmt::format("{}\n", m->vars().size())},
+             {"  Extra Section Count:", fmt::format("{}\n", m->extra_sections().size())}}
+        }.get()
+    );
+}
+
 /// Common path after IR gen.
 void EmitModule(
     lcc::Module* m,
@@ -103,48 +137,19 @@ void EmitModule(
     std::string_view output_file_path,
     const cli::Options& options
 ) {
-    if (not m) return;
+    if (not m)
+        return;
     LCC_ASSERT(m->context());
-    if (m->context()->has_error()) return;
+    if (m->context()->has_error())
+        return;
 
-    if (m->context()->option_print_stats()) {
-        lcc::usz block_count{};
-        lcc::usz inst_count{};
-        lcc::usz most_inst_in_block{};
-        lcc::usz most_block_in_function{};
-        for (auto f : m->code()) {
-            if (f->blocks().size() > most_block_in_function)
-                most_block_in_function = f->blocks().size();
-
-            block_count += f->blocks().size();
-
-            for (auto b : f->blocks()) {
-                if (b->instructions().size() > most_inst_in_block)
-                    most_inst_in_block = b->instructions().size();
-
-                inst_count += b->instructions().size();
-            }
-        }
-        fmt::print(
-            "{}",
-            TwoColumnLayoutHelper{
-                {{"\nIR Module Stats:\n", ""},
-                 {"  Function Count:", fmt::format("{}\n", m->code().size())},
-                 {"  Block Count:", fmt::format("{}\n", block_count)},
-                 {"  Instruction Count:", fmt::format("{}\n", inst_count)},
-                 {"  Most Blocks in Function:", fmt::format("{}\n", most_block_in_function)},
-                 {"  Most Instructions in Block:", fmt::format("{}\n", most_inst_in_block)},
-                 {"  Global Count:", fmt::format("{}\n", m->vars().size())},
-                 {"  Extra Section Count:", fmt::format("{}\n", m->extra_sections().size())}}
-            }.get()
-        );
-    }
+    if (m->context()->option_print_stats())
+        print_module_stats(m);
 
     if (not options.optimisation_passes.empty()) {
         lcc::opt::RunPasses(m, options.optimisation_passes);
-        if (options.ir) {
+        if (options.ir)
             fmt::print("{}", m->as_lcc_ir(options.use_colour()));
-        }
     }
 
     if (options.ir)
@@ -299,23 +304,22 @@ void do_run(
         lcc::Diag::ICE("run: Empty binary path");
 
     // Run binary.
+    // FIXME: Not sure this is the correct way to execute a generated binary
+    // file on every system.
     auto command = fmt::format(
         "{}",
         lcc::fs::absolute(lcc::fs::path(binary_path))
     );
-    // FIXME: Not sure this is the correct way to execute a generated binary
-    // file on every system.
+
     if (context.has_option("verbose"))
         fmt::print("Running generated binary at `{}`\n", command);
 
     auto rc = run_command(command);
-    if (rc) {
-        lcc::Diag::Error(
-            "Exited with code {}: `{}`",
-            rc,
-            command
-        );
-    }
+    fmt::print(
+        "{}: Exited with status code {}\n",
+        binary_path,
+        rc
+    );
 }
 
 // NOTE: Moves the input file, so, uhh, don't use that after passing it to
@@ -345,7 +349,17 @@ void GenerateOutputFile(
         return;
     }
 
-    auto contents = read_file_contents(&context, input_file);
+    if (
+        context.has_option("verbose")
+        and std::filesystem::exists(output_file_path)
+    ) {
+        lcc::Diag::Warning(
+            "Generating output at {} overwrites existing file",
+            output_file_path
+        );
+    }
+
+    auto contents = read_file_contents(&context, path.string());
     if (not contents) return;
 
     auto& file = context.create_file(
@@ -475,7 +489,13 @@ auto main(int argc, const char** argv) -> int {
     auto configured_output_file_path = options.output_filepath;
     if (input_files.size() == 1) {
         std::string output_file_path = configured_output_file_path;
-        if (output_file_path.empty()) {
+        // If no output file path was specified, generate one by converting the
+        // input file path extension.
+        // If linking is requested, always generate an output path, such as to
+        // ensure /this/ stages output file path is different from the final
+        // stages. The "configured" output file path---the one provided from the
+        // CLI refers to a different file than this output.
+        if (options.link or output_file_path.empty()) {
             output_file_path = ConvertFileExtensionToOutputFormat(
                 context,
                 input_files[0]
@@ -527,19 +547,20 @@ auto main(int argc, const char** argv) -> int {
             )
         ) fmt::print("Generated final output at {}\n", output_file_path);
 
-        // For `-run`
+        // For `--run`
         configured_output_file_path = output_file_path;
 
     } else {
         if (not options.link and not configured_output_file_path.empty()) {
             lcc::Diag::Fatal(
                 "Cannot specify -o when generating multiple output files (would overwrite the same file with every output).\n"
-                "If you have a suggestion of how you think this should behave, let a developer know.\n"
+                "To generate a single output file from multiple inputs, link them together with -b.\n"
+                "If you have a suggestion of how you think this should behave, let a developer know."
             );
         }
         if (options.link and configured_output_file_path.empty()) {
             lcc::Diag::Fatal(
-                "Must specify -o when linking multiple input files.\n"
+                "Must specify -o when linking multiple input files."
             );
         }
 

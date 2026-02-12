@@ -777,7 +777,8 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_object(
     for (auto p : paths) {
         paths_tried.push_back(p);
         if (std::filesystem::exists(p)) {
-            fmt::print("Found IMPORT {} at {}\n", import_ref.name, p);
+            if (context->has_option("verbose"))
+                fmt::print("Found IMPORT {} at {}\n", import_ref.name, p);
             // Open file, get contents
             auto object_file = File::Read(p);
 
@@ -849,7 +850,8 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
 
     paths_tried.push_back(path);
     if (std::filesystem::exists(path)) {
-        fmt::print("Found IMPORT {} at {}\n", import_ref.name, path);
+        if (context->has_option("verbose"))
+            fmt::print("Found IMPORT {} at {}\n", import_ref.name, path);
 
         // Open file, get contents
         auto gmeta_file = File::Read(path);
