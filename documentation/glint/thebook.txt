@@ -602,8 +602,8 @@ _________________
   ,----
   | root
   | |-- x
-  | `--block
-  |    `-- y
+  | `-- block
+  |     `-- y
   `----
 
   When we "exit" the block expression, the scope is exited as well;
