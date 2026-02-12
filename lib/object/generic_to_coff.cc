@@ -289,7 +289,8 @@ void GenericObject::as_coff(FILE* f) {
 
         // FIXME: r.symbol.byte_offset? r.addend? It's been too long, and I don't
         // have Windows or ReactOS.
-        coff_relocation.reference_address = (int32_t) (r.symbol.byte_offset + r.addend);
+        coff_relocation.reference_address
+            = (int32_t) ((isz) r.symbol.byte_offset + r.addend);
 
         coff_relocation.symbol_index = (uint32_t) sym_index;
 
