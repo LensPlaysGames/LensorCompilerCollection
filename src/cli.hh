@@ -2,7 +2,6 @@
 #define LCC_DRIVER_CLI_HH
 
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include <lcc/context.hh>
@@ -16,6 +15,7 @@ struct Options {
     bool stopat_ir{false};
     bool emit_sarif{false};
     bool link{false};
+    bool run{false};
 
     lcc::Context::OptionPrintStats print_stats{false};
     lcc::Context::OptionPrintAST ast{false};

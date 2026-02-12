@@ -2,6 +2,8 @@
 #include <sarif.hh>
 #include <version.hh>
 
+#include <fmt/format.h>
+
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/format.hh>
@@ -19,10 +21,13 @@
 #include <cstdlib> // system
 #include <cstring> // strerror
 #include <filesystem>
-#include <fmt/format.h>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#if defined(__linux__) || defined(__unix__)
+#    include <sys/wait.h>
+#endif
 
 void aluminium_handler() {
 #if defined(LCC_PLATFORM_WINDOWS)
@@ -234,7 +239,16 @@ auto read_file_contents(
     return contents;
 }
 
+int run_command(std::string_view s) {
+    auto rc = std::system(s.data());
+#if defined(__linux__) || defined(__unix__)
+    rc = WEXITSTATUS(rc);
+#endif
+    return rc;
+}
+
 void do_link(
+    lcc::Context& context,
     std::vector<std::string> input_paths,
     std::string_view output_path
 ) {
@@ -248,20 +262,58 @@ void do_link(
     if (not cc) cc = "gcc";
 
     // Build link command.
-    // TODO: Pass along include directories.
     auto link_command = fmt::format(
-        "{} {} -o {}",
+        "{} {} {} -o {}",
         cc,
+        fmt::join(
+            lcc::vws::transform(
+                context.include_directories(),
+                [](const auto s) {
+                    return fmt::format("-I {}", s);
+                }
+            ),
+            " "
+        ),
         fmt::join(input_paths, " "),
         output_path
     );
 
     // Run link command.
-    auto rc = std::system(link_command.c_str());
+    if (context.has_option("verbose"))
+        fmt::print("Running link command: `{}`\n", link_command);
+
+    auto rc = run_command(link_command);
     if (rc) {
         lcc::Diag::Fatal(
             "Failed link: `{}`",
             link_command
+        );
+    }
+}
+
+void do_run(
+    lcc::Context& context,
+    std::string_view binary_path
+) {
+    if (binary_path.empty())
+        lcc::Diag::ICE("run: Empty binary path");
+
+    // Run binary.
+    auto command = fmt::format(
+        "{}",
+        lcc::fs::absolute(lcc::fs::path(binary_path))
+    );
+    // FIXME: Not sure this is the correct way to execute a generated binary
+    // file on every system.
+    if (context.has_option("verbose"))
+        fmt::print("Running generated binary at `{}`\n", command);
+
+    auto rc = run_command(command);
+    if (rc) {
+        lcc::Diag::Error(
+            "Exited with code {}: `{}`",
+            rc,
+            command
         );
     }
 }
@@ -404,6 +456,9 @@ auto main(int argc, const char** argv) -> int {
         }
     };
 
+    if (options.verbose)
+        context.add_option("verbose");
+
     context.add_include_directory(".");
     for (const auto& directory : options.include_directories) {
         if (options.verbose)
@@ -458,7 +513,7 @@ auto main(int argc, const char** argv) -> int {
                 = std::filesystem::path(output_file_path)
                       .replace_extension("")
                       .string();
-            do_link({output_file_path}, outpath);
+            do_link(context, {output_file_path}, outpath);
             output_file_path = outpath;
         }
 
@@ -471,6 +526,9 @@ auto main(int argc, const char** argv) -> int {
                 or options.stopat_mir
             )
         ) fmt::print("Generated final output at {}\n", output_file_path);
+
+        // For `-run`
+        configured_output_file_path = output_file_path;
 
     } else {
         if (not options.link and not configured_output_file_path.empty()) {
@@ -498,8 +556,11 @@ auto main(int argc, const char** argv) -> int {
             return 1;
 
         if (options.link)
-            do_link(output_paths, configured_output_file_path);
+            do_link(context, output_paths, configured_output_file_path);
     }
+
+    if (options.run)
+        do_run(context, configured_output_file_path);
 
     return 0;
 }

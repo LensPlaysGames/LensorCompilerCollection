@@ -35,6 +35,7 @@ std::vector<std::string> known_arguments{
     "-I",
     "-O",
     "-b",
+    "-r",
     "-f",
     "-o",
     "-t",
@@ -50,6 +51,7 @@ void help() {
     fmt::print("FLAGS:\n");
     fmt::print("{}", TwoColumnLayoutHelper{{
         {"  -b", "Build *and link* input file(s)\n"},
+        {"  -r", "Build and link input file(s), and run the generated binary\n"},
         {"  -v", "Enable verbose output\n"},
         {"  --version", "Print compiler version information, then exit\n"},
         {"  --ast", "Print AST in human-readable format\n"},
@@ -147,8 +149,12 @@ auto parse(int argc, const char** argv) -> Options {
             o.diag_backtrace = lcc::Context::DiagBacktrace;
         else if (arg == "--sarif")
             o.emit_sarif = true;
-        else if (arg == "-b")
+        else if (arg == "-b" or arg == "--build")
             o.link = true;
+        else if (arg == "-r" or arg == "--run") {
+            o.link = true;
+            o.run = true;
+        }
 
         else if (arg == "-I") {
             // Add a directory to the include search paths
