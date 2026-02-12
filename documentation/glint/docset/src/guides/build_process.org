@@ -11,3 +11,53 @@ After writing Glint code (usually saved in a file), the compiler is ran with the
 This output may need further processing by further tooling (like linking by a linker) to be executable.
 
 Once the executable is obtained, running it is equivalent to executing the Glint source code it was generated from.
+
+** Examples
+
+*** Build and Run with LCC
+
+The simplest form of the Glint build process: from source to output all in one command.
+
+=foo.g=
+#+begin_src glint
+  print "Hello, World!\n";
+#+end_src
+
+=terminal=
+#+begin_src shell-command
+  $ lcc --run foo.g
+  Hello, World!
+#+end_src
+
+=--run= argument tells LCC to build the input source file into an intermediate object file, link it into an executable using =$CC=, and then invoke that executable. As you can see, that causes the Glint =print= to execute, outputting the contents of the string literal.
+
+NOTE: =--run= implies =--build=.
+
+*** Link with LCC, Run Separately
+
+=foo.g=
+#+begin_src glint
+  print "Hello, World!\n";
+#+end_src
+
+=terminal=
+#+begin_src shell-command
+  $ lcc --build foo.g
+  $ ./foo
+  Hello, World!
+#+end_src
+
+*** Build with LCC, Link and Run Separately
+
+=foo.g=
+#+begin_src glint
+  print "Hello, World!\n";
+#+end_src
+
+=terminal=
+#+begin_src shell-command
+  $ lcc foo.g
+  $ gcc foo.s -o foo
+  $ ./foo
+  Hello, World!
+#+end_src

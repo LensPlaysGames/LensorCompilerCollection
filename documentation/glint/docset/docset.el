@@ -3,7 +3,7 @@
 ;; Author: Lens_r
 ;; Maintainer: Lens_r
 ;; Version: 0.0.1
-;; Package-Requires: ()
+;; Package-Requires: ((emacs 29.1))
 ;; Homepage: https://github.com/LensPlaysGames/LensorCompilerCollection
 ;; Keywords: zeal, glint, documentation
 
@@ -30,8 +30,70 @@
 
 ;;; Code:
 
+(require 'org) ;; org-map-entries
+(require 'org-element) ;; org-element-map
+(require 'ox) ;; org export
+(require 'ox-html) ;; org export, HTML
+(require 'seq) ;; seq-count
+(require 'simple) ;; open-line
 (require 'sqlite)
-(require 'ox)
+
+(defun docset-get-first-org-heading-title ()
+  "Return the title of the first heading in the current org buffer."
+  (interactive)
+  (let* ((data (org-element-parse-buffer 'greater-elements))
+         (first-headline (org-element-map data 'headline
+                           (lambda (el) el) nil 'first-match 'no-recursion)))
+    (when first-headline
+      (org-element-property :raw-value first-headline))))
+
+(defun docset-get-orgfile-title (path)
+  "Return the title of the first heading in the org file at PATH."
+  (let ((title (with-current-buffer (find-file-noselect path)
+                 (docset-get-first-org-heading-title))))
+    (kill-buffer (get-file-buffer path))
+    title))
+
+;; https://amitp.blogspot.com/2021/04/automatically-generate-ids-for-emacs.html
+(defun docset-title-to-filename (title)
+  "Convert TITLE to a reasonable filename.
+No spaces, no non-ascii, less symbols."
+  ;; Based on the slug logic in org-roam, but org-roam also uses a
+  ;; timestamp, and this uses only the slug.
+  (setf title (downcase title))
+  ;; Convert lots of things to '-'
+  (setf title (replace-regexp-in-string "[^a-zA-Z0-9]+" "-" title))
+  (setf title (replace-regexp-in-string "-+" "-" title))
+  (setf title (replace-regexp-in-string "^-" "" title))
+  (setf title (replace-regexp-in-string "-$" "" title)))
+
+(defun docset-org-generate-custom-ids ()
+  "Generate CUSTOM_ID for any headings that are missing one."
+  (interactive)
+  (let ((existing-ids (org-map-entries
+                       (lambda () (org-entry-get nil "CUSTOM_ID"))))
+        (inserted-ids nil))
+    (org-map-entries
+     (lambda ()
+       (let* ((custom-id      (org-entry-get nil "CUSTOM_ID"))
+              (heading        (org-heading-components))
+              (level          (nth 0 heading))
+              (todo           (nth 2 heading))
+              (headline       (nth 4 heading))
+              (slug           (docset-title-to-filename headline))
+              (preexisting-id (member slug existing-ids))
+              (duplicate-id   (seq-count
+                               (lambda (elem) (equal elem slug))
+                               inserted-ids)))
+         (when (and (not custom-id) (< level 4)
+                    (not todo) (not preexisting-id))
+           (when (> duplicate-id 0)
+             ;; Push unchanged slug so we know how many duplicates of
+             ;; each we've had: foo-1, foo-2, etc.
+             (push slug inserted-ids)
+             (setf slug (format "%s-%s" slug duplicate-id)))
+           (org-entry-put nil "CUSTOM_ID" slug)
+           (push slug inserted-ids)))))))
 
 (defun docset-install--zeal (docset-path)
   ;; TODO: Ensure path is a directory that ends in ".docset"
@@ -106,6 +168,14 @@ Return the absolute file path of the generated HTML."
       ;; Delete the copied source after generation...
       (let
           ((result (with-current-buffer (find-file-noselect copied-source-path t)
+                     ;; Insert #+TITLE, if one doesn't exist already,
+                     ;; with the contents of the first headline.
+                     (unless (org-get-title)
+                       (beginning-of-buffer) (open-line 2)
+                       (insert "#+title: " (docset-get-first-org-heading-title)))
+                     ;; Insert CUSTOM_IDs based on heading contents
+                     (docset-org-generate-custom-ids)
+                     (save-buffer)
                      ;; Generate HTML from copied source
                      (expand-file-name (org-html-export-to-html)))))
         (kill-buffer (get-file-buffer copied-source-path))
@@ -122,6 +192,8 @@ Return the absolute file path of the generated HTML."
                 "<link rel=\"stylesheet\" href=\"all.css\">"))
        ;; Don't insert "validate" footer stuff
        (org-html-postamble nil)
+       ;; Don't insert #+title, just use it for HTML metadata.
+       (org-export-with-title nil)
        ;; Use CSS classes to colorize output.
        (org-html-htmlize-output-type 'css)
        ;; Disable default CSS output (we have a custom theme).
@@ -148,9 +220,8 @@ Return the absolute file path of the generated HTML."
        (let
            ((guide-html-path (docset-org-to-html guide-path)))
          ;; Create an entry in search database.
-         ;; TODO: Extract title from org source.
          (docset-db-search-entry db
-                                 (file-name-base guide-path)
+                                 (docset-get-orgfile-title guide-path)
                                  "Guide"
                                  (file-name-nondirectory guide-html-path))))
      (directory-files "src/guides" 'absolute "\\.org\\'"))
@@ -174,10 +245,29 @@ Return the absolute file path of the generated HTML."
     ;;     src/errors/*.org
 
     ;; index.org -> HTML
-    (docset-org-to-html "./src/index.org")
+    (copy-file "./src/index.in.org" "./index.org" t)
+    (with-current-buffer (find-file-noselect "./index.org")
+      (end-of-buffer) (newline) (open-line 1)
+      (insert "** Guides\n")
+      ;; file:///home/lens_r/Programming/play/LensorCompilerCollection/documentation/glint/docset/src/guides/build_process.html
+      (mapc (lambda (guide-path)
+              (insert (org-link-make-string
+                       (concat
+                        "file:"
+                        (file-name-with-extension
+                         (file-name-nondirectory guide-path)
+                         "html"))
+                       (docset-get-orgfile-title guide-path)))
+              (newline 2))
+            (directory-files "src/guides" 'absolute "\\.org\\'"))
+      (save-buffer))
+    (kill-buffer (get-file-buffer "./index.org"))
+    (docset-org-to-html "./index.org")
+    (delete-file "./index.org")
     (docset-db-search-entry db "Home" "File" "index.html")
 
-    (docset-db-close db)))
+    (docset-db-close db))
+  "Generated docset")
 
 ;; (docset-make)
 ;; (docset-install--zeal "../Glint.docset")

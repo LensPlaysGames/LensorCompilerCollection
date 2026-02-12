@@ -3,19 +3,19 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-02-09 Mon 12:32 -->
+<!-- 2026-02-12 Thu 12:18 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>&lrm;</title>
-<meta name="author" content="Lens_r" />
+<title>The Glint Build Process</title>
+<meta name="author" content="Rylan Kellogg" />
 <meta name="generator" content="Org Mode" />
 <link rel="stylesheet" href="all.css">
 </head>
 <body>
 <div id="content" class="content">
-<div id="outline-container-org6a0ed53" class="outline-2">
-<h2 id="org6a0ed53"><span class="section-number-2">1.</span> The Glint Build Process</h2>
-<div class="outline-text-2" id="text-1">
+<div id="outline-container-the-glint-build-process" class="outline-2">
+<h2 id="the-glint-build-process"><span class="section-number-2">1.</span> The Glint Build Process</h2>
+<div class="outline-text-2" id="text-the-glint-build-process">
 <p>
 Glint is most often used to make programs that a user may run on their computer; to make these programs faster, Glint code is translated into something more understandable for a machine to execute. We store this more efficient form in a file called an executable. It's an <i>executable</i> because it contains data which a computer may treat as code and, well, <i>execute</i> it.
 </p>
@@ -39,6 +39,89 @@ This output may need further processing by further tooling (like linking by a li
 <p>
 Once the executable is obtained, running it is equivalent to executing the Glint source code it was generated from.
 </p>
+</div>
+<div id="outline-container-examples" class="outline-3">
+<h3 id="examples"><span class="section-number-3">1.1.</span> Examples</h3>
+<div class="outline-text-3" id="text-examples">
+</div>
+<div id="outline-container-build-and-run-with-lcc" class="outline-4">
+<h4 id="build-and-run-with-lcc"><span class="section-number-4">1.1.1.</span> Build and Run with LCC</h4>
+<div class="outline-text-4" id="text-build-and-run-with-lcc">
+<p>
+The simplest form of the Glint build process: from source to output all in one command.
+</p>
+
+<p>
+<code>foo.g</code>
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">print</span> <span class="org-string">"Hello, World!\n"</span>;
+</pre>
+</div>
+
+<p>
+<code>terminal</code>
+</p>
+<div class="org-src-container">
+<pre class="src src-shell-command">$ lcc <span class="org-comment">--run</span> foo.g
+Hello, World!
+</pre>
+</div>
+
+<p>
+<code>--run</code> argument tells LCC to build the input source file into an intermediate object file, link it into an executable using <code>$CC</code>, and then invoke that executable. As you can see, that causes the Glint <code>print</code> to execute, outputting the contents of the string literal.
+</p>
+
+<p>
+NOTE: <code>--run</code> implies <code>--build</code>.
+</p>
+</div>
+</div>
+<div id="outline-container-link-with-lcc-run-separately" class="outline-4">
+<h4 id="link-with-lcc-run-separately"><span class="section-number-4">1.1.2.</span> Link with LCC, Run Separately</h4>
+<div class="outline-text-4" id="text-link-with-lcc-run-separately">
+<p>
+<code>foo.g</code>
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">print</span> <span class="org-string">"Hello, World!\n"</span>;
+</pre>
+</div>
+
+<p>
+<code>terminal</code>
+</p>
+<div class="org-src-container">
+<pre class="src src-shell-command">$ lcc <span class="org-comment">--build</span> foo.g
+$ ./foo
+Hello, World!
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-build-with-lcc-link-and-run-separately" class="outline-4">
+<h4 id="build-with-lcc-link-and-run-separately"><span class="section-number-4">1.1.3.</span> Build with LCC, Link and Run Separately</h4>
+<div class="outline-text-4" id="text-build-with-lcc-link-and-run-separately">
+<p>
+<code>foo.g</code>
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">print</span> <span class="org-string">"Hello, World!\n"</span>;
+</pre>
+</div>
+
+<p>
+<code>terminal</code>
+</p>
+<div class="org-src-container">
+<pre class="src src-shell-command">$ lcc foo.g
+$ gcc foo.s <span class="org-comment">-o</span> foo
+$ ./foo
+Hello, World!
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 </div>

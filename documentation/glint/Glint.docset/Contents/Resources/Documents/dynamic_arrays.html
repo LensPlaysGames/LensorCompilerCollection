@@ -3,19 +3,19 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-02-09 Mon 12:32 -->
+<!-- 2026-02-12 Thu 12:18 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>&lrm;</title>
-<meta name="author" content="Lens_r" />
+<title>Glint's Built-in Dynamic Array Type</title>
+<meta name="author" content="Rylan Kellogg" />
 <meta name="generator" content="Org Mode" />
 <link rel="stylesheet" href="all.css">
 </head>
 <body>
 <div id="content" class="content">
-<div id="outline-container-org97a040e" class="outline-2">
-<h2 id="org97a040e"><span class="section-number-2">1.</span> Glint's Built-in Dynamic Array Type</h2>
-<div class="outline-text-2" id="text-1">
+<div id="outline-container-glint-s-built-in-dynamic-array-type" class="outline-2">
+<h2 id="glint-s-built-in-dynamic-array-type"><span class="section-number-2">1.</span> Glint's Built-in Dynamic Array Type</h2>
+<div class="outline-text-2" id="text-glint-s-built-in-dynamic-array-type">
 <p>
 Glint's dynamic array type allows the Glint programmer to have a collection of some other type, contiguous in memory, without worrying <i>too much</i> about where that memory comes from or goes to.
 </p>
@@ -32,9 +32,9 @@ If you are familiar with Rust, think <code>Vec</code>;
 If you are familiar with any LISP, think, well, <code>()</code> <code>:^)</code>.
 </p>
 </div>
-<div id="outline-container-org5957b3c" class="outline-3">
-<h3 id="org5957b3c"><span class="section-number-3">1.1.</span> Initialisation</h3>
-<div class="outline-text-3" id="text-1-1">
+<div id="outline-container-initialisation" class="outline-3">
+<h3 id="initialisation"><span class="section-number-3">1.1.</span> Initialisation</h3>
+<div class="outline-text-3" id="text-initialisation">
 <div class="org-src-container">
 <pre class="src src-glint"><span class="org-comment">;; Define a dynamic array with elements of type `T`.</span>
 array <span class="org-operator">:</span> <span class="org-type">[T]</span>;
@@ -50,9 +50,9 @@ array <span class="org-operator">:</span> <span class="org-type">[T N]</span>;
 </pre>
 </div>
 </div>
-<div id="outline-container-org0a6876e" class="outline-4">
-<h4 id="org0a6876e"><span class="section-number-4">1.1.1.</span> Non-standard (non-zeroed) default initialisation</h4>
-<div class="outline-text-4" id="text-1-1-1">
+<div id="outline-container-non-standard-non-zeroed-default-initialisation" class="outline-4">
+<h4 id="non-standard-non-zeroed-default-initialisation"><span class="section-number-4">1.1.1.</span> Non-standard (non-zeroed) default initialisation</h4>
+<div class="outline-text-4" id="text-non-standard-non-zeroed-default-initialisation">
 <p>
 Normally, when any other type is default-initialised in Glint, it is zeroed out. All bytes that constitute the value of that type are set to the zero value (no bits set).
 </p>
@@ -62,26 +62,26 @@ Dynamic arrays are different: memory is allocated, and a pointer to that memory 
 </p>
 </div>
 </div>
-<div id="outline-container-org4e0a1e6" class="outline-4">
-<h4 id="org4e0a1e6"><span class="section-number-4">1.1.2.</span> From Other Types</h4>
-<div class="outline-text-4" id="text-1-1-2">
+<div id="outline-container-from-other-types" class="outline-4">
+<h4 id="from-other-types"><span class="section-number-4">1.1.2.</span> From Other Types</h4>
+<div class="outline-text-4" id="text-from-other-types">
 </div>
 <ol class="org-ol">
-<li><a id="org3ecaf3f"></a>From Fixed Array<br /></li>
+<li><a id="orgc3ce954"></a>From Fixed Array<br /></li>
 
-<li><a id="org4324935"></a>From Array View<br /></li>
+<li><a id="orgf9051ed"></a>From Array View<br /></li>
 
-<li><a id="org0175976"></a>From Pointer and Size<br /></li>
+<li><a id="orgeda1006"></a>From Pointer and Size<br /></li>
 </ol>
 </div>
 </div>
-<div id="outline-container-org69114d0" class="outline-3">
-<h3 id="org69114d0"><span class="section-number-3">1.2.</span> Modification</h3>
-<div class="outline-text-3" id="text-1-2">
+<div id="outline-container-modification" class="outline-3">
+<h3 id="modification"><span class="section-number-3">1.2.</span> Modification</h3>
+<div class="outline-text-3" id="text-modification">
 </div>
-<div id="outline-container-org4cdb40f" class="outline-4">
-<h4 id="org4cdb40f"><span class="section-number-4">1.2.1.</span> Prepend/Append</h4>
-<div class="outline-text-4" id="text-1-2-1">
+<div id="outline-container-prepend-append" class="outline-4">
+<h4 id="prepend-append"><span class="section-number-4">1.2.1.</span> Prepend/Append</h4>
+<div class="outline-text-4" id="text-prepend-append">
 <div class="org-src-container">
 <pre class="src src-glint"><span class="org-comment">;; Append</span>
 array[index] <span class="org-operator">+=</span> element; <span class="org-comment">;; @array[array.size] is now element</span>
@@ -91,9 +91,9 @@ array[index] <span class="org-operator">~=</span> element; <span class="org-comm
 </div>
 </div>
 </div>
-<div id="outline-container-org377ca31" class="outline-4">
-<h4 id="org377ca31"><span class="section-number-4">1.2.2.</span> Insert At Index</h4>
-<div class="outline-text-4" id="text-1-2-2">
+<div id="outline-container-insert-at-index" class="outline-4">
+<h4 id="insert-at-index"><span class="section-number-4">1.2.2.</span> Insert At Index</h4>
+<div class="outline-text-4" id="text-insert-at-index">
 <div class="org-src-container">
 <pre class="src src-glint"><span class="org-comment">;; Insert</span>
 array[index] <span class="org-operator">+=</span> element;
@@ -102,9 +102,9 @@ array[index] <span class="org-operator">+=</span> element;
 </div>
 </div>
 </div>
-<div id="outline-container-org6a0cc15" class="outline-3">
-<h3 id="org6a0cc15"><span class="section-number-3">1.3.</span> Delete Requirement</h3>
-<div class="outline-text-3" id="text-1-3">
+<div id="outline-container-delete-requirement" class="outline-3">
+<h3 id="delete-requirement"><span class="section-number-3">1.3.</span> Delete Requirement</h3>
+<div class="outline-text-3" id="text-delete-requirement">
 <p>
 It is a program error to initialise a dynamic array without subsequently using the unary negation operator on it, i.e. <code>-array</code>. You should do this from the same scope you defined the dynamic array in.
 </p>
