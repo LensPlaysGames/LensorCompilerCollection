@@ -296,7 +296,7 @@ void do_link(
     }
 }
 
-void do_run(
+int do_run(
     lcc::Context& context,
     std::string_view binary_path
 ) {
@@ -315,11 +315,14 @@ void do_run(
         fmt::print("Running generated binary at `{}`\n", command);
 
     auto rc = run_command(command);
-    fmt::print(
-        "{}: Exited with status code {}\n",
-        binary_path,
-        rc
-    );
+    if (context.has_option("verbose")) {
+        fmt::print(
+            "{}: Exited with status code {}\n",
+            binary_path,
+            rc
+        );
+    }
+    return rc;
 }
 
 // NOTE: Moves the input file, so, uhh, don't use that after passing it to
@@ -581,7 +584,7 @@ auto main(int argc, const char** argv) -> int {
     }
 
     if (options.run)
-        do_run(context, configured_output_file_path);
+        return do_run(context, configured_output_file_path);
 
     return 0;
 }
