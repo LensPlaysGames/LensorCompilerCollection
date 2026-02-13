@@ -1917,6 +1917,15 @@ public:
     }
 
     [[nodiscard]]
+    auto children_ref() -> std::vector<Expr**> {
+        std::vector<Expr**> out{};
+        out.reserve(_values.size());
+        for (auto& m : _values)
+            out.emplace_back(&m.value);
+        return out;
+    }
+
+    [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {
         return expr->kind() == Kind::CompoundLiteral;
     }

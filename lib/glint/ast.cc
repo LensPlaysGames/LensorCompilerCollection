@@ -1253,7 +1253,10 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
 
         case Kind::Block: {
             auto* b = as<lcc::glint::BlockExpr>(this);
-            auto children = vws::transform(b->children(), [](auto*& e) { return &e; });
+            auto children = vws::transform(
+                b->children(),
+                [](auto*& e) { return &e; }
+            );
             return {children.begin(), children.end()};
         }
 
