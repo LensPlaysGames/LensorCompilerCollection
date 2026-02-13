@@ -132,7 +132,9 @@ auto Module::serialise_expr(
             write_tag();
 
             // type :TypeIndex
-            write_t(type_at(expr->type()));
+            write_t(type_at(
+                as<TypeExpr>(expr)->contained_type()
+            ));
         } break;
 
         // IntegerLiteral

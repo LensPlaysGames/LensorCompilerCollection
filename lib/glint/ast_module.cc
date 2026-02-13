@@ -220,9 +220,13 @@ void calculate_indices(
 
         // No children, but encodes type.
         case Expr::Kind::IntegerLiteral:
-        case Expr::Kind::Type:
         case Expr::Kind::NameRef: {
             calculate_indices(type_out, type_index, expr->type());
+        } break;
+
+        case Expr::Kind::Type: {
+            auto t = as<TypeExpr>(expr);
+            calculate_indices(type_out, type_index, t->contained_type());
         } break;
 
         // Expressions that may have a single child.
