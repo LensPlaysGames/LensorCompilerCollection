@@ -87,16 +87,22 @@ public:
     /// Get the diagnostic.
     ///
     /// This returns a && to simplify the `return res.diag()` pattern.
-    [[nodiscard]] auto diag() -> Diag&& { return std::move(std::get<Diag>(data)); }
+    [[nodiscard]]
+    auto diag() -> Diag&& { return std::move(std::get<Diag>(data)); }
 
     /// Check if the result holds a diagnostic.
-    [[nodiscard]] bool is_diag() { return std::holds_alternative<Diag>(data); }
+    [[nodiscard]]
+    bool is_diag() { return std::holds_alternative<Diag>(data); }
 
     /// Check if the result holds a value.
-    [[nodiscard]] bool is_value() { return std::holds_alternative<ValueType>(data); }
+    [[nodiscard]]
+    bool is_value() { return std::holds_alternative<ValueType>(data); }
 
     /// Get the value.
-    [[nodiscard]] auto value() -> ValueType& requires (not std::is_void_v<Type>) {
+    [[nodiscard]]
+    auto value() -> ValueType&
+    requires (not std::is_void_v<Type>)
+    {
         return std::get<ValueType>(data);
     }
 
@@ -104,18 +110,22 @@ public:
     explicit operator bool() { return is_value(); }
 
     /// Access the underlying value.
-    [[nodiscard]] auto operator*() -> ValueType& { return value(); }
+    [[nodiscard]]
+    auto operator*() -> ValueType& { return value(); }
 
     /// Access the underlying value.
-    [[nodiscard]] auto operator->() -> ValueType
+    [[nodiscard]]
+    auto operator->() -> ValueType
     requires (std::is_pointer_v<ValueType>)
     { return value(); }
 
     /// Access the underlying value.
-    [[nodiscard]] auto operator->() -> ValueType* //
-        requires (not std::is_pointer_v<ValueType>) {
-            return std::addressof(value());
-        }
+    [[nodiscard]]
+    auto operator->() -> ValueType*
+    requires (not std::is_pointer_v<ValueType>)
+    {
+        return std::addressof(value());
+    }
 
     /// \brief Monad bind operator for results.
     ///
