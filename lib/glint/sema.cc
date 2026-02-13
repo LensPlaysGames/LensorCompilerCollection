@@ -2263,11 +2263,17 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 // fmt::print("expected_type:{}\n", fmt::ptr(expected_type));
                 // if (expected_type) fmt::print("*expected_type:{}\n", *expected_type);
 
-                Error(
-                    c->location(),
-                    "Cannot infer type of Untyped Compound Literal"
-                );
-                c->set_sema_errored();
+                if (c->values().size() != 1) {
+                    Error(
+                        c->location(),
+                        "Cannot infer type of Untyped Compound Literal with multiple subexpressions"
+                    );
+                    c->set_sema_errored();
+                } else {
+                    // Set type of compound literal to type of singular subexpression.
+                    // "bubble up"
+                    c->type(c->values().at(0).value->type());
+                }
             }
             // If both c->type() and expected_type, Convert to expected_type.
             else if ((c->type() and not c->type()->is_unknown()) and expected_type) {
