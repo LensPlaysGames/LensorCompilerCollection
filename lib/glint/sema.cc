@@ -567,8 +567,10 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
 
         case Expr::Kind::If: {
             auto* i = as<IfExpr>(expr);
-            if (HasSideEffects(i->condition())) return true;
-            if (HasSideEffects(i->then())) return true;
+            if (HasSideEffects(i->condition()))
+                return true;
+            if (HasSideEffects(i->then()))
+                return true;
             return i->otherwise() and HasSideEffects(i->otherwise());
         }
 
@@ -1798,7 +1800,12 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
                 // This is how we build the chain of ifs
                 auto* otherwise_expr = if_expr;
-                if_expr = new (mod) IfExpr(cond_expr, then_expr, otherwise_expr, match->location());
+                if_expr = new (mod) IfExpr(
+                    cond_expr,
+                    then_expr,
+                    otherwise_expr,
+                    match->location()
+                );
                 if (not Analyse(&if_expr)) {
                     expr->set_sema_errored();
                     return false;
@@ -1884,9 +1891,11 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             // type, then this IfExpr returns that common type. Otherwise, it's a void
             // expression.
             i->type(Type::Void);
-            if (i->then() and i->otherwise()
+            if (
+                i->then() and i->otherwise()
                 and not i->then()->type()->is_void()
-                and not i->otherwise()->type()->is_void()) {
+                and not i->otherwise()->type()->is_void()
+            ) {
                 if (ConvertToCommonType(&i->then(), &i->otherwise())) {
                     // fmt::print("THEN\n");
                     // i->then()->print(true);
