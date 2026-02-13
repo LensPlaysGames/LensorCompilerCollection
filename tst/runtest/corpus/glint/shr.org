@@ -1,0 +1,17 @@
+* Shift Right =shr=
+
+NOTE: It is important that the answer does not appear as either the lhs or rhs of the input (we had an issue in the past with instruction selection patterns).
+
+#+NAME: source
+#+begin_src glint
+16 >> 2;
+#+end_src
+
+#+NAME: status
+#+begin_example
+4
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

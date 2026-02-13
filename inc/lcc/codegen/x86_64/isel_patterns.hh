@@ -183,40 +183,40 @@ using sar_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Sar), Register<>, Immediate<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightArithmetic), o<1>, o<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using shr_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shr), Register<>, Immediate<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightLogical), o<1>, o<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using shl_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shl), Register<>, Immediate<>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::ShiftLeft), o<1>, o<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using sar_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Sar), Register<>, Register<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), Immediate<32>>>, // 32 bits to clear dependencies
         Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightArithmetic), Register<usz(RegId::RCX), Immediate<8>>, o<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using shr_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shr), Register<>, Register<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), Immediate<32>>>, // 32 bits to clear dependencies
         Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightLogical), Register<usz(RegId::RCX), Immediate<8>>, o<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using shl_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Shl), Register<>, Register<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), Immediate<32>>>, // 32 bits to clear dependencies
         Inst<Clobbers<c<1>>, usz(Opcode::ShiftLeft), Register<usz(RegId::RCX), Immediate<8>>, o<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 template <usz inst_kind, usz out_opcode>
 using binary_commutative_reg_reg = Pattern<
