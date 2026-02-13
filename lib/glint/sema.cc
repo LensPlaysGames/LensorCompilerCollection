@@ -4955,7 +4955,7 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
 void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
     // Look up the thing in its scope, if there is no definition of the symbol
     // in its scope, search its parent scopes until we find one.
-    auto* scope = expr->scope();
+    auto* const scope = expr->scope();
     std::vector<Decl*> syms = scope->find_recursive(expr->name());
 
     // If we’re at the global scope and there still is no symbol, then this
@@ -5028,7 +5028,12 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             return;
         }
 
-        auto err = Error(expr->location(), "Unknown symbol '{}' in scope at {}", expr->name(), fmt::ptr(scope));
+        auto err = Error(
+            expr->location(),
+            "Unknown symbol '{}' in scope at {}",
+            expr->name(),
+            fmt::ptr(scope)
+        );
 
         for (auto s = expr->scope(); s; s = s->parent()) {
             std::vector<std::string_view> symbol_names{};

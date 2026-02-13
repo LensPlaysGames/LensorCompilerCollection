@@ -792,8 +792,12 @@ auto lcc::glint::Expr::CloneImpl(
         case Kind::VarDecl: {
             auto v = as<VarDecl>(expr);
 
+            // We are searching for the scope that actually declares *this* VarDecl
+            // (exactly this one, like, the same point in memory and everything).
+            // This allows us to ensure we are cloning the proper "scope structure",
+            // basically.
             Scope* scope{nullptr};
-            for (auto s : mod.scopes) {
+            for (auto s : v->module()->scopes) {
                 for (auto sym : s->all_symbols()) {
                     // Found encountered decl in existing scope
                     if (sym == v) {
@@ -806,9 +810,10 @@ auto lcc::glint::Expr::CloneImpl(
             }
             LCC_ASSERT(
                 scope,
-                "Encountered declaration during cloning that cannot be found in any scope in the given module."
+                "Encountered declaration during cloning, {}, that cannot be found in any scope in the given module."
                 " If you just need to clone something and could care less about scopes,"
-                " create a `new (mod) Scope(nullptr)` and declare the declarations in your clonee AST in that."
+                " create a `new (mod) Scope(nullptr)` and declare the declarations in your clonee AST in that.",
+                v->name()
             );
 
             // Declare declaration in fixed up scope.
@@ -2315,11 +2320,21 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
     }
 
     void print(lcc::glint::Module* mod) {
+        LCC_ASSERT(mod, "Cannot print NULL module");
+
+        if (mod->imports().size()) {
+            out += "Imports:\n";
+            for (auto import_ref : mod->imports()) {
+                out += fmt::format("- {}", import_ref.name);
+                if (import_ref.aliased_name.size())
+                    out += fmt::format(" aliased as {}", import_ref.aliased_name);
+                else out += " directly";
+                out += '\n';
+            }
+        }
+
         printed_functions.insert(mod->top_level_function());
-        if (auto* funcbody = cast<lcc::glint::BlockExpr>(mod->top_level_function()->body())) {
-            for (auto* node : funcbody->children())
-                PrintTopLevelNode(node);
-        } else PrintTopLevelNode(mod->top_level_function()->body());
+        PrintTopLevelNode(mod->top_level_function());
 
         for (auto* f : mod->functions())
             if (not printed_functions.contains(f))

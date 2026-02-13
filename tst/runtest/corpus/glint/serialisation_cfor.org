@@ -7,6 +7,7 @@ Test serialisation and deserialisation of =cfor= style loops.
   import foo_serialise_cfor;
 
   x print "foo";
+  print `\n`;
 
   69;
 #+end_src
@@ -25,5 +26,6 @@ Test serialisation and deserialisation of =cfor= style loops.
 
 #+NAME: output
 #+begin_example
+foofoofoofoofoofoofoofoofoofoo
 #+end_example
 

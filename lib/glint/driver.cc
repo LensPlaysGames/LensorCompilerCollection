@@ -24,8 +24,7 @@ auto module_parsed_stats(Module& m) {
              {"  Type Count:", fmt::format("{}\n", m.types.size())},
              {"  Scope Count:", fmt::format("{}\n", m.scopes.size())},
              {"  String Count:", fmt::format("{}\n", m.strings.size())},
-             {"  Is A Module:", fmt::format("{}\n", m.is_module())}
-            }
+             {"  Is A Module:", fmt::format("{}\n", m.is_module())}}
         }.get()
     );
 }

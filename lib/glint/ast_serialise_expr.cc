@@ -41,6 +41,7 @@ auto Module::serialise_expr(
     // possibly serialising children first.
     const auto write_tag = [&]() {
         u8 tag = u8(expr->kind());
+        // fmt::print("Writing expression tag at offset {}\n", out.size());
         out.push_back(tag);
         tag_written = true;
     };
@@ -445,7 +446,7 @@ auto Module::serialise_expr(
         // MatchExpr
         //     object :ExprIndex
         //     body_count :u16
-        //     bodies :(name_length :u8, name :u8[name_length], body :ExprIndex)[body_count]
+        //     bodies :(name_length :u16, name :u8[name_length], body :ExprIndex)[body_count]
         case Expr::Kind::Match: {
             auto m = as<MatchExpr>(expr);
             recurse(m->object());
@@ -458,7 +459,7 @@ auto Module::serialise_expr(
 
         // VarDecl
         //     type :TypeIndex
-        //     name_length :u8
+        //     name_length :u16
         //     name :u8[name_length]
         //     linkage :u8
         //     init :ExprIndex
@@ -471,10 +472,10 @@ auto Module::serialise_expr(
 
             write_t(type_at(v->type()));
 
-            write_t(v->name().size());
+            write_t(u16(v->name().size()));
             write_each(v->name());
 
-            write_t(+v->linkage());
+            write_t(u8(+v->linkage()));
 
             if (v->init())
                 write_t(indices.at(v->init()));

@@ -74,13 +74,18 @@ lcc::glint::Module::Module(
 lcc::glint::Module::~Module() {
     for (auto* node : nodes) delete node;
     for (auto* type : types) delete type;
-    auto global_scope_ = global_scope();
+    Scope* global_scope_{};
+    if (scopes.size())
+        global_scope_ = global_scope();
     for (auto* scope : scopes) delete scope;
     for (auto& import_ref : _imports) {
         if (not import_ref.module)
             continue;
         // If global scope is shared, don't double free it.
-        if (import_ref.module->global_scope() == global_scope_) {
+        if (
+            import_ref.module->scopes.size()
+            and import_ref.module->global_scope() == global_scope_
+        ) {
             import_ref.module->scopes.erase(
                 import_ref.module->scopes.cbegin()
             );

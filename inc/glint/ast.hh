@@ -374,13 +374,21 @@ public:
 
     /// Deserialise a module metadata blob into `this`.
     /// \return a boolean value denoting `true` iff deserialisation succeeded.
-    /// NOTE: Does not clear out old module before deserialising into `this`.
+    /// NOTE: Does not clear out module before deserialising into `this`.
     [[nodiscard]]
-    auto deserialise(lcc::Context*, std::vector<u8> module_metadata_blob) -> bool;
+    auto deserialise(
+        lcc::Context*,
+        std::vector<u8> module_metadata_blob
+    ) -> bool;
 
     // After deserialising all expressions, walk each one and build/fixup
     // scopes.
-    void scope_walk(lcc::Context*, Expr*, Scope*);
+    void scope_walk(
+        lcc::Context*,
+        std::unordered_set<Expr*>&,
+        Expr*,
+        Scope*
+    );
 
     /// Convert a type back to the source it may have been lexed from.
     [[nodiscard]]
@@ -2297,6 +2305,7 @@ public:
 
     [[nodiscard]]
     auto bodies() const { return _bodies; }
+    // Please, please, PLEASE don't use this to add match bodies.
     [[nodiscard]]
     auto bodies() -> std::vector<Expr*>& { return _bodies; }
 

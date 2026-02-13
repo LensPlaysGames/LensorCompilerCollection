@@ -12,9 +12,33 @@
 #include <utility>
 #include <vector>
 
-void lcc::glint::Module::scope_walk(lcc::Context* ctx, Expr* e, Scope* current_scope) {
+void lcc::glint::Module::scope_walk(
+    lcc::Context* ctx,
+    std::unordered_set<Expr*>& visited,
+    Expr* e,
+    Scope* current_scope
+) {
     LCC_ASSERT(e);
     LCC_ASSERT(current_scope);
+
+    if (visited.contains(e))
+        return;
+    visited.emplace(e);
+
+    // fmt::print("Importee module at {}\n", fmt::ptr(this));
+    // fmt::print("Importing module at {}\n", fmt::ptr(&importing_module));
+
+    const auto recurse = [&](Expr* expr, Scope* scope) {
+        scope_walk(ctx, visited, expr, scope);
+    };
+
+    // Helper to visualise scope structures on one line.
+    // const auto scope_string = [](const Scope* s) {
+    //     auto str = fmt::format("{}", fmt::ptr(s));
+    //     for (auto scope = s->parent(); scope; scope = scope->parent())
+    //         str += fmt::format("->{}", fmt::ptr(scope));
+    //     return str;
+    // };
 
     switch (e->kind()) {
         // No scope changes
@@ -37,10 +61,19 @@ void lcc::glint::Module::scope_walk(lcc::Context* ctx, Expr* e, Scope* current_s
         case Expr::Kind::Unary:
         case Expr::Kind::Apply:
         case Expr::Kind::Group:
-            break;
+        case Expr::Kind::Match: {
+            for (auto c : e->children())
+                recurse(c, current_scope);
+        } break;
 
         case Expr::Kind::NameRef: {
-            as<NameRefExpr>(e)->scope(current_scope);
+            auto n = as<NameRefExpr>(e);
+            // fmt::print(
+            //     "NameRef {} is in scope {}\n",
+            //     n->name(),
+            //     scope_string(current_scope)
+            // );
+            n->scope(current_scope);
         } break;
 
         // These expressions open a new scope
@@ -49,12 +82,13 @@ void lcc::glint::Module::scope_walk(lcc::Context* ctx, Expr* e, Scope* current_s
             // scope.
             auto block_scope = new (*this) Scope(current_scope);
             for (auto c : as<BlockExpr>(e)->children())
-                scope_walk(ctx, c, block_scope);
+                recurse(c, block_scope);
         } break;
 
         case Expr::Kind::Template: {
             // A template defines a new scope, and declares it's parameters in that scope.
             auto template_scope = new (*this) Scope(current_scope);
+            // fmt::print("Created scope for `template`: {}\n", scope_string(template_scope));
 
             // Declare parameters in template's scope.
             auto e_template = as<TemplateExpr>(e);
@@ -78,21 +112,62 @@ void lcc::glint::Module::scope_walk(lcc::Context* ctx, Expr* e, Scope* current_s
             }
 
             // Walk body.
-            scope_walk(ctx, e_template->body(), template_scope);
-
+            recurse(e_template->body(), template_scope);
         } break;
 
+        case Expr::Kind::While: {
+            // A while defines a new scope, and all child expressions are within that
+            // scope.
+            auto while_scope = new (*this) Scope(current_scope);
+            // fmt::print("Created scope for `while`: {}\n", scope_string(while_scope));
+            recurse(as<WhileExpr>(e)->condition(), while_scope);
+            recurse(as<WhileExpr>(e)->body(), while_scope);
+        } break;
+
+        case Expr::Kind::For: {
+            auto for_scope = new (*this) Scope(current_scope);
+            // fmt::print("Created scope for `for`: {}\n", scope_string(for_scope));
+            auto f = as<ForExpr>(e);
+            recurse(f->init(), for_scope);
+            recurse(f->condition(), for_scope);
+            recurse(f->increment(), for_scope);
+            recurse(f->body(), for_scope);
+        } break;
+
+        case Expr::Kind::If: {
+            auto if_scope = new (*this) Scope(current_scope);
+            // fmt::print("Created scope for `if`: {}\n", scope_string(if_scope));
+            auto i = as<IfExpr>(e);
+            recurse(i->condition(), if_scope);
+            recurse(i->then(), if_scope);
+            if (i->otherwise())
+                recurse(i->otherwise(), if_scope);
+        } break;
+
+        case Expr::Kind::VarDecl:
         case Expr::Kind::EnumeratorDecl:
-        case Expr::Kind::For:
+        case Expr::Kind::TypeAliasDecl:
+        case Expr::Kind::TypeDecl: {
+            auto d = as<Decl>(e);
+            // fmt::print(
+            //     "Declaring {} in scope {}\n",
+            //     d->name(),
+            //     scope_string(current_scope)
+            // );
+            auto success = current_scope->declare(
+                ctx,
+                std::string(d->name()),
+                d
+            );
+            if (not success) {
+                success.diag().print();
+                Diag::ICE("Failed to declare {} during scope walk\n", d->name());
+            }
+        } break;
+
         case Expr::Kind::FuncDecl:
         case Expr::Kind::TemplatedFuncDecl:
-        case Expr::Kind::If:
-        case Expr::Kind::Match:
-        case Expr::Kind::TypeAliasDecl:
-        case Expr::Kind::TypeDecl:
-        case Expr::Kind::VarDecl:
-        case Expr::Kind::While:
-            LCC_TODO("Scope walking during deserialisation");
+            LCC_TODO("Implement function declaration scope walk");
     }
 }
 
@@ -156,6 +231,9 @@ auto lcc::glint::Module::deserialise(
 
     std::vector<Expr*> exprs{};
     {
+        using TypeIndex = ModuleDescription::TypeIndex;
+        using ExprIndex = ModuleDescription::ExprIndex;
+
         auto expr_count = hdr.expr_count;
         auto expr_offset = hdr.expr_table_offset;
         exprs.reserve(expr_count);
@@ -169,6 +247,7 @@ auto lcc::glint::Module::deserialise(
         };
 
         for (decltype(expr_count) expr_index = 0; expr_index < expr_count; ++expr_index) {
+            // fmt::print("Reading expression tag at offset {}\n", expr_offset - hdr.expr_table_offset);
             auto tag = module_metadata_blob.at(expr_offset++);
             // TODO: Ensure kind is within range/a valid kind.
             auto kind = Expr::Kind(tag);
@@ -182,7 +261,7 @@ auto lcc::glint::Module::deserialise(
                 ///     length :u16
                 ///     name   :u8[length]
                 case Expr::Kind::NameRef: {
-                    auto ty = read_t(ModuleDescription::TypeIndex());
+                    auto ty = read_t(TypeIndex());
 
                     auto length = read_t(u16());
                     LCC_ASSERT(length, "NameRefExpr must not have zero length name");
@@ -208,7 +287,7 @@ auto lcc::glint::Module::deserialise(
                 //     type :TypeIndex
                 //     value :u64
                 case Expr::Kind::IntegerLiteral: {
-                    auto t_index = read_t(ModuleDescription::TypeIndex());
+                    auto t_index = read_t(TypeIndex());
                     auto value = read_t(u64());
 
                     auto i = new (*this) IntegerLiteral(value, Type::Unknown, {});
@@ -245,14 +324,18 @@ auto lcc::glint::Module::deserialise(
                     // part of the module /importing it/. Otherwise, we wouldn't need to (de)
                     // serialise the expression ever, if it wasn't going to be used in the
                     // context of the module importing it.
-                    auto s = new (*this) StringLiteral(*this, deserialised_name, {});
+                    auto s = new (*this) StringLiteral(
+                        *this,
+                        deserialised_name,
+                        {}
+                    );
                     exprs.insert(exprs.begin() + expr_index, s);
                 } break;
 
                 // TypeExpr:
                 //     type :TypeIndex
                 case Expr::Kind::Type: {
-                    auto t_index = read_t(ModuleDescription::TypeIndex());
+                    auto t_index = read_t(TypeIndex());
 
                     auto t = new (*this) TypeExpr(*this, Type::Unknown, {});
                     fixups.emplace_back(t->contained_type_ref(), t_index);
@@ -265,14 +348,14 @@ auto lcc::glint::Module::deserialise(
                 //     param_count :u8
                 //     param_data  :(type : TypeIndex, name_length :u16, name :u8[name_length])[param_count]
                 case Expr::Kind::Template: {
-                    auto body_index = read_t(ModuleDescription::ExprIndex());
+                    auto body_index = read_t(ExprIndex());
                     LCC_ASSERT(body_index != ModuleDescription::bad_expr_index);
                     auto body = exprs.at(body_index);
 
                     auto param_count = read_t(u8());
                     std::vector<TemplateExpr::Param> parameters{};
                     for (decltype(param_count) i = 0; i < param_count; ++i) {
-                        auto param_type_index = read_t(ModuleDescription::TypeIndex());
+                        auto param_type_index = read_t(TypeIndex());
 
                         auto param_name_length = read_t(u16());
                         std::string param_name{};
@@ -300,7 +383,7 @@ auto lcc::glint::Module::deserialise(
                 // ReturnExpr
                 //     value :ExprIndex (-1 if not present)
                 case Expr::Kind::Return: {
-                    auto e_index = read_t(ModuleDescription::ExprIndex());
+                    auto e_index = read_t(ExprIndex());
                     Expr* r_value{};
                     if (e_index != ModuleDescription::bad_expr_index)
                         r_value = exprs.at(e_index);
@@ -314,11 +397,11 @@ auto lcc::glint::Module::deserialise(
                 //     arglists_count :u8
                 //     arglists :ExprIndex[arglists_count]
                 case Expr::Kind::Apply: {
-                    auto callee_index = read_t(ModuleDescription::ExprIndex());
+                    auto callee_index = read_t(ExprIndex());
                     auto arglists_count = read_t(u8());
                     std::vector<Expr*> arglists{};
                     for (u8 i = 0; i < arglists_count; ++i) {
-                        auto arglist_index = read_t(ModuleDescription::ExprIndex());
+                        auto arglist_index = read_t(ExprIndex());
                         arglists.emplace_back(exprs.at(arglist_index));
                     }
 
@@ -334,8 +417,8 @@ auto lcc::glint::Module::deserialise(
                 //     name_length :u16
                 //     name :u8[name_length]
                 case Expr::Kind::MemberAccess: {
-                    auto t_index = read_t(ModuleDescription::TypeIndex());
-                    auto object_index = read_t(ModuleDescription::ExprIndex());
+                    auto t_index = read_t(TypeIndex());
+                    auto object_index = read_t(ExprIndex());
                     auto name_length = read_t(u16());
                     std::string name{};
                     for (decltype(name_length) i = 0; i < name_length; ++i)
@@ -356,8 +439,13 @@ auto lcc::glint::Module::deserialise(
                 //     from :ExprIndex
                 case Expr::Kind::Cast: {
                     auto cast_kind = read_t(u8());
-                    auto to_type_index = read_t(ModuleDescription::TypeIndex());
-                    auto from_expr_index = read_t(ModuleDescription::ExprIndex());
+                    auto to_type_index = read_t(TypeIndex());
+                    auto from_expr_index = read_t(ExprIndex());
+
+                    LCC_ASSERT(
+                        to_type_index != ModuleDescription::bad_type_index,
+                        "cast 'to' type has bad type index..."
+                    );
 
                     // TODO: Verify cast_kind
 
@@ -373,24 +461,271 @@ auto lcc::glint::Module::deserialise(
                     exprs.insert(exprs.begin() + expr_index, c);
                 } break;
 
-                case Expr::Kind::Sizeof:
-                case Expr::Kind::Alignof:
-                case Expr::Kind::Unary:
-                    LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));
+                // SizeofExpr
+                //     operand :ExprIndex
+                case Expr::Kind::Sizeof: {
+                    auto operand_index = read_t(ExprIndex());
 
-                case Expr::Kind::Binary:
-                case Expr::Kind::If:
-                case Expr::Kind::While:
-                case Expr::Kind::For:
-                    LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));
+                    auto operand = exprs.at(operand_index);
+                    auto s = new (*this) SizeofExpr(operand, {});
+                    exprs.insert(exprs.begin() + expr_index, s);
+                } break;
 
-                case Expr::Kind::Call:
+                // AlignofExpr
+                //     operand :ExprIndex
+                case Expr::Kind::Alignof: {
+                    auto operand_index = read_t(ExprIndex());
+
+                    auto operand = exprs.at(operand_index);
+                    auto s = new (*this) AlignofExpr(operand, {});
+                    exprs.insert(exprs.begin() + expr_index, s);
+                } break;
+
+                // UnaryExpr
+                //     operator :u8
+                //     operand :ExprIndex
+                case Expr::Kind::Unary: {
+                    auto op = read_t(u8());
+                    auto operand_index = read_t(ExprIndex());
+
+                    auto operand = exprs.at(operand_index);
+                    auto u = new (*this) UnaryExpr(
+                        (TokenKind) op,
+                        operand,
+                        false,
+                        {}
+                    );
+                    exprs.insert(exprs.begin() + expr_index, u);
+                } break;
+
+                case Expr::Kind::Binary: {
+                    auto op = read_t(u8());
+                    auto lhs_index = read_t(ExprIndex());
+                    auto rhs_index = read_t(ExprIndex());
+
+                    auto lhs = exprs.at(lhs_index);
+                    auto rhs = exprs.at(rhs_index);
+                    auto b = new (*this) BinaryExpr(
+                        (TokenKind) op,
+                        lhs,
+                        rhs,
+                        {}
+                    );
+                    exprs.insert(exprs.begin() + expr_index, b);
+                } break;
+
+                // IfExpr
+                //     condition :ExprIndex
+                //     then :ExprIndex
+                //     else :ExprIndex
+                case Expr::Kind::If: {
+                    auto condition_index = read_t(ExprIndex());
+                    auto then_index = read_t(ExprIndex());
+                    auto otherwise_index = read_t(ExprIndex());
+
+                    auto condition = exprs.at(condition_index);
+                    auto then = exprs.at(then_index);
+                    Expr* otherwise = nullptr;
+                    if (otherwise_index != ModuleDescription::bad_expr_index)
+                        otherwise = exprs.at(otherwise_index);
+                    auto i = new (*this) IfExpr(
+                        condition,
+                        then,
+                        otherwise,
+                        {}
+                    );
+                    exprs.insert(exprs.begin() + expr_index, i);
+                } break;
+
+                // WhileExpr
+                //     condition :ExprIndex
+                //     body :ExprIndex
+                case Expr::Kind::While: {
+                    auto condition_index = read_t(ExprIndex());
+                    auto body_index = read_t(ExprIndex());
+
+                    auto condition = exprs.at(condition_index);
+                    auto body = exprs.at(body_index);
+                    auto w = new (*this) WhileExpr(
+                        condition,
+                        body,
+                        {}
+                    );
+                    exprs.insert(exprs.begin() + expr_index, w);
+                } break;
+
+                // ForExpr
+                //     init :ExprIndex
+                //     condition :ExprIndex
+                //     increment :ExprIndex
+                //     body :ExprIndex
+                case Expr::Kind::For: {
+                    auto initial_index = read_t(ExprIndex());
+                    auto condition_index = read_t(ExprIndex());
+                    auto increment_index = read_t(ExprIndex());
+                    auto body_index = read_t(ExprIndex());
+
+                    auto initial = exprs.at(initial_index);
+                    auto condition = exprs.at(condition_index);
+                    auto increment = exprs.at(increment_index);
+                    auto body = exprs.at(body_index);
+                    auto f = new (*this) ForExpr(
+                        initial,
+                        condition,
+                        increment,
+                        body,
+                        {}
+                    );
+                    exprs.insert(exprs.begin() + expr_index, f);
+                } break;
+
+                // CallExpr
+                //     type :TypeIndex
+                //     callee :ExprIndex
+                //     arg_count :u16
+                //     args :ExprIndex[arg_count]
+                case Expr::Kind::Call: {
+                    auto t_index = read_t(TypeIndex());
+                    auto callee_index = read_t(ExprIndex());
+                    auto argcount = read_t(u16());
+                    std::vector<Expr*> args{};
+                    for (decltype(argcount) i = 0; i < argcount; ++i) {
+                        args.emplace_back(
+                            exprs.at(read_t(ExprIndex()))
+                        );
+                    }
+                    auto callee = exprs.at(callee_index);
+                    auto c = new (*this) CallExpr(callee, std::move(args), {});
+                    if (t_index != ModuleDescription::bad_type_index)
+                        fixups.emplace_back(c->type_ref(), t_index);
+                    exprs.insert(exprs.begin() + expr_index, c);
+                } break;
+
+                // CompoundLiteral
+                //     type :TypeIndex
+                //     count :u16
+                //     expressions :ExprIndex[count]
+                case Expr::Kind::CompoundLiteral: {
+                    auto t_index = read_t(TypeIndex());
+                    auto count = read_t(u16());
+                    std::vector<Expr*> children{};
+                    for (decltype(count) i = 0; i < count; ++i) {
+                        children.emplace_back(
+                            exprs.at(read_t(ExprIndex()))
+                        );
+                    }
+                    auto c = new (*this) CompoundLiteral(
+                        children,
+                        {}
+                    );
+                    if (t_index != ModuleDescription::bad_type_index)
+                        fixups.emplace_back(c->type_ref(), t_index);
+                    exprs.insert(exprs.begin() + expr_index, c);
+                } break;
+
+                // BlockExpr
+                //     count :u16
+                //     expressions :ExprIndex[count]
+                case Expr::Kind::Block: {
+                    auto count = read_t(u16());
+                    std::vector<Expr*> children{};
+                    for (decltype(count) i = 0; i < count; ++i) {
+                        children.emplace_back(
+                            exprs.at(read_t(ExprIndex()))
+                        );
+                    }
+                    auto b = new (*this) BlockExpr(
+                        children,
+                        {}
+                    );
+                    exprs.insert(exprs.begin() + expr_index, b);
+                } break;
+
+                // GroupExpr
+                //     count       :u16
+                //     expressions :ExprIndex[count]
+                case Expr::Kind::Group: {
+                    auto count = read_t(u16());
+                    std::vector<Expr*> children{};
+                    for (decltype(count) i = 0; i < count; ++i) {
+                        children.emplace_back(
+                            exprs.at(read_t(ExprIndex()))
+                        );
+                    }
+                    auto g = new (*this) GroupExpr(
+                        children,
+                        {}
+                    );
+                    exprs.insert(exprs.begin() + expr_index, g);
+                } break;
+
+                // MatchExpr
+                //     object :ExprIndex
+                //     body_count :u16
+                //     bodies :(name_length :u8, name :u8[name_length], body :ExprIndex)[body_count]
+                case Expr::Kind::Match: {
+                    auto object_index = read_t(ExprIndex());
+                    auto count = read_t(u16());
+                    std::vector<std::string> body_names{};
+                    std::vector<Expr*> body_exprs{};
+                    for (decltype(count) i = 0; i < count; ++i) {
+                        auto name_length = read_t(u16());
+                        std::string name{};
+                        name.reserve(name_length);
+                        for (decltype(name_length) j = 0; j < name_length; ++j)
+                            name += (char) read_t(u8());
+
+                        auto body_index = read_t(ExprIndex());
+
+                        body_names.emplace_back(std::move(name));
+                        body_exprs.emplace_back(exprs.at(body_index));
+                    }
+                    auto object = exprs.at(object_index);
+                    auto m = new (*this) MatchExpr(
+                        object,
+                        {}
+                    );
+                    for (auto [name, expr] : vws::zip(body_names, body_exprs))
+                        m->add_match(name, expr);
+
+                } break;
+
                 case Expr::Kind::IntrinsicCall:
-                case Expr::Kind::CompoundLiteral:
-                case Expr::Kind::Block:
-                case Expr::Kind::Group:
-                case Expr::Kind::Match:
                     LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));
+
+                // VarDecl
+                //     type :TypeIndex
+                //     name_length :u16
+                //     name :u8[name_length]
+                //     linkage :u8
+                //     init :ExprIndex
+                case Expr::Kind::VarDecl: {
+                    auto t_index = read_t(TypeIndex());
+                    auto name_length = read_t(u16());
+                    std::string name{};
+                    name.reserve(name_length);
+                    for (decltype(name_length) i = 0; i < name_length; ++i)
+                        name += (char) read_t(u8());
+
+                    auto linkage = read_t(u8());
+                    auto init_index = read_t(ExprIndex());
+                    Expr* init_expr = nullptr;
+                    if (init_index != ModuleDescription::bad_expr_index)
+                        init_expr = exprs.at(init_index);
+
+                    auto v = new (*this) VarDecl(
+                        name,
+                        Type::Unknown,
+                        init_expr,
+                        this,
+                        (Linkage) linkage,
+                        {}
+                    );
+                    if (t_index != ModuleDescription::bad_expr_index)
+                        fixups.emplace_back(v->type_ref(), t_index);
+
+                    exprs.insert(exprs.begin() + expr_index, v);
+                } break;
 
                 case Expr::Kind::Module:
                 case Expr::Kind::EnumeratorDecl:
@@ -399,7 +734,6 @@ auto lcc::glint::Module::deserialise(
                 case Expr::Kind::OverloadSet:
                 case Expr::Kind::TypeAliasDecl:
                 case Expr::Kind::TypeDecl:
-                case Expr::Kind::VarDecl:
                     LCC_TODO("Implement deserialisation of expression kind {}", ToString(kind));
             }
         }
@@ -425,8 +759,9 @@ auto lcc::glint::Module::deserialise(
         auto the_global_scope = global_scope();
         Scope* module_scope = new (*this) Scope(the_global_scope);
 
-        for (auto e : exprs)
-            scope_walk(context, e, module_scope);
+        std::unordered_set<Expr*> visited{};
+        for (auto e : vws::reverse(exprs))
+            scope_walk(context, visited, e, module_scope);
     }
     // Starting at the type table offset, parse all types. Stop after parsing
     // the amount of types specified in the header.
