@@ -290,13 +290,17 @@ public:
     void add_top_level_expr(Expr* node);
 
     /// Get the functions that are part of this module.
-    auto functions() -> std::vector<FuncDecl*>& { return _functions; }
+    auto functions() -> decltype(_functions)& { return _functions; }
+    auto functions() const -> const decltype(_functions)& { return _functions; }
 
     // Get a list of functions by their name
     auto function(std::string_view name) -> std::vector<FuncDecl*>;
 
     /// Get the module imports.
-    auto imports() -> std::vector<Ref>& { return _imports; }
+    auto imports() -> decltype(_imports)& { return _imports; }
+    auto imports() const -> const decltype(_imports)& {
+        return _imports;
+    }
 
     /// Get the module imports.
     auto exports() -> std::vector<Decl*>& { return _exports; }
@@ -305,7 +309,10 @@ public:
     [[nodiscard]]
     auto intern(std::string_view str) -> usz;
 
-    /// Print the AST of this module.
+    /// Print this module.
+    auto string(bool use_colour) const -> std::string;
+
+    /// Print this module.
     void print(bool use_colour);
 
     /// Get the global scope.
@@ -1711,6 +1718,8 @@ public:
     [[nodiscard]]
     auto type() const -> Type*;
 
+    // Print this expression.
+    auto string(bool use_colour) const -> std::string;
     void print(bool use_colour) const;
 
     // Deep-copy an expression.

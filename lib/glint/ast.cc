@@ -2323,7 +2323,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
         PrintNodeChildren(e, std::move(leading_text));
     }
 
-    void print(lcc::glint::Module* mod) {
+    void print(const lcc::glint::Module* mod) {
         LCC_ASSERT(mod, "Cannot print NULL module");
 
         if (mod->imports().size()) {
@@ -2725,8 +2725,22 @@ auto lcc::glint::Type::string(bool use_colours) const -> std::string {
     LCC_UNREACHABLE();
 }
 
+auto lcc::glint::Module::string(bool use_colour) const -> std::string {
+    auto a = ASTPrinter{use_colour};
+    a.print(this);
+    auto result = std::move(a.out);
+    return result;
+}
+
 void lcc::glint::Module::print(bool use_colour) {
     ASTPrinter{use_colour}.print(this);
+}
+
+auto lcc::glint::Expr::string(bool use_colour) const -> std::string {
+    auto a = ASTPrinter{use_colour};
+    a(this);
+    auto result = std::move(a.out);
+    return result;
 }
 
 void lcc::glint::Expr::print(bool use_colour) const {

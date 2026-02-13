@@ -18,13 +18,14 @@ struct ASTPrinter {
     static constexpr Colour base_colour{White};
     static constexpr Colour name_colour{Reset};
 
-    std::string out;
+    std::string out{};
     bool use_colour = true;
     Colours C{use_colour};
 
     ASTPrinter(bool should_use_colour) : use_colour{should_use_colour} {}
     ~ASTPrinter() {
-        if (not out.empty()) fmt::print("{}{}", out, C(Reset));
+        if (not out.empty())
+            fmt::print("{}{}", out, C(Reset));
     }
 
     /// Print basic information about an AST node.

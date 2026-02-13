@@ -959,7 +959,8 @@ auto lcc::glint::Sema::apply_template(
         mod.top_level_scope()
     );
     if (not templates_m) {
-        if (templates_m.is_diag()) templates_m.diag().print();
+        if (templates_m.is_diag())
+            templates_m.diag().print();
         Diag::ICE("GlintSema failed to parse semantic template");
     }
 
@@ -1106,7 +1107,8 @@ void lcc::glint::Sema::AnalyseModule() {
         new (mod) Scope(mod.top_level_scope())
     );
     if (not templates_m) {
-        if (templates_m.is_diag()) templates_m.diag().print();
+        if (templates_m.is_diag())
+            templates_m.diag().print();
         Diag::ICE("GlintSema failed to parse semantic templates");
     }
 
@@ -1182,7 +1184,8 @@ void lcc::glint::Sema::AnalyseModule() {
     // resolution properly, we first need to apply decltype decay
     // to all parameters (e.g. convert parameters of function type
     // to function pointers etc.).
-    for (auto& func : mod.functions()) AnalyseFunctionSignature(func);
+    for (auto& func : mod.functions())
+        AnalyseFunctionSignature(func);
 
     // Analyse function bodies.
     // NOTE: Sema may create new functions, so we have to be very careful of
@@ -1197,9 +1200,10 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     LCC_ASSERT(decl);
 
     // fmt::print(
-    //     "Analysing body of function {} : {}\n",
+    //     "Analysing body of function {} : {}\n{}\n",
     //     decl->name(),
-    //     *decl->type()
+    //     *decl->type(),
+    //     decl->string(false)
     // );
 
     tempset curr_func = decl;
@@ -4208,10 +4212,13 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 
                 // print x:void -> ERROR
                 if (Type::Equal(arg->type(), Type::Void)) {
-                    arg->print(true);
+                    arg->print(context->option_use_colour());
                     expr->set_sema_errored();
-                    Error(arg->location(), "Argument to print has void type; no formatter available");
-                    return;
+                    Error(
+                        arg->location(),
+                        "Argument to print has void type; no formatter available"
+                    );
+                    continue;
                 }
 
                 // print x:byte -> putchar x
