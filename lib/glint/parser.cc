@@ -1109,7 +1109,9 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 );
             }
 
-            if (not Consume(Tk::RParen)) return Error(ErrorId::Expected, "Expected )");
+            if (not Consume(Tk::RParen))
+                return Error(ErrorId::Expected, "Expected )");
+
             lhs->location() = {lhs->location(), tok.location};
         } break;
 
