@@ -1615,6 +1615,7 @@ public:
         For,
         Return,
 
+        // BEGIN TypedExpr
         TypeDecl,
         TypeAliasDecl,
         EnumeratorDecl,
@@ -1640,9 +1641,11 @@ public:
 
         NameRef,
         Type,
-        MemberAccess,
-        Module,
         Group,
+        MemberAccess,
+        // END TypedExpr
+
+        Module,
 
         // replaced during sema
         Match,
@@ -1773,12 +1776,15 @@ class GroupExpr : public TypedExpr {
 
 public:
     GroupExpr(std::vector<Expr*> exprs, Location location)
-        : TypedExpr(Kind::Group, location), _expressions(exprs) {}
+        : TypedExpr(Kind::Group, location),
+          _expressions(exprs) {}
 
     [[nodiscard]]
     auto expressions() const { return _expressions; }
     [[nodiscard]]
-    auto expressions() -> decltype(_expressions)& { return _expressions; }
+    auto expressions() -> decltype(_expressions)& {
+        return _expressions;
+    }
 
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {

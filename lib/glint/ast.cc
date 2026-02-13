@@ -79,7 +79,8 @@ auto lcc::glint::Scope::declare(
 }
 
 auto lcc::glint::Expr::type() const -> Type* {
-    if (auto e = cast<TypedExpr>(this)) return e->type();
+    if (auto e = cast<TypedExpr>(this))
+        return e->type();
     return Type::Void;
 }
 
@@ -2264,7 +2265,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
 
                 out += '\n';
                 return;
-            case K::Group: PrintBasicGlintNode("GroupExpr", e, nullptr); return;
+            case K::Group: PrintBasicGlintNode("GroupExpr", e, e->type()); return;
             case K::While: PrintBasicGlintNode("WhileExpr", e, nullptr); return;
             case K::For: PrintBasicGlintNode("ForExpr", e, nullptr); return;
             case K::Block: PrintBasicGlintNode("BlockExpr", e, e->type()); return;
