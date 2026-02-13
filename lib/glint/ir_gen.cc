@@ -1598,8 +1598,16 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             // If the type of an if isn't void, it must return a value, so generate
             // Phi goodness.
             if (not if_expr->type()->is_void()) {
-                LCC_ASSERT(if_expr->otherwise(), "IfExpr with non-void type has no otherwise; for an IfExpr to return a value, both then and otherwise expressions need to exist");
-                LCC_ASSERT(generated_ir[if_expr->otherwise()], "IfExpr with non-void type has no IR generated for otherwise expression");
+                LCC_ASSERT(
+                    if_expr->otherwise(),
+                    "IfExpr with non-void type has no otherwise; for an"
+                    " IfExpr to return a value, both then and otherwise expressions need to exist"
+                );
+                LCC_ASSERT(
+                    generated_ir[if_expr->otherwise()],
+                    "IfExpr with non-void type {} has no IR generated for otherwise expression",
+                    *if_expr->type()
+                );
 
                 phi->set_incoming(generated_ir[if_expr->then()], last_then_block);
                 phi->set_incoming(generated_ir[if_expr->otherwise()], last_else_block);
