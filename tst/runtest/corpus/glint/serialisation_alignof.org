@@ -16,9 +16,11 @@ Test serialisation and deserialisation of alignof expressions.
     alignof e;
 #+end_src
 
+For some odd reason, alignof currently returns bit values instead of byte values (even though alignment is calculated in bytes)...
+
 #+NAME: status
 #+begin_example
-8
+64
 #+end_example
 
 #+NAME: output

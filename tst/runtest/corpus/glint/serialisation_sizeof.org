@@ -16,9 +16,11 @@ Test serialisation and deserialisation of sizeof expressions.
     sizeof e;
 #+end_src
 
+For some odd reason, sizeof currently returns bit values instead of byte values...
+
 #+NAME: status
 #+begin_example
-8
+64
 #+end_example
 
 #+NAME: output

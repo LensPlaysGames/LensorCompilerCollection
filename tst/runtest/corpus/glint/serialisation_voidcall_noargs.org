@@ -7,7 +7,7 @@ Test serialisation and deserialisation of call expressions that return void with
   import foo_serialise_voidcall_noargs;
 
   foo : void()
-    print "foo";
+    print "foo\n";
 
   x 0;
 
