@@ -1524,6 +1524,55 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         } break;
 
         case K::If: {
+            const auto& if_expr = as<IfExpr>(expr);
+
+            if (not if_expr->otherwise()) {
+                ///         +---------+         |
+                ///         | current |         |
+                ///         +---------+         |
+                ///        //      \\           |
+                ///    +------+     \\          |
+                ///    | then |      |          |
+                ///    +------+     //          |
+                ///           \\   //           |
+                ///          +------+           |
+                ///          | exit |           |
+                ///          +------+           |
+                ///                             |
+                auto* then = new (*module) lcc::Block(fmt::format("if.then.{}", total_if));
+                // TODO: exit block not needed if then is noreturn.
+                auto* exit = new (*module) lcc::Block(fmt::format("if.exit.{}", total_if));
+                total_if += 1;
+
+                generate_expression(if_expr->condition());
+                insert(new (*module) CondBranchInst(
+                    generated_ir[if_expr->condition()],
+                    then,
+                    exit,
+                    expr->location()
+                ));
+
+                update_block(then);
+                auto then_copy = generated_ir;
+                generate_expression(if_expr->then());
+                auto then_ir = generated_ir[if_expr->then()];
+                // Basically, if the if expression is a 'return' or something like that,
+                // the block is already closed, and we do not need to (automatically)
+                // branch out, since the user did explicitly...
+                auto last_then_block = block;
+                if (not last_then_block->closed())
+                    insert(new (*module) BranchInst(exit, expr->location()));
+
+                // If anything outside of the then branch references an AST node that was
+                // used in this then branch, it needs to re-generate the IR for that
+                // node (as it wasn't in the control flow of this branch).
+                then_copy[if_expr->then()] = then_ir;
+                generated_ir = then_copy;
+
+                update_block(exit);
+                break;
+            }
+
             ///         +---------+         |
             ///         | current |         |
             ///         +---------+         |
@@ -1536,36 +1585,6 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             ///          | exit |           |
             ///          +------+           |
             ///                             |
-            const auto& if_expr = as<IfExpr>(expr);
-
-            if (not if_expr->otherwise()) {
-                auto* then = new (*module) lcc::Block(fmt::format("if.then.{}", total_if));
-                // TODO: exit block not needed if then is noreturn.
-                auto* exit = new (*module) lcc::Block(fmt::format("if.exit.{}", total_if));
-                total_if += 1;
-
-                generate_expression(if_expr->condition());
-                insert(new (*module) CondBranchInst(generated_ir[if_expr->condition()], then, exit, expr->location()));
-
-                update_block(then);
-                const auto then_copy = generated_ir;
-                generate_expression(if_expr->then());
-                // Basically, if the if expression is a 'return' or something like that,
-                // the block is already closed, and we do not need to (automatically)
-                // branch out, since the user did explicitly...
-                auto last_then_block = block;
-                if (not last_then_block->closed())
-                    insert(new (*module) BranchInst(exit, expr->location()));
-
-                // If anything outside of the then branch references an AST node that was
-                // used in this then branch, it needs to re-generate the IR for that
-                // node (as it wasn't in the control flow of this branch).
-                generated_ir = then_copy;
-
-                update_block(exit);
-                break;
-            }
-
             auto* then = new (*module) lcc::Block(fmt::format("if.then.{}", total_if));
             auto* otherwise = new (*module) lcc::Block(fmt::format("if.else.{}", total_if));
             // TODO: exit block not needed when both then and else are noreturn.
@@ -1573,17 +1592,37 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             total_if += 1;
 
             generate_expression(if_expr->condition());
-            insert(new (*module) CondBranchInst(generated_ir[if_expr->condition()], then, otherwise, expr->location()));
+            insert(new (*module) CondBranchInst(
+                generated_ir[if_expr->condition()],
+                then,
+                otherwise,
+                expr->location()
+            ));
 
-            auto* phi = new (*module) PhiInst(Convert(ctx, if_expr->type()), expr->location());
+            auto* phi = new (*module) PhiInst(
+                Convert(ctx, if_expr->type()),
+                expr->location()
+            );
 
             update_block(then);
-            const auto then_copy = generated_ir;
+            auto then_copy = generated_ir;
             generate_expression(if_expr->then());
+            auto then_ir = generated_ir[if_expr->then()];
             auto* last_then_block = block;
             if (not last_then_block->closed())
                 insert(new (*module) BranchInst(exit, expr->location()));
 
+            // Now that we've generated the then expression, we go on to generate the
+            // otherwise expression. The weirdness with generated_ir here is due to
+            // the fact that our AST is actually a DAG; there may be multiple
+            // appearances of a single node at different points.
+            // The issue with that, in this context, is that if generated_ir already
+            // contains an entry for a node, it will not generate anything.
+            // This is an issue if a single tree node is used /for the first time/ in
+            // each of these then/otherwise branches. We need each of these branches
+            // to "reset" the nodes they have generated, such that, if they are
+            // encountered again, they get codegenned.
+            then_copy[if_expr->then()] = then_ir;
             generated_ir = then_copy;
 
             update_block(otherwise);
@@ -1591,8 +1630,6 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             auto* last_else_block = block;
             if (not last_else_block->closed())
                 insert(new (*module) BranchInst(exit, expr->location()));
-
-            generated_ir = then_copy;
 
             update_block(exit);
             // If the type of an if isn't void, it must return a value, so generate
