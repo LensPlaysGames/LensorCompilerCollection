@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-02-12 Thu 11:07 -->
+<!-- 2026-02-13 Fri 00:36 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Programming in Lensor Glint</title>
@@ -398,7 +398,7 @@ For now, you just need to learn about something called <i>memory</i>. A computer
 A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary <i>bits</i> (values that may only be on or off), it is addressed via <i>bytes</i>. In hardware, a byte (the minimum addressable unit in memory) is <i>usually</i> eight bits.
 </p>
 
-<pre class="example" id="orgbab1704">
+<pre class="example" id="orgc38a453">
 MEMORY
 | off on  off off off on  off on | ...
 | BYTE 0                         | BYTE 1
@@ -648,12 +648,12 @@ Glint supports decimal fractional literal formats. The whole part of a decimal f
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint"><span class="org-number">0</span>.<span class="org-number">0</span>;
-<span class="org-number">0</span>.<span class="org-number">5</span>;
-<span class="org-number">1</span>.<span class="org-number">0</span>;
-<span class="org-number">1</span>.<span class="org-number">0005</span>;
-<span class="org-number">82921</span>.<span class="org-number">5</span>;
-<span class="org-number">12398</span>.<span class="org-number">812</span>;
+<pre class="src src-glint"><span class="org-number">0.0</span>;
+<span class="org-number">0.5</span>;
+<span class="org-number">1.0</span>;
+<span class="org-number">1.0005</span>;
+<span class="org-number">82921.5</span>;
+<span class="org-number">12398.812</span>;
 </pre>
 </div>
 
@@ -840,7 +840,7 @@ y; <span class="org-comment">;; Error! Unknown symbol y'</span>
 <p>
 The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
 </p>
-<pre class="example" id="org56091d7">
+<pre class="example" id="orgf291496">
 root
 |-- x
 `-- block
@@ -1300,7 +1300,7 @@ A view is compatible with a ranged for loop expression (more on that later).
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint"><span class="org-keyword">match</span> value_of_sum_type, <span class="org-delimiter">{</span>
+<pre class="src src-glint"><span class="org-keyword">match</span> value_of_sum_type<span class="org-warning">,</span> <span class="org-delimiter">{</span>
   .member0 expr;
   .member1 expr;
 <span class="org-delimiter">}</span>;
@@ -1337,7 +1337,7 @@ To access these points, you use the member access operator, <code>.</code>, with
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">A <span class="org-operator">::</span> <span class="org-type">struct</span> <span class="org-delimiter">{</span>
+<pre class="src src-glint"><span class="org-type">A</span> <span class="org-operator">::</span> <span class="org-type">struct</span> <span class="org-delimiter">{</span>
   x <span class="org-operator">:</span> <span class="org-type">int</span>;
   y <span class="org-operator">:</span> <span class="org-type">int</span>;
 <span class="org-delimiter">}</span>;
@@ -1352,19 +1352,19 @@ foo.x <span class="org-operator">+</span> foo.y;
 </div>
 </div>
 <ol class="org-ol">
-<li><a id="orgc8c90c1"></a>Supplanted Members<br />
+<li><a id="org36d7d20"></a>Supplanted Members<br />
 <div class="outline-text-5" id="text-2-8-1-1">
 <p>
 A struct may have another struct (or sum) type supplanted within it; this means that the supplanted type's members are now accessible as if they were members of the struct the member resides in. In reality, the compiler does generate a unique name for the member and generates code to access that member by name; this construct is simply for the programmer's convenience.
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">A <span class="org-operator">::</span> <span class="org-type">struct</span> <span class="org-delimiter">{</span>
+<pre class="src src-glint"><span class="org-type">A</span> <span class="org-operator">::</span> <span class="org-type">struct</span> <span class="org-delimiter">{</span>
   x <span class="org-operator">:</span> <span class="org-type">int</span>;
   y <span class="org-operator">:</span> <span class="org-type">int</span>;
 <span class="org-delimiter">}</span>;
 
-B <span class="org-operator">::</span> <span class="org-type">struct</span> <span class="org-delimiter">{</span>
+<span class="org-type">B</span> <span class="org-operator">::</span> <span class="org-type">struct</span> <span class="org-delimiter">{</span>
   <span class="org-keyword">supplant</span> A;
   z <span class="org-operator">:</span> <span class="org-type">int</span>;
 <span class="org-delimiter">}</span>;
@@ -1414,7 +1414,7 @@ Enumerations, often shortened to just <i>enums</i>, are named constant values.
 Let's say you wanted the number <code>1</code> to be called <code>Success</code>, and the number <code>7</code> to be called <code>Erased</code>, to make your Glint code more readable, or understandable.
 </p>
 <div class="org-src-container">
-<pre class="src src-glint">Code <span class="org-operator">::</span> <span class="org-type">enum</span><span class="org-delimiter">(</span><span class="org-type">int</span><span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
+<pre class="src src-glint"><span class="org-type">Code</span> <span class="org-operator">::</span> <span class="org-type">enum</span><span class="org-delimiter">(</span><span class="org-type">int</span><span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
   Success <span class="org-operator">::</span> <span class="org-number">1</span>;
   Erased <span class="org-operator">::</span> <span class="org-number">7</span>;
 <span class="org-delimiter">}</span>;
@@ -1539,7 +1539,7 @@ foo <span class="org-operator">:</span> <span class="org-type">A</span>;
 foo.x <span class="org-operator">:=</span> <span class="org-number">69</span>;
 foo.y <span class="org-operator">:=</span> foo.x;
 
-<span class="org-keyword">match</span> foo, <span class="org-delimiter">{</span>
+<span class="org-keyword">match</span> foo<span class="org-warning">,</span> <span class="org-delimiter">{</span>
   .x out <span class="org-operator">:=</span> foo.x;
   .y out <span class="org-operator">:=</span> foo.y;
 <span class="org-delimiter">}</span>;
@@ -1696,7 +1696,7 @@ First, let's look at the most basic template expression: the <i>identity</i> tem
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">template<span class="org-delimiter">(</span>x <span class="org-operator">:</span> expr<span class="org-delimiter">)</span> x;
+<pre class="src src-glint">template<span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">expr</span><span class="org-delimiter">)</span> x;
 </pre>
 </div>
 
@@ -1709,7 +1709,7 @@ Often, you want to use a template more than once; for convenience, a Glint progr
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">identity <span class="org-operator">::</span> template<span class="org-delimiter">(</span>x <span class="org-operator">:</span> expr<span class="org-delimiter">)</span> x;
+<pre class="src src-glint">identity <span class="org-operator">::</span> template<span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">expr</span><span class="org-delimiter">)</span> x;
 
 <span class="org-comment">;; Evaluates to '69420'.</span>
 identity <span class="org-number">69420</span>;
@@ -1773,7 +1773,7 @@ A templated type is a template expression that defines a type.
   capacity <span class="org-operator">:</span> <span class="org-type">uint</span>;
 <span class="org-delimiter">}</span>;
 
-my_vec_of_int <span class="org-operator">:</span> <span class="org-type">vector</span> <span class="org-type">int</span>;
+<span class="org-type">my_vec_of_int</span> <span class="org-operator">:</span> <span class="org-type">vector</span> <span class="org-type">int</span>;
 </pre>
 </div>
 </div>
@@ -1794,7 +1794,7 @@ The <code>auto</code> type allows for partial definition of a type, just like C+
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">vector_push <span class="org-operator">:</span> <span class="org-type">void</span><span class="org-delimiter">(</span>vec <span class="org-operator">:</span> <span class="org-delimiter">(</span>vector auto.element<span class="org-delimiter">)</span>.ref, val <span class="org-operator">:</span> <span class="org-type">auto</span>.element<span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
+<pre class="src src-glint"><span class="org-function-name">vector_push</span> <span class="org-operator">:</span> <span class="org-type">void</span><span class="org-delimiter">(</span>vec <span class="org-operator">:</span> <span class="org-type">(vector auto.element).ref</span>, val <span class="org-operator">:</span> <span class="org-type">auto</span><span class="org-warning">.element</span><span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
   <span class="org-keyword">if</span> vec.size <span class="org-operator">+</span> <span class="org-number">2</span> <span class="org-operator">&gt;</span> vec.capacity,
     vector_grow vec;
 
@@ -1809,9 +1809,9 @@ Now, upon invocation of <code>vector_push</code>, the compiler will first look f
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">vector_push <span class="org-operator">::</span> template<span class="org-delimiter">(</span>element <span class="org-operator">:</span> type<span class="org-delimiter">)</span>
-  vector_push_impl <span class="org-operator">:</span> <span class="org-type">void</span><span class="org-delimiter">(</span>vec <span class="org-operator">:</span> <span class="org-delimiter">(</span>vector element<span class="org-delimiter">)</span>, val <span class="org-operator">:</span> <span class="org-type">element</span><span class="org-delimiter">)</span>
-    ...;
+<pre class="src src-glint">vector_push <span class="org-operator">::</span> template<span class="org-delimiter">(</span>element <span class="org-operator">:</span> <span class="org-type">type</span><span class="org-delimiter">)</span>
+  <span class="org-function-name">vector_push_impl</span> <span class="org-operator">:</span> <span class="org-type">void</span><span class="org-delimiter">(</span>vec <span class="org-operator">:</span> <span class="org-delimiter">(</span>vector element<span class="org-delimiter">)</span>, val <span class="org-operator">:</span> <span class="org-type">element</span><span class="org-delimiter">)</span>
+    <span class="org-warning">...</span>;
 
 <span class="org-comment">;; Invocations could be thought of like this</span>
 <span class="org-delimiter">(</span>vector_push <span class="org-type">int</span><span class="org-delimiter">)</span> my_vec_of_int <span class="org-number">69</span>;
@@ -1903,7 +1903,7 @@ Just some extra information on the type sub-language. A lot of the first portion
 <span class="org-comment">;; architecture-sized unsigned integer. Same size as 'int'.</span>
 <span class="org-type">uint</span>;
 <span class="org-comment">;; architecture-sized fractional number.</span>
-float;
+<span class="org-type">float</span>;
 <span class="org-comment">;; Boolean: binary value 'true' or 'false'.</span>
 <span class="org-type">bool</span>;
 <span class="org-comment">;; The nothing type. Declares absence of something (i.e. a function that</span>

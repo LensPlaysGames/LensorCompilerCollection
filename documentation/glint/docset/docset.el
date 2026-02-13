@@ -85,7 +85,7 @@ No spaces, no non-ascii, less symbols."
               (duplicate-id   (seq-count
                                (lambda (elem) (equal elem slug))
                                inserted-ids)))
-         (when (and (not custom-id) (< level 4)
+         (when (and (not custom-id) ;; (< level 4)
                     (not todo) (not preexisting-id))
            (when (> duplicate-id 0)
              ;; Push unchanged slug so we know how many duplicates of
