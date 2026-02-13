@@ -6,7 +6,7 @@ Test serialisation and deserialisation of if expressions without an otherwise cl
 #+begin_src glint
   import foo_serialise_if_noelse;
 
-  x 69;
+  x print "foo\n";
 #+end_src
 
 #+NAME: source
@@ -18,10 +18,11 @@ Test serialisation and deserialisation of if expressions without an otherwise cl
 
 #+NAME: status
 #+begin_example
-69
+0
 #+end_example
 
 #+NAME: output
 #+begin_example
+foo
 #+end_example
 

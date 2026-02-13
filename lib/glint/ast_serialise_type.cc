@@ -449,7 +449,10 @@ auto lcc::glint::Module::serialise(
 
     LCC_ASSERT(
         indices.at(ty) == type_index,
-        "Mismatch in AoT index calculation and actual serialisation"
+        "Mismatch in AoT type index calculation and actual serialisation"
+        " (AoT index {}, actual index {})",
+        indices.at(ty),
+        type_index
     );
 
     cache.emplace_back(ty);

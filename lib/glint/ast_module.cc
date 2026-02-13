@@ -115,7 +115,8 @@ void calculate_indices(
     Type* ty
 ) {
     // Don't visit a type twice.
-    if (out.contains(ty)) return;
+    if (out.contains(ty))
+        return;
 
     // Add dummy entry to out so that we don't visit the type twice if the
     // type is self-referencing. This needs to be updated after all the
@@ -210,6 +211,11 @@ void calculate_indices(
         calculate_indices(out, index, type_out, type_index, e);
     };
 
+    const auto recurse_type = [&](Type* t) {
+        if (not t->is_unknown())
+            calculate_indices(type_out, type_index, t);
+    };
+
     // Visit expression's children, first.
     switch (expr->kind()) {
         // Expressions that never have children
@@ -221,12 +227,14 @@ void calculate_indices(
         // No children, but encodes type.
         case Expr::Kind::IntegerLiteral:
         case Expr::Kind::NameRef: {
-            calculate_indices(type_out, type_index, expr->type());
+            // Unknown type does not ever get serialised, even if we do end up
+            // recording a type index in the serialised format (the type index is -1).
+            recurse_type(expr->type());
         } break;
 
         case Expr::Kind::Type: {
             auto t = as<TypeExpr>(expr);
-            calculate_indices(type_out, type_index, t->contained_type());
+            recurse_type(t->contained_type());
         } break;
 
         // Expressions that may have a single child.
@@ -245,13 +253,13 @@ void calculate_indices(
         case Expr::Kind::MemberAccess: {
             auto m = as<MemberAccessExpr>(expr);
             recurse(m->object());
-            calculate_indices(type_out, type_index, m->type());
+            recurse_type(m->type());
         } break;
 
         case Expr::Kind::Cast: {
             auto c = as<CastExpr>(expr);
             recurse(c->operand());
-            calculate_indices(type_out, type_index, c->type());
+            recurse_type(c->type());
         } break;
 
         case Expr::Kind::Sizeof: {
@@ -312,7 +320,7 @@ void calculate_indices(
             for (auto e : c->args())
                 recurse(e);
 
-            calculate_indices(type_out, type_index, c->type());
+            recurse_type(c->type());
         } break;
 
         case Expr::Kind::IntrinsicCall: {
@@ -325,7 +333,7 @@ void calculate_indices(
             for (auto e : c->children())
                 recurse(e);
 
-            calculate_indices(type_out, type_index, c->type());
+            recurse_type(c->type());
         } break;
 
         case Expr::Kind::Block: {
@@ -354,7 +362,7 @@ void calculate_indices(
             if (v->init())
                 recurse(v->init());
 
-            calculate_indices(type_out, type_index, v->type());
+            recurse_type(v->type());
         } break;
 
         case Expr::Kind::Module:
