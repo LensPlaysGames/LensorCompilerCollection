@@ -692,7 +692,8 @@ void emit_gnu_att_assembly(
     // Emit initialized global variable definitions in .data
     bool init_vars_present{false};
     for (auto* var : module->vars()) {
-        if (not var->init()) continue;
+        if (not var->init())
+            continue;
 
         bool defines{false};
         for (auto n : var->names()) {

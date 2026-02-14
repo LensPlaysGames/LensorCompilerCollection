@@ -1145,7 +1145,8 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             return;
         }
 
-        if (v->init()) Print("= {}\n", Val(v->init(), false));
+        if (v->init())
+            Print("= {}\n", Val(v->init(), false));
         else Print("= {}0\n", C(P::Literal));
     }
 
