@@ -5054,7 +5054,14 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             expr->location(),
             "Unknown symbol '{}' in scope at {}",
             expr->name(),
-            fmt::ptr(scope)
+            [](const auto* sc) {
+                std::string out{
+                    fmt::format("{}", fmt::ptr(sc))
+                };
+                for (auto s = sc->parent(); s; s = s->parent())
+                    out += fmt::format("->{}", fmt::ptr(s));
+                return out;
+            }(scope)
         );
 
         for (auto s = expr->scope(); s; s = s->parent()) {
@@ -5063,7 +5070,8 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
                 symbol_names.emplace_back(sym->name());
             err.attach(Note(
                 s->location(),
-                "Searched this scope... {}",
+                "Searched this scope ({})... {}",
+                fmt::ptr(s),
                 fmt::join(symbol_names, ", ")
             ));
         }
@@ -5129,13 +5137,17 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         Expr* e = syms.at(0);
 
         if (not e->ok()) {
+            // fmt::print("\n\nScope at {}\n", fmt::ptr(scope));
+            // e->print(true);
             auto err = Error(
                 expr->location(),
                 "Reference to '{}' before it has been declared (and therefore initialized).\n"
                 "Allowing this access would mean allowing potentially uninitialized data to alter your program!",
                 expr->name()
             );
-            err.attach(Note(e->location(), "Declared here"));
+            if (e->location().is_valid())
+                err.attach(Note(e->location(), "Declared here"));
+
             // TODO: Suggestions:
             //   1) Move the declaration of 'x' to be before this access.
             //   2) Move the "expression containing this access" to after the

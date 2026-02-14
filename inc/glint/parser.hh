@@ -203,7 +203,8 @@ private:
     auto DeclScope(bool for_local_var = false) -> Scope* {
         /// Local variables always go in the current scope since
         /// the global scope is *never* the current scope.
-        if (for_local_var) return CurrScope();
+        if (for_local_var)
+            return CurrScope();
 
         /// Globals at the top-level go in the global scope.
         return CurrScope() == TopLevelScope() ? GlobalScope() : CurrScope();

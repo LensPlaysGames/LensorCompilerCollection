@@ -578,10 +578,29 @@ auto lcc::glint::Expr::CloneImpl(
     // If we have not yet encountered this scope, create a new scope and add a
     // mapping to our scope fixups.
     const auto fixup_scope
-        = [](this auto&& self, Module& m, decltype(scope_fixups) scope_fixes, Scope* scope) -> Scope* {
-        if (not scope) return nullptr;
+        = [](
+              this auto&& self,
+              Module& m,
+              decltype(scope_fixups) scope_fixes,
+              Scope* scope
+          ) -> Scope* {
+        if (not scope)
+            return nullptr;
+
         if (not scope_fixes.contains(scope)) {
-            auto cloned_scope = new (m) Scope(scope->parent());
+            // If any parent scope is contained within scope_fixes (i.e. we have
+            // already encountered the scope and made a new one representing it in our
+            // cloned scope space), we should also replace that parent scope with the
+            // fixed up scope.
+            // A->B->C->D where B and D are contained within scope_fixes, mapped to X
+            // and Z respectively, we should end up with A->X->C->Z.
+            // NOTE: Currently only supports sequential fixed up scopes starting at a
+            // leaf... i.e. X->B->C->D, X->Y->C->D, etc.
+            auto cloned_scope_parent = scope->parent();
+            if (scope_fixes.contains(cloned_scope_parent))
+                cloned_scope_parent = scope_fixes.at(cloned_scope_parent);
+
+            auto cloned_scope = new (m) Scope(cloned_scope_parent);
             scope_fixes.emplace(scope, cloned_scope);
         }
         return scope_fixes.at(scope);
@@ -697,11 +716,12 @@ auto lcc::glint::Expr::CloneImpl(
             if (scope_fixups.contains(s))
                 s = fixup_scope(mod, scope_fixups, n->scope());
 
-            return new (mod) NameRefExpr(
+            auto nameref = new (mod) NameRefExpr(
                 n->name(),
                 s,
                 n->location()
             );
+            return nameref;
         }
 
         case Kind::Sizeof: {
@@ -715,7 +735,10 @@ auto lcc::glint::Expr::CloneImpl(
 
         case Kind::Block: {
             auto b = as<BlockExpr>(expr);
-            return new (mod) BlockExpr(CloneAll(b->children()), b->location());
+            return new (mod) BlockExpr(
+                CloneAll(b->children()),
+                b->location()
+            );
         }
 
         case Kind::Call: {

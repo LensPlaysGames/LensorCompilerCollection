@@ -1516,9 +1516,22 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
 
     // Calculate end pointer (subscript of member access .data on container by
     // member access .size on container)
-    auto member_access_data = new (*mod) MemberAccessExpr(*container, "data", loc);
-    auto member_access_size = new (*mod) MemberAccessExpr(*container, "size", loc);
-    auto end_pointer = new (*mod) BinaryExpr(Tk::LBrack, member_access_data, member_access_size, loc);
+    auto member_access_data = new (*mod) MemberAccessExpr(
+        *container,
+        "data",
+        loc
+    );
+    auto member_access_size = new (*mod) MemberAccessExpr(
+        *container,
+        "size",
+        loc
+    );
+    auto end_pointer = new (*mod) BinaryExpr(
+        Tk::LBrack,
+        member_access_data,
+        member_access_size,
+        loc
+    );
     auto end_name = mod->unique_name("rangedforend_");
     auto end = new (*mod) VarDecl(
         end_name,
@@ -1537,7 +1550,11 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
     auto init = new (*mod) VarDecl(
         iter_name,
         Type::Unknown,
-        new (*mod) MemberAccessExpr(*container, "data", loc),
+        new (*mod) MemberAccessExpr(
+            *container,
+            "data",
+            loc
+        ),
         mod,
         Linkage::LocalVar,
         loc
@@ -1546,7 +1563,7 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
         = scope->declare(context, std::move(iter_name), init);
     LCC_ASSERT(init_decl);
 
-    auto init_block = new (*mod) BlockExpr({end, init}, loc);
+    auto init_group = new (*mod) GroupExpr({end, init}, loc);
 
     // namerefexpr to init declaration != calculated end pointer
     auto cond = new (*mod) BinaryExpr(
@@ -1584,9 +1601,15 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
             Linkage::LocalVar,
             loc
         );
-    auto loop_var_decl
-        = DeclScope(loop_var_vardecl->linkage() == Linkage::LocalVar)
-              ->declare(context, std::move(loop_var), loop_var_vardecl);
+    auto decl_scope = DeclScope(
+        loop_var_vardecl->linkage() == Linkage::LocalVar
+    );
+    auto loop_var_decl = decl_scope->declare(
+        context,
+        std::move(loop_var),
+        loop_var_vardecl
+    );
+
     LCC_ASSERT(loop_var_decl);
 
     auto block_body = new (*mod) BlockExpr(
@@ -1594,7 +1617,13 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
         loc
     );
 
-    return new (*mod) ForExpr(init_block, cond, increment, block_body, loc);
+    return new (*mod) ForExpr(
+        init_group,
+        cond,
+        increment,
+        block_body,
+        loc
+    );
 }
 
 auto lcc::glint::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {

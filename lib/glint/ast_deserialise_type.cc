@@ -25,12 +25,13 @@ void lcc::glint::Module::scope_walk(
         return;
     visited.emplace(e);
 
+    // fmt::print(
+    //     "Scope Walk: Visiting {}: {}\n",
+    //     fmt::ptr(e),
+    //     e->string(ctx->option_use_colour())
+    // );
     // fmt::print("Importee module at {}\n", fmt::ptr(this));
     // fmt::print("Importing module at {}\n", fmt::ptr(&importing_module));
-
-    const auto recurse = [&](Expr* expr, Scope* scope) {
-        scope_walk(ctx, visited, expr, scope);
-    };
 
     // Helper to visualise scope structures on one line.
     // const auto scope_string = [](const Scope* s) {
@@ -39,6 +40,11 @@ void lcc::glint::Module::scope_walk(
     //         str += fmt::format("->{}", fmt::ptr(scope));
     //     return str;
     // };
+
+    const auto recurse = [&](Expr* expr, Scope* scope) {
+        // fmt::print("  recurse scope {}\n", scope_string(scope));
+        scope_walk(ctx, visited, expr, scope);
+    };
 
     switch (e->kind()) {
         // No scope changes
@@ -81,6 +87,7 @@ void lcc::glint::Module::scope_walk(
             // A block defines a new scope, and all child expressions are within that
             // scope.
             auto block_scope = new (*this) Scope(current_scope);
+            // fmt::print("Created scope for `block`: {}\n", scope_string(block_scope));
             for (auto c : as<BlockExpr>(e)->children())
                 recurse(c, block_scope);
         } break;
@@ -163,6 +170,18 @@ void lcc::glint::Module::scope_walk(
                 success.diag().print();
                 Diag::ICE("Failed to declare {} during scope walk\n", d->name());
             }
+
+            // Some types of declarations (may) have initialiser expressions
+            if (
+                auto d_enum = cast<EnumeratorDecl>(e);
+                d_enum and d_enum->init()
+            ) recurse(d_enum->init(), current_scope);
+
+            if (
+                auto d_var = cast<VarDecl>(e);
+                d_var and d_var->init()
+            ) recurse(d_var->init(), current_scope);
+
         } break;
 
         case Expr::Kind::FuncDecl:
@@ -760,8 +779,14 @@ auto lcc::glint::Module::deserialise(
         Scope* module_scope = new (*this) Scope(the_global_scope);
 
         std::unordered_set<Expr*> visited{};
-        for (auto e : vws::reverse(exprs))
+        for (auto e : vws::reverse(exprs)) {
+            // fmt::print(
+            //     "Visiting {}: {}\n",
+            //     fmt::ptr(e),
+            //     e->string(context->option_use_colour())
+            // );
             scope_walk(context, visited, e, module_scope);
+        }
     }
     // Starting at the type table offset, parse all types. Stop after parsing
     // the amount of types specified in the header.
@@ -1331,9 +1356,11 @@ auto lcc::glint::Module::deserialise(
         *f.fixup = type_at(f.index);
 
     // for (auto e : exprs) {
-    //     // TODO: Analyse?
-    //     fmt::print("Deserialised expression (after type fixups):\n");
-    //     e->print(true);
+    //     fmt::print(
+    //         "Deserialised expression (after type fixups):\n"
+    //         "{}",
+    //         e->string(true)
+    //     );
     // }
 
     // Starting after the header, begin parsing declarations. Stop after
