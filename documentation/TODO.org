@@ -68,6 +68,8 @@
   Require MAJOR.MINOR.PATCH version during module import.
 
   The idea is, the "package.json" of Glint should be the file header. It should contain the declaration of the "package", as well as dependencies, including versions.
+
+  I'm not /super/ sure about this one. I /think/ I do want versioning, but I may have it be a name convention rather than built-in? I don't know. I have to figure out how I want it to work.
 - [Parser/Sema]: Unary operator (keyword) for asserting compile time evaluation
   =evaluate=?
   "evaluate 42 + 27" -> "69".
@@ -81,6 +83,7 @@
 
   Also =println=, which just adds a byte literal =\n= as a final argument.
 - [Sema]: Include an =int= formatter function, so that people can write =print 420=, and it "just works".
+  Ideally, only if it's needed.
 - [Sema]: =out;= as first expression of function body becomes declaration of return type
   Or maybe behind a =builds_result= attribute, where =result= is then automagically declared as a variable of the return type.
 - [Meta]: glintlang website
