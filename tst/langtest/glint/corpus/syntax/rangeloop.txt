@@ -10,7 +10,7 @@ for x in y, z;
 
 (block
  (for
-  (block
+  (group
    (variable_declaration
     (binary_subscript
      (member_access
