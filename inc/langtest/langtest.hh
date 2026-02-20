@@ -1,8 +1,11 @@
-#include <fmt/format.h>
 #include <lcc/context.hh>
 #include <lcc/format.hh>
+#include <lcc/ir/core.hh>
+#include <lcc/ir/module.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
+
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <cctype>
@@ -25,7 +28,7 @@
 namespace langtest {
 
 struct MatchTree {
-    std::string_view name;
+    std::string_view name{};
     std::vector<MatchTree> children{};
 
     [[nodiscard]]
@@ -78,6 +81,96 @@ struct Test {
 
             case FailurePoint::None:
             case FailurePoint::Sema:
+                break;
+        }
+
+        return true;
+    }
+
+    bool test_passed(
+        bool failed_parse,
+        bool failed_check,
+        bool warned_parse,
+        bool warned_check,
+        bool matched_ast,
+        bool matched_ir
+    ) {
+        // Now we just have to determine if the test processed above actually
+        // passed. To do this, we will go through all possible fail cases, and
+        // return false in those cases, since the test failed. If no failure case
+        // returns false, then the test must have passed, and it will return true.
+
+        switch (warning_point) {
+            case langtest::Test::WarningPoint::Syntax:
+                if (not warned_parse) {
+                    fmt::print("Expected warning from parser, but one was not emitted.\n");
+                    return false;
+                }
+                break;
+
+            case langtest::Test::WarningPoint::Sema:
+                if (not warned_check) {
+                    fmt::print("Expected warning from sema, but one was not emitted.\n");
+                    return false;
+                }
+                break;
+
+            // No warning point means no warnings are expected.
+            case langtest::Test::WarningPoint::None:
+                if (warned_parse or warned_check) {
+                    fmt::print("Expected no warnings, but warnings were emitted.\n");
+                    return false;
+                }
+                break;
+        }
+
+        switch (failure_point) {
+            case langtest::Test::FailurePoint::Syntax:
+                if (not failed_parse) {
+                    fmt::print("Expected parse failure, but parsing succeeded.\n");
+                    return false;
+                }
+                break;
+
+            // Failure Point at sema means parsing is expected to succeed.
+            case langtest::Test::FailurePoint::Sema:
+                if (failed_parse) {
+                    fmt::print("Expected sema failure, which implies parsing success, but parsing failed.\n");
+                    return false;
+                }
+                if (not failed_check) {
+                    fmt::print("Expected sema failure, but sema succeeded.\n");
+                    return false;
+                }
+                break;
+
+            case langtest::Test::FailurePoint::None:
+                // No failure point means parsing and checking is expected to succeed.
+                if (failed_parse) {
+                    fmt::print("Expected no failures, but parsing failed.\n");
+                    return false;
+                }
+                if (failed_check) {
+                    fmt::print("Expected no failures, but sema failed.\n");
+                    return false;
+                }
+                // No failure point means matching is performed, and expected to succeed.
+                if (not matched_ast) {
+                    fmt::print("Expected AST to match, but AST did not match.\n");
+                    return false;
+                }
+                if (not matched_ir) {
+                    fmt::print("Expected IR to match, but IR did not match.\n");
+                    return false;
+                }
+                break;
+        }
+
+        // Stop point mostly has to do with how a test is processed, rather than
+        // affecting how a test passes.
+        switch (stop_point) {
+            case langtest::Test::StopPoint::Syntax:
+            case langtest::Test::StopPoint::None:
                 break;
         }
 
@@ -169,6 +262,202 @@ auto perform_match(TNode* e, MatchTree& t) -> bool {
     }
 
     return children_match;
+}
+
+bool perform_ir_match_block(
+    lcc::Module& got,
+    lcc::Module& expected,
+    lcc::Block* got_block,
+    lcc::Block* expected_block
+) {
+    lcc::utils::Colours C{
+        got.context() and got.context()->option_use_colour()
+    };
+
+    LCC_ASSERT(
+        got_block and expected_block,
+        "Cannot perform IR match on NULL IR block"
+    );
+
+    if (expected_block->instructions().size() != got_block->instructions().size()) {
+        fmt::print(
+            "IR MISMATCH: Instruction count in block {} in function {}\n",
+            expected_block->name(),
+            expected_block->function()->names().at(0).name
+        );
+
+        return false;
+    }
+
+    std::unordered_map<lcc::Inst*, lcc::Inst*> expected_to_got{};
+    for (size_t inst_i = 0; inst_i < expected_block->instructions().size(); ++inst_i) {
+        auto* expected_inst = expected_block->instructions().at(inst_i);
+        auto* got_inst = got_block->instructions().at(inst_i);
+        expected_to_got[expected_inst] = got_inst;
+
+        if (expected_inst->kind() != got_inst->kind()) {
+            // TODO: Maybe have this behind a "--verbose-ir" CLI flag or something
+            // fmt::print("\nExpected IR:\n");
+            // expected_block->function()->print();
+            // fmt::print("Got IR:\n");
+            // got_func->print();
+
+            fmt::print(
+                "IR MISMATCH: Expected instruction (1) but got instruction (2) in block {} in function {}\n",
+                expected_block->name(),
+                expected_block->function()->names().at(0).name
+            );
+
+            fmt::print("(1): ");
+            expected_inst->print();
+            fmt::print("{}\n", C(lcc::utils::Colour::Reset));
+
+            fmt::print("(2): ");
+            got_inst->print();
+            fmt::print("{}\n", C(lcc::utils::Colour::Reset));
+
+            return false;
+        }
+
+        // Compare instruction children and ensure they point to equivalent
+        // places (i.e. got_inst->child[0] == expected_inst->child[0], but not
+        // literally equals, just equals the one that represents. Basically, we
+        // will need a map of expected_inst to got_inst so we can do this
+        // comparison properly).
+        auto expected_children = expected_inst->children();
+        auto got_children = got_inst->children();
+
+        size_t child_i = 0;
+        while (
+            expected_children.begin() != expected_children.end()
+            and got_children.begin() != got_children.end()
+        ) {
+            auto* expected_child = *expected_children.begin();
+            auto* got_child = *got_children.begin();
+            if (auto* expected_child_inst = lcc::cast<lcc::Inst>(expected_child)) {
+                if (expected_to_got[expected_child_inst] != got_child) {
+                    fmt::print(
+                        "IR MISMATCH: Expected operand {} (zero-based) of instruction (1) to reference (2), but it instead references (3)\n",
+                        child_i
+                    );
+
+                    fmt::print("(1): ");
+                    got_inst->print();
+                    fmt::print("{}\n", C(lcc::utils::Colour::Reset));
+
+                    fmt::print("(2): ");
+                    expected_child_inst->print();
+                    fmt::print("{}\n", C(lcc::utils::Colour::Reset));
+
+                    fmt::print("(3): ");
+                    expected_to_got[expected_child_inst]->print();
+                    fmt::print("{}\n", C(lcc::utils::Colour::Reset));
+
+                    return false;
+                }
+            }
+            // Advance iterators
+            ++expected_children.begin();
+            ++got_children.begin();
+            ++child_i;
+        }
+    }
+
+    return true;
+}
+
+bool perform_ir_match_function(lcc::Module& got, lcc::Module& expected, lcc::Function* expected_function) {
+    LCC_ASSERT(
+        expected_function,
+        "Cannot perform IR match on NULL expected IR function"
+    );
+    LCC_ASSERT(
+        expected_function->names().size(),
+        "Expected IR function must have at least one name"
+    );
+
+    // We want to find the function in the IR generated by the test by name;
+    // that is, we want to find it if any of it's names match the expected
+    // function's name (that we parsed from the expected test output).
+    auto got_func_in_ir
+        = got.function_by_one_of_names(expected_function->names());
+    if (not got_func_in_ir) {
+        fmt::print(
+            "IR MISMATCH: Expected function {} to be in IR, but didn't find it\n"
+            "{}",
+            expected_function->names().at(0).name,
+            got.as_lcc_ir(true)
+        );
+
+        return false;
+    }
+    auto* got_func = *got_func_in_ir;
+
+    if (expected_function->blocks().size() != got_func->blocks().size()) {
+        fmt::print(
+            "IR MISMATCH: Block count in function {}\n",
+            expected_function->names().at(0).name
+        );
+
+        return false;
+    }
+
+    bool blocks_match{true};
+    for (size_t block_i = 0; block_i < expected_function->blocks().size(); ++block_i) {
+        auto* expected_block = expected_function->blocks().at(block_i);
+        auto* got_block = got_func->blocks().at(block_i);
+        if (
+            not perform_ir_match_block(
+                got,
+                expected,
+                got_block,
+                expected_block
+            )
+        ) blocks_match = false;
+    }
+
+    return blocks_match;
+}
+
+// @return true if modules are "equivalent". That is, they contain the
+// same functions, blocks, and instructions in the same order.
+[[nodiscard]]
+bool perform_ir_match(lcc::Module& got, lcc::Module& expected) {
+    // For every function in the expected IR, check that the function also
+    // exists in the IR we got.
+    bool functions_match{true};
+    for (auto* expected_function : expected.code()) {
+        if (
+            not perform_ir_match_function(
+                got,
+                expected,
+                expected_function
+            )
+        ) functions_match = false;
+    }
+
+    return functions_match;
+}
+
+// @return true either if the test has no IR matcher, or if the test does have an IR matcher and it matches.
+[[nodiscard]]
+bool perform_ir_match(lcc::Module& got, langtest::Test& test) {
+    if (test.ir.empty())
+        return true;
+
+    LCC_ASSERT(got.context(), "NULL context...");
+
+    // Parse expected IRGen IR
+    // fmt::print("EXPECTED IR SPAN:\n{}\n", ir);
+    std::vector<char> ir_v = {test.ir.begin(), test.ir.end()};
+    auto& ir_f = got.context()->create_file("ir_source.lcc", std::move(ir_v));
+    auto expected = lcc::Module::Parse(got.context(), ir_f);
+    if (not expected) {
+        fmt::print("Error parsing expected IR for test {}\n", test.name);
+        return false;
+    }
+
+    return perform_ir_match(got, *expected);
 }
 
 void parse_matchtree(
@@ -371,7 +660,10 @@ auto parse_test(
         if (i >= fsize or contents[i] == '=') {
             // Error if the test is not expected to fail (nothing to match if it is specified to fail)
             if (test.failure_point == Test::FailurePoint::None) {
-                fmt::print("ERROR test has no matcher declared but it is not specified to fail... {}\n", test.name);
+                fmt::print(
+                    "ERROR test has no matcher declared but it is not specified to fail... {}\n",
+                    test.name
+                );
                 return false;
             }
             return true;
