@@ -1,9 +1,12 @@
-; R %lcc --ir -O3 %s
+================
+Optimisation: Remove Unreachable
+:optimise 3
+================
 
-; * remove_unreachable : i64():
-; +   bb0
-; +     return i64 1
-remove_unreachable : i64():
+; Test that ensures unreachable code is removed (tests simple control
+; flow graph optimisation)
+
+func (exported): ccc i64():
   bb0:
     %0 = alloca i64
     store i64 12 into %0
@@ -24,3 +27,9 @@ remove_unreachable : i64():
     branch to %bb6
   bb6:
     unreachable
+
+---
+
+func (exported): ccc i64():
+  bb0:
+    return i64 1

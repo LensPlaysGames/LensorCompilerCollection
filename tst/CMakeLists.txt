@@ -44,6 +44,10 @@ add_subdirectory("./langtest/glint/" "langtest_glint")
 # CodeTest
 add_subdirectory("./codetest/x86_64/" "codetest_x86_64")
 
+# IRTest
+add_subdirectory("./irtest/" "irtest")
+
+# RunTest
 add_custom_target(
   runtest
   COMMAND
@@ -55,6 +59,18 @@ add_custom_target(
   DEPENDS
   lcc
   VERBATIM
+  USES_TERMINAL
+)
+
+# IRTest
+add_custom_target(
+  irtest
+  COMMAND
+  irtest_target
+  DEPENDS
+  irtest_target
+  WORKING_DIRECTORY
+  "${CMAKE_CURRENT_LIST_DIR}/irtest/"
   USES_TERMINAL
 )
 
@@ -104,5 +120,6 @@ add_custom_target(
   langtest
   codetest
   runtest
+  irtest
 )
 

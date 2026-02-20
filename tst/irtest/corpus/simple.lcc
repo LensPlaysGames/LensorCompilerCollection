@@ -1,0 +1,41 @@
+================
+Just a Return
+================
+
+func (internal): ccc void():
+  bb0:
+    return
+
+---
+
+func (internal): ccc void():
+  bb0:
+    return
+
+================
+Return a Value (integer literal, i32 type)
+================
+
+func (internal): ccc i32():
+  bb0:
+    return i32 0
+
+---
+
+func (internal): ccc i32():
+  bb0:
+    return i32 0
+
+================
+Return a Value (fractional literal, f32 type)
+================
+
+func (internal): ccc f32():
+  bb0:
+    return f32 0.1
+
+---
+
+func (internal): ccc i32():
+  bb0:
+    return f32 0.1
