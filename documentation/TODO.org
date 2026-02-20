@@ -45,6 +45,8 @@
 
 * Glint
 
+** Features
+
 - [QoL]: Ability to iterate a container you are editing while iterating it
   #+begin_src glint
     for x in container, {
@@ -57,11 +59,27 @@
   Possibly even named loops and the ability to break/continue from specific ones from nested loops...
 - [Parser/Sema]: Named scopes
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
-- [Cereal]: Flesh out binary AST format
 - [Parser/Sema]: Switch on value
-- [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
+
+
 - [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=, =T_enum.count=
+- [Parser/Sema]: Unary operator (keyword) for asserting compile time evaluation
+  =evaluate=?
+  "evaluate 42 + 27" -> "69".
 - [Sema]: =maps_arguments= function attribute
+- [Sema]: =out;= as first expression of function body becomes declaration of return type
+  Or maybe behind a =builds_result= attribute, where =result= is then automagically declared as a variable of the return type.
+- [Meta]: glintlang website
+  Probably a GitHub organisation with a GitHub Pages website.
+  Site generated from Org and org-publish or something like that.
+- [Sema]: Variable Entanglement
+  Tell the compiler that if a variable =A= has a known value (or a range of values), then variable =B= has a known value (or a range of values).
+  The compiler would be able to optimise more in certain cases if it knew more about how values were related to each other (if they are).
+- [Sema]: Dynamic array of =expr=. =for e in exprs, apply foo, e;= type of thing.
+
+** Fixes/Changes
+
+- [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
 - [Parser/Sema]: Module versioning
 
   Require MAJOR.MINOR.PATCH version in module declaration.
@@ -70,9 +88,6 @@
   The idea is, the "package.json" of Glint should be the file header. It should contain the declaration of the "package", as well as dependencies, including versions.
 
   I'm not /super/ sure about this one. I /think/ I do want versioning, but I may have it be a name convention rather than built-in? I don't know. I have to figure out how I want it to work.
-- [Parser/Sema]: Unary operator (keyword) for asserting compile time evaluation
-  =evaluate=?
-  "evaluate 42 + 27" -> "69".
 - [Parser]: Warn when multiple expressions appear on one line
   Multiple "top level" expressions.
 - [Parser/Sema]: Compile-time Checked Interpolation: =printf "value: {}\n", 69;=
@@ -84,17 +99,8 @@
   Also =println=, which just adds a byte literal =\n= as a final argument.
 - [Sema]: Include an =int= formatter function, so that people can write =print 420=, and it "just works".
   Ideally, only if it's needed.
-- [Sema]: =out;= as first expression of function body becomes declaration of return type
-  Or maybe behind a =builds_result= attribute, where =result= is then automagically declared as a variable of the return type.
-- [Meta]: glintlang website
-  Probably a GitHub organisation with a GitHub Pages website.
-  Site generated from Org and org-publish or something like that.
 - [Sema]: Use intrinsic memset for initialisation (optimisation)
   I just used an external memset because that seemed easier at the time. I think the word intrinsic scared (scares?) me.
-- [Sema]: Variable Entanglement
-  Tell the compiler that if a variable =A= has a known value (or a range of values), then variable =B= has a known value (or a range of values).
-  The compiler would be able to optimise more in certain cases if it knew more about how values were related to each other (if they are).
-- [Sema]: Dynamic array of =expr=. =for e in exprs, apply foo, e;= type of thing.
 - [Parser/Sema]: Tokens in the AST
   Basically, if we could have a dynamic array of =token=, we could then insert that into the source code via some special token list application operator... This would let Glint code build Glint code at compile time (like a LISP macro operating on symbols themselves vs the values they are bound to).
 - [Diags]: Get rid of "Miscellaneous" ErrorId
