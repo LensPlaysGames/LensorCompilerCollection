@@ -604,7 +604,11 @@ void Block::erase() {
 }
 
 void Block::merge(lcc::Block* b) {
+    // We are merging given block `b` into `this` block.
     LCC_ASSERT(b);
+    // We cannot merge into `this` block if it is closed.
+    // UNLESS we are closed and the branch is a singular branch to the block
+    // we are trying to merge.
     LCC_ASSERT(
         not closed()
         or as<BranchInst>(terminator())->target() == b
@@ -618,7 +622,7 @@ void Block::merge(lcc::Block* b) {
     /// Fix PHIs.
     if (parent) {
         for (usz i = 0; i < users().size(); /** No increment! **/) {
-            auto phi = cast<PhiInst>(users()[i]);
+            auto phi = cast<PhiInst>(users().at(i));
             if (not phi) {
                 i++;
                 continue;
@@ -659,18 +663,21 @@ void Block::merge(lcc::Block* b) {
     /// Erase our terminator only after fixing the PHIs so the call
     /// to drop_stale_operands() doesn’t yeet the one value we care
     /// about.
-    if (auto t = terminator()) t->erase();
+    if (auto t = terminator())
+        t->erase();
 
     /// Set the parent for each instruction to this block and move
     /// them all over. Lastly, delete the block.
-    for (auto i : b->inst_list) i->parent = this;
+    for (auto i : b->inst_list)
+        i->parent = this;
     inst_list.insert(
         inst_list.end(),
         b->inst_list.begin(),
         b->inst_list.end()
     );
     b->inst_list.clear();
-    if (b->parent) b->erase();
+    if (b->parent)
+        b->erase();
 }
 
 auto lcc::Block::predecessor_count() const -> usz {
@@ -1455,10 +1462,11 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             if (i->block() and i->block()->function())
                 p.SetFunctionIndices(i->block()->function());
             p.PrintInst(i);
+            p.Print("\n");
         } else if (is<GlobalVariable>(v)) {
             p.PrintGlobal(as<GlobalVariable>(v));
         } else {
-            p.Print("{}", p.Val(v, true));
+            p.Print("{}\n", p.Val(v, true));
         }
         return fmt::format(
             "{}{}",

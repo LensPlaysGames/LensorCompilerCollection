@@ -387,8 +387,8 @@ public:
                 DivImpl<UDivInst, ShrInst, [](auto l, auto r) { return l.udiv(r); }>(i);
                 break;
 
-            case Value::Kind::Eq: CmpImpl < &aint::operator==>(i); break;
-            case Value::Kind::Ne: CmpImpl < &aint::operator!=>(i); break;
+            case Value::Kind::Eq: CmpImpl<&aint::operator== >(i); break;
+            case Value::Kind::Ne: CmpImpl<&aint::operator!= >(i); break;
             case Value::Kind::SLt: CmpImpl<&aint::slt>(i); break;
             case Value::Kind::ULt: CmpImpl<&aint::ult>(i); break;
             case Value::Kind::SGt: CmpImpl<&aint::sgt>(i); break;
@@ -843,47 +843,64 @@ private:
     }
 };
 
-/// CFG simplification pass.
+// CFG simplification pass.
 struct CFGSimplePass : InstructionRewritePass {
     void run_on_function(Function* f) {
-        /// We start at 1 because the entry block is always reachable.
+        // We start at 1 because the entry block is always reachable.
         for (usz i = 1; i < f->blocks().size(); /** No increment! **/) {
-            auto* b = f->blocks()[i];
+            auto* b = f->blocks().at(i);
 
-            /// Count how many users of this block are not PHIs.
+            // Count how many users of this block are not PHIs.
+            usz non_phi_users{0};
             Inst* branch = nullptr;
             for (auto* u : b->users()) {
                 if (not is<PhiInst>(u)) {
-                    if (branch) {
-                        ++i;
-                        continue;
-                    }
+                    ++non_phi_users;
+                    if (branch)
+                        break;
                     branch = u;
                 }
             }
 
+            // There are multiple uses of this block in non-phi context; we
+            // cannot do anything to it.
+            if (non_phi_users > 1) {
+                // This block has too many non-phi users to viably remove in a simple
+                // fashion. SKIP IT!
+                ++i;
+                continue;
+            }
+
+            LCC_ASSERT(
+                non_phi_users <= 1,
+                "Blocks with more than one non-phi use should be skipped above..."
+            );
+
             // If there is only one non-PHI user, and that user is a direct branch to
             // this, inline this block into the block containing that branch
-            if (branch) {
+            if (non_phi_users == 1) {
+                // If there is only one non-phi use of this block, but it isn't a trivial
+                // branch, we can't really merge the two (since we know that the kind of
+                // instruction that "connects" these two blocks is NOT simple/trivial).
                 if (not is<BranchInst>(branch)) {
                     ++i;
                     continue;
                 }
+
                 branch->block()->merge(b);
             }
-            // Otherwise, the block is unreachable. Remove it from all PHIs.
+            // If the block is unreachable, remove it from all PHIs.
             else {
                 for (auto* u : b->users()) {
                     auto* phi = as<PhiInst>(u);
                     phi->remove_incoming(b);
                 }
 
-                /// Yeet!
+                // Yeet the unreachable block!
                 b->erase();
             }
 
-            // Don't increment, since we may just have removed this block, and
-            // incrementing would cause use to skip the next one.
+            // Record that this optimisation pass did change something.
             SetChanged();
         }
     }

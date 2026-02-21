@@ -334,24 +334,25 @@ bool perform_ir_match_block(
         ) {
             auto* expected_child = *expected_children.begin();
             auto* got_child = *got_children.begin();
-            if (auto* expected_child_inst = lcc::cast<lcc::Inst>(expected_child)) {
+
+            // If the expected child is an instruction, that means we can look it up
+            // in our "expected instruction to got instruction" cache.
+            auto* expected_child_inst = lcc::cast<lcc::Inst>(expected_child);
+            if (expected_child_inst) {
+                // If the expected child instruction does not "map" to the actual child
+                // instruction we got, then these IRs do not match.
                 if (expected_to_got[expected_child_inst] != got_child) {
                     fmt::print(
                         "IR MISMATCH: Expected operand {} (zero-based) of instruction (1) to reference (2), but it instead references (3)\n",
                         child_i
                     );
 
-                    fmt::print("(1): ");
-                    got_inst->print();
-                    fmt::print("{}\n", C(lcc::utils::Colour::Reset));
+                    fmt::print("(1): {}", got_inst->string());
+                    fmt::print("(2): {}", expected_child_inst->string());
 
-                    fmt::print("(2): ");
-                    expected_child_inst->print();
-                    fmt::print("{}\n", C(lcc::utils::Colour::Reset));
-
-                    fmt::print("(3): ");
-                    expected_to_got[expected_child_inst]->print();
-                    fmt::print("{}\n", C(lcc::utils::Colour::Reset));
+                    if (expected_to_got[expected_child_inst])
+                        fmt::print("(3): {}", expected_to_got[expected_child_inst]->string());
+                    else fmt::print("(3):     NULL\n");
 
                     return false;
                 }
