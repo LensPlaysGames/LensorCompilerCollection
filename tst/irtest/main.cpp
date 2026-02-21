@@ -244,6 +244,22 @@ auto collect_tests_from_file(
     return tests;
 }
 
+[[nodiscard]]
+auto print_test_passedfailed(const TestNameAndResult& result) -> std::string {
+    return fmt::format(
+        "  {} {}: {}\n",
+        fmt::format(
+            "{}{}{}",
+            result.passed ? C(lcc::utils::Colour::BoldGreen) : C(lcc::utils::Colour::BoldRed),
+            result.passed ? 'O' : 'X',
+            C(lcc::utils::Colour::Reset)
+        ),
+        result.name,
+        result.passed ? "PASSED" : "FAILED"
+    );
+}
+
+[[nodiscard]]
 auto print_passedfailed(const std::vector<TestNameAndResult>& results) -> std::string {
     std::string out{};
 
@@ -298,12 +314,7 @@ void visit_directory(
                 if (not out.option_per_directory_count)
                     return;
 
-                fmt::print(
-                    "  {} {}: {}\n",
-                    passed ? 'O' : 'X',
-                    t.name,
-                    passed ? "PASSED" : "FAILED"
-                );
+                fmt::print("{}", print_test_passedfailed(results.back()));
             };
 
             auto& got_f = out.context.create_file(fmt::format("got.{}", t.name), lcc::utils::to_vec(t.input));
@@ -353,7 +364,16 @@ int main(int argc, char** argv) {
     TestContext test_context{context};
     visit_directory(test_context, "corpus");
 
-    fmt::print("\nFINAL REPORT:\n{}", print_passedfailed(test_context.results));
+    fmt::print(
+        "\nFINAL REPORT:\n{}",
+        print_passedfailed(test_context.results)
+    );
+
+    for (auto result : test_context.results) {
+        if (result.passed)
+            continue;
+        fmt::print("{}", print_test_passedfailed(result));
+    }
 
     return 0;
 }

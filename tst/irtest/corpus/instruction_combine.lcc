@@ -1,0 +1,121 @@
+================
+Optimisation: Trivial Fold
+:optimise 3
+================
+
+; Test that trivial operations on constants and/or known values fold into
+; a single value.
+
+fold_trivial (exported): ccc i32():
+  bb0:
+    %0 = add i32 42, 27
+    return i32 %0
+
+---
+
+fold_trivial (exported): ccc i32():
+  bb0:
+    return i32 69
+
+================
+Optimisation: Addition Fold
+:optimise 3
+================
+
+fold_add (exported): i32(i32 %0):
+  bb1:
+    %1 = add i32 1, %0
+    %2 = add i32 2, %1
+    %3 = add i32 %2, 1
+    %4 = add i32 %3, 2
+    %5 = add i32 1, %4
+    %6 = add i32 %5, 2
+    return i32 %6
+
+---
+
+fold_add (exported): i32(i32 %0):
+  bb0:
+    %1 = add i32 9, %0
+    return i32 %1
+
+================
+Optimisation: Addition/Subtraction Fold
+:optimise 3
+================
+
+; Tests that addition and subtraction operations may be folded together
+; into either a single addition or subtraction.
+
+fold_add_sub (exported): i32(i32 %0):
+  bb0:
+    %1 = add i32 %0, 1
+    %2 = add i32 %1, 2
+    %3 = add i32 3, %2
+    %4 = sub i32 %3, 5
+    return i32 %4
+
+---
+
+fold_add_sub (exported): i32(i32 %0):
+  bb0:
+    %1 = add i32 1, %0
+    return i32 %1
+
+================
+Optimisation: Bitcast Fold
+:optimise 3
+================
+
+fold_bitcast (exported): i64():
+  bb0:
+    %0 = bitcast i64 42 to ptr
+    %1 = bitcast ptr %0 to i64
+    return i64 %1
+
+---
+
+fold_bitcast (exported): i64():
+  bb0:
+    return i64 42
+
+================
+Optimisation: Replace Load/Store with Memory Copy Intrinsic
+:optimise 3
+================
+
+memcpy (exported): void(ptr %0, ptr %1):
+  bb0:
+    %2 = load i32[100] from %1
+    store i32[100] %2 into %0
+    return
+
+---
+
+memcpy (exported): void(ptr %0, ptr %1):
+  bb0:
+    intrinsic @memcpy(ptr %0, ptr %1, i64 400)
+    return
+
+================
+Optimisation: Division Fold
+:optimise 3
+================
+
+; Optimise udiv to shift, but not sdiv.
+
+divs (exported): i64(i64 %0):
+  bb0:
+    %1 = udiv i64 %0, 16
+    %2 = sdiv i64 %0, 16
+    %3 = add i64 %1, %2
+    return i64 %3
+
+---
+
+divs (exported): i64(i64 %0):
+  bb0:
+    %1 = shr i64 %0, 4
+    %2 = sdiv i64 %0, 16
+    %3 = add i64 %1, %2
+    return i64 %3

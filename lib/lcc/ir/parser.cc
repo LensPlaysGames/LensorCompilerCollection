@@ -104,7 +104,7 @@ constexpr auto StringifyEnum(TokenKind t) -> std::string_view {
 }
 
 std::unordered_map<std::string, IntrinsicKind> intrinsic_kinds{
-    {"@memcpy", IntrinsicKind::MemCopy}
+    {"memcpy", IntrinsicKind::MemCopy}
     // TODO: memset
 };
 
@@ -761,10 +761,9 @@ auto lcc::parser::Parser::ParseCall(bool tail) -> Result<CallInst*> {
 }
 
 auto lcc::parser::Parser::ParseIntrinsic() -> Result<IntrinsicInst*> {
-    std::vector<Type*> arg_types;
-    std::vector<IRValue> args;
+    std::vector<Type*> arg_types{};
+    std::vector<IRValue> args{};
 
-    auto intrinsic_name = tok.text;
     if (not At(Tk::Global))
         return Error(ErrorId::Expected, "Expected intrinsic name");
 
@@ -772,8 +771,22 @@ auto lcc::parser::Parser::ParseIntrinsic() -> Result<IntrinsicInst*> {
     auto loc = tok.location;
 
     auto intrinsic_it = intrinsic_kinds.find(name);
-    if (intrinsic_it == intrinsic_kinds.end())
-        return Error(ErrorId::Miscellaneous, "Unrecognized intrinsic name");
+    if (intrinsic_it == intrinsic_kinds.end()) {
+        return Error(
+            ErrorId::Miscellaneous,
+            "Unrecognized intrinsic name `@{}`... expected one of {}",
+            name,
+            fmt::join(
+                vws::transform(
+                    intrinsic_kinds,
+                    [](const auto& p) {
+                        return fmt::format("`@{}`", p.first);
+                    }
+                ),
+                ", "
+            )
+        );
+    }
 
     NextToken();
 
