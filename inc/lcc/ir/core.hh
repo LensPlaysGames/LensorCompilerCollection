@@ -137,6 +137,8 @@ public:
     Type*& type_reference() { return value_type; }
 
     /// Print this value for debugging.
+    auto string() const -> std::string;
+    /// Print this value for debugging.
     void print() const;
 
     [[nodiscard]]

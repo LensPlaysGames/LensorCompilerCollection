@@ -605,8 +605,15 @@ void Block::erase() {
 
 void Block::merge(lcc::Block* b) {
     LCC_ASSERT(b);
-    LCC_ASSERT(not closed() or as<BranchInst>(terminator())->target() == b);
-    LCC_ASSERT(not parent or not b->parent or parent == b->parent);
+    LCC_ASSERT(
+        not closed()
+        or as<BranchInst>(terminator())->target() == b
+    );
+    LCC_ASSERT(
+        not parent
+        or not b->parent
+        or parent == b->parent
+    );
 
     /// Fix PHIs.
     if (parent) {
@@ -623,8 +630,16 @@ void Block::merge(lcc::Block* b) {
             /// one value in those PHIs.
             if (phi->parent == b) {
                 phi->drop_stale_operands();
-                LCC_ASSERT(phi->operands().size() <= 1);
-                if (auto in = phi->get_incoming(this)) phi->replace_with(in);
+
+                LCC_ASSERT(
+                    phi->operands().size() <= 1,
+                    "Expected PHI in merged block to have one or zero operands (has {})...\n{}\n",
+                    phi->operands().size(),
+                    phi->string()
+                );
+
+                if (auto in = phi->get_incoming(this))
+                    phi->replace_with(in);
                 else phi->erase();
 
                 /// Don’t increment since we’ve just removed a user.
@@ -1421,7 +1436,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     /// This is *not* to be used when printing the rest of
     /// the IR! This is the entry point for printing a single
     /// value only.
-    static void PrintValue(const Value* const_value, bool use_colour) {
+    static auto PrintValue(const Value* const_value, bool use_colour) -> std::string {
         LCC_ASSERT(const_value);
 
         /// Ok because we’re not going to mutate this, but we should
@@ -1445,7 +1460,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         } else {
             p.Print("{}", p.Val(v, true));
         }
-        fmt::print(
+        return fmt::format(
             "{}{}",
             p.Output(),
             lcc::utils::Colours{use_colour}(lcc::utils::Colour::Reset)
@@ -1462,8 +1477,12 @@ auto Module::as_lcc_ir(bool use_colour) -> std::string {
     );
 }
 
+auto Value::string() const -> std::string {
+    return LCCIRPrinter::PrintValue(this, true);
+}
+
 void Value::print() const {
-    LCCIRPrinter::PrintValue(this, true);
+    fmt::print("{}", string());
 }
 
 } // namespace lcc
