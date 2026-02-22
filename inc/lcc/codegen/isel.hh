@@ -39,6 +39,10 @@ enum struct OperandKind {
     // the size from it IN BITS. BITS. I'll say it a third time, IN BITS.
     Sizeof,
 
+    // Eventually an immediate operand; takes an input instruction index and
+    // gets the result register size from it IN BITS.
+    SizeofInstruction,
+
     Register,
     // Generally used for specifying in the input pattern.
     RegisterOfCategory,
@@ -87,6 +91,20 @@ struct Sizeof {
     using sz = Immediate<>;
     using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Sizeof;
+    static constexpr i64 immediate = 0;
+    static constexpr usz index = idx;
+    static constexpr usz value = 0;
+    static constexpr usz size = 0;
+    static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
+};
+
+template <usz idx>
+struct SizeofInst {
+    using sz = Immediate<>;
+    using offset = Immediate<>;
+    static constexpr OperandKind kind = OperandKind::SizeofInstruction;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
     static constexpr usz value = 0;
@@ -315,14 +333,44 @@ public:
             return {};
         };
 
+        const auto input_instruction_by_index = [&](usz index) -> Result<MOperandRegister> {
+            LCC_ASSERT(
+                index < input.size(),
+                "Pattern has ill-formed i<{}> operand: index greater than amount of instructions in input.",
+                index
+            );
+
+            // Instruction index we need to find.
+            auto instruction = input.at(index);
+            return MOperandRegister(
+                instruction->reg(),
+                uint(instruction->regsize()),
+                (::lcc::Register::Category) instruction->regcategory()
+            );
+        };
+
         switch (operand::kind) {
             case OperandKind::Immediate:
                 return MOperandImmediate(operand::immediate);
 
+            case OperandKind::SizeofInstruction: {
+                auto instreg = input_instruction_by_index(operand::index);
+                LCC_ASSERT(
+                    instreg,
+                    "Pattern has ill-formed SizeofInst<{}> operand: index greater than amount of instructions in input.",
+                    operand::index
+                );
+                return MOperandImmediate(instreg->size);
+            }
+
             case OperandKind::Sizeof: {
                 auto op_result = input_operand_by_index(operand::index);
                 // FIXME: Which pattern? Possible to include it in error message somehow?
-                LCC_ASSERT(op_result, "Pattern has ill-formed Sizeof<{}> operand: index greater than amount of operands in input.", operand::index);
+                LCC_ASSERT(
+                    op_result,
+                    "Pattern has ill-formed Sizeof<{}> operand: index greater than amount of operands in input.",
+                    operand::index
+                );
                 auto op = *op_result;
 
                 u64 size{};
@@ -335,8 +383,7 @@ public:
                 else if (std::holds_alternative<MOperandLocal>(op)) {
                     auto* local = function.locals().at(std::get<MOperandLocal>(op).index);
                     size = local->allocated_type()->bits();
-                } else LCC_ASSERT(
-                    false,
+                } else Diag::ICE(
                     "Unhandled operand kind in Sizeof handling, sorry"
                 );
 
@@ -356,9 +403,22 @@ public:
                         size = uint(std::get<MOperandImmediate>(op).value);
                     } break;
 
+                    case OperandKind::SizeofInstruction: {
+                        auto op = input_instruction_by_index(operand::index);
+                        LCC_ASSERT(op, "SizeofInstruction couldn't resolve index {}", operand::index);
+                        size = uint(op->size);
+                        // FIXME: Calls that return void, usually, so we fix it up.
+                        // TODO: We should ideally only apply the isel pattern that inserts a
+                        // "move" from the result register if there even is a result register in
+                        // the first place. And have a separate pattern for void calls.
+                        // Once we do that, this should become an assert with a message that
+                        // details SizeofInst referencing an instruction that does not define a
+                        // result register.
+                        if (not size) size = 1;
+                    } break;
+
                     default:
-                        LCC_ASSERT(
-                            false,
+                        Diag::ICE(
                             "Unhandled operand kind in sz field (size) of Register, sorry"
                         );
                 }
@@ -376,7 +436,6 @@ public:
 
             case OperandKind::ResizedRegister: {
                 auto op_result = input_operand_by_index(operand::index);
-                // FIXME: Which pattern? Possible to include it in error message somehow?
                 LCC_ASSERT(
                     op_result,
                     "Pattern has ill-formed ResizedRegister<{}, {}> operand: index greater than amount of operands in input.",
@@ -429,7 +488,6 @@ public:
                     if (found) break;
                 }
 
-                // FIXME: Which pattern? Possible to include it in error message somehow?
                 LCC_ASSERT(
                     found,
                     "Pattern has ill-formed v<{}> operand: index greater than amount of operands in input.",
@@ -484,39 +542,22 @@ public:
 
             case OperandKind::InputOperandReference: {
                 auto op_result = input_operand_by_index(operand::index);
-                // FIXME: Which pattern? Possible to include it in error message somehow?
-                LCC_ASSERT(op_result, "Pattern has ill-formed o<{}> operand: index greater than amount of operands in input.", operand::index);
+                LCC_ASSERT(
+                    op_result,
+                    "Pattern has ill-formed o<{}> operand: index greater than amount of operands in input.",
+                    operand::index
+                );
                 return *op_result;
             }
 
             case OperandKind::InputInstructionReference: {
-                MOperand op{};
-                // Current instruction index.
-                usz i = 0;
-                // Instruction index we need to find.
-                usz needle = operand::index;
-                // Whether or not we've found the instruction we are looking for.
-                bool found = false;
-                for (auto instruction : input) {
-                    if (i == needle) {
-                        found = true;
-                        op = MOperandRegister(
-                            instruction->reg(),
-                            uint(instruction->regsize()),
-                            (::lcc::Register::Category) instruction->regcategory()
-                        );
-                    }
-                    if (found) break;
-                    ++i;
-                }
-
+                auto inst_result = input_instruction_by_index(operand::index);
                 LCC_ASSERT(
-                    found,
+                    inst_result,
                     "Pattern has ill-formed i<{}> operand: index greater than amount of instructions in input.",
-                    needle
+                    operand::index
                 );
-
-                return op;
+                return *inst_result;
             }
         }
         LCC_UNREACHABLE();
