@@ -1001,7 +1001,11 @@ class LoadInst : public Inst {
 public:
     explicit LoadInst(Type* ty, Value* ptr, Location location = {})
         : Inst(Kind::Load, ty, location), pointer(ptr) {
-        LCC_ASSERT(ptr->type() == Type::PtrTy, "IR: LoadInst can only load from pointers, which {} is not", *ty);
+        LCC_ASSERT(
+            ptr->type() == Type::PtrTy,
+            "IR: LoadInst can only load from pointers, which {} is not",
+            *ty
+        );
         AddUse(pointer, this);
     }
 
@@ -1010,7 +1014,9 @@ public:
     auto ptr() const -> Value* { return pointer; }
 
     /// Replace the pointer.
-    void ptr(Value* v) { UpdateOperand(pointer, v); }
+    void ptr(Value* v) {
+        UpdateOperand(pointer, v);
+    }
 
     /// RTTI.
     [[nodiscard]]

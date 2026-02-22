@@ -56,7 +56,9 @@ public:
 
     struct promise_type {
         T current_value{};
-        auto get_return_object() -> Generator { return {handle_type::from_promise(*this)}; }
+        auto get_return_object() -> Generator {
+            return {handle_type::from_promise(*this)};
+        }
         auto final_suspend() noexcept -> std::suspend_always { return {}; }
         auto initial_suspend() noexcept -> std::suspend_never { return {}; };
         void return_void() noexcept {}

@@ -268,17 +268,21 @@ bool perform_ir_match_block(
     lcc::Module& got,
     lcc::Module& expected,
     lcc::Block* got_block,
-    lcc::Block* expected_block
+    lcc::Block* expected_block,
+    std::unordered_map<lcc::Inst*, lcc::Inst*>& expected_to_got
 ) {
     lcc::utils::Colours C{
         got.context() and got.context()->option_use_colour()
     };
 
+    // Disallow comparing from/to NULL pointer.
     LCC_ASSERT(
         got_block and expected_block,
         "Cannot perform IR match on NULL IR block"
     );
 
+    // Two blocks without the same number of instructions within them are
+    // never equivalent.
     if (expected_block->instructions().size() != got_block->instructions().size()) {
         fmt::print(
             "IR MISMATCH: Instruction count in block {} in function {}\n",
@@ -289,7 +293,6 @@ bool perform_ir_match_block(
         return false;
     }
 
-    std::unordered_map<lcc::Inst*, lcc::Inst*> expected_to_got{};
     for (size_t inst_i = 0; inst_i < expected_block->instructions().size(); ++inst_i) {
         auto* expected_inst = expected_block->instructions().at(inst_i);
         auto* got_inst = got_block->instructions().at(inst_i);
@@ -303,18 +306,14 @@ bool perform_ir_match_block(
             // got_func->print();
 
             fmt::print(
-                "IR MISMATCH: Expected instruction (1) but got instruction (2) in block {} in function {}\n",
+                "IR MISMATCH: Expected instruction (1) but got instruction (2) in block {} in function {}\n"
+                "(1): {}"
+                "(2): {}",
                 expected_block->name(),
-                expected_block->function()->names().at(0).name
+                expected_block->function()->names().at(0).name,
+                expected_inst->string(),
+                got_inst->string()
             );
-
-            fmt::print("(1): ");
-            expected_inst->print();
-            fmt::print("{}\n", C(lcc::utils::Colour::Reset));
-
-            fmt::print("(2): ");
-            got_inst->print();
-            fmt::print("{}\n", C(lcc::utils::Colour::Reset));
 
             return false;
         }
@@ -339,20 +338,27 @@ bool perform_ir_match_block(
             // in our "expected instruction to got instruction" cache.
             auto* expected_child_inst = lcc::cast<lcc::Inst>(expected_child);
             if (expected_child_inst) {
+                // If the expected child instruction does not map to _any_ actual child
+                // instruction we got, that is an error in how we are traversing the IR
+                // and building our cache.
+                LCC_ASSERT(
+                    expected_to_got.contains(expected_child_inst),
+                    "Expected->Got cache not built correctly"
+                );
+
                 // If the expected child instruction does not "map" to the actual child
                 // instruction we got, then these IRs do not match.
                 if (expected_to_got[expected_child_inst] != got_child) {
                     fmt::print(
-                        "IR MISMATCH: Expected operand {} (zero-based) of instruction (1) to reference (2), but it instead references (3)\n",
-                        child_i
+                        "IR MISMATCH: Expected operand {} (zero-based) of instruction (1) to reference (2), but it instead references (3)\n"
+                        "(1): {}"
+                        "(2): {}"
+                        "(3): {}",
+                        child_i,
+                        got_inst->string(),
+                        expected_child_inst->string(),
+                        expected_to_got[expected_child_inst]->string()
                     );
-
-                    fmt::print("(1): {}", got_inst->string());
-                    fmt::print("(2): {}", expected_child_inst->string());
-
-                    if (expected_to_got[expected_child_inst])
-                        fmt::print("(3): {}", expected_to_got[expected_child_inst]->string());
-                    else fmt::print("(3):     NULL\n");
 
                     return false;
                 }
@@ -403,7 +409,27 @@ bool perform_ir_match_function(lcc::Module& got, lcc::Module& expected, lcc::Fun
         return false;
     }
 
-    bool blocks_match{true};
+    // Cache of expected instructions mapped to the instruction we actually
+    // got in the output.
+    //
+    // Used to resolve lookups to make sure references are "equivalent".
+    //
+    // EXPECTED:
+    //   %0 = add i32 13, 14
+    //   %1 = add i32 %0, 14
+    // GOT:
+    //   %a = add i32 13, 14
+    //   %b = add i32 %a, 14
+    // expected_to_got: [ (%0, %a), (%1, %b) ]
+    //
+    // That way, when we get to %b in the "got" and %1 in "expected", we can
+    // lookup the expected first operand, %0, and know that we should expect
+    // the first operand to /actually/ be %a, from the output.
+    //
+    // This needs to be per-function and not per-block because of PHI
+    // instructions.
+    std::unordered_map<lcc::Inst*, lcc::Inst*> expected_to_got{};
+
     for (size_t block_i = 0; block_i < expected_function->blocks().size(); ++block_i) {
         auto* expected_block = expected_function->blocks().at(block_i);
         auto* got_block = got_func->blocks().at(block_i);
@@ -412,12 +438,13 @@ bool perform_ir_match_function(lcc::Module& got, lcc::Module& expected, lcc::Fun
                 got,
                 expected,
                 got_block,
-                expected_block
+                expected_block,
+                expected_to_got
             )
-        ) blocks_match = false;
+        ) return false;
     }
 
-    return blocks_match;
+    return true;
 }
 
 // @return true if modules are "equivalent". That is, they contain the

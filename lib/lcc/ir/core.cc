@@ -440,7 +440,8 @@ auto Inst::Children() -> Generator<Value**> {
 
         case Kind::Intrinsic: {
             auto* i = as<IntrinsicInst>(this);
-            for (auto* a : i->operand_list) co_yield &a;
+            for (auto* a : i->operand_list)
+                co_yield &a;
         } break;
 
         case Kind::Load: {
