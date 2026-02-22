@@ -354,6 +354,7 @@ with the braces' contents having the same indentation.
       "return"
       "supplant" "match" "print"
       "apply"
+      (function_attribute)
       ]
      @font-lock-keyword-face)
 
