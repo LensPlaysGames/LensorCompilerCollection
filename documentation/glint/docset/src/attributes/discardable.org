@@ -1,0 +1,27 @@
+* Function Attribute: =discardable=
+
+=discardable= is a function attribute which specifies that the /non-void/ return value of the attributed function may be safely ignored, without emitting an "unused expression" warning or error.
+
+#+begin_src glint
+  foo : void()
+    print "foo";
+
+  bar : int()
+    69;
+
+  baz : int() discardable
+    69;
+
+  foo; ;; Not an error, since discarding `void` is always allowed.
+
+  bar; ;; Emits a diagnostic regarding `unused expression`.
+
+  baz; ;; Not an error.
+  foo; ;; Not an error.
+
+  bar; ;; Not an error (value returned from program is used).
+#+end_src
+
+This is needed because, in Glint, it is a warning/error for an expression to produce a value that is completely unused /by default/.
+
+By contrast, in C++, every value is discardable by default, and the default behaviour in Glint is reachable through the =[ [nodiscard]]= function attribute.

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- 2026-02-22 Sun 09:43 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Function Attribute: =discardable=</title>
+<meta name="author" content="Lens_r" />
+<meta name="generator" content="Org Mode" />
+<link rel="stylesheet" href="all.css">
+</head>
+<body>
+<div id="content" class="content">
+<div id="outline-container-function-attribute-discardable" class="outline-2">
+<h2 id="function-attribute-discardable"><span class="section-number-2">1.</span> Function Attribute: <code>discardable</code></h2>
+<div class="outline-text-2" id="text-function-attribute-discardable">
+<p>
+<code>discardable</code> is a function attribute which specifies that the <i>non-void</i> return value of the attributed function may be safely ignored, without emitting an "unused expression" warning or error.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-function-name">foo</span> <span class="org-operator">:</span> <span class="org-type">void</span><span class="org-delimiter">()</span>
+  <span class="org-keyword">print</span> <span class="org-string">"foo"</span>;
+
+<span class="org-function-name">bar</span> <span class="org-operator">:</span> <span class="org-type">int</span><span class="org-delimiter">()</span>
+  <span class="org-number">69</span>;
+
+<span class="org-function-name">baz</span> <span class="org-operator">:</span> <span class="org-type">int</span><span class="org-delimiter">()</span> <span class="org-keyword">discardable</span>
+  <span class="org-number">69</span>;
+
+foo; <span class="org-comment">;; Not an error, since discarding `void` is always allowed.</span>
+
+bar; <span class="org-comment">;; Emits a diagnostic regarding `unused expression`.</span>
+
+baz; <span class="org-comment">;; Not an error.</span>
+foo; <span class="org-comment">;; Not an error.</span>
+
+bar; <span class="org-comment">;; Not an error (value returned from program is used).</span>
+</pre>
+</div>
+
+<p>
+This is needed because, in Glint, it is a warning/error for an expression to produce a value that is completely unused <i>by default</i>.
+</p>
+
+<p>
+By contrast, in C++, every value is discardable by default, and the default behaviour in Glint is reachable through the <code>[ [nodiscard]]</code> function attribute.
+</p>
+</div>
+</div>
+</div>
+</body>
+</html>

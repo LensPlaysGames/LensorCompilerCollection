@@ -1,0 +1,11 @@
+* Function Attribute: =nomangle=
+
+=nomangle= specifies that the 'final' name (the one that appears as a symbol in the output object file, before linking, which the linker will use to resolve uses of the function to it's actual definition) of a function must be equivalent to the one provided in the source file.
+
+Without this attribute, Glint's functions go through something called /name mangling/. Name mangling takes the function's name as it is written in the source file, and encodes the function signature into it. This allows for two functions to have the same name in the source code, but two different names in the final object (meaning the linker doesn't get confused as to which one is which). This means that a function attributed with the =nomangle= attribute cannot and must not be overloaded.
+
+** Why?
+
+=nomangle= has no use /internally/, within the Glint language itself. Where this attribute comes into play is when calling Glint code from /other/ languages (like C, C++, Rust, etc).
+
+See [[docset:../guides/ffi.org][the FFI guide]] for more information.

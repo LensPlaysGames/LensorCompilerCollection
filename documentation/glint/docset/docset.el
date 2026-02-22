@@ -26,17 +26,26 @@
 
 ;;; Commentary:
 
-;; This is made so that we can generate a Glint docset.
+;; This program made so that we can generate a Glint docset.
+;;
+;; A docset is a collection of documentation in a specific format, which
+;; documentation viewers like Zeal can navigate. This format includes a
+;; searchable database, meaning the user can easily search to find the
+;; documentation they are looking for, even across languages, modules,
+;; etc.
+;;
+;; The hope is that one could learn Glint entirely offline with this
+;; docset and a working development environment.
 
 ;;; Code:
 
-(require 'org) ;; org-map-entries
+(require 'org)         ;; org-map-entries
 (require 'org-element) ;; org-element-map
-(require 'ox) ;; org export
-(require 'ox-html) ;; org export, HTML
-(require 'seq) ;; seq-count
-(require 'simple) ;; open-line
-(require 'sqlite)
+(require 'ox)          ;; org export
+(require 'ox-html)     ;; org export, HTML
+(require 'seq)         ;; seq-count
+(require 'simple)      ;; open-line
+(require 'sqlite)      ;; database stuff
 
 (defun docset-get-first-org-heading-title ()
   "Return the title of the first heading in the current org buffer."
@@ -77,7 +86,7 @@ No spaces, no non-ascii, less symbols."
      (lambda ()
        (let* ((custom-id      (org-entry-get nil "CUSTOM_ID"))
               (heading        (org-heading-components))
-              (level          (nth 0 heading))
+              ;; (level          (nth 0 heading))
               (todo           (nth 2 heading))
               (headline       (nth 4 heading))
               (slug           (docset-title-to-filename headline))
@@ -105,9 +114,9 @@ No spaces, no non-ascii, less symbols."
   ;; (before deletion).
   (let
       ((docsets-install-path
-        (if (or (eq "windows-nt" system-type)
-                (eq "cygwin" system-type)
-                (eq "ms-dos" system-type))
+        (if (or (string-equal "windows-nt" system-type)
+                (string-equal "cygwin" system-type)
+                (string-equal "ms-dos" system-type))
             "$HOME/AppData/Local/Zeal/Zeal/docsets/"
           "~/.local/share/Zeal/Zeal/docsets/")))
     (when (file-exists-p docsets-install-path)
@@ -171,7 +180,8 @@ Return the absolute file path of the generated HTML."
                      ;; Insert #+TITLE, if one doesn't exist already,
                      ;; with the contents of the first headline.
                      (unless (org-get-title)
-                       (beginning-of-buffer) (open-line 2)
+                       (goto-char (point-min))
+                       (open-line 2)
                        (insert "#+title: " (docset-get-first-org-heading-title)))
                      ;; Insert CUSTOM_IDs based on heading contents
                      (docset-org-generate-custom-ids)
@@ -183,6 +193,19 @@ Return the absolute file path of the generated HTML."
         result))))
 
 (defun docset-make ()
+  (org-link-set-parameters
+   "docset"
+   :follow
+   #'org-link-open-as-file
+   :export
+   (lambda (path description export-backend)
+     (when (string-equal "html" export-backend)
+       (format "<a href=\"%s\">%s</a>"
+               (file-name-with-extension
+                (file-name-nondirectory path)
+                "html")
+               description))))
+
   ;; Configure ORG HTML export (i.e. 'org-html-head').
   ;; Create new search database to populate with entries.
   (let
@@ -226,13 +249,26 @@ Return the absolute file path of the generated HTML."
                                  (file-name-nondirectory guide-html-path))))
      (directory-files "src/guides" 'absolute "\\.org\\'"))
 
+    ;; Attributes -> HTML
+    ;; We want function attributes like =discardable=.
+    ;;     src/attributes/*.org
+    (mapc
+     (lambda (attribute-path)
+       ;; Convert each attribute document to HTML.
+       (let
+           ((attribute-html-path (docset-org-to-html attribute-path)))
+         ;; Create an entry in search database.
+         (docset-db-search-entry db
+                                 (docset-get-orgfile-title attribute-path)
+                                 "Attribute"
+                                 (file-name-nondirectory attribute-html-path))))
+     (directory-files "src/attributes" 'absolute "\\.org\\'"))
+
     ;; TODO
     ;; We want each function of the standard library.
     ;;     src/std/*.org
     ;; We want built-ins like =print=.
     ;;     src/builtins/*.org
-    ;; We want function attributes like =discardable=.
-    ;;     src/attributes/*.org
     ;; We want keywords like =if=.
     ;;     src/keywords/*.org
     ;; We want constants like =true=.
@@ -247,9 +283,10 @@ Return the absolute file path of the generated HTML."
     ;; index.org -> HTML
     (copy-file "./src/index.in.org" "./index.org" t)
     (with-current-buffer (find-file-noselect "./index.org")
-      (end-of-buffer) (newline) (open-line 1)
+      (goto-char (point-max))
+      (newline) (open-line 1)
+
       (insert "** Guides\n")
-      ;; file:///home/lens_r/Programming/play/LensorCompilerCollection/documentation/glint/docset/src/guides/build_process.html
       (mapc (lambda (guide-path)
               (insert (org-link-make-string
                        (concat
@@ -260,6 +297,19 @@ Return the absolute file path of the generated HTML."
                        (docset-get-orgfile-title guide-path)))
               (newline 2))
             (directory-files "src/guides" 'absolute "\\.org\\'"))
+
+      (insert "** Attributes\n")
+      (mapc (lambda (attribute-path)
+              (insert (org-link-make-string
+                       (concat
+                        "file:"
+                        (file-name-with-extension
+                         (file-name-nondirectory attribute-path)
+                         "html"))
+                       (docset-get-orgfile-title attribute-path)))
+              (newline 2))
+            (directory-files "src/attributes" 'absolute "\\.org\\'"))
+
       (save-buffer))
     (kill-buffer (get-file-buffer "./index.org"))
     (docset-org-to-html "./index.org")

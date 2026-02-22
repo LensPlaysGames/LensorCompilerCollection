@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- 2026-02-22 Sun 09:43 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Function Attribute: =nomangle=</title>
+<meta name="author" content="Lens_r" />
+<meta name="generator" content="Org Mode" />
+<link rel="stylesheet" href="all.css">
+</head>
+<body>
+<div id="content" class="content">
+<div id="outline-container-function-attribute-nomangle" class="outline-2">
+<h2 id="function-attribute-nomangle"><span class="section-number-2">1.</span> Function Attribute: <code>nomangle</code></h2>
+<div class="outline-text-2" id="text-function-attribute-nomangle">
+<p>
+<code>nomangle</code> specifies that the 'final' name (the one that appears as a symbol in the output object file, before linking, which the linker will use to resolve uses of the function to it's actual definition) of a function must be equivalent to the one provided in the source file.
+</p>
+
+<p>
+Without this attribute, Glint's functions go through something called <i>name mangling</i>. Name mangling takes the function's name as it is written in the source file, and encodes the function signature into it. This allows for two functions to have the same name in the source code, but two different names in the final object (meaning the linker doesn't get confused as to which one is which). This means that a function attributed with the <code>nomangle</code> attribute cannot and must not be overloaded.
+</p>
+</div>
+<div id="outline-container-why" class="outline-3">
+<h3 id="why"><span class="section-number-3">1.1.</span> Why?</h3>
+<div class="outline-text-3" id="text-why">
+<p>
+<code>nomangle</code> has no use <i>internally</i>, within the Glint language itself. Where this attribute comes into play is when calling Glint code from <i>other</i> languages (like C, C++, Rust, etc).
+</p>
+
+<p>
+See <a href="ffi.html">the FFI guide</a> for more information.
+</p>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>
