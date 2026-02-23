@@ -67,6 +67,9 @@ void lcc::glint::Module::scope_walk(
         case Expr::Kind::Unary:
         case Expr::Kind::Apply:
         case Expr::Kind::Group:
+        // FIXME: Switch and match should /probably/ have scope changes.
+        // Anything that effects control flow, really.
+        case Expr::Kind::Switch:
         case Expr::Kind::Match: {
             for (auto c : e->children())
                 recurse(c, current_scope);
@@ -706,6 +709,38 @@ auto lcc::glint::Module::deserialise(
                     );
                     for (auto [name, expr] : vws::zip(body_names, body_exprs))
                         m->add_match(name, expr);
+
+                } break;
+
+                // SwitchExpr
+                //     object :ExprIndex
+                //     body_count :u16
+                //     bodies :(name_length :u8, name :u8[name_length], body :ExprIndex)[body_count]
+                case Expr::Kind::Switch: {
+                    auto object_index = read_t(ExprIndex());
+                    auto count = read_t(u16());
+
+                    std::vector<std::string> body_names{};
+                    std::vector<Expr*> body_exprs{};
+                    for (decltype(count) i = 0; i < count; ++i) {
+                        auto name_length = read_t(u16());
+                        std::string name{};
+                        name.reserve(name_length);
+                        for (decltype(name_length) j = 0; j < name_length; ++j)
+                            name += (char) read_t(u8());
+
+                        auto body_index = read_t(ExprIndex());
+
+                        body_names.emplace_back(std::move(name));
+                        body_exprs.emplace_back(exprs.at(body_index));
+                    }
+                    auto object = exprs.at(object_index);
+                    auto sw = new (*this) SwitchExpr(
+                        object,
+                        {}
+                    );
+                    for (auto [name, expr] : vws::zip(body_names, body_exprs))
+                        sw->add_match(name, expr);
 
                 } break;
 

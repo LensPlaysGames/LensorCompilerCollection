@@ -180,6 +180,7 @@ enum struct TokenKind {
     Lambda,
     Supplant,
     Match,
+    Switch,
     Print,
     Template,
 
@@ -1601,6 +1602,9 @@ public:
     auto enumerator_by_value(aint value) -> EnumeratorDecl*;
 
     [[nodiscard]]
+    auto enumerator_by_name(std::string_view name) -> EnumeratorDecl*;
+
+    [[nodiscard]]
     static auto classof(const Type* type) -> bool { return type->kind() == Kind::Enum; }
 };
 
@@ -1656,6 +1660,7 @@ public:
 
         // replaced during sema
         Match,
+        Switch,
         Sizeof,
         Alignof,
         Template,
@@ -2341,6 +2346,43 @@ public:
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {
         return expr->kind() == Kind::Match;
+    }
+};
+
+class SwitchExpr : public Expr {
+    Expr* _object;
+    std::vector<std::string> _names;
+    std::vector<Expr*> _bodies;
+
+public:
+    SwitchExpr(Expr* object, Location location)
+        : Expr(Kind::Switch, location),
+          _object(object) {}
+
+    [[nodiscard]]
+    auto object() const { return _object; }
+    [[nodiscard]]
+    auto object() -> Expr*& { return _object; }
+
+    [[nodiscard]]
+    auto names() const { return _names; }
+    [[nodiscard]]
+    auto names() -> std::vector<std::string>& { return _names; }
+
+    [[nodiscard]]
+    auto bodies() const { return _bodies; }
+    // Please, please, PLEASE don't use this to add match bodies.
+    [[nodiscard]]
+    auto bodies() -> std::vector<Expr*>& { return _bodies; }
+
+    auto add_match(std::string name, Expr* body) {
+        _names.push_back(std::move(name));
+        _bodies.push_back(body);
+    }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::Switch;
     }
 };
 

@@ -1,0 +1,112 @@
+================
+Switch on Enum, Non-exhaustive Is Error
+:fail_sema
+================
+
+e :: enum {
+  A :: 0,
+  B :: 1
+};
+
+foo :: e.A;
+
+switch foo, {
+  .A print "foo";
+};
+
+================
+Switch on Non-Enum Is Error
+:fail_sema
+================
+
+foo :: 69;
+
+switch foo, {
+  .A print "foo";
+};
+
+================
+Switch on Enum, Exhaustive Is Okay
+================
+
+e :: enum {
+  A :: 0,
+  B :: 1
+};
+
+foo :: e.A;
+
+switch foo, {
+  .A print "foo";
+  .B print "bar";
+};
+
+---
+
+(block
+ (type_declaration)
+ (variable_declaration
+  (evaluated_constant))
+ (if
+     (binary_equal
+      (cast
+       (name))
+      (evaluated_constant))
+     (block
+      (for
+       (variable_declaration
+        (integer_literal))
+       (binary_lessthan
+        (cast
+         (cast
+          (name)))
+        (evaluated_constant))
+       (binary_assignment
+        (name)
+        (binary_add
+         (cast
+          (name))
+         (integer_literal)))
+       (call
+        (name)
+        (cast
+         (cast
+          (unary_dereference
+           (binary_subscript
+            (cast
+             (string_literal))
+            (cast
+             (name)))))))))
+   (if
+       (binary_equal
+        (cast
+         (name))
+        (evaluated_constant))
+       (block
+        (for
+         (variable_declaration
+          (integer_literal))
+         (binary_lessthan
+          (cast
+           (cast
+            (name)))
+          (evaluated_constant))
+         (binary_assignment
+          (name)
+          (binary_add
+           (cast
+            (name))
+           (integer_literal)))
+         (call
+          (name)
+          (cast
+           (cast
+            (unary_dereference
+             (binary_subscript
+              (cast
+               (string_literal))
+              (cast
+               (name)))))))))))
+ (return
+  (integer_literal)))
+

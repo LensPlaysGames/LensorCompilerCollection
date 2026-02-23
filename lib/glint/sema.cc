@@ -507,6 +507,7 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
     switch (expr->kind()) {
         /// These always have side effects.
         case Expr::Kind::Match:
+        case Expr::Kind::Switch:
         case Expr::Kind::While:
         case Expr::Kind::For:
         case Expr::Kind::Return:
@@ -1809,6 +1810,121 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     then_expr,
                     otherwise_expr,
                     match->location()
+                );
+                if (not Analyse(&if_expr)) {
+                    expr->set_sema_errored();
+                    return false;
+                }
+            }
+            *expr_ptr = if_expr;
+        } break;
+
+        case Expr::Kind::Switch: {
+            auto* sw = as<SwitchExpr>(expr);
+
+            if (sw->names().size() != sw->bodies().size())
+                Diag::ICE("SwitchExpr has mismatched amount of names and bodies");
+
+            if (not Analyse(&sw->object())) {
+                expr->set_sema_errored();
+                return false;
+            }
+
+            if (not is<EnumType>(sw->object()->type())) {
+                Error(
+                    sw->object()->location(),
+                    "Invalid type for switch object: {}\n  (requires enum type)",
+                    sw->object()->type()
+                );
+                expr->set_sema_errored();
+                return false;
+            }
+
+            // Ensure all names are parts of the composite type of the object.
+            auto* e = as<EnumType>(sw->object()->type());
+            auto it = rgs::find_if(sw->names(), [&](const auto& name) {
+                // If we find the member, continue. If we have a mismatch, return true.
+                return e->enumerator_by_name(name) == nullptr;
+            });
+            if (it != sw->names().end()) {
+                // TODO: Provide list of names that would be valid.
+                Error(
+                    sw->bodies().at(usz(it - sw->names().begin()))->location(),
+                    "Name given in switch expression, `{}`, not present as part of the enum type we are switching on.",
+                    *it
+                );
+                expr->set_sema_errored();
+                return false;
+            }
+
+            // Ensure all enumerators are handled in body expression.
+            if (
+                not rgs::all_of(e->enumerators(), [&](const auto& enumerator) {
+                    return rgs::any_of(sw->names(), [&](const auto& name) {
+                        return name == enumerator->name();
+                    });
+                })
+            ) {
+                auto err = Error(
+                    sw->location(),
+                    "Not all enumerators handled in switch"
+                );
+                for (const auto& enumerator : e->enumerators()) {
+                    if (not rgs::any_of(sw->names(), [&](const auto& name) {
+                            return name == enumerator->name();
+                        })) {
+                        err.attach(
+                            Note(
+                                enumerator->location(),
+                                "Unhandled enumerator: {}",
+                                enumerator->name()
+                            )
+                        );
+                    }
+                }
+                expr->set_sema_errored();
+                return false;
+            }
+
+            // Analyse match bodies
+            for (auto*& body : sw->bodies()) {
+                if (not Analyse(&body)) {
+                    expr->set_sema_errored();
+                    return false;
+                }
+            }
+
+            Expr* if_expr = nullptr;
+            auto body = sw->bodies().rbegin();
+            for (auto name = sw->names().rbegin(); name != sw->names().rend(); ++name, ++body) {
+                LCC_ASSERT(
+                    body != sw->bodies().rend(),
+                    "SwitchExpr has mismatched amount of names and bodies"
+                );
+
+                auto* enumerator = e->enumerator_by_name(*name);
+                LCC_ASSERT(enumerator);
+                auto enumerator_value = new (mod) ConstantExpr(
+                    enumerator,
+                    enumerator->value()
+                );
+                enumerator_value->type(e);
+
+                auto* cond_expr = new (mod) BinaryExpr(
+                    TokenKind::Eq,
+                    sw->object(),
+                    enumerator_value,
+                    (*body)->location()
+                );
+                auto* then_expr = *body;
+
+                // This is how we build the chain of ifs
+                auto* otherwise_expr = if_expr;
+                if_expr = new (mod) IfExpr(
+                    cond_expr,
+                    then_expr,
+                    otherwise_expr,
+                    sw->location()
                 );
                 if (not Analyse(&if_expr)) {
                     expr->set_sema_errored();
@@ -3599,6 +3715,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Lambda:
         case TokenKind::Supplant:
         case TokenKind::Match:
+        case TokenKind::Switch:
         case TokenKind::Print:
         case TokenKind::CShort:
         case TokenKind::CUShort:
@@ -5475,6 +5592,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::Lambda:
         case TokenKind::Supplant:
         case TokenKind::Match:
+        case TokenKind::Switch:
         case TokenKind::Print:
         case TokenKind::CShort:
         case TokenKind::CUShort:

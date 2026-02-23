@@ -132,6 +132,7 @@ struct ModuleDescription {
                 case K::Apply:
                 case K::Group:
                 case K::Match:
+                case K::Switch:
                 case K::While:
                 case K::For:
                 case K::Return:

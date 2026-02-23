@@ -622,6 +622,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::Sizeof:
                 case TokenKind::Alignof:
                 case TokenKind::Match:
+                case TokenKind::Switch:
                 case TokenKind::Print:
                 case TokenKind::For:
                 case TokenKind::RangedFor:
@@ -934,6 +935,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::LBrack: // handled above
                 case TokenKind::RBrack:
                 case TokenKind::Match:
+                case TokenKind::Switch:
                 case TokenKind::Print:
                 case TokenKind::Sizeof:
                 case TokenKind::Alignof:
@@ -1027,6 +1029,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             // FIXED ARRAY TO ARRAY VIEW
             bool from_array_ref = (cast->operand()->type()->is_pointer() or cast->operand()->type()->is_reference()) and cast->operand()->type()->elem()->is_array();
             if ((from_array_ref or cast->operand()->type()->is_array()) and cast->type()->is_view()) {
+                // FIXME: This should be caught during sema with an error.
                 LCC_ASSERT(
                     cast->operand()->is_lvalue() or cast->operand()->type()->is_reference(),
                     "Sorry, but to cast an rvalue fixed size array to an array view would require making a temporary for the array (to get an lvalue for the view), and /then/ making a temporary for the view. Because of this, it's not handled, so, make a variable and then a view from that. Thanks."
@@ -1776,10 +1779,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         } break;
 
         case K::CompoundLiteral: {
-            // TODO: I need help with this. What IR does it make?
-            LCC_ASSERT(
-                false,
-                "TODO: I'm blanking on how to implement compound literal IRGen, so I'm going to wait until I can talk to somebody smarter than me."
+            Diag::ICE(
+                "I'm blanking on how to implement compound literal IRGen, so I'm going to wait until I can talk to somebody smarter than me."
             );
         } break;
 
@@ -1788,6 +1789,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         case K::Sizeof:
         case K::Alignof:
         case K::Match:
+        case K::Switch:
         case K::Type:
         case K::TypeDecl:
         case K::TypeAliasDecl:

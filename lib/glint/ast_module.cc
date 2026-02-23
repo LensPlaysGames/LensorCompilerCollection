@@ -357,6 +357,15 @@ void calculate_indices(
 
         } break;
 
+        case Expr::Kind::Switch: {
+            auto sw = as<SwitchExpr>(expr);
+            recurse(sw->object());
+
+            for (auto e : sw->bodies())
+                recurse(e);
+
+        } break;
+
         case Expr::Kind::VarDecl: {
             auto v = as<VarDecl>(expr);
             if (v->init())

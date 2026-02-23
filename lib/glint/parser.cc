@@ -126,6 +126,7 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Lambda:
         case Tk::Supplant:
         case Tk::Match:
+        case Tk::Switch:
         case Tk::Print:
         case Tk::Template:
         case Tk::Typeof:
@@ -219,6 +220,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::Colon:
         case Tk::Supplant:
         case Tk::Match:
+        case Tk::Switch:
         case Tk::Print:
         case Tk::Template:
         // Unary Prefix
@@ -952,6 +954,65 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                     "Expected end brace for match body block expression."
                 );
             }
+        } break;
+
+        case Tk::Switch: {
+            NextToken();
+
+            auto object = ParseExpr(current_precedence);
+            if (not object) return object.diag();
+
+            lhs = new (*mod) SwitchExpr(
+                *object,
+                {start_location, object->location()}
+            );
+
+            if (not Consume(Tk::LBrace)) {
+                return Error(
+                    lhs->location(),
+                    ErrorId::Expected,
+                    "Expected block expression for switch body following switch object expression."
+                );
+            }
+
+            while (not At(Tk::RBrace)) {
+                if (not Consume(Tk::Dot)) {
+                    // TODO: List valid enumerator identifiers if object type is known.
+                    return Error(
+                        tok.location,
+                        ErrorId::Expected,
+                        "Expected `.` followed by enumerator identifier (or `}}`)"
+                    );
+                }
+
+                if (not At(Tk::Ident)) {
+                    return Error(
+                        tok.location,
+                        ErrorId::Expected,
+                        "Expected enumerator identifier after ."
+                    );
+                }
+
+                auto name = tok.text;
+                // Yeet name
+                Consume(Tk::Ident);
+
+                auto body = ParseExpr();
+                if (not body) return body.diag();
+                // Consume expression separator(s), if present.
+                while (ConsumeExpressionSeparator() != ExpressionSeparator::Invalid);
+
+                as<SwitchExpr>(*lhs)->add_match(name, *body);
+            }
+
+            if (not Consume(Tk::RBrace)) {
+                return Error(
+                    lhs->location(),
+                    ErrorId::Expected,
+                    "Expected end brace for switch body block expression."
+                );
+            }
+
         } break;
 
         case Tk::Sizeof: {

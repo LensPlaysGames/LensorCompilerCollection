@@ -306,6 +306,7 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::Lambda:
                 case TokenKind::Supplant:
                 case TokenKind::Match:
+                case TokenKind::Switch:
                 case TokenKind::Print:
                 case TokenKind::Template:
                 case TokenKind::Typeof:
@@ -418,6 +419,7 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::Lambda:
                 case TokenKind::Supplant:
                 case TokenKind::Match:
+                case TokenKind::Switch:
                 case TokenKind::Print:
                 case TokenKind::CShort:
                 case TokenKind::CUShort:
@@ -456,6 +458,13 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
             const auto m = as<MatchExpr>(expr);
 
             (void) m;
+            LCC_TODO("GlintEval: {}", ToString(expr->kind()));
+        } break;
+
+        case Expr::Kind::Switch: {
+            const auto sw = as<SwitchExpr>(expr);
+
+            (void) sw;
             LCC_TODO("GlintEval: {}", ToString(expr->kind()));
         } break;
 

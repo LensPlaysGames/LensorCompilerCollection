@@ -459,6 +459,20 @@ auto Module::serialise_expr(
             LCC_TODO("Serialise MatchExpr...");
         } break;
 
+        // SwitchExpr
+        //     object :ExprIndex
+        //     body_count :u16
+        //     bodies :(name_length :u16, name :u8[name_length], body :ExprIndex)[body_count]
+        case Expr::Kind::Switch: {
+            auto sw = as<SwitchExpr>(expr);
+            recurse(sw->object());
+
+            for (auto e : sw->bodies())
+                recurse(e);
+
+            LCC_TODO("Serialise MatchExpr...");
+        } break;
+
         // VarDecl
         //     type :TypeIndex
         //     name_length :u16

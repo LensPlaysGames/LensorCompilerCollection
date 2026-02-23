@@ -948,6 +948,17 @@ auto lcc::glint::Expr::CloneImpl(
             return m_new;
         }
 
+        case Kind::Switch: {
+            auto m = as<SwitchExpr>(expr);
+            auto m_new = new (mod) SwitchExpr(
+                Clone(m->object()),
+                m->location()
+            );
+            m_new->names() = m->names();
+            m_new->bodies() = CloneAll(m->bodies());
+            return m_new;
+        }
+
         case Kind::EvaluatedConstant: {
             auto c = as<ConstantExpr>(expr);
             return new (mod) ConstantExpr(c->expr(), c->value());
@@ -1018,6 +1029,7 @@ std::string lcc::glint::Expr::name() const {
         case Kind::IntrinsicCall:
         case Kind::Cast:
         case Kind::Match:
+        case Kind::Switch:
         case Kind::Template:
         case Kind::Apply:
         case Kind::Group:
@@ -1228,7 +1240,16 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
         case Kind::Match: {
             auto* match = as<lcc::glint::MatchExpr>(this);
             std::vector<lcc::glint::Expr**> children{&match->object()};
-            for (auto*& b : match->bodies()) children.push_back(&b);
+            for (auto*& b : match->bodies())
+                children.emplace_back(&b);
+            return children;
+        }
+
+        case Kind::Switch: {
+            auto* sw = as<lcc::glint::SwitchExpr>(this);
+            std::vector<lcc::glint::Expr**> children{&sw->object()};
+            for (auto*& b : sw->bodies())
+                children.emplace_back(&b);
             return children;
         }
 
@@ -1373,7 +1394,16 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
         case Kind::Match: {
             const auto* match = as<lcc::glint::MatchExpr>(this);
             std::vector<lcc::glint::Expr*> children{match->object()};
-            for (auto* b : match->bodies()) children.push_back(b);
+            for (auto* b : match->bodies())
+                children.emplace_back(b);
+            return children;
+        }
+
+        case Kind::Switch: {
+            const auto* sw = as<lcc::glint::SwitchExpr>(this);
+            std::vector<lcc::glint::Expr*> children{sw->object()};
+            for (auto* b : sw->bodies())
+                children.emplace_back(b);
             return children;
         }
 
@@ -1458,6 +1488,7 @@ auto lcc::glint::Expr::langtest_name() const -> std::string {
         case Kind::IntrinsicCall:
         case Kind::Cast:
         case Kind::Match:
+        case Kind::Switch:
         case Kind::Template:
         case Kind::TypeDecl:
         case Kind::TypeAliasDecl:
@@ -1730,6 +1761,7 @@ auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
         case K::Sizeof: return "sizeof";
         case K::Alignof: return "alignof";
         case K::Match: return "match";
+        case K::Switch: return "switch";
     }
     LCC_UNREACHABLE();
 }
@@ -2027,10 +2059,26 @@ auto lcc::glint::Module::ToSource(const Expr& e) -> Result<std::string> {
             for (auto [name, body] : vws::zip(e_match->names(), e_match->bodies())) {
                 auto e_body = ToSource(*body);
                 if (not e_body) return e_body;
-                match_exprs_string += fmt::format(".{}:{};", name, *e_body);
+                match_exprs_string += fmt::format(".{} {};", name, *e_body);
             }
 
             return fmt::format("match {} {{{}}}", *e_matchee, match_exprs_string);
+        }
+
+        case Expr::Kind::Switch: {
+            auto e_switch = as<SwitchExpr>(&e);
+
+            auto e_matchee = ToSource(*e_switch->object());
+            if (not e_matchee) return e_matchee;
+
+            std::string match_exprs_string{};
+            for (auto [name, body] : vws::zip(e_switch->names(), e_switch->bodies())) {
+                auto e_body = ToSource(*body);
+                if (not e_body) return e_body;
+                match_exprs_string += fmt::format(".{} {};", name, *e_body);
+            }
+
+            return fmt::format("switch {} {{{}}}", *e_matchee, match_exprs_string);
         }
 
         case Expr::Kind::TypeAliasDecl:
@@ -2227,6 +2275,19 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             case K::Match: {
                 PrintBasicHeader("MatchExpr", e);
                 const auto* m = as<lcc::glint::MatchExpr>(e);
+                out += fmt::format(
+                    " on {}{} {}",
+                    C(name_colour),
+                    m->object()->name(),
+                    m->object()->type()->string(use_colour)
+                );
+                out += '\n';
+                return;
+            }
+
+            case K::Switch: {
+                PrintBasicHeader("SwitchExpr", e);
+                const auto* m = as<lcc::glint::SwitchExpr>(e);
                 out += fmt::format(
                     " on {}{} {}",
                     C(name_colour),
@@ -3232,6 +3293,17 @@ auto lcc::glint::EnumType::enumerator_by_value(aint value) -> EnumeratorDecl* {
     EnumeratorDecl* e_decl{};
     for (auto e : enumerators()) {
         if (e->value() == value) {
+            e_decl = e;
+            break;
+        }
+    }
+    return e_decl;
+}
+
+auto lcc::glint::EnumType::enumerator_by_name(std::string_view name) -> EnumeratorDecl* {
+    EnumeratorDecl* e_decl{};
+    for (auto e : enumerators()) {
+        if (e->name() == name) {
             e_decl = e;
             break;
         }

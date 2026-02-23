@@ -1,0 +1,16 @@
+================
+Switch on Enum
+:syntax
+================
+
+switch foo, {
+  .A 0;
+  .B 0;
+};
+
+---
+
+(block
+ (switch (name)
+  (integer_literal)
+  (integer_literal)))

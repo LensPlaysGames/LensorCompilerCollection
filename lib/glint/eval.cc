@@ -46,6 +46,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
         case Kind::Return:
         case Kind::While:
         case Kind::Match:
+        case Kind::Switch:
         case Kind::Apply:
             return unhandled_constant_expr();
 
@@ -248,6 +249,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::Struct:
                 case TokenKind::Supplant:
                 case TokenKind::Match:
+                case TokenKind::Switch:
                 case TokenKind::Print:
                 case TokenKind::Sum:
                 case TokenKind::TildeEq:
@@ -441,6 +443,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::Lambda:
                 case TokenKind::Supplant:
                 case TokenKind::Match:
+                case TokenKind::Switch:
                 case TokenKind::Print:
                 case TokenKind::CShort:
                 case TokenKind::CUShort:
