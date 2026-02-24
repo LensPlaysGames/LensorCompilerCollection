@@ -456,7 +456,18 @@ auto Module::serialise_expr(
             for (auto e : m->bodies())
                 recurse(e);
 
-            LCC_TODO("Serialise MatchExpr...");
+            write_tag();
+
+            write_t(indices.at(m->object()));
+
+            write_t(u16(m->bodies().size()));
+
+            for (auto [name, body] : vws::zip(m->names(), m->bodies())) {
+                write_t(u16(name.length()));
+                write_each(name);
+                write_t(indices.at(body));
+            }
+
         } break;
 
         // SwitchExpr
@@ -470,7 +481,18 @@ auto Module::serialise_expr(
             for (auto e : sw->bodies())
                 recurse(e);
 
-            LCC_TODO("Serialise MatchExpr...");
+            write_tag();
+
+            write_t(indices.at(sw->object()));
+
+            write_t(u16(sw->bodies().size()));
+
+            for (auto [name, body] : vws::zip(sw->names(), sw->bodies())) {
+                write_t(u16(name.length()));
+                write_each(name);
+                write_t(indices.at(body));
+            }
+
         } break;
 
         // VarDecl
