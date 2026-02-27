@@ -86,26 +86,13 @@ syn keyword glintFunctionAttributes
 
 syn keyword glintTypeAttributes alignas
 
-" syn match glintOperators "?\|+\|-\|\*\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\)\@!"
-syn match glintOperators "[/*+-\%~&|^<>]="
-syn match glintOperators ":"
-syn keyword glintOperators
-  \ @
-  \ !
-  \ +
-  \ -
-  \ *
-  \ /
-  \ &
-  \ =
-  \ <
-  \ >
-  \ bitand
-  \ bitor
-  \ bitxor
-  \ bitnot
-  \ ++
-  \ --
+syn match glintOperators '[-+*/%:<>!&^\~|]=\?'
+syn match glintOperators '->'
+syn match glintOperators '\[='
+syn match glintOperators 'bit[&\^~|]'
+syn match glintOperators '[<>*-+]{2}'
+syn match glintOperators '#'
+syn keyword glintOperators not
 
 syn match glintNumber "\v<\d+>"
 
