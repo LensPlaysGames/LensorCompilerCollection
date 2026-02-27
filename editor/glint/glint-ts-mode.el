@@ -352,8 +352,10 @@ with the braces' contents having the same indentation.
       "and" "or"
       "external" "export"
       "return"
-      "supplant" "match" "print"
-      "apply"
+      "supplant"
+      "match" "switch"
+      "print" "apply"
+      "template"
       (function_attribute)
       ]
      @font-lock-keyword-face)
