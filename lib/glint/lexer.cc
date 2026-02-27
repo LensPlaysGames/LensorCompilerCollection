@@ -59,6 +59,8 @@ lcc::StringMap<Tk> keywords{
     {"template", Tk::Template},
     {"typeof", Tk::Typeof},
     {"apply", Tk::Apply},
+    {"continue", Tk::Continue},
+    {"break", Tk::Break},
     // C FFI Types
     {"cshort", Tk::CShort},
     {"cushort", Tk::CUShort},
@@ -1287,6 +1289,8 @@ auto lcc::glint::GlintToken::operator==(const GlintToken& rhs) const -> bool {
         case TokenKind::For:
         case TokenKind::RangedFor:
         case TokenKind::Return:
+        case TokenKind::Continue:
+        case TokenKind::Break:
         case TokenKind::Export:
         case TokenKind::Struct:
         case TokenKind::Enum:
@@ -1361,6 +1365,8 @@ auto lcc::glint::ToString(Tk kind) -> std::string_view {
         case Tk::For: return "for";
         case Tk::RangedFor: return "for";
         case Tk::Return: return "return";
+        case Tk::Continue: return "continue";
+        case Tk::Break: return "break";
         case Tk::LParen: return "(";
         case Tk::RParen: return ")";
         case Tk::LBrack: return "[";
@@ -1538,6 +1544,8 @@ auto lcc::glint::ToSource(
         case Tk::For: return {"cfor"};
         case Tk::RangedFor: return {"for"};
         case Tk::Return: return {"return"};
+        case Tk::Continue: return {"return"};
+        case Tk::Break: return {"return"};
         case Tk::Export: return {"export"};
         case Tk::Struct: return {"struct"};
         case Tk::Enum: return {"enum"};

@@ -183,6 +183,8 @@ enum struct TokenKind {
     Switch,
     Print,
     Template,
+    Continue,
+    Break,
 
     CShort,     // cshort
     CUShort,    // cushort
@@ -1625,6 +1627,8 @@ public:
         While,
         For,
         Return,
+        Continue,
+        Break,
 
         // BEGIN TypedExpr
         TypeDecl,
@@ -1678,8 +1682,10 @@ protected:
 public:
     virtual ~Expr() = default;
 
-    [[nodiscard]] auto operator new(size_t) -> void* = delete;
-    [[nodiscard]] auto operator new(size_t sz, Module& mod) -> void* {
+    [[nodiscard]]
+    auto operator new(size_t) -> void* = delete;
+    [[nodiscard]]
+    auto operator new(size_t sz, Module& mod) -> void* {
         auto* ptr = ::operator new(sz);
         mod.nodes.push_back(static_cast<Expr*>(ptr));
         return ptr;
@@ -1694,20 +1700,18 @@ public:
     [[nodiscard]]
     auto evaluate(Context* ctx, EvalResult& out, bool required) -> bool;
 
-    // A somewhat human readable name that represents this expression.
-    [[nodiscard]]
-    auto name() const -> std::string;
-
     [[nodiscard]]
     auto children() const -> std::vector<lcc::glint::Expr*>;
 
     [[nodiscard]]
     auto children_ref() -> std::vector<lcc::glint::Expr**>;
 
+#ifdef LCC_LANGTEST
     [[nodiscard]]
-    auto langtest_name() const -> std::string;
+    auto langtest_name() const -> std::string_view;
     [[nodiscard]]
     auto langtest_children() const -> std::vector<lcc::glint::Expr*>;
+#endif /* LCC_LANGTEST */
 
     [[nodiscard]]
     auto kind() const -> Kind { return _kind; }
@@ -1720,6 +1724,8 @@ public:
     /// Mark this as an lvalue.
     void set_lvalue(bool lvalue = true) { _lvalue = lvalue; }
 
+    // If this expression is a TypedExpr, return the TypedExpr's type().
+    // Otherwise, return nullptr.
     [[nodiscard]]
     auto type() const -> Type*;
 
@@ -1757,7 +1763,7 @@ public:
 };
 
 [[nodiscard]]
-auto ToString(Expr::Kind k) -> std::string;
+auto ToString(Expr::Kind k) -> std::string_view;
 
 class TypedExpr : public Expr {
     Type* _type;
@@ -2488,6 +2494,42 @@ public:
 
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Return; }
+};
+
+class ContinueExpr : public Expr {
+    Expr* _target{};
+
+public:
+    ContinueExpr(Expr* target, Location location)
+        : Expr(Kind::Continue, location), _target(target) {}
+
+    [[nodiscard]]
+    auto target() -> Expr*& { return _target; }
+    [[nodiscard]]
+    auto target() const { return _target; }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::Continue;
+    }
+};
+
+class BreakExpr : public Expr {
+    Expr* _target{};
+
+public:
+    BreakExpr(Expr* target, Location location)
+        : Expr(Kind::Break, location), _target(target) {}
+
+    [[nodiscard]]
+    auto target() -> Expr*& { return _target; }
+    [[nodiscard]]
+    auto target() const { return _target; }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::Break;
+    }
 };
 
 /// Expression that has been evaluated by sema, together w/ a cached value.

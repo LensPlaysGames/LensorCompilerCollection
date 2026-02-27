@@ -206,6 +206,36 @@ auto Module::serialise_expr(
             write_t(value_index);
         } break;
 
+        // ContinueExpr
+        //     value :ExprIndex (-1 if not present)
+        case Expr::Kind::Continue: {
+            auto con = as<ContinueExpr>(expr);
+            if (con->target())
+                recurse(con->target());
+
+            auto target_index = ModuleDescription::bad_expr_index;
+            if (con->target())
+                target_index = indices.at(con->target());
+
+            write_tag();
+            write_t(target_index);
+        } break;
+
+        // BreakExpr
+        //     value :ExprIndex (-1 if not present)
+        case Expr::Kind::Break: {
+            auto br = as<BreakExpr>(expr);
+            if (br->target())
+                recurse(br->target());
+
+            auto target_index = ModuleDescription::bad_expr_index;
+            if (br->target())
+                target_index = indices.at(br->target());
+
+            write_tag();
+            write_t(target_index);
+        } break;
+
         // TemplateExpr
         //     body :ExprIndex
         //     param_count :u8
@@ -520,13 +550,13 @@ auto Module::serialise_expr(
             else write_t(ModuleDescription::bad_expr_index);
         } break;
 
-        case Expr::Kind::Module:
-        case Expr::Kind::EnumeratorDecl:
         case Expr::Kind::FuncDecl:
         case Expr::Kind::TemplatedFuncDecl:
-        case Expr::Kind::OverloadSet:
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::TypeDecl:
+        case Expr::Kind::EnumeratorDecl:
+        case Expr::Kind::Module:
+        case Expr::Kind::OverloadSet:
             expr->print(true);
             LCC_TODO("Implement serialisation of preceding expression AST\n");
     }

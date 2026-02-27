@@ -33,9 +33,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
         case Kind::TemplatedFuncDecl:
             return not_a_constant_expr();
 
-        /// These are here not necessarily because they are not constant
-        /// expressions but rather because evaluating them has not yet
-        /// been implemented.
+        // TODO: Implement
         case Kind::Template:
         case Kind::Call:
         case Kind::CompoundLiteral:
@@ -48,6 +46,8 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
         case Kind::Match:
         case Kind::Switch:
         case Kind::Apply:
+        case Kind::Continue:
+        case Kind::Break:
             return unhandled_constant_expr();
 
         case Kind::IntegerLiteral:
@@ -267,6 +267,8 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::BitOR:
                 case TokenKind::BitXOR:
                 case TokenKind::Apply:
+                case TokenKind::Continue:
+                case TokenKind::Break:
                     Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
                     LCC_UNREACHABLE();
             }
@@ -464,6 +466,8 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
                 case TokenKind::Pipe:
                 case TokenKind::Caret:
                 case TokenKind::Apply:
+                case TokenKind::Continue:
+                case TokenKind::Break:
                     Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
                     LCC_UNREACHABLE();
             }

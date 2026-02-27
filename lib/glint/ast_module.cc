@@ -244,6 +244,18 @@ void calculate_indices(
                 recurse(r->value());
         } break;
 
+        case Expr::Kind::Break: {
+            auto br = as<BreakExpr>(expr);
+            if (br->target())
+                recurse(br->target());
+        } break;
+
+        case Expr::Kind::Continue: {
+            auto con = as<ContinueExpr>(expr);
+            if (con->target())
+                recurse(con->target());
+        } break;
+
         // Expressions that have a single child.
         case Expr::Kind::Template: {
             auto t = as<TemplateExpr>(expr);

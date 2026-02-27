@@ -67,6 +67,8 @@ void lcc::glint::Module::scope_walk(
         case Expr::Kind::Unary:
         case Expr::Kind::Apply:
         case Expr::Kind::Group:
+        case Expr::Kind::Continue:
+        case Expr::Kind::Break:
         // FIXME: Switch and match should /probably/ have scope changes.
         // Anything that effects control flow, really.
         case Expr::Kind::Switch:
@@ -412,6 +414,30 @@ auto lcc::glint::Module::deserialise(
 
                     auto r = new (*this) ReturnExpr(r_value, {});
                     exprs.insert(exprs.begin() + expr_index, r);
+                } break;
+
+                // ContinueExpr
+                //     value :ExprIndex (-1 if not present)
+                case Expr::Kind::Continue: {
+                    auto e_index = read_t(ExprIndex());
+                    Expr* c_value{};
+                    if (e_index != ModuleDescription::bad_expr_index)
+                        c_value = exprs.at(e_index);
+
+                    auto c = new (*this) ContinueExpr(c_value, {});
+                    exprs.insert(exprs.begin() + expr_index, c);
+                } break;
+
+                // BreakExpr
+                //     value :ExprIndex (-1 if not present)
+                case Expr::Kind::Break: {
+                    auto e_index = read_t(ExprIndex());
+                    Expr* c_value{};
+                    if (e_index != ModuleDescription::bad_expr_index)
+                        c_value = exprs.at(e_index);
+
+                    auto c = new (*this) BreakExpr(c_value, {});
+                    exprs.insert(exprs.begin() + expr_index, c);
                 } break;
 
                 // ApplyExpr

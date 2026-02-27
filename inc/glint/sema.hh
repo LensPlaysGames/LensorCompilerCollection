@@ -45,6 +45,10 @@ class Sema {
     /// The function we’re currently analysing.
     FuncDecl* curr_func;
 
+    // Loops we are within. Index zero is the top-most. The last element is
+    // the closest containing loop.
+    std::vector<Expr*> within_loops{};
+
     /// Whether to use colours in diagnostics.
     bool _use_colours;
 
@@ -88,6 +92,8 @@ private:
     auto Analyse(Type** type) -> bool;
     [[nodiscard]]
     auto Analyse(Expr** expr, Type* expected_type = nullptr) -> bool;
+    [[nodiscard]]
+    bool AnalyseLoop(Loop* l);
     // expr_ptr points to binary expression `b`
     void AnalyseBinary(Expr** expr_ptr, BinaryExpr* b);
     // expr_ptr points to call expression `expr`

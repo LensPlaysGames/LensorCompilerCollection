@@ -2,6 +2,7 @@
 
 #include <lcc/context.hh>
 #include <lcc/core.hh>
+#include <lcc/diags.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
@@ -663,7 +664,9 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::BitOR:
                 case TokenKind::BitXOR:
                 case TokenKind::Apply:
-                    LCC_ASSERT(false, "Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
+                case TokenKind::Continue:
+                case TokenKind::Break:
+                    Diag::ICE("Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
             }
         } break;
 
@@ -986,6 +989,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case TokenKind::CaretEq:
                 case TokenKind::TildeEq:
                 case TokenKind::LBrackEq:
+                case TokenKind::Continue:
+                case TokenKind::Break:
                     LCC_TODO(
                         "Binary operator {} in IRGen should have been lowered by semantic analysis",
                         ToString(binary_expr->op())
@@ -1313,6 +1318,42 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             insert(ret);
         } break;
 
+        case K::Break: {
+            auto* br_expr = as<BreakExpr>(expr);
+            LCC_ASSERT(
+                br_expr->target(),
+                "Break expression must have a resolved target at time of IR generation"
+            );
+            LCC_ASSERT(
+                loop_info.contains(br_expr->target()),
+                "IR generation must record block information of loops (for continue/break)"
+            );
+            auto* br = new (*module) BranchInst(
+                loop_info.at(br_expr->target()).exit,
+                expr->location()
+            );
+            generated_ir[expr] = br;
+            insert(br);
+        } break;
+
+        case K::Continue: {
+            auto* con_expr = as<ContinueExpr>(expr);
+            LCC_ASSERT(
+                con_expr->target(),
+                "Continue expression must have a resolved target at time of IR generation"
+            );
+            LCC_ASSERT(
+                loop_info.contains(con_expr->target()),
+                "IR generation must record block information of loops (for continue/break)"
+            );
+            auto* con = new (*module) BranchInst(
+                loop_info.at(con_expr->target()).entry,
+                expr->location()
+            );
+            generated_ir[expr] = con;
+            insert(con);
+        } break;
+
         case K::While: {
             // +---------+
             // | current |
@@ -1335,13 +1376,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             const auto& while_expr = as<WhileExpr>(expr);
 
-            // TODO: could number whiles to make this easier I guess, for any poor
-            // soul who has to debug the IR.
-
             auto* body = new (*module) lcc::Block(fmt::format("while.body.{}", total_while));
             auto* conditional = new (*module) lcc::Block(fmt::format("while.conditional.{}", total_while));
             auto* exit = new (*module) lcc::Block(fmt::format("while.exit.{}", total_while));
             total_while += 1;
+
+            loop_info[while_expr] = {conditional, exit};
 
             insert(new (*module) BranchInst(conditional, expr->location()));
 
@@ -1393,6 +1433,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             auto* body = new (*module) lcc::Block(fmt::format("for.body.{}", total_for));
             auto* exit = new (*module) lcc::Block(fmt::format("for.exit.{}", total_for));
             total_for += 1;
+
+            loop_info[for_expr] = {conditional, exit};
 
             generate_expression(for_expr->init());
             insert(new (*module) BranchInst(conditional, expr->location()));
@@ -1600,9 +1642,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         intrinsic->args().empty(),
                         "No arguments to Debug Trap Builtin"
                     );
-                    LCC_ASSERT(
-                        false,
-                        "TODO: Implement debug trap IR instruction, as it needs to make it all the way to MIR"
+                    LCC_TODO(
+                        "Implement debug trap IR instruction, as it needs to make it all the way to MIR"
                     );
                 } break;
 

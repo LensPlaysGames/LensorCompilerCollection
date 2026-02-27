@@ -147,6 +147,8 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::glint::TokenKind t) -> lcc::isz {
         case Tk::Pipe:
         case Tk::Caret:
         case Tk::Apply:
+        case Tk::Continue:
+        case Tk::Break:
             return -1;
     }
     LCC_UNREACHABLE();
@@ -202,7 +204,7 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::Fractional:
         case Tk::ByteLiteral:
         case Tk::String:
-        // Regular Expressions
+        // "Regular" Expressions
         case Tk::LParen:
         case Tk::LBrack:
         case Tk::LBrace:
@@ -214,6 +216,8 @@ constexpr auto MayStartAnExpression(lcc::glint::TokenKind kind) -> bool {
         case Tk::For:
         case Tk::RangedFor:
         case Tk::Return:
+        case Tk::Continue:
+        case Tk::Break:
         case Tk::Export:
         case Tk::Lambda:
         case Tk::Expression:
@@ -768,7 +772,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
     const auto start_location = tok.location;
     switch (tok.kind) {
         case Tk::Gensym:
-            LCC_ASSERT(false, "Gensym token in parser: there is a bug in the lexer");
+            Diag::ICE("Gensym token in parser: there is a bug in the lexer");
 
         /// AST node bound by macro.
         case Tk::Expression:
@@ -1088,6 +1092,40 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         case Tk::For: lhs = ParseForExpr(); break;
         case Tk::RangedFor: lhs = ParseRangedForExpr(); break;
         case Tk::While: lhs = ParseWhileExpr(); break;
+
+        case Tk::Break: {
+            auto loc = tok.location;
+            NextToken();
+
+            /// If there is an expression, parse it; otherwise,
+            /// this return expression has no operand.
+            auto value = ExprResult::Null();
+            if (AtStartOfExpression()) {
+                value = ParseExpr();
+                if (not value)
+                    return value.diag();
+                loc = {loc, value.value()->location()};
+            }
+
+            lhs = new (*mod) BreakExpr(value.value(), loc);
+        } break;
+
+        case Tk::Continue: {
+            auto loc = tok.location;
+            NextToken();
+
+            /// If there is an expression, parse it; otherwise,
+            /// this return expression has no operand.
+            auto value = ExprResult::Null();
+            if (AtStartOfExpression()) {
+                value = ParseExpr();
+                if (not value)
+                    return value.diag();
+                loc = {loc, value.value()->location()};
+            }
+
+            lhs = new (*mod) ContinueExpr(value.value(), loc);
+        } break;
 
         /// Return expression.
         case Tk::Return: {

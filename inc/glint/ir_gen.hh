@@ -34,6 +34,11 @@ class IRGen {
     }
 
     std::unordered_map<glint::Expr*, lcc::Value*> generated_ir;
+    struct LoopBlocks {
+        lcc::Block* entry{};
+        lcc::Block* exit{};
+    };
+    std::unordered_map<glint::Expr*, LoopBlocks> loop_info;
     std::vector<lcc::GlobalVariable*> string_literals;
 
     IRGen(Context* c, glint::Module& m) : ctx(c), int_module(m) {

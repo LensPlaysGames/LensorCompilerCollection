@@ -659,6 +659,20 @@ auto lcc::glint::Expr::CloneImpl(
                 r->location()
             );
         }
+        case Kind::Break: {
+            auto r = as<BreakExpr>(expr);
+            return new (mod) BreakExpr(
+                Clone(r->target()),
+                r->location()
+            );
+        }
+        case Kind::Continue: {
+            auto r = as<ContinueExpr>(expr);
+            return new (mod) ContinueExpr(
+                Clone(r->target()),
+                r->location()
+            );
+        }
         case Kind::Unary: {
             auto u = as<UnaryExpr>(expr);
             return new (mod) UnaryExpr(
@@ -1008,155 +1022,157 @@ auto lcc::glint::Module::function(std::string_view name) -> std::vector<lcc::gli
     return out;
 }
 
-std::string lcc::glint::Expr::name() const {
-    switch (kind()) {
-        case Kind::While:
-        case Kind::For:
-        case Kind::Return:
-        case Kind::IntegerLiteral:
-        case Kind::FractionalLiteral:
-        case Kind::StringLiteral:
-        case Kind::CompoundLiteral:
-        case Kind::OverloadSet:
-        case Kind::EvaluatedConstant:
-        case Kind::If:
-        case Kind::Block:
-        case Kind::MemberAccess:
-        case Kind::Module:
-        case Kind::Sizeof:
-        case Kind::Alignof:
-        case Kind::Call:
-        case Kind::IntrinsicCall:
-        case Kind::Cast:
-        case Kind::Match:
-        case Kind::Switch:
-        case Kind::Template:
-        case Kind::Apply:
-        case Kind::Group:
-            return ToString(kind());
+// std::string lcc::glint::Expr::name() const {
+//     switch (kind()) {
+//         case Kind::While:
+//         case Kind::For:
+//         case Kind::Return:
+//         case Kind::Continue:
+//         case Kind::Break:
+//         case Kind::IntegerLiteral:
+//         case Kind::FractionalLiteral:
+//         case Kind::StringLiteral:
+//         case Kind::CompoundLiteral:
+//         case Kind::OverloadSet:
+//         case Kind::EvaluatedConstant:
+//         case Kind::If:
+//         case Kind::Block:
+//         case Kind::MemberAccess:
+//         case Kind::Module:
+//         case Kind::Sizeof:
+//         case Kind::Alignof:
+//         case Kind::Call:
+//         case Kind::IntrinsicCall:
+//         case Kind::Cast:
+//         case Kind::Match:
+//         case Kind::Switch:
+//         case Kind::Template:
+//         case Kind::Apply:
+//         case Kind::Group:
+//             return std::string(ToString(kind()));
 
-        case Kind::NameRef:
-            return as<NameRefExpr>(this)->name();
+//         case Kind::NameRef:
+//             return as<NameRefExpr>(this)->name();
 
-        case Kind::TypeDecl:
-        case Kind::TypeAliasDecl:
-        case Kind::EnumeratorDecl:
-        case Kind::VarDecl:
-        case Kind::FuncDecl:
-        case Kind::TemplatedFuncDecl:
-            return as<Decl>(this)->name();
+//         case Kind::TypeDecl:
+//         case Kind::TypeAliasDecl:
+//         case Kind::EnumeratorDecl:
+//         case Kind::VarDecl:
+//         case Kind::FuncDecl:
+//         case Kind::TemplatedFuncDecl:
+//             return as<Decl>(this)->name();
 
-        case Kind::Unary: {
-            switch (as<UnaryExpr>(this)->op()) {
-                default: LCC_ASSERT(
-                    false,
-                    "Unhandled unary expression operator {}",
-                    ToString(as<UnaryExpr>(this)->op())
-                );
-                case TokenKind::Ampersand: return "unary_addressof";
-                case TokenKind::At: return "unary_dereference";
-                case TokenKind::Minus: return "unary_negation";
-                case TokenKind::BitNOT: return "unary_bitnot";
-                case TokenKind::Exclam: return "unary_not";
-                case TokenKind::Has: return "unary_has";
-                case TokenKind::PlusPlus: return "unary_plusplus";
-                case TokenKind::MinusMinus: return "unary_minusminus";
-            }
-        } break;
+//         case Kind::Unary: {
+//             switch (as<UnaryExpr>(this)->op()) {
+//                 default: LCC_ASSERT(
+//                     false,
+//                     "Unhandled unary expression operator {}",
+//                     ToString(as<UnaryExpr>(this)->op())
+//                 );
+//                 case TokenKind::Ampersand: return "unary_addressof";
+//                 case TokenKind::At: return "unary_dereference";
+//                 case TokenKind::Minus: return "unary_negation";
+//                 case TokenKind::BitNOT: return "unary_bitnot";
+//                 case TokenKind::Exclam: return "unary_not";
+//                 case TokenKind::Has: return "unary_has";
+//                 case TokenKind::PlusPlus: return "unary_plusplus";
+//                 case TokenKind::MinusMinus: return "unary_minusminus";
+//             }
+//         } break;
 
-        case Kind::Binary: {
-            switch (as<BinaryExpr>(this)->op()) {
-                default: LCC_ASSERT(
-                    false,
-                    "Unhandled binary expression operator {}",
-                    ToString(as<UnaryExpr>(this)->op())
-                );
+//         case Kind::Binary: {
+//             switch (as<BinaryExpr>(this)->op()) {
+//                 default: LCC_ASSERT(
+//                     false,
+//                     "Unhandled binary expression operator {}",
+//                     ToString(as<BinaryExpr>(this)->op())
+//                 );
 
-                case TokenKind::Dot:
-                    return "binary_dot";
+//                 case TokenKind::Dot:
+//                     return "binary_dot";
 
-                /// Call and subscript have higher precedence than unary operators.
-                /// Note: Unary operator precedence is 10'000.
-                case TokenKind::LBrack: return "binary_subscript";
+//                 /// Call and subscript have higher precedence than unary operators.
+//                 /// Note: Unary operator precedence is 10'000.
+//                 case TokenKind::LBrack: return "binary_subscript";
 
-                case TokenKind::Plus: return "binary_add";
-                case TokenKind::Minus: return "binary_subtract";
-                case TokenKind::Star: return "binary_multiply";
-                case TokenKind::Slash: return "binary_divide";
-                case TokenKind::Percent: return "binary_modulo";
+//                 case TokenKind::Plus: return "binary_add";
+//                 case TokenKind::Minus: return "binary_subtract";
+//                 case TokenKind::Star: return "binary_multiply";
+//                 case TokenKind::Slash: return "binary_divide";
+//                 case TokenKind::Percent: return "binary_modulo";
 
-                case TokenKind::Shl: return "binary_shl";
-                case TokenKind::Shr: return "binary_shr";
+//                 case TokenKind::Shl: return "binary_shl";
+//                 case TokenKind::Shr: return "binary_shr";
 
-                case TokenKind::BitAND: return "binary_bitand";
-                case TokenKind::BitOR: return "binary_bitor";
-                case TokenKind::BitXOR: return "binary_bitxor";
+//                 case TokenKind::BitAND: return "binary_bitand";
+//                 case TokenKind::BitOR: return "binary_bitor";
+//                 case TokenKind::BitXOR: return "binary_bitxor";
 
-                case TokenKind::Eq: return "binary_equal";
-                case TokenKind::Ne: return "binary_notequal";
-                case TokenKind::Lt: return "binary_lessthan";
-                case TokenKind::Gt: return "binary_greaterthan";
-                case TokenKind::Le: return "binary_lessthan_orequal";
-                case TokenKind::Ge: return "binary_greaterthan_orequal";
+//                 case TokenKind::Eq: return "binary_equal";
+//                 case TokenKind::Ne: return "binary_notequal";
+//                 case TokenKind::Lt: return "binary_lessthan";
+//                 case TokenKind::Gt: return "binary_greaterthan";
+//                 case TokenKind::Le: return "binary_lessthan_orequal";
+//                 case TokenKind::Ge: return "binary_greaterthan_orequal";
 
-                case TokenKind::And: return "binary_and";
-                case TokenKind::Or: return "binary_or";
+//                 case TokenKind::And: return "binary_and";
+//                 case TokenKind::Or: return "binary_or";
 
-                case TokenKind::ColonEq: return "binary_assignment";
-                case TokenKind::ColonColon: return "declaration_type_inferred";
+//                 case TokenKind::ColonEq: return "binary_assignment";
+//                 case TokenKind::ColonColon: return "declaration_type_inferred";
 
-                case TokenKind::RightArrow: return "binary_rightarrow";
+//                 case TokenKind::RightArrow: return "binary_rightarrow";
 
-                case TokenKind::PlusEq: return "binary_plus_assign";
-                case TokenKind::MinusEq: return "binary_subtract_assign";
-                case TokenKind::StarEq: return "binary_multiply_assign";
-                case TokenKind::SlashEq: return "binary_divide_assign";
-                case TokenKind::PercentEq: return "binary_modulo_assign";
-                case TokenKind::AmpersandEq: return "binary_bitand_assign";
-                case TokenKind::PipeEq: return "binary_bitor_assign";
-                case TokenKind::CaretEq: return "binary_bitxor_assign";
-                case TokenKind::TildeEq: return "binary_bitnot_assign";
-                case TokenKind::LBrackEq: return "binary_subscript_assign";
-            }
-        }
-        case Kind::Type: {
-            auto ty = as<TypeExpr>(this)->contained_type();
-            switch (ty->kind()) {
-                case Type::Kind::Builtin: {
-                    switch (as<BuiltinType>(ty)->builtin_kind()) {
-                        case BuiltinType::BuiltinKind::Unknown: return "t_unknown";
-                        case BuiltinType::BuiltinKind::Bool: return "t_bool";
-                        case BuiltinType::BuiltinKind::Byte: return "t_byte";
-                        case BuiltinType::BuiltinKind::Int: return "t_int";
-                        case BuiltinType::BuiltinKind::UInt: return "t_uint";
-                        case BuiltinType::BuiltinKind::Float: return "t_float";
-                        case BuiltinType::BuiltinKind::Void: return "t_void";
-                        case BuiltinType::BuiltinKind::OverloadSet: return "t_overloadset";
-                    }
-                    LCC_UNREACHABLE();
-                }
-                case Type::Kind::FFIType: return "t_ffi";
-                case Type::Kind::Type: return "t_type";
-                case Type::Kind::Named: return "t_named";
-                case Type::Kind::Pointer: return "t_ptr";
-                case Type::Kind::Reference: return "t_ref";
-                case Type::Kind::DynamicArray: return "t_dynarray";
-                case Type::Kind::ArrayView: return "t_view";
-                case Type::Kind::Array: return "t_fixarray";
-                case Type::Kind::Function: return "t_function";
-                case Type::Kind::Sum: return "t_sum";
-                case Type::Kind::Union: return "t_union";
-                case Type::Kind::Enum: return "t_enum";
-                case Type::Kind::Struct: return "t_struct";
-                case Type::Kind::TemplatedStruct: return "t_templated_struct";
-                case Type::Kind::Integer: return "t_int";
-                case Type::Kind::Typeof: return "t_typeof";
-            }
-            LCC_UNREACHABLE();
-        } break;
-    }
-    LCC_UNREACHABLE();
-}
+//                 case TokenKind::PlusEq: return "binary_plus_assign";
+//                 case TokenKind::MinusEq: return "binary_subtract_assign";
+//                 case TokenKind::StarEq: return "binary_multiply_assign";
+//                 case TokenKind::SlashEq: return "binary_divide_assign";
+//                 case TokenKind::PercentEq: return "binary_modulo_assign";
+//                 case TokenKind::AmpersandEq: return "binary_bitand_assign";
+//                 case TokenKind::PipeEq: return "binary_bitor_assign";
+//                 case TokenKind::CaretEq: return "binary_bitxor_assign";
+//                 case TokenKind::TildeEq: return "binary_bitnot_assign";
+//                 case TokenKind::LBrackEq: return "binary_subscript_assign";
+//             }
+//         }
+//         case Kind::Type: {
+//             auto ty = as<TypeExpr>(this)->contained_type();
+//             switch (ty->kind()) {
+//                 case Type::Kind::Builtin: {
+//                     switch (as<BuiltinType>(ty)->builtin_kind()) {
+//                         case BuiltinType::BuiltinKind::Unknown: return "t_unknown";
+//                         case BuiltinType::BuiltinKind::Bool: return "t_bool";
+//                         case BuiltinType::BuiltinKind::Byte: return "t_byte";
+//                         case BuiltinType::BuiltinKind::Int: return "t_int";
+//                         case BuiltinType::BuiltinKind::UInt: return "t_uint";
+//                         case BuiltinType::BuiltinKind::Float: return "t_float";
+//                         case BuiltinType::BuiltinKind::Void: return "t_void";
+//                         case BuiltinType::BuiltinKind::OverloadSet: return "t_overloadset";
+//                     }
+//                     LCC_UNREACHABLE();
+//                 }
+//                 case Type::Kind::FFIType: return "t_ffi";
+//                 case Type::Kind::Type: return "t_type";
+//                 case Type::Kind::Named: return "t_named";
+//                 case Type::Kind::Pointer: return "t_ptr";
+//                 case Type::Kind::Reference: return "t_ref";
+//                 case Type::Kind::DynamicArray: return "t_dynarray";
+//                 case Type::Kind::ArrayView: return "t_view";
+//                 case Type::Kind::Array: return "t_fixarray";
+//                 case Type::Kind::Function: return "t_function";
+//                 case Type::Kind::Sum: return "t_sum";
+//                 case Type::Kind::Union: return "t_union";
+//                 case Type::Kind::Enum: return "t_enum";
+//                 case Type::Kind::Struct: return "t_struct";
+//                 case Type::Kind::TemplatedStruct: return "t_templated_struct";
+//                 case Type::Kind::Integer: return "t_int";
+//                 case Type::Kind::Typeof: return "t_typeof";
+//             }
+//             LCC_UNREACHABLE();
+//         } break;
+//     }
+//     LCC_UNREACHABLE();
+// }
 
 auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
     switch (kind()) {
@@ -1234,6 +1250,20 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
         case Kind::Return: {
             auto* ret = as<lcc::glint::ReturnExpr>(this);
             if (ret->value()) return {&ret->value()};
+            return {};
+        }
+
+        case Kind::Continue: {
+            auto* con = as<lcc::glint::ContinueExpr>(this);
+            if (con->target())
+                return {&con->target()};
+            return {};
+        }
+
+        case Kind::Break: {
+            auto* br = as<lcc::glint::BreakExpr>(this);
+            if (br->target())
+                return {&br->target()};
             return {};
         }
 
@@ -1391,6 +1421,20 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
             return {};
         }
 
+        case Kind::Continue: {
+            const auto* con = as<lcc::glint::ContinueExpr>(this);
+            if (con->target())
+                return {con->target()};
+            return {};
+        }
+
+        case Kind::Break: {
+            const auto* br = as<lcc::glint::BreakExpr>(this);
+            if (br->target())
+                return {br->target()};
+            return {};
+        }
+
         case Kind::Match: {
             const auto* match = as<lcc::glint::MatchExpr>(this);
             std::vector<lcc::glint::Expr*> children{match->object()};
@@ -1467,11 +1511,15 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
     LCC_UNREACHABLE();
 }
 
-auto lcc::glint::Expr::langtest_name() const -> std::string {
+#ifdef LCC_LANGTEST
+auto lcc::glint::Expr::langtest_name() const -> std::string_view {
+    using TokenKind = lcc::glint::TokenKind;
     switch (kind()) {
         case Kind::While:
         case Kind::For:
         case Kind::Return:
+        case Kind::Continue:
+        case Kind::Break:
         case Kind::IntegerLiteral:
         case Kind::FractionalLiteral:
         case Kind::StringLiteral:
@@ -1501,10 +1549,179 @@ auto lcc::glint::Expr::langtest_name() const -> std::string {
         case Kind::Group:
             return ToString(kind());
 
-        case Kind::Unary:
-        case Kind::Binary:
-        case Kind::Type:
-            return name();
+        case Kind::Unary: {
+            switch (as<UnaryExpr>(this)->op()) {
+                default: Diag::ICE(
+                    "Unhandled unary expression operator {}",
+                    ToString(as<UnaryExpr>(this)->op())
+                );
+                case TokenKind::Ampersand:
+                    return "unary_addressof";
+                case TokenKind::At:
+                    return "unary_dereference";
+                case TokenKind::Minus:
+                    return "unary_negation";
+                case TokenKind::BitNOT:
+                    return "unary_bitnot";
+                case TokenKind::Exclam:
+                    return "unary_not";
+                case TokenKind::Has:
+                    return "unary_has";
+                case TokenKind::PlusPlus:
+                    return "unary_plusplus";
+                case TokenKind::MinusMinus:
+                    return "unary_minusminus";
+            }
+            LCC_UNREACHABLE();
+        }
+
+        case Kind::Binary: {
+            switch (as<BinaryExpr>(this)->op()) {
+                default: Diag::ICE(
+                    "Unhandled binary expression operator {}",
+                    ToString(as<BinaryExpr>(this)->op())
+                );
+
+                case TokenKind::Dot:
+                    return "binary_dot";
+
+                /// Call and subscript have higher precedence than unary operators.
+                /// Note: Unary operator precedence is 10'000.
+                case TokenKind::LBrack:
+                    return "binary_subscript";
+
+                case TokenKind::Plus:
+                    return "binary_add";
+                case TokenKind::Minus:
+                    return "binary_subtract";
+                case TokenKind::Star:
+                    return "binary_multiply";
+                case TokenKind::Slash:
+                    return "binary_divide";
+                case TokenKind::Percent:
+                    return "binary_modulo";
+
+                case TokenKind::Shl:
+                    return "binary_shl";
+                case TokenKind::Shr:
+                    return "binary_shr";
+
+                case TokenKind::BitAND:
+                    return "binary_bitand";
+                case TokenKind::BitOR:
+                    return "binary_bitor";
+                case TokenKind::BitXOR:
+                    return "binary_bitxor";
+
+                case TokenKind::Eq:
+                    return "binary_equal";
+                case TokenKind::Ne:
+                    return "binary_notequal";
+                case TokenKind::Lt:
+                    return "binary_lessthan";
+                case TokenKind::Gt:
+                    return "binary_greaterthan";
+                case TokenKind::Le:
+                    return "binary_lessthan_orequal";
+                case TokenKind::Ge:
+                    return "binary_greaterthan_orequal";
+
+                case TokenKind::And:
+                    return "binary_and";
+                case TokenKind::Or:
+                    return "binary_or";
+
+                case TokenKind::ColonEq:
+                    return "binary_assignment";
+                case TokenKind::ColonColon:
+                    return "declaration_type_inferred";
+
+                case TokenKind::RightArrow:
+                    return "binary_rightarrow";
+
+                case TokenKind::PlusEq:
+                    return "binary_plus_assign";
+                case TokenKind::MinusEq:
+                    return "binary_subtract_assign";
+                case TokenKind::StarEq:
+                    return "binary_multiply_assign";
+                case TokenKind::SlashEq:
+                    return "binary_divide_assign";
+                case TokenKind::PercentEq:
+                    return "binary_modulo_assign";
+                case TokenKind::AmpersandEq:
+                    return "binary_bitand_assign";
+                case TokenKind::PipeEq:
+                    return "binary_bitor_assign";
+                case TokenKind::CaretEq:
+                    return "binary_bitxor_assign";
+                case TokenKind::TildeEq:
+                    return "binary_bitnot_assign";
+                case TokenKind::LBrackEq:
+                    return "binary_subscript_assign";
+            }
+            LCC_UNREACHABLE();
+        }
+
+        case Kind::Type: {
+            auto ty = as<TypeExpr>(this)->contained_type();
+            switch (ty->kind()) {
+                case Type::Kind::Builtin: {
+                    switch (as<BuiltinType>(ty)->builtin_kind()) {
+                        case BuiltinType::BuiltinKind::Unknown:
+                            return "t_unknown";
+                        case BuiltinType::BuiltinKind::Bool:
+                            return "t_bool";
+                        case BuiltinType::BuiltinKind::Byte:
+                            return "t_byte";
+                        case BuiltinType::BuiltinKind::Int:
+                            return "t_int";
+                        case BuiltinType::BuiltinKind::UInt:
+                            return "t_uint";
+                        case BuiltinType::BuiltinKind::Float:
+                            return "t_float";
+                        case BuiltinType::BuiltinKind::Void:
+                            return "t_void";
+                        case BuiltinType::BuiltinKind::OverloadSet:
+                            return "t_overloadset";
+                    }
+                    LCC_UNREACHABLE();
+                }
+                case Type::Kind::FFIType:
+                    return "t_ffi";
+                case Type::Kind::Type:
+                    return "t_type";
+                case Type::Kind::Named:
+                    return "t_named";
+                case Type::Kind::Pointer:
+                    return "t_ptr";
+                case Type::Kind::Reference:
+                    return "t_ref";
+                case Type::Kind::DynamicArray:
+                    return "t_dynarray";
+                case Type::Kind::ArrayView:
+                    return "t_view";
+                case Type::Kind::Array:
+                    return "t_fixarray";
+                case Type::Kind::Function:
+                    return "t_function";
+                case Type::Kind::Sum:
+                    return "t_sum";
+                case Type::Kind::Union:
+                    return "t_union";
+                case Type::Kind::Enum:
+                    return "t_enum";
+                case Type::Kind::Struct:
+                    return "t_struct";
+                case Type::Kind::TemplatedStruct:
+                    return "t_templated_struct";
+                case Type::Kind::Integer:
+                    return "t_int";
+                case Type::Kind::Typeof:
+                    return "t_typeof";
+            }
+            LCC_UNREACHABLE();
+        }
     }
     LCC_UNREACHABLE();
 }
@@ -1521,6 +1738,7 @@ auto lcc::glint::Expr::langtest_children() const -> std::vector<lcc::glint::Expr
 
     return children();
 }
+#endif /* LCC_LANGTEST */
 
 auto lcc::glint::EnumeratorDecl::value() const -> aint {
     LCC_ASSERT(ok(), "value() can only be used if the enumerator was analysed successfully");
@@ -1726,7 +1944,7 @@ auto lcc::glint::Module::ToSource(const lcc::glint::Type& t) -> lcc::Result<std:
     LCC_UNREACHABLE();
 }
 
-auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
+auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string_view {
     using K = lcc::glint::Expr::Kind;
     switch (k) {
         case K::Group: return "group";
@@ -1735,6 +1953,8 @@ auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string {
         case K::While: return "while";
         case K::For: return "for";
         case K::Return: return "return";
+        case K::Continue: return "continue";
+        case K::Break: return "break";
         case K::TypeDecl: return "type_declaration";
         case K::TypeAliasDecl: return "type_alias_declaration";
         case K::EnumeratorDecl: return "enum_declaration";
@@ -1839,6 +2059,28 @@ auto lcc::glint::Module::ToSource(const Expr& e) -> Result<std::string> {
                 return fmt::format("return {}", *e_expression);
             }
             return {"return"};
+        }
+
+        case Expr::Kind::Continue: {
+            auto e_ret = as<ContinueExpr>(&e);
+            if (e_ret->target()) {
+                auto e_expression = ToSource(*e_ret->target());
+                if (not e_expression)
+                    return e_expression;
+                return fmt::format("continue {}", *e_expression);
+            }
+            return {"continue"};
+        }
+
+        case Expr::Kind::Break: {
+            auto e_ret = as<BreakExpr>(&e);
+            if (e_ret->target()) {
+                auto e_expression = ToSource(*e_ret->target());
+                if (not e_expression)
+                    return e_expression;
+                return fmt::format("break {}", *e_expression);
+            }
+            return {"break"};
         }
 
         case Expr::Kind::Template: {
@@ -2266,7 +2508,8 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
 
             case K::If: {
                 PrintBasicHeader("IfExpr", e);
-                if (not e->type()->is_void()) out += fmt::format(" {}", e->type()->string(use_colour));
+                if (not e->type()->is_void())
+                    out += fmt::format(" {}", e->type()->string(use_colour));
                 PrintLValue(e);
                 out += '\n';
                 return;
@@ -2276,9 +2519,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                 PrintBasicHeader("MatchExpr", e);
                 const auto* m = as<lcc::glint::MatchExpr>(e);
                 out += fmt::format(
-                    " on {}{} {}",
-                    C(name_colour),
-                    m->object()->name(),
+                    " on {}",
                     m->object()->type()->string(use_colour)
                 );
                 out += '\n';
@@ -2289,9 +2530,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                 PrintBasicHeader("SwitchExpr", e);
                 const auto* m = as<lcc::glint::SwitchExpr>(e);
                 out += fmt::format(
-                    " on {}{} {}",
-                    C(name_colour),
-                    m->object()->name(),
+                    " on {}",
                     m->object()->type()->string(use_colour)
                 );
                 out += '\n';
@@ -2354,6 +2593,8 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             case K::For: PrintBasicGlintNode("ForExpr", e, nullptr); return;
             case K::Block: PrintBasicGlintNode("BlockExpr", e, e->type()); return;
             case K::Return: PrintBasicGlintNode("ReturnExpr", e, nullptr); return;
+            case K::Continue: PrintBasicGlintNode("ContinueExpr", e, nullptr); return;
+            case K::Break: PrintBasicGlintNode("BreakExpr", e, nullptr); return;
             case K::Call: PrintBasicGlintNode("CallExpr", e, e->type()); return;
             case K::IntrinsicCall: PrintBasicGlintNode("IntrinsicCallExpr", e, e->type()); return;
             case K::Module: PrintBasicGlintNode("ModuleExpr", e, nullptr); return;

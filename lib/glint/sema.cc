@@ -8,6 +8,7 @@
 #include <object/elf.hh>
 
 #include <glint/ast.hh>
+#include <glint/error_ids.hh>
 #include <glint/module_description.hh>
 #include <glint/parser.hh>
 #include <glint/sema.hh>
@@ -511,6 +512,8 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
         case Expr::Kind::While:
         case Expr::Kind::For:
         case Expr::Kind::Return:
+        case Expr::Kind::Continue:
+        case Expr::Kind::Break:
         case Expr::Kind::TypeDecl:
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::VarDecl:
@@ -1575,6 +1578,33 @@ auto lcc::glint::Sema::DeclReference(Decl* decl) -> Expr* {
     );
 }
 
+auto lcc::glint::Sema::AnalyseLoop(Loop* l) -> bool {
+    LCC_ASSERT(l);
+
+    auto cond_result = Analyse(&l->condition());
+    if (not cond_result) {
+        l->set_sema_errored();
+        return false;
+    }
+
+    if (not Convert(&l->condition(), Type::Bool)) {
+        Error(
+            l->location(),
+            "Invalid type for loop condition: {}",
+            l->condition()->type()
+        );
+        l->set_sema_errored();
+        return false;
+    }
+    LValueToRValue(&l->condition());
+    if (not AnalyseAndDiscard(&l->body())) {
+        l->set_sema_errored();
+        return false;
+    }
+
+    return true;
+}
+
 /// ===========================================================================
 ///  Analysing Expressions
 /// ===========================================================================
@@ -1616,6 +1646,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         /// The condition of a loop must be convertible to bool.
         case Expr::Kind::For: {
             auto* f = as<ForExpr>(expr);
+
+            within_loops.emplace_back(f);
+
             if (not AnalyseAndDiscard(&f->init())) {
                 expr->set_sema_errored();
                 return false;
@@ -1624,25 +1657,138 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 expr->set_sema_errored();
                 return false;
             }
-            [[fallthrough]];
-        }
+            if (not AnalyseLoop(as<Loop>(expr)))
+                return false;
+
+            within_loops.pop_back();
+        } break;
 
         case Expr::Kind::While: {
-            auto* l = as<Loop>(expr);
-            if (not Analyse(&l->condition())) {
-                expr->set_sema_errored();
+            within_loops.emplace_back(expr);
+
+            if (not AnalyseLoop(as<Loop>(expr)))
                 return false;
-            };
-            if (not Convert(&l->condition(), Type::Bool)) Error(
-                l->location(),
-                "Invalid type for loop condition: {}",
-                l->condition()->type()
-            );
-            LValueToRValue(&l->condition());
-            if (not AnalyseAndDiscard(&l->body())) {
-                expr->set_sema_errored();
+
+            within_loops.pop_back();
+        } break;
+
+        case Expr::Kind::Break: {
+            auto* br = as<BreakExpr>(expr);
+
+            if (within_loops.empty()) {
+                Error(br->location(), "`break` not within any loop");
+                br->set_sema_errored();
                 return false;
             }
+
+            // Resolve break target
+
+            // If no target specified, get containing loops. If there is more than one
+            // containing loop, it is a program error.
+            if (not br->target()) {
+                if (within_loops.size() != 1) {
+                    Error(
+                        br->location(),
+                        "`break` without a specified target within multiple loops;"
+                        " specify a target by naming a loop or using an integer denoting how many loops to break out of"
+                    );
+                    br->set_sema_errored();
+                    return false;
+                }
+                br->target() = within_loops.back();
+                break;
+            }
+
+            // Otherwise, if a target is specified, ensure it is a valid target.
+            if (is<NameRefExpr>(br->target())) {
+                auto n = as<NameRefExpr>(br->target());
+                LCC_TODO(
+                    "Find containing loop named {}",
+                    n->name()
+                );
+            }
+
+            if (is<IntegerLiteral>(br->target())) {
+                auto i = as<IntegerLiteral>(br->target());
+                auto loop_position = i->value().value();
+                auto loop_index = loop_position - 1;
+                if (loop_index >= within_loops.size()) {
+                    Error(
+                        br->target()->location(),
+                        "Integer is out of range (min 1, max {})",
+                        within_loops.size()
+                    );
+                    br->set_sema_errored();
+                    return false;
+                }
+                br->target() = within_loops.at(usz(loop_index));
+                break;
+            }
+
+            Error(
+                expr->location(),
+                "Break target must be unspecified, an identifier, or an integer."
+            );
+        } break;
+
+        // TODO: Deduplicate with `break`
+        case Expr::Kind::Continue: {
+            auto* br = as<ContinueExpr>(expr);
+
+            if (within_loops.empty()) {
+                Error(br->location(), "`continue` not within any loop");
+                br->set_sema_errored();
+                return false;
+            }
+
+            // Resolve break target
+
+            // If no target specified, get containing loops. If there is more than one
+            // containing loop, it is a program error.
+            if (not br->target()) {
+                if (within_loops.size() != 1) {
+                    Error(
+                        br->location(),
+                        "`break` without a specified target within multiple loops;"
+                        " specify a target by naming a loop or using an integer denoting how many loops to break out of"
+                    );
+                    br->set_sema_errored();
+                    return false;
+                }
+                br->target() = within_loops.back();
+                break;
+            }
+
+            // Otherwise, if a target is specified, ensure it is a valid target.
+            if (is<NameRefExpr>(br->target())) {
+                auto n = as<NameRefExpr>(br->target());
+                LCC_TODO(
+                    "Find containing loop named {}",
+                    n->name()
+                );
+            }
+
+            if (is<IntegerLiteral>(br->target())) {
+                auto i = as<IntegerLiteral>(br->target());
+                auto loop_position = i->value().value();
+                auto loop_index = loop_position - 1;
+                if (loop_index >= within_loops.size()) {
+                    Error(
+                        br->target()->location(),
+                        "Integer is out of range (min 1, max {})",
+                        within_loops.size()
+                    );
+                    br->set_sema_errored();
+                    return false;
+                }
+                br->target() = within_loops.at(usz(loop_index));
+                break;
+            }
+
+            Error(
+                expr->location(),
+                "Break target must be unspecified, an identifier, or an integer."
+            );
         } break;
 
         case Expr::Kind::Apply: {
@@ -3736,6 +3882,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::Caret:
         case TokenKind::Apply:
         case TokenKind::BitNOT:
+        case TokenKind::Continue:
+        case TokenKind::Break:
             Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
             LCC_UNREACHABLE();
     }
@@ -3973,16 +4121,21 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
         // TODO: Should "expr" type cover type expressions? I can't think of a
         // time where you could use either a type expression or a different
         // expression in the same place...
-        if (auto n = cast<NamedType>(param_t); n and n->name() == "expr")
-            continue;
+        if (
+            auto n = cast<NamedType>(param_t);
+            n and n->name() == "expr"
+        ) continue;
 
         // Only type expressions are valid for "type" compile-time type.
-        if (auto n = cast<NamedType>(param_t); n and n->name() == "type") {
+        if (
+            auto n = cast<NamedType>(param_t);
+            n and n->name() == "type"
+        ) {
             if (not is<TypeExpr>(expr->args().at(i))) {
                 Error(
                     expr->args().at(i)->location(),
                     "Expected argument to be a type expression during template expression, but instead got {}",
-                    expr->args().at(i)->name()
+                    expr->args().at(i)->string(context->option_use_colour())
                 );
                 expr->set_sema_errored();
                 return;
@@ -4897,8 +5050,10 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 std::string fname{};
                 if (auto fdecl = cast<FuncDecl>(expr->callee()))
                     fname = fdecl->name();
-                if (auto nameref = cast<NameRefExpr>(expr->callee()))
-                    fname = nameref->target()->name();
+                else if (
+                    auto nameref = cast<NameRefExpr>(expr->callee());
+                    nameref and is<Decl>(nameref->target())
+                ) fname = as<Decl>(nameref->target())->name();
 
                 Error(
                     expr->args().at(i)->location(),
@@ -5612,6 +5767,8 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::BitAND:
         case TokenKind::BitOR:
         case TokenKind::BitXOR:
+        case TokenKind::Continue:
+        case TokenKind::Break:
             Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
             LCC_UNREACHABLE();
     }

@@ -204,7 +204,7 @@ public:
 template <typename T>
 concept langtest_node_has_name = requires (T node) {
     node.langtest_name();
-    requires std::convertible_to<decltype(node.langtest_name()), std::string>;
+    requires std::convertible_to<decltype(node.langtest_name()), std::string_view>;
 };
 template <typename T>
 concept langtest_node_has_children = requires (T node) {

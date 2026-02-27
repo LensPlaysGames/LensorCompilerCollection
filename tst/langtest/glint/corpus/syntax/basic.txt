@@ -139,3 +139,36 @@ Compound Literal, Nested
 
 (block (compound_literal (compound_literal)))
 
+================
+continue
+:syntax
+================
+
+continue;
+
+---
+
+(block (continue))
+
+================
+continue w/ integer
+:syntax
+================
+
+continue 1;
+
+---
+
+(block (continue (integer_literal)))
+
+================
+continue w/ identifier
+:syntax
+================
+
+continue foo;
+
+---
+
+(block (continue (name)))
+

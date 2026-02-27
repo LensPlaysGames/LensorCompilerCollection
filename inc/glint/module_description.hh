@@ -136,6 +136,8 @@ struct ModuleDescription {
                 case K::While:
                 case K::For:
                 case K::Return:
+                case K::Continue:
+                case K::Break:
                 case K::IntegerLiteral:
                 case K::FractionalLiteral:
                 case K::StringLiteral:

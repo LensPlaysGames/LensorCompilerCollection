@@ -45,6 +45,20 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
             return eval_expr(r->value());
         }
 
+        case Expr::Kind::Continue: {
+            const auto* c = as<ContinueExpr>(expr);
+
+            (void) c;
+            LCC_TODO("GlintEval: {}", ToString(expr->kind()));
+        }
+
+        case Expr::Kind::Break: {
+            const auto* b = as<BreakExpr>(expr);
+
+            (void) b;
+            LCC_TODO("GlintEval: {}", ToString(expr->kind()));
+        }
+
         case Expr::Kind::While: {
             const auto w = as<WhileExpr>(expr);
 
@@ -226,7 +240,7 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::MinusMinus:
                 case TokenKind::PlusPlus:
                 case TokenKind::BitNOT:
-                    LCC_ASSERT(false, "TODO: Implement unary operator {}", ToString(u->op()));
+                    LCC_TODO("TODO: Implement unary operator {}", ToString(u->op()));
 
                 case TokenKind::Invalid:
                 case TokenKind::Eof:
@@ -309,6 +323,8 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::Switch:
                 case TokenKind::Print:
                 case TokenKind::Template:
+                case TokenKind::Continue:
+                case TokenKind::Break:
                 case TokenKind::Typeof:
                 case TokenKind::CShort:
                 case TokenKind::CUShort:
@@ -324,7 +340,7 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::BitAND:
                 case TokenKind::BitOR:
                 case TokenKind::BitXOR:
-                    LCC_ASSERT(false, "NOT a unary operator: {}", ToString(u->op()));
+                    Diag::ICE("NOT a unary operator: {}", ToString(u->op()));
             }
             LCC_UNREACHABLE();
         } break;
@@ -434,6 +450,8 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
                 case TokenKind::Expression:
                 case TokenKind::ByteLiteral:
                 case TokenKind::Template:
+                case TokenKind::Continue:
+                case TokenKind::Break:
                 case TokenKind::Typeof:
                 case TokenKind::BitNOT:
                 case TokenKind::Ampersand:
@@ -521,9 +539,8 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
             LCC_TODO("GlintEval: {}", ToString(expr->kind()));
         } break;
 
-            LCC_ASSERT(
-                false,
-                "TODO: Implement evaluation of AST node kind {}\n",
+            LCC_TODO(
+                "Implement evaluation of AST node kind {}\n",
                 ToString(expr->kind())
             );
     }
