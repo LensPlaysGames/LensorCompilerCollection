@@ -93,7 +93,10 @@ syn match glintOperators 'bit[&^\~|]'
 syn match glintOperators '[<>*-+]{2}'
 syn match glintOperators '#'
 syn match glintOperators '@'
-syn keyword glintOperators not
+syn keyword glintOperators
+  \ and
+  \ or
+  \ not
 
 syn match glintNumber "\v<\d+>"
 
