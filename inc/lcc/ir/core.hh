@@ -320,19 +320,36 @@ protected:
     /// Remove a use by an instruction.
     static void RemoveUse(Value* of_value, Inst* by) {
         LCC_ASSERT(of_value, "Expected non-null ptr");
-        if (not is<UseTrackingValue>(of_value)) return;
+        // We allow any Value to be passed in here so that you don't have to have
+        // casts to UseTrackingValue all over the place. We do it once, here.
+        if (not is<UseTrackingValue>(of_value))
+            return;
+
         auto* of = as<UseTrackingValue>(of_value);
 
         LCC_ASSERT(by, "Expected non-null ptr");
         auto it = rgs::find(of->user_list, by);
-        if (it == of->user_list.end()) return;
+        if (it == of->user_list.end()) {
+            // TODO: Should this be a problem?
+            // Diag::Warning(
+            //     "Attempted to remove use of value (1) by instruction (2), but no use was found\n"
+            //     "(1){}"
+            //     "(2){}"
+            //     "Users:\n{}",
+            //     of_value->string(),
+            //     by->string(),
+            //     fmt::join(vws::transform(of->user_list, &Value::string), "")
+            // );
+            return;
+        }
         of->user_list.erase(it);
     }
 
     /// Replace an operand with another operand and update uses.
     template <std::derived_from<Value> T>
     void UpdateOperand(T*& op, T* newval) {
-        if (op) RemoveUse(op, this);
+        if (op)
+            RemoveUse(op, this);
         AddUse(newval, this);
         op = newval;
     }
@@ -406,7 +423,6 @@ public:
     /// should be replaced. If the callback returns a non-null
     /// Value*, the child is replaced.
     ///
-    ///
     /// \tparam InstType If provided, only children of this type
     ///     will be replaced.
     /// \param cb The callback to call for each child.
@@ -452,9 +468,6 @@ class Block : public UseTrackingValue {
 
     /// The name of this block.
     std::string block_name;
-
-    /// TODO: Blocks and functions should also keep track of their users
-    /// to simplify dead code elimination and computing predecessors.
 
 public:
     explicit Block(std::string n = "")
@@ -568,9 +581,13 @@ public:
     /// Get the terminator instruction of this block; may return nullptr.
     [[nodiscard]]
     auto terminator() const -> Inst* {
-        if (inst_list.empty()) return nullptr;
+        if (inst_list.empty())
+            return nullptr;
+
         auto* i = inst_list.back();
-        if (not i->is_terminator()) return nullptr;
+        if (not i->is_terminator())
+            return nullptr;
+
         return i;
     }
 

@@ -891,10 +891,16 @@ struct CFGSimplePass : InstructionRewritePass {
             }
             // If the block is unreachable, remove it from all PHIs.
             else {
-                for (auto* u : b->users()) {
+                std::vector<Inst*> user_list_copy = b->users();
+                for (auto* u : user_list_copy) {
                     auto* phi = as<PhiInst>(u);
                     phi->remove_incoming(b);
                 }
+
+                LCC_ASSERT(
+                    b->users().empty(),
+                    "Failed to remove all PHI users of block"
+                );
 
                 // Yeet the unreachable block!
                 b->erase();

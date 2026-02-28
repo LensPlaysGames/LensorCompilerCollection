@@ -513,13 +513,27 @@ auto Inst::Children() -> Generator<Value**> {
 
 void Inst::EraseImpl() {
     /// Clear usees.
-    for (auto* usee : children()) RemoveUse(usee, this);
+    for (auto* usee : children())
+        RemoveUse(usee, this);
 
-    /// Erase this instruction.
-    if (parent)
-        parent->instructions().erase(
-            rgs::find(parent->instructions(), this)
-        );
+    // Erase this instruction from the containing block.
+    if (parent) {
+        // Sometimes values are poisoned/erased *without* their parent being updated
+        // to nullptr. This should be a compiler error, but, for now, we just make
+        // sure to not crash here or remove the wrong instruction, if that's the case.
+        auto it = rgs::find(parent->instructions(), this);
+        // LCC_ASSERT(
+        //     it != parent->instructions().end(),
+        //     "Erasing an instruction that has a parent block, but the instruction is not present within the specified parent block..."
+        // );
+        if (it != parent->instructions().end()) {
+            // Remove the instruction from the instruction list.
+            parent->instructions().erase(it);
+            // Remove the instruction from the users list of the block, if necessary.
+            // This is required for PHI instructions, for example.
+            RemoveUse(parent, this);
+        }
+    }
 }
 
 auto Inst::children() const -> Generator<Value*> {
@@ -542,7 +556,8 @@ void Inst::erase() {
 
 void Inst::erase_cascade() {
     EraseImpl();
-    while (not users().empty()) users().front()->erase_cascade();
+    while (not users().empty())
+        users().front()->erase_cascade();
 }
 
 auto Inst::instructions_before_this() -> std::span<Inst*> {
@@ -557,10 +572,32 @@ auto Inst::instructions_before_this() -> std::span<Inst*> {
 
 void Inst::replace_with(Value* v) {
     LCC_ASSERT(v, "Cannot replace instruction with null Value");
+
+    // fmt::print(
+    //     "Replacing (1) with (2)\n(1){}(2){}",
+    //     string(),
+    //     v->string()
+    // );
+
+    if (auto phi = cast<PhiInst>(this)) {
+        for (auto [value, block] : phi->operands()) {
+            // Removing use of phi from block
+            RemoveUse(block, this);
+            // NOTE: Handled below
+            // RemoveUse(value, this);
+        }
+    }
+
+    // For every user, go through it's children (usees; values that contain
+    // this instruction in their user list) and remove uses of the
+    // replaced instruction, and add uses of the instruction it is being
+    // replaced with, while also replacing the child (this instruction) with
+    // the replacement (v).
     while (not users().empty()) {
         auto* u = users().front();
 
-        /// Using `Children()` is fine here since we are not a block.
+        // fmt::print("(x) is a user of (1)\n(x){}", u->string());
+
         for (auto* use : u->Children()) {
             if (*use == this) {
                 RemoveUse(this, u);
@@ -568,6 +605,17 @@ void Inst::replace_with(Value* v) {
                 *use = v;
             }
         }
+
+        if (auto phi = cast<PhiInst>(u)) {
+            for (auto operand : phi->operands()) {
+                // If a PHI operand was just replaced, we need to also update the origin block.
+                if (operand.value == v) {
+                    RemoveUse(operand.block, this);
+                }
+            }
+        }
+
+        // fmt::print("(x'){}", u->string());
     }
 
     /// If v is an instruction and not inserted in a block, insert it now.
@@ -595,13 +643,24 @@ auto Block::create_phi(Type* type, Location loc) -> PhiInst* {
 }
 
 void Block::erase() {
-    LCC_ASSERT(users().empty(), "Cannot remove used block");
+    if (not users().empty()) {
+        for (auto u : users()) {
+            fmt::print("User\n{}{}", u->string(), u->block()->string());
+        }
+    }
+    LCC_ASSERT(
+        users().empty(),
+        "Cannot remove used block"
+    );
 
     /// Erase all instructions in this block.
     while (not inst_list.empty())
         inst_list.back()->erase_cascade();
-    auto it = rgs::find(parent->blocks(), this);
-    parent->blocks().erase(it);
+
+    if (parent) {
+        auto it = rgs::find(parent->blocks(), this);
+        parent->blocks().erase(it);
+    }
 }
 
 void Block::merge(lcc::Block* b) {
@@ -620,20 +679,15 @@ void Block::merge(lcc::Block* b) {
         or parent == b->parent
     );
 
-    /// Fix PHIs.
-    if (parent) {
-        for (usz i = 0; i < users().size(); /** No increment! **/) {
+    // For every Phi user of this block, if it is contained within the block
+    // being merged, replace every use of the phi with the incoming value from
+    // this block.
+    {
+        bool removed{false};
+        for (usz i = 0; i < users().size(); removed ? i : ++i) {
+            removed = false;
             auto phi = cast<PhiInst>(users().at(i));
-            if (not phi) {
-                i++;
-                continue;
-            }
-
-            /// Any PHIs in the other block must be replaced with
-            /// the value from this block; since the other block
-            /// has only us as a predecessor, there must only be
-            /// one value in those PHIs.
-            if (phi->parent == b) {
+            if (phi and phi->parent == b) {
                 phi->drop_stale_operands();
 
                 LCC_ASSERT(
@@ -647,38 +701,56 @@ void Block::merge(lcc::Block* b) {
                     phi->replace_with(in);
                 else phi->erase();
 
-                /// Don’t increment since we’ve just removed a user.
-                continue;
-            }
-
-            /// Any PHIs that use a value from the other block must
-            /// be updated to use the value from this block.
-            else if (auto in = phi->get_incoming(b)) {
-                phi->remove_incoming(b);
-                phi->set_incoming(in, this);
-                i++;
+                // We may not have removed the Phi instruction, but we have removed a user
+                // of this block.
+                removed = true;
             }
         }
     }
 
-    /// Erase our terminator only after fixing the PHIs so the call
-    /// to drop_stale_operands() doesn’t yeet the one value we care
-    /// about.
+    // Erase our terminator only after fixing the PHIs so the call
+    // to drop_stale_operands() doesn’t yeet the one value we care
+    // about.
     if (auto t = terminator())
         t->erase();
+
+    // For every Phi user of the block being merged, update it's incoming
+    // block to this block. Also removes uses of block being merged.
+    {
+        bool removed{false};
+        for (usz i = 0; i < b->users().size(); removed ? i : ++i) {
+            removed = false;
+
+            auto phi = cast<PhiInst>(b->users().at(i));
+            if (not phi) continue;
+
+            // If the block being merged has a user that is a phi instruction which
+            // contains an incoming value from the block being merged, replace the
+            // block being merged with this block.
+            if (auto in = phi->get_incoming(b)) {
+                /** This alters the container we are iterating over, removing the
+                 ** element at i.
+                 **/
+                removed = true;
+                phi->remove_incoming(b);
+                phi->set_incoming(in, this);
+            }
+        }
+    }
 
     /// Set the parent for each instruction to this block and move
     /// them all over. Lastly, delete the block.
     for (auto i : b->inst_list)
         i->parent = this;
+
     inst_list.insert(
         inst_list.end(),
         b->inst_list.begin(),
         b->inst_list.end()
     );
     b->inst_list.clear();
-    if (b->parent)
-        b->erase();
+
+    b->erase();
 }
 
 auto lcc::Block::predecessor_count() const -> usz {
@@ -1413,17 +1485,20 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 return true;
 
             /// Instructions that may yield a value.
-            case Value::Kind::Call: return as<CallInst>(i)->type() != Type::VoidTy;
+            case Value::Kind::Call:
+                return as<CallInst>(i)->type() != Type::VoidTy;
+
             case Value::Kind::Intrinsic: {
                 auto* intrinsic = as<IntrinsicInst>(i);
                 switch (intrinsic->intrinsic_kind()) {
                     default: LCC_UNREACHABLE();
 
+                    case IntrinsicKind::DebugTrap:
                     case IntrinsicKind::MemCopy:
-                    case IntrinsicKind::MemSet: return false;
+                    case IntrinsicKind::MemSet:
+                        return false;
 
-                    case IntrinsicKind::DebugTrap: return false;
-                    case IntrinsicKind::SystemCall: return true; // ??
+                    case IntrinsicKind::SystemCall: return true;
                 }
             }
 
