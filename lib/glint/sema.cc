@@ -3655,13 +3655,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             LValueToRValue(&b->lhs());
             LValueToRValue(&b->rhs());
 
-            /// Both types must be integers.
-            if (
-                not (lhs_t->is_integer() or Type::Equal(Type::Float, lhs_t))
-                or not (rhs_t->is_integer() or Type::Equal(Type::Float, rhs_t))
-            ) {
-                // TODO: if (function-exists "_GlintOpOverload<OpString>") -> do that
-
+            /// Convert both operands to their common type.
+            if (not ConvertToCommonType(&b->lhs(), &b->rhs())) {
                 Error(
                     b->location(),
                     "Cannot perform arithmetic on {} and {}",
@@ -3672,8 +3667,13 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 return;
             }
 
-            /// Convert both operands to their common type.
-            if (not ConvertToCommonType(&b->lhs(), &b->rhs())) {
+            /// Both types must be integers.
+            if (
+                not (lhs_t->is_integer() or Type::Equal(Type::Float, lhs_t))
+                or not (rhs_t->is_integer() or Type::Equal(Type::Float, rhs_t))
+            ) {
+                // TODO: if (function-exists "_GlintOpOverload<OpString>") -> do that
+
                 Error(
                     b->location(),
                     "Cannot perform arithmetic on {} and {}",
