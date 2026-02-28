@@ -338,6 +338,7 @@ void GenerateOutputFile(
     auto path_str = path.lexically_normal().string();
 
     if (not std::filesystem::exists(path)) {
+        context.set_error();
         lcc::Diag::Error(
             "Input file does not exist: {}",
             path.lexically_normal().string()
@@ -345,6 +346,7 @@ void GenerateOutputFile(
         return;
     }
     if (not std::filesystem::is_regular_file(path)) {
+        context.set_error();
         lcc::Diag::Error(
             "Input file exists, but is not a regular file: {}",
             path.lexically_normal().string()
@@ -363,7 +365,10 @@ void GenerateOutputFile(
     }
 
     auto contents = read_file_contents(&context, path.string());
-    if (not contents) return;
+    if (not contents) {
+        context.set_error();
+        return;
+    }
 
     auto& file = context.create_file(
         std::move(input_file),
