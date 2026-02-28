@@ -1,0 +1,28 @@
+* =break=, Simple
+
+#+NAME: source
+#+begin_src glint
+  foo : [byte];
+  foo += `b`;
+  foo += `a`;
+  foo += `r`;
+  foo += `\n`;
+
+  for c in foo, {
+    print c;
+    if c = `a`,
+      break;
+  };
+
+  print "here\n";
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+bahere
+#+end_example

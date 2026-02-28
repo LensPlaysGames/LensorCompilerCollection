@@ -1,0 +1,29 @@
+* =continue=, Simple
+
+#+NAME: source
+#+begin_src glint
+  foo : [byte];
+  foo += `b`;
+  foo += `f`;
+  foo += `a`;
+  foo += `r`;
+  foo += `f`;
+
+  for c in foo, {
+    if c = `f`,
+      continue;
+    print c;
+  };
+
+  print "here\n";
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+barhere
+#+end_example
