@@ -107,7 +107,8 @@ syn keyword glintModule module nextgroup=glintModuleName skipwhite
 syn keyword glintExportSymbol export
 syn keyword glintSupplant supplant
 
-" NOTE: Include semicolon at the end of line?
+" NOTE: This is correct, but it doesn't work, despite working in search regexp
+" syn match glintModuleName /[a-z\$_?][a-z0-9_!\$@\-\/&+?^|\~]*/ contained skipwhite
 syn match glintModuleName "\<[a-zA-Z0-9_]*" contained skipwhite
 
 syn keyword glintBooleans
