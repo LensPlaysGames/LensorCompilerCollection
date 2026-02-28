@@ -1419,7 +1419,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             //      |             |             |
             //      |      +----------------+   |
             //      |      | body           |   |
-            //      |      | emit iterator  |   |
+            //      |      +----------------+   |
+            //      |             |             |
+            //      |      +----------------+   |
+            //      |      | iterator       |   |
             //      |      +----------------+   |
             //      |             |             |
             //      |            ...            |
@@ -1431,22 +1434,36 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             auto* conditional = new (*module) lcc::Block(fmt::format("for.conditional.{}", total_for));
             auto* body = new (*module) lcc::Block(fmt::format("for.body.{}", total_for));
+            auto* iterator = new (*module) lcc::Block(fmt::format("for.iter.{}", total_for));
             auto* exit = new (*module) lcc::Block(fmt::format("for.exit.{}", total_for));
             total_for += 1;
 
-            loop_info[for_expr] = {conditional, exit};
+            loop_info[for_expr] = {iterator, exit};
 
             generate_expression(for_expr->init());
-            insert(new (*module) BranchInst(conditional, expr->location()));
+            if (not block->closed())
+                insert(new (*module) BranchInst(conditional, expr->location()));
 
             update_block(conditional);
             generate_expression(for_expr->condition());
-            insert(new (*module) CondBranchInst(generated_ir[for_expr->condition()], body, exit, expr->location()));
+            if (not block->closed()) {
+                insert(new (*module) CondBranchInst(
+                    generated_ir[for_expr->condition()],
+                    body,
+                    exit,
+                    expr->location()
+                ));
+            }
 
             update_block(body);
             generate_expression(for_expr->body());
+            if (not block->closed())
+                insert(new (*module) BranchInst(iterator, expr->location()));
+
+            update_block(iterator);
             generate_expression(for_expr->increment());
-            insert(new (*module) BranchInst(conditional, expr->location()));
+            if (not block->closed())
+                insert(new (*module) BranchInst(conditional, expr->location()));
 
             update_block(exit);
         } break;

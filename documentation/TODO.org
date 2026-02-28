@@ -97,6 +97,9 @@
   relevant string literals (split on `{}`).
 
   Also =println=, which just adds a byte literal =\n= as a final argument.
+
+  Also a cool thing to support would be "quick debugging" formats.
+  So =printf "{dbg:x}";= expands to =printf "x :: {}", x;=.
 - [Sema]: Include an =int= formatter function, so that people can write =print 420=, and it "just works".
   Ideally, only if it's needed.
 - [Sema]: Use intrinsic memset for initialisation (optimisation)
