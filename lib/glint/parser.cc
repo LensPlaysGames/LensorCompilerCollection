@@ -1796,12 +1796,10 @@ auto lcc::glint::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Exp
 
     /// Function body is in a new scope. Note that the scope of a function
     /// is a child of the global scope if we’re at the top level rather than
-    /// of the global scope.
+    /// of the top level scope.
     ScopeRAII sc{this, CurrScope() == TopLevelScope() ? GlobalScope() : CurrScope()};
     sc.scope->set_function_scope();
 
-    /// The body must either be a block expression or an equals sign
-    /// followed by an expression.
     auto scope = sc.scope;
     auto expr = ExprResult::Null();
 
@@ -1914,7 +1912,8 @@ auto lcc::glint::Parser::ParseIdentExpr() -> Result<Expr*> {
     }
 
     /// If the next token is ':' or '::', then this is a declaration.
-    if (At(Tk::Colon, Tk::ColonColon)) return ParseDeclRest(std::move(text), loc, false);
+    if (At(Tk::Colon, Tk::ColonColon))
+        return ParseDeclRest(std::move(text), loc, false);
 
     /// Otherwise, it’s just a name.
     return new (*mod) NameRefExpr(std::move(text), CurrScope(), loc);

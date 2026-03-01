@@ -679,78 +679,79 @@ void lcc::glint::Sema::AnalyseModule() {
     // Parse templates that sema will use to expand and/or rewrite things
     // (that way we don't have to create large, branching AST structures in
     // code).
-    // TODO: Once we use C++26, just use #embed
-    // TODO: It'd be really convenient to have a way to tell the Glint parser
-    // to "obfuscate" all identifiers encountered in a source file (such that
-    // you can write a standard library without having to riddle everything
-    // with double underscores).
-    std::string_view templates_source =
-        // Initialise a dynamic array expression with the given capacity.
-        "__dynarray_init :: template(dynarray : expr, capacity : expr) {\n"
-        "  dynarray.capacity := capacity;\n"
-        "  dynarray.size := 0;\n"
-        "  dynarray.data := malloc (capacity (sizeof @dynarray.data))\n"
-        "};\n"
+    {
+        // TODO: Once we use C++26, just use #embed
+        // TODO: It'd be really convenient to have a way to tell the Glint parser
+        // to "obfuscate" all identifiers encountered in a source file (such that
+        // you can write a standard library without having to riddle everything
+        // with double underscores).
+        std::string_view templates_source =
+            // Initialise a dynamic array expression with the given capacity.
+            "__dynarray_init :: template(dynarray : expr, capacity : expr) {\n"
+            "  dynarray.capacity := capacity;\n"
+            "  dynarray.size := 0;\n"
+            "  dynarray.data := malloc (capacity (sizeof @dynarray.data))\n"
+            "};\n"
 
-        "__dynarray_grow :: template(dynarray : expr) {\n"
-        "  if dynarray.size >= dynarray.capacity - 1, {\n"
-        //   Allocate memory, capacity *\ 2
-        //   NOTE: Shouldn't have to put parens around the arguments, but there is
-        //   currently a bug in the parser where a "single expression" doesn't
-        //   include a binary expression or something like that.
-        "    newmem :: malloc (2 dynarray.capacity);\n"
-        //   Copy <size> elements into newly-allocated memory
-        "    memcpy newmem, dynarray.data, dynarray.size;\n"
-        //   De-allocate old memory
-        "    free dynarray.data;\n"
-        //   Assign dynarray.data to newly-allocated memory
-        //   dynarray.data <- newmem;
-        "    dynarray.data := (typeof dynarray.data) newmem;\n"
-        //   Assign dynarray.capacity to dynarray.capacity * 2
-        "    dynarray.capacity *= 2;\n"
-        "  };\n"
-        "};\n"
-        "__putchar_each :: template(container : expr, size : uint)\n"
-        "  cfor\n"
-        "      __i_ii :: 0;\n"
-        "      __i_ii < size;\n"
-        "      __i_ii += 1;\n"
-        "    putchar @container[__i_ii];\n"
-        "__print__putchar_each :: template(container : expr)\n"
-        "  cfor\n"
-        "      __i_ii :: 0;\n"
-        "      __i_ii < container.size;\n"
-        "      __i_ii += 1;\n"
-        "    putchar @container[__i_ii];\n";
+            "__dynarray_grow :: template(dynarray : expr) {\n"
+            "  if dynarray.size >= dynarray.capacity - 1, {\n"
+            //   Allocate memory, capacity *\ 2
+            //   NOTE: Shouldn't have to put parens around the arguments, but there is
+            //   currently a bug in the parser where a "single expression" doesn't
+            //   include a binary expression or something like that.
+            "    newmem :: malloc (2 dynarray.capacity);\n"
+            //   Copy <size> elements into newly-allocated memory
+            "    memcpy newmem, dynarray.data, dynarray.size;\n"
+            //   De-allocate old memory
+            "    free dynarray.data;\n"
+            //   Assign dynarray.data to newly-allocated memory
+            //   dynarray.data <- newmem;
+            "    dynarray.data := (typeof dynarray.data) newmem;\n"
+            //   Assign dynarray.capacity to dynarray.capacity * 2
+            "    dynarray.capacity *= 2;\n"
+            "  };\n"
+            "};\n"
+            "__putchar_each :: template(container : expr, size : uint)\n"
+            "  cfor\n"
+            "      __i_ii :: 0;\n"
+            "      __i_ii < size;\n"
+            "      __i_ii += 1;\n"
+            "    putchar @container[__i_ii];\n"
+            "__print__putchar_each :: template(container : expr)\n"
+            "  cfor\n"
+            "      __i_ii :: 0;\n"
+            "      __i_ii < container.size;\n"
+            "      __i_ii += 1;\n"
+            "    putchar @container[__i_ii];\n";
 
-    auto& f = context->create_file(
-        "sema_templates.g",
-        std::vector<char>{templates_source.begin(), templates_source.end()}
-    );
-
-    auto templates_m = glint::Parser::ParseFreestanding(
-        mod,
-        context,
-        f,
-        new (mod) Scope(mod.top_level_scope())
-    );
-    if (not templates_m) {
-        if (templates_m.is_diag())
-            templates_m.diag().print();
-        Diag::ICE("GlintSema failed to parse semantic templates");
-    }
-
-    for (auto c : *templates_m) {
-        LCC_ASSERT(
-            is<VarDecl>(c),
-            "Malformed sema_templates.g: expected named template as top level expression"
+        auto& f = context->create_file(
+            "sema_templates.g",
+            std::vector<char>{templates_source.begin(), templates_source.end()}
         );
-        auto v = as<VarDecl>(c);
-        LCC_ASSERT(is<TemplateExpr>(v->init()), "Malformed sema_templates.g: expected named template...");
 
-        sema_templates.emplace_back(v->name(), as<TemplateExpr>(v->init()));
+        auto templates_m = glint::Parser::ParseFreestanding(
+            mod,
+            context,
+            f,
+            new (mod) Scope(mod.top_level_scope())
+        );
+        if (not templates_m) {
+            if (templates_m.is_diag())
+                templates_m.diag().print();
+            Diag::ICE("GlintSema failed to parse semantic templates");
+        }
+
+        for (auto c : *templates_m) {
+            LCC_ASSERT(
+                is<VarDecl>(c),
+                "Malformed sema_templates.g: expected named template as top level expression"
+            );
+            auto v = as<VarDecl>(c);
+            LCC_ASSERT(is<TemplateExpr>(v->init()), "Malformed sema_templates.g: expected named template...");
+
+            sema_templates.emplace_back(v->name(), as<TemplateExpr>(v->init()));
+        }
     }
-
     // Register functions that may be called by expressions inserted by
     // semantic analysis HERE. The reason we have to do this now and not each
     // time it's needed is because it may cause iterator invalidation if
@@ -807,6 +808,61 @@ void lcc::glint::Sema::AnalyseModule() {
          {"size", FFIType::CInt(mod), {}}}
     );
 
+    {
+        std::string_view builtin_formatters =
+            "format : [byte](x : int) {\n"
+            "  out : [byte];\n"
+            "  if x = 0, out += `0`;\n"
+            "  negative :: x < 0;\n"
+            "  ;; Make x positive\n"
+            "  if negative, x := -x;\n"
+            "  while x, {\n"
+            "    out ~= byte x % 10 + `0`;\n"
+            "    x /= 10;\n"
+            "  };\n"
+            "  if negative, out ~= `-`;\n"
+            "  out;\n"
+            "};\n"
+            "format : [byte](x : uint) {\n"
+            "  out : [byte];\n"
+            "  if x = 0, out += `0`;\n"
+            "  while x, {\n"
+            "    out ~= byte x % 10 + `0`;\n"
+            "    x /= 10;\n"
+            "  };\n"
+            "  out;\n"
+            "};\n";
+
+        auto& formatters_source = context->create_file(
+            "builtin_formatters.g",
+            std::vector<char>{builtin_formatters.begin(), builtin_formatters.end()}
+        );
+
+        auto formatters_module = glint::Parser::ParseFreestanding(
+            mod,
+            context,
+            formatters_source,
+            mod.top_level_scope()
+        );
+        if (not formatters_module) {
+            if (formatters_module.is_diag())
+                formatters_module.diag().print();
+            Diag::ICE("GlintSema failed to parse builtin formatters");
+        }
+
+        for (auto c : *formatters_module) {
+            LCC_ASSERT(
+                is<FuncDecl>(c),
+                "Malformed builtin_formatters.g: expected function declaration as top level expression"
+            );
+            auto function = as<FuncDecl>(c);
+            LCC_ASSERT(
+                function->name() == "format",
+                "builtin_formatters.g should be used to define format() overloads"
+            );
+        }
+    }
+
     // Analyse the signatures of all functions. This must be done
     // before analysing bodies since, in order to perform overload
     // resolution properly, we first need to apply decltype decay
@@ -835,7 +891,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     // );
 
     tempset curr_func = decl;
-    auto* ty = as<FuncType>(decl->type());
+    auto* ty = decl->function_type();
 
     // If the function has no body, then we’re done.
     if (not decl->body()) return;
@@ -963,7 +1019,10 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         // expression that returns the converted last expression.
         // FIXME: Probably a bug elsewhere, but last type can be void after
         // conversion if deproceduring happens to a function that returns void.
-        if (TryConvert(last, ty->return_type()).possible() and not (*last)->type()->is_void()) {
+        if (
+            TryConvert(last, ty->return_type()).possible()
+            and not (*last)->type()->is_void()
+        ) {
             // If it works, apply it.
             LCC_ASSERT(Convert(last, ty->return_type()));
 
@@ -996,7 +1055,8 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
                 (*last)->type(),
                 ty->return_type()
             );
-            decl->set_sema_errored();
+            // FIXME: For some reason, declarations are set as State::Done already.
+            // decl->set_sema_errored();
             return;
         }
 
@@ -2685,6 +2745,8 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
                     /// If all of them are equal, then we have a problem.
                     if (k == oi_params.size()) {
+                        // FIXME: There is a bug here, but I don't yet know what it is. I ran into
+                        // a crash when defining two identical functions (format functions).
                         Error(
                             oi->location(),
                             "Overload set contains two overloads with the same parameter types, {} and {}",
@@ -4958,14 +5020,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             expr->location(),
             "Unknown symbol '{}' in scope at {}",
             expr->name(),
-            [](const auto* sc) {
-                std::string out{
-                    fmt::format("{}", fmt::ptr(sc))
-                };
-                for (auto s = sc->parent(); s; s = s->parent())
-                    out += fmt::format("->{}", fmt::ptr(s));
-                return out;
-            }(scope)
+            scope->chain_string()
         );
 
         for (auto s = expr->scope(); s; s = s->parent()) {
@@ -5041,8 +5096,6 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         Expr* e = syms.at(0);
 
         if (not e->ok()) {
-            // fmt::print("\n\nScope at {}\n", fmt::ptr(scope));
-            // e->print(true);
             auto err = Error(
                 expr->location(),
                 "Reference to '{}' before it has been declared (and therefore initialized).\n"

@@ -196,18 +196,20 @@ private:
         return E::Invalid;
     };
 
-    /// Get the current scope.
+    // Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }
 
-    /// Get the scope to use for declarations.
+    // Get the scope to use for declarations.
     auto DeclScope(bool for_local_var = false) -> Scope* {
-        /// Local variables always go in the current scope since
-        /// the global scope is *never* the current scope.
+        // Local variables always go in the current scope since
+        // the global scope is *never* the current scope.
         if (for_local_var)
             return CurrScope();
 
-        /// Globals at the top-level go in the global scope.
-        return CurrScope() == TopLevelScope() ? GlobalScope() : CurrScope();
+        // Globals at the top-level go in the global scope.
+        return CurrScope() == TopLevelScope()
+                 ? GlobalScope()
+                 : CurrScope();
     }
 
     // Use this when you need a bunch of expressions until you get a closing

@@ -485,6 +485,15 @@ public:
     /// Get the location.
     auto location() -> Location& { return _location; }
 
+    auto chain_string() -> std::string {
+        std::string out{
+            fmt::format("{}", fmt::ptr(this))
+        };
+        for (auto s = this->parent(); s; s = s->parent())
+            out += fmt::format("->{}", fmt::ptr(s));
+        return out;
+    };
+
     // FIXME: The entire decl system is a fucking mess, an absolute joke.
     /// Declare a symbol in this scope.
     ///
@@ -2119,7 +2128,12 @@ public:
 
     [[nodiscard]]
     auto param_types() const {
-        return as<FuncType>(type())->params() | vws::transform([](auto& p) { return p.type; });
+        return vws::transform(
+            as<FuncType>(type())->params(),
+            [](auto& p) {
+                return p.type;
+            }
+        );
     }
 
     [[nodiscard]]
