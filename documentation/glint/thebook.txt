@@ -328,8 +328,8 @@ _________________
   | my/cool-function! : int()
   |   42;
   | 
-  | ;; Emit "420".
-  | print 10 my/cool-function!, `\n`;
+  | ;; Emit "69420".
+  | print 69, my/cool-function!, "0", `\n`;
   | 
   | ;; The final expression in the program is returned.
   | 69;
