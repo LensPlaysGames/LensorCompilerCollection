@@ -363,6 +363,44 @@ using sdiv_reg_imm = Pattern<
         Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
 
+using udiv_imm_imm = Pattern<
+    InstList<
+        Inst<Clobbers<>, usz(MKind::UDiv), Immediate<>, Immediate<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
+        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::UnsignedDivide), v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+
+using udiv_reg_reg = Pattern<
+    InstList<
+        Inst<
+            Clobbers<>,
+            usz(MKind::UDiv),
+            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
+            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
+        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::UnsignedDivide), v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+
+using udiv_reg_imm = Pattern<
+    InstList<
+        Inst<
+            Clobbers<>,
+            usz(MKind::UDiv),
+            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
+            Immediate<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
+        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::UnsignedDivide), v<0, 1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+
 template <usz in, usz op>
 using float_reg_reg = Pattern<
     InstList<
@@ -597,6 +635,18 @@ using z_ext_imm = Pattern<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::MoveZeroExtended), v<0, 0>, i<0>>>>;
 
+using neg_reg = Pattern<
+    InstList<
+        Inst<Clobbers<>, usz(MKind::Neg), Register<>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Negate), o<0>>>>;
+
+using neg_imm = Pattern<
+    InstList<
+        Inst<Clobbers<>, usz(MKind::Neg), Immediate<>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Negate), o<0>>>>;
+
 // clang-format off
 // This doesn't really work, as far as I can tell. Not exactly sure yet,
 // could be o<1> in input pattern not being resolved, could be order of
@@ -688,6 +738,10 @@ using AllPatterns = PatternList<
     srem_reg_reg,
     srem_reg_imm,
 
+    udiv_imm_imm,
+    udiv_reg_imm,
+    udiv_reg_reg,
+
     urem_reg_reg,
     urem_reg_imm,
 
@@ -753,7 +807,10 @@ using AllPatterns = PatternList<
     u_gt_eq_imm_imm,
     s_gt_eq_imm_imm,
     eq_imm_imm,
-    ne_imm_imm>;
+    ne_imm_imm,
+
+    neg_reg,
+    neg_imm>;
 
 } // namespace lcc::isel::x86_64
 

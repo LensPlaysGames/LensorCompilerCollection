@@ -1135,6 +1135,7 @@ static void assemble_inst(
         } break;
 
         case Opcode::Not:
+        case Opcode::Negate:
         case Opcode::Or:
         case Opcode::Multiply:
         case Opcode::MoveSignExtended:

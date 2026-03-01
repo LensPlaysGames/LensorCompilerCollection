@@ -46,6 +46,8 @@ enum struct Opcode : u32 {
     SignedDivide,   // idiv
     UnsignedDivide, // div
 
+    Negate, // Two's Complement Negation
+
     Compare,        // cmp
     Test,           // test
     JumpIfZeroFlag, // jz
@@ -170,6 +172,7 @@ constexpr auto ToString(Opcode op) -> std::string_view {
         case Opcode::MoveZeroExtended: return "movzx";
         case Opcode::LoadEffectiveAddress: return "lea";
         case Opcode::Not: return "not";
+        case Opcode::Negate: return "neg";
         case Opcode::And: return "and";
         case Opcode::Or: return "or";
         case Opcode::Xor: return "xor";
