@@ -41,7 +41,7 @@ foo : int() 42;
 (block
  (function_declaration
   (return (integer_literal)))
- (return (binary_add (call (name)) (integer_literal))))
+ (return (binary_add (integer_literal) (call (name)))))
 
 ================
 Deprocedure Function Variable as Operand of Unary Operation
@@ -56,4 +56,4 @@ not foo;
 (block
  (function_declaration
   (return (integer_literal)))
- (return (unary_not (call (name)))))
+ (return (cast (unary_not (call (name))))))

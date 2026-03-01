@@ -417,6 +417,7 @@ add_library(
   lib/glint/ast_module.cc
   lib/glint/ast_serialise_expr.cc
   lib/glint/ast_serialise_type.cc
+  lib/glint/convert.cc
   lib/glint/driver.cc
   lib/glint/eval.cc
   lib/glint/init.cc

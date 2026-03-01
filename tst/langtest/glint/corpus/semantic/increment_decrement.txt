@@ -1,0 +1,32 @@
+================
+Increment R-Value
+:fail_sema
+================
+
+++1;
+
+================
+Decrement R-Value
+:fail_sema
+================
+
+;; careful with lines starting with `-`
+ --1;
+
+================
+Increment L-Value
+================
+
+x :: 0;
+++x;
+
+---
+
+(block
+ (variable_declaration (integer_literal))
+ (return (cast
+   (binary_assignment
+    (name)
+    (binary_add
+     (cast (name))
+     (integer_literal))))))
