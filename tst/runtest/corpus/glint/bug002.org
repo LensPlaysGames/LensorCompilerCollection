@@ -1,0 +1,31 @@
+* Bug 002
+
+This should print =69=, as ranged for iterators should capture the value by reference.
+
+Unfortunately, it's currently printing =58=.
+
+#+NAME: source
+#+begin_src glint
+  my/array : [byte];
+
+  my/array += `8`; ;; append
+  my/array ~= `5`; ;; prepend
+
+  ;; Iteration
+  for b in my/array,
+    b += 1;
+
+  ;; Emit "69".
+  print my/array, `\n`;
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+58
+#+end_example
+
