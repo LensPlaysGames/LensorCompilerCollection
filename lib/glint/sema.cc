@@ -810,27 +810,27 @@ void lcc::glint::Sema::AnalyseModule() {
 
     {
         std::string_view builtin_formatters =
-            "format : [byte](x : int) {\n"
-            "  out : [byte];\n"
-            "  if x = 0, out += `0`;\n"
-            "  negative :: x < 0;\n"
+            "format : [byte](__x : int) {\n"
+            "  __out : [byte];\n"
+            "  if __x = 0, __out += `0`;\n"
+            "  __negative :: __x < 0;\n"
             "  ;; Make x positive\n"
-            "  if negative, x := -x;\n"
-            "  while x, {\n"
-            "    out ~= byte x % 10 + `0`;\n"
-            "    x /= 10;\n"
+            "  if __negative, __x := -__x;\n"
+            "  while __x, {\n"
+            "    __out ~= byte __x % 10 + `0`;\n"
+            "    __x /= 10;\n"
             "  };\n"
-            "  if negative, out ~= `-`;\n"
-            "  out;\n"
+            "  if __negative, __out ~= `-`;\n"
+            "  __out;\n"
             "};\n"
-            "format : [byte](x : uint) {\n"
-            "  out : [byte];\n"
-            "  if x = 0, out += `0`;\n"
-            "  while x, {\n"
-            "    out ~= byte x % 10 + `0`;\n"
-            "    x /= 10;\n"
+            "format : [byte](__x : uint) {\n"
+            "  __out : [byte];\n"
+            "  if __x = 0, __out += `0`;\n"
+            "  while __x, {\n"
+            "    __out ~= byte __x % 10 + `0`;\n"
+            "    __x /= 10;\n"
             "  };\n"
-            "  out;\n"
+            "  __out;\n"
             "};\n";
 
         auto& formatters_source = context->create_file(
@@ -932,15 +932,14 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         );
         Expr* dd{d};
 
-        LCC_ASSERT(
-            decl->scope()
-                ->declare(
-                    context,
-                    auto(param.name),
-                    as<VarDecl>(d)
-                )
-                .is_value()
+        auto declared = decl->scope()->declare(
+            context,
+            auto(param.name),
+            as<VarDecl>(d)
         );
+        if (not declared)
+            declared.diag().print();
+        LCC_ASSERT(declared);
         if (not Analyse(&d)) {
             // Continue to analyse the rest of the parameters
             params_failed = true;
