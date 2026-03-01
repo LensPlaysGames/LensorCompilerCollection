@@ -27,368 +27,6 @@
 #include <utility>
 #include <vector>
 
-/// For an explanation of the return value of this function, see
-/// the comment on the declaration of TryConvert().
-template <bool PerformConversion>
-auto lcc::glint::Sema::ConvertImpl(
-    lcc::glint::Expr** expr_ptr,
-    lcc::glint::Type* to
-) -> int {
-    LCC_ASSERT(
-        expr_ptr and *expr_ptr and to,
-        "Pointers mustn't be null"
-    );
-
-    enum : int {
-        TypesContainErrors = -2,
-        ConversionImpossible = -1,
-        NoOp = 0,
-    };
-
-    // Caching "from" always caused a whole bunch of problems so this is the
-    // never-cache solution while still providing a nice name
-#define from ((*expr_ptr)->type())
-
-    // Cannot convert if the types contain errors.
-    if (
-        from->is_unknown() or from->sema_errored()
-        or to->is_unknown() or to->sema_errored()
-    ) return TypesContainErrors;
-
-    // This is so we don’t forget that we’ve applied lvalue-to-rvalue
-    // conversion and raised the score by one.
-    int score = 0;
-    auto Score = [&](int i) {
-        LCC_ASSERT(i, "Score must be 1 or greater. Use the enum constants above for values <= 0");
-        return i + int(score);
-    };
-
-    // Any type can be converted to void.
-    if (to->is_void())
-        return NoOp;
-
-    // Any type can be converted to auto.
-    if (TemplatedFuncDecl::is_auto(*to))
-        return NoOp;
-
-    // Any type can be converted to itself.
-    if (Type::Equal(from, to)) {
-        // lvalue expression must be converted to rvalue if we want a value of the given type.
-        if ((*expr_ptr)->is_lvalue()) {
-            if constexpr (PerformConversion)
-                LValueToRValue(expr_ptr);
-            return Score(1);
-        }
-
-        return NoOp;
-    }
-
-    // Casting to a supplanted member can be done from an lvalue.
-    // TODO: When sum types are supplant-able, add that here too.
-    if (
-        from->strip_references()->is_struct()
-        and to->strip_references()->is_struct()
-    ) {
-        auto from_stripped = from->strip_pointers_and_references();
-        auto members = as<StructType>(from_stripped)->members();
-        for (auto m : members) {
-            if (m.supplanted and Type::Equal(m.type, to->strip_references())) {
-                if constexpr (PerformConversion) {
-                    *expr_ptr = new (mod) MemberAccessExpr(
-                        *expr_ptr,
-                        m.name,
-                        from->location()
-                    );
-                    (void) Analyse(expr_ptr);
-                }
-                return Score(1);
-            }
-        }
-    }
-
-    // Casting to an array view can be done from an lvalue.
-
-    // Fixed Array to Array View
-    bool from_array_ref = (from->is_pointer() or from->is_reference())
-                      and from->elem()->is_array();
-    if ((from->is_array() or from_array_ref) and to->is_view()) {
-        auto* from_elem = from->elem();
-        if (from_array_ref)
-            from_elem = from_elem->elem();
-
-        // TODO: If fixed array isn't an lvalue, then we need to create a
-        // temporary and everything for it (I think).
-
-        // Underlying types have to be convertible. This checks if they are equal,
-        // since we can only check if convertible if we have an expression (which
-        // we don't). Gotta change stupid API built by stupid people.
-        if (not Type::Equal(from_elem, to->elem()))
-            return ConversionImpossible;
-
-        if constexpr (PerformConversion)
-            InsertImplicitCast(expr_ptr, to);
-        return Score(1);
-    }
-
-    // Dynamic Array to Array View
-    // TODO: Handle .ptr, .ref variations
-    if (from->is_dynamic_array() and to->is_view()) {
-        if (not Type::Equal(from->elem(), to->elem()))
-            return ConversionImpossible;
-
-        if constexpr (PerformConversion)
-            InsertImplicitCast(expr_ptr, to);
-
-        return Score(1);
-    }
-
-    // All conversions beside reference binding require lvalue-to-rvalue conversion.
-    if (to->is_reference() and Type::Equal(from, to->elem())) {
-        if ((*expr_ptr)->is_lvalue()) {
-            if constexpr (PerformConversion)
-                WrapWithCast(expr_ptr, to, CastKind::LValueToReference);
-            return NoOp;
-        }
-
-        return ConversionImpossible;
-    }
-
-    // Lvalue to rvalue conversion is required.
-    score += (*expr_ptr)->is_lvalue();
-    if constexpr (PerformConversion)
-        LValueToRValue(expr_ptr, false);
-
-    // Get reference-to-reference conversions out of the way early.
-    if (from->is_reference() and to->is_reference()) {
-        // A reference can be converted to the same reference.
-        if (Type::Equal(from, to)) return NoOp;
-
-        // References to arrays can be converted to references to
-        // the first element.
-        auto* arr = cast<ArrayType>(from->elem());
-        if (arr and Type::Equal(arr->element_type(), to->elem())) {
-            if constexpr (PerformConversion)
-                InsertImplicitCast(expr_ptr, to);
-            return Score(1);
-        }
-
-        return ConversionImpossible;
-    }
-
-    // Strip reference from `from` if need be.
-    if (cast<ReferenceType>(from)) {
-        score += 1;
-        if constexpr (PerformConversion)
-            LValueToRValue(expr_ptr);
-    }
-
-    // Function types can be converted to their corresponding function pointer
-    // types.
-    if (
-        from->is_function() and to->is_pointer()
-        and Type::Equal(to->elem(), from)
-    ) {
-        if constexpr (PerformConversion)
-            InsertImplicitCast(expr_ptr, to);
-        return NoOp;
-    }
-
-    // Try deproceduring (convert a function into a call to that function).
-    if (Deproceduring(expr_ptr))
-        return Score(1);
-
-    // Now check if the types are equal. In many cases, lvalue-to-rvalue
-    // conversion is all we need.
-    if (Type::Equal(from, to))
-        return NoOp;
-
-    // Pointer to pointer conversions.
-    if (from->is_pointer() and to->is_pointer()) {
-        /// Pointers to arrays are convertible to pointers to the first element.
-        auto* arr = cast<ArrayType>(from->elem());
-        if (arr and Type::Equal(arr->element_type(), to->elem())) {
-            if constexpr (PerformConversion)
-                InsertImplicitCast(expr_ptr, to);
-            return Score(1);
-        }
-
-        /// Any pointer is convertible to `@void`.
-        if (Type::Equal(to, Type::VoidPtr)) {
-            if constexpr (PerformConversion)
-                InsertImplicitCast(expr_ptr, to);
-            return Score(1);
-        }
-    }
-
-    // Array to array conversions.
-    // FIXME: We kind of need to check that the base types are convertible,
-    // but, uhhh, we can't really do that right now without an expression of
-    // that type due to how Convert works ... I wonder what idiot built it
-    // that way.
-
-    // Fixed Array to Fixed Array
-    if (from->is_array() and to->is_array()) {
-        auto* from_arr = as<ArrayType>(from);
-        auto* to_arr = as<ArrayType>(to);
-
-        // If the array we are converting from is larger than the resulting array,
-        // it wouldn't fit and that conversion is impossible.
-        if (from_arr->dimension() > to_arr->dimension())
-            return ConversionImpossible;
-        if (not Type::Equal(from_arr->element_type(), to_arr->element_type()))
-            return ConversionImpossible;
-
-        if constexpr (PerformConversion)
-            InsertImplicitCast(expr_ptr, to);
-        return Score(1);
-    }
-
-    // Fixed Array to Dynamic Array
-    // TODO: We probably want to disallow this being an implicit cast (but
-    // explicit should be allowed).
-    if (from->is_array() and to->is_dynamic_array()) {
-        if (not Type::Equal(from->elem(), to->elem()))
-            return ConversionImpossible;
-
-        if constexpr (PerformConversion)
-            InsertImplicitCast(expr_ptr, to);
-        return Score(1);
-    }
-
-    // Function types can be converted to their corresponding function types.
-    if (
-        from->is_function() and to->is_pointer()
-        and Type::Equal(to->elem(), from)
-    ) {
-        if constexpr (PerformConversion)
-            InsertImplicitCast(expr_ptr, to);
-        return NoOp;
-    }
-
-    // Integer to boolean and vis versa implicit conversions.
-    if (
-        (from->is_integer() and to->is_bool())
-        or (from->is_bool() and to->is_integer())
-    ) {
-        if constexpr (PerformConversion)
-            InsertImplicitCast(expr_ptr, to);
-        return Score(1);
-    }
-
-    // FIXME: I'm pretty sure enum to enum should never happen, since sema
-    // should lower every enum access to it's underlying type?
-    // TODO: Handle enum to underlying
-    if (is<EnumType>(from)) {
-        // TODO: If underlying type is convertible to `to` type, not just equal check.
-        // I think we may be able to "attempt" that via changing the type of
-        // `from` to the underlying type (possible via inserting an
-        // implicit cast) and then calling Convert on that.
-        if (Type::Equal(from->elem(), to)) {
-            if constexpr (PerformConversion)
-                InsertImplicitCast(expr_ptr, to);
-            return NoOp;
-        }
-
-        return ConversionImpossible;
-    }
-
-    // Integer to integer
-    //
-    // For portability, we would ideally not make any assumptions about
-    // the size of `int`, but the issue with that is that it would make
-    // most code rather cumbersome to write as you’d have to, e.g., cast
-    // an `i16` to `int` manually. C FFI types suffer from similar problems,
-    // so we just use their width on the target.
-    if (from->is_integer() and to->is_integer()) {
-        // Integer types are always convertible to each other if the value is
-        // known at compile time and in range for the type it is being converted
-        // to.
-        EvalResult res;
-        if ((*expr_ptr)->evaluate(context, res, false)) {
-            // Note: We currently don’t support integer constants larger than 64
-            // bits internally, so if the type has a bit width larger than 64, it
-            // will always fit.
-            auto val = res.as_int();
-
-            // Signed to Unsigned Conversion
-            if (val.slt(0) and to->is_unsigned_int(context))
-                return ConversionImpossible;
-
-            // Unsigned to Unsigned Conversion
-            auto bits = to->size(context);
-            if (
-                from->is_unsigned_int(context)
-                and bits < 64
-                and val > u64(utils::MaxBitValue(bits))
-            ) return ConversionImpossible;
-
-            if constexpr (PerformConversion) {
-                InsertImplicitCast(expr_ptr, to);
-                *expr_ptr = new (mod) ConstantExpr(*expr_ptr, res);
-            }
-            return Score(1);
-        }
-
-        // Otherwise, if not known at compile-time, we will just go by what
-        // doesn't cause a memory error. If it fits, it ships.
-        if (from->size(context) <= to->size(context)) {
-            if constexpr (PerformConversion)
-                InsertImplicitCast(expr_ptr, to);
-            return Score(1);
-        }
-
-        return ConversionImpossible;
-    }
-
-    // Try deproceduring one last time.
-    if (Deproceduring(expr_ptr)) return Score(1);
-
-#undef from
-
-    return ConversionImpossible;
-}
-
-bool lcc::glint::Sema::ConvertOrError(Expr** expr, Type* to) {
-    LCC_ASSERT(expr and to, "Pointers mustn't be null");
-    if (not Convert(expr, to)) {
-        Error(
-            (*expr)->location(),
-            "Expression is not convertible to type {}",
-            to
-        );
-        (*expr)->set_sema_errored();
-        return false;
-    }
-    return true;
-}
-
-auto lcc::glint::Sema::ConvertToCommonType(Expr** a, Expr** b) -> bool {
-    LCC_ASSERT(a and b, "Pointers mustn't be null");
-    // An integer literal should always be converted into the type of the
-    // other side STRIPPED OF REFERENCES.
-    bool a_is_literal = is<IntegerLiteral>(*a);
-    bool b_is_literal = is<IntegerLiteral>(*b);
-    bool both_literals = a_is_literal and b_is_literal;
-    if (not both_literals) {
-        if (a_is_literal)
-            return Convert(a, (*b)->type()->strip_references());
-        if (b_is_literal)
-            return Convert(b, (*a)->type()->strip_references());
-    }
-    return Convert(a, (*b)->type())
-        or Convert(b, (*a)->type());
-}
-
-auto lcc::glint::Sema::TryConvert(Expr** expr, Type* type) -> ConversionStatus {
-    return {.score = ConvertImpl<false>(expr, type)};
-}
-
-auto lcc::glint::Sema::Convert(Expr** expr, Type* type) -> bool {
-    LCC_ASSERT(expr and type);
-    if ((*expr)->sema_errored()) return true;
-    return ConvertImpl<true>(expr, type) >= 0;
-}
-
 auto lcc::glint::Sema::AnalyseAndDiscard(Expr** expr) -> bool {
     LCC_ASSERT(expr);
     if (not Analyse(expr)) return false;
@@ -403,6 +41,8 @@ auto lcc::glint::Sema::DeclTypeDecay(Type* type) -> Type* {
 
 auto lcc::glint::Sema::Deproceduring(Expr** expr_ptr) -> bool {
     LCC_ASSERT(expr_ptr);
+
+    // fmt::print("Possibly Deproceduring:\n{}", (*expr_ptr)->string(true));
 
     /// This conversion only applies to functions and function pointers.
     auto* expr = *expr_ptr;
@@ -617,22 +257,6 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
     }
 
     LCC_UNREACHABLE();
-}
-
-auto lcc::glint::Sema::Convert__RemoveReferences(Expr** expr) -> bool {
-    LCC_ASSERT(expr and *expr);
-
-    if (is<ReferenceType>((*expr)->type())) {
-        /// Don’t strip reference here since we want an lvalue.
-        LValueToRValue(expr, false);
-        WrapWithCast(
-            expr,
-            as<TypeWithOneElement>((*expr)->type())->element_type(),
-            CastKind::ReferenceToLValue
-        );
-    }
-
-    return (*expr)->is_lvalue();
 }
 
 auto lcc::glint::Sema::ImplicitDereference(Expr** expr) -> bool {
@@ -3659,7 +3283,10 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             if (not ConvertToCommonType(&b->lhs(), &b->rhs())) {
                 Error(
                     b->location(),
-                    "Cannot perform arithmetic on {} and {}",
+                    "Cannot perform {} on {} and {}; operand types not convertible to common type",
+                    ToString(b->op()),
+                    lhs_t,
+                    rhs_t,
                     lhs_t,
                     rhs_t
                 );
@@ -3667,7 +3294,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 return;
             }
 
-            /// Both types must be integers.
+            // Both types must be integers or floats (rather, in the set of real
+            // numbers, ℝ)..
             if (
                 not (lhs_t->is_integer() or Type::Equal(Type::Float, lhs_t))
                 or not (rhs_t->is_integer() or Type::Equal(Type::Float, rhs_t))
@@ -3676,7 +3304,8 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
                 Error(
                     b->location(),
-                    "Cannot perform arithmetic on {} and {}",
+                    "Cannot perform {} on {} and {}",
+                    ToString(b->op()),
                     lhs_t,
                     rhs_t
                 );
@@ -3716,17 +3345,20 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             }
 
             /// Bool can only be compared with bool.
-            else if (lhs_t->is_bool() and rhs_t->is_bool()) { /** No-op **/
+            else if (lhs_t->is_bool() and rhs_t->is_bool()) {
+                /** No-op **/
             }
 
             /// If both operands are pointers, they must be the same type.
             else if (lhs_t->is_pointer() and rhs_t->is_pointer()) {
-                if (not Type::Equal(lhs_t, rhs_t)) Error(
-                    b->location(),
-                    "Cannot compare unrelated pointer types {} and {}",
-                    lhs_t,
-                    rhs_t
-                );
+                if (not Type::Equal(lhs_t, rhs_t)) {
+                    Error(
+                        b->location(),
+                        "Cannot compare unrelated pointer types {} and {}",
+                        lhs_t,
+                        rhs_t
+                    );
+                }
             }
 
             /// Other comparisons are not allowed.
@@ -3799,7 +3431,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             if (not Convert(&b->rhs(), lhs_type)) {
                 Error(
                     b->rhs()->location(),
-                    "Type of expression {} is not convertible to variable type {}",
+                    "Type {} is not convertible to type {}",
                     rhs_t,
                     lhs_type
                 );
@@ -5487,49 +5119,54 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
 }
 
 void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
-    /// Give up if there is an error in the operand.
+    // No-op if there is an error in the operand.
     if (not Analyse(&u->operand())) {
         u->set_sema_errored();
         return;
     }
 
-    /// Postfix operators.
+    // Unary postfix operators.
     if (u->is_postfix()) {
         /// We currently don’t have postfix operators.
+        Diag::ICE("Invalid postfix operator {}", ToString(u->op()));
         LCC_UNREACHABLE();
     }
 
-    /// Prefix operators.
+#define operand_type u->operand()->type()
+
+    // Unary prefix operators.
     switch (u->op()) {
-        /// Get the address of an lvalue or function.
+        // Get the address of an lvalue or function.
         case TokenKind::Ampersand: {
             if (not u->operand()->is_lvalue()) {
+                // FIXME: Better, non-cryptic error message.
                 Error(u->location(), "Cannot take address of rvalue");
                 u->set_sema_errored();
                 break;
             }
 
-            u->type(Ptr(u->operand()->type()));
+            u->type(Ptr(operand_type));
         } break;
 
         /// Convert a pointer to an lvalue.
         case TokenKind::Dereference: {
             /// The pointer itself must be an rvalue.
             LValueToRValue(&u->operand());
-            auto* ty = u->operand()->type();
-            if (not is<PointerType>(ty)) {
-                Error(u->location(), "Cannot dereference non-pointer type {}", ty);
+            if (not is<PointerType>(operand_type)) {
+                Error(u->location(), "Cannot dereference non-pointer type {}", operand_type);
                 u->set_sema_errored();
                 break;
             }
 
-            u->type(as<PointerType>(ty)->element_type());
+            u->type(
+                as<PointerType>(operand_type)->element_type()
+            );
             u->set_lvalue();
         } break;
 
         // Negate an integer or free a dynamic array.
         case TokenKind::Minus: {
-            if (u->operand()->type()->is_dynamic_array()) {
+            if (operand_type->is_dynamic_array()) {
                 u->type(Type::Void);
                 LCC_ASSERT(
                     is<NameRefExpr>(u->operand()),
@@ -5549,26 +5186,31 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
 
             LValueToRValue(&u->operand());
 
-            if (not u->operand()->type()->is_integer()) {
+            if (
+                not operand_type->is_integer()
+                or not Convert(&u->operand(), Type::Int)
+            ) {
                 Error(
                     u->location(),
-                    "Operand of unary prefix operator '-' must be an integer or dynamic array type, but was {}",
-                    u->operand()->type()
+                    "Operand of unary prefix operator {} must be of a dynamic array type, or convertible to an integer, but was {}",
+                    ToString(u->op()),
+                    operand_type
                 );
                 u->set_sema_errored();
                 break;
             }
 
-            u->type(u->operand()->type());
+            u->type(operand_type);
         } break;
 
+        case TokenKind::MinusMinus:
         case TokenKind::PlusPlus: {
             if (not u->operand()->is_lvalue()) {
                 // TODO: If it's not an lvalue, should we just return "operand + 1"
-                // instead of "operand := operand + 1"?
+                // instead of "operand := operand + 1"? This would make ++1 = 2.
                 Error(
                     u->location(),
-                    "Operand of unary prefix operator increment (`{}') must be an lvalue (assignable)\n"
+                    "Operand of unary prefix operator {} (increment) must be assignable (an lvalue)\n"
                     "If you think this should work and should increment without doing an assignment, let me know.\n",
                     ToString(u->op())
                 );
@@ -5576,71 +5218,69 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
                 break;
             }
 
-            *expr_ptr = new (mod) BinaryExpr(
-                TokenKind::ColonEq,
+            // Unary prefix operator -> binary operator IIFE.
+            auto binary_op = [](TokenKind k) {
+                switch (k) {
+                    default: Diag::ICE(
+                        "You added a case up above but didn't handle it down here"
+                    );
+                    case TokenKind::PlusPlus: return TokenKind::Plus;
+                    case TokenKind::MinusMinus: return TokenKind::Minus;
+                }
+            }(u->op());
+            // We let the binary expression type checking handle the, well, type
+            // checking.
+            RewriteToBinaryOpThenAssign(
+                expr_ptr,
+                binary_op,
                 u->operand(),
-                new (mod) BinaryExpr(
-                    TokenKind::Plus,
-                    u->operand(),
-                    new (mod) IntegerLiteral(1, u->location()),
-                    u->location()
-                ),
+                new (mod) IntegerLiteral(1, u->location()),
                 u->location()
             );
-            AnalyseBinary(expr_ptr, as<BinaryExpr>(*expr_ptr));
-        } break;
-
-        case TokenKind::MinusMinus: {
-            LValueToRValue(&u->operand());
-
-            if (not u->operand()->type()->is_integer()) {
-                Error(
-                    u->location(),
-                    "Operand of unary prefix operator decrement (`{}') must have an integer type, but was {}",
-                    ToString(u->op()),
-                    u->operand()->type()
-                );
-                u->set_sema_errored();
-                break;
-            }
-
-            u->type(u->operand()->type());
         } break;
 
         /// Bitwise-not an integer.
         case TokenKind::BitNOT: {
             LValueToRValue(&u->operand());
-            auto* ty = u->operand()->type();
-            if (not ty->is_integer()) {
+            if (
+                not operand_type->is_integer()
+                or not Convert(&u->operand(), Type::Int)
+            ) {
                 Error(
                     u->location(),
-                    "Operand of operator '~' must be an integer type, but was {}",
-                    ty
+                    "Operand of unary prefix operator {} must be convertible to {}, but was {}",
+                    ToString(u->op()),
+                    Type::Int,
+                    operand_type
                 );
                 u->set_sema_errored();
                 break;
             }
 
-            u->type(ty);
+            u->type(operand_type);
         } break;
 
         /// Negate a bool, integer, or pointer.
         case TokenKind::Exclam: {
             LValueToRValue(&u->operand());
-            auto* ty = u->operand()->type();
-            if (not is<PointerType>(ty) and not ty->is_integer(true)) {
+            // Logical negation accepts pointer types, or any non-pointer type that is
+            // convertible to an integer.
+            if (
+                not is<PointerType>(operand_type)
+                and not Convert(&u->operand(), Type::Bool)
+            ) {
                 Error(
                     u->location(),
-                    "Operand of operator '!' must be a bool, integer, or pointer type, but was {}",
-                    ty
+                    "Operand of unary prefix operator {} must be of a pointer type or convertible to {}, but was {}",
+                    ToString(u->op()),
+                    Type::Bool,
+                    operand_type
                 );
-
-                /// No need to mark this as errored because the
-                /// result type is always bool.
+                u->set_sema_errored();
                 break;
             }
 
-            /// The result of '!' is always a bool.
+            /// The result of logical negation is always a bool.
             u->type(Type::Bool);
         } break;
 
@@ -5650,8 +5290,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
             if (not member_access) {
                 Error(
                     u->operand()->location(),
-                    "Expected a member access to a sum type as the operand to '{}', i.e. `{} sum.x`.",
-                    ToString(u->op()),
+                    "Expected a member access to a sum type as the operand to {0}, i.e. `{0} sum.x`.",
                     ToString(u->op())
                 );
                 u->set_sema_errored();
@@ -5660,7 +5299,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
             if (not is<SumType>(member_access->object()->type())) {
                 Error(
                     u->operand()->location(),
-                    "Operand of '{}' must access a sum type (got {})",
+                    "Operand of unary prefix operator {} must access a sum type, but was {}",
                     ToString(u->op()),
                     member_access->object()->type()
                 );
@@ -5769,7 +5408,9 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::BitXOR:
         case TokenKind::Continue:
         case TokenKind::Break:
-            Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
+            Diag::ICE("Invalid prefix operator {}", ToString(u->op()));
             LCC_UNREACHABLE();
     }
+
+#undef operand_type
 }
