@@ -54,6 +54,7 @@
   Basically, if we are looping over a container, and it is modified, we need to adjust the loop code to take that into account. Ideally, we would update the "current" iterator reference (=x= in the above example) after every modification that requires it (possible resize).
 - [Parser/Sema]: Named scopes
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
+- [Sema]: Expression expressions
 
 
 - [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=, =T_enum.count=
