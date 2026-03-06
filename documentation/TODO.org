@@ -2,9 +2,6 @@
 
 * LCC
 
-- [IRTest]: IR -> IR testing facility
-  This will allow us to test optimisations, as well as make sure our IR parser is a working frontend (further than runtest).
-  We could also re-use the IR against IR matching code for LangTest's IR facilities.
 - [MIRTest]: MIR -> MIR testing facility
   This will allow us to test register allocation, instruction selection, among other things.
 - [Test Coverage]: floats
@@ -55,11 +52,8 @@
     };
   #+end_src
   Basically, if we are looping over a container, and it is modified, we need to adjust the loop code to take that into account. Ideally, we would update the "current" iterator reference (=x= in the above example) after every modification that requires it (possible resize).
-- [Control Flow]: =continue=, =break=
-  Possibly even named loops and the ability to break/continue from specific ones from nested loops...
 - [Parser/Sema]: Named scopes
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
-- [Parser/Sema]: Switch on value
 
 
 - [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=, =T_enum.count=
