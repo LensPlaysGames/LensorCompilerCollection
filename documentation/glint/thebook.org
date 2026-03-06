@@ -1161,6 +1161,71 @@ Now, upon invocation of =vector_push=, the compiler will first look for a define
 
 Basically, a templated function is shorthand to define a template that defines a unique function for every unique set of types passed in place of =auto= in the parameters.
 
+** Expression Expressions
+
+An expression is an expression, er, at least according to the law of identity. Most times, we want the /result/ of an expression (the expression acquired /after/ evaluating the given expression). This means variable references like =foo= get resolved to their stored value---usually exactly what you want. However, sometimes, we want to operate on the expression itself /before/ evaluation. An expression expression is an unevaluated form of expression.
+
+#+begin_src glint
+  foo : expr 69;
+
+  foo; ;; 69 (int)
+
+  typeof foo; ;; expr (type)
+
+  foo.type; ;; int (type)
+  foo.name; ;; void---use with declarations
+  foo.source; ;; "69" ([byte 3])
+
+  ;; Expression Multiplication
+  3 foo; ;; !{ 69; 69; 69; } ([expr 3])
+#+end_src
+
+*** Expression Lists
+
+#+begin_src glint
+  foos : [expr]
+    !{ 27; 42; };
+
+  foldl foos, binary+, 0; ;; 69
+  foldl foos, binary+, 351; ;; 420
+
+  for foo in foos,
+    print foo.type, `\n`;
+#+end_src
+
+*** Module Introspection
+
+#+begin_src glint
+  ;; program <name> allows naming a non-library Glint module, allowing self-
+  ;; referencing metaprogramming.
+  program P;
+  ;; module P;
+
+  P.name; ;; "P" ([byte 2])
+  P.expressions; ;; list of all top-level expressions
+  P.declarations; ;; list of all top-level declaration expressions
+  P.imports; ;; list of module expressions
+#+end_src
+
+*** Example
+
+#+begin_src glint
+  module my/numbers;
+
+  10;
+  27;
+  29;
+  2;
+#+end_src
+
+#+begin_src glint
+  import my/numbers;
+
+  foldl my/numbers.expressions, binary+, 0;
+#+end_src
+
+The result of running the above program would be =69=.
+
 ** Modules
 
 *** Writing A Module Vs A Program

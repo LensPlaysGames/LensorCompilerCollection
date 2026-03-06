@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-03-06 Fri 03:05 -->
+<!-- 2026-03-06 Fri 03:41 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Programming in Lensor Glint</title>
@@ -134,11 +134,18 @@
 <li><a href="#operator-overloading">2.13. Operator Overloading</a></li>
 <li><a href="#templated-types">2.14. Templated Types</a></li>
 <li><a href="#templated-functions">2.15. Templated Functions</a></li>
-<li><a href="#modules">2.16. Modules</a>
+<li><a href="#expression-expressions">2.16. Expression Expressions</a>
 <ul>
-<li><a href="#writing-a-module-vs-a-program">2.16.1. Writing A Module Vs A Program</a></li>
-<li><a href="#exporting-variables">2.16.2. Exporting Variables</a></li>
-<li><a href="#importing-modules">2.16.3. Importing Modules</a></li>
+<li><a href="#expression-lists">2.16.1. Expression Lists</a></li>
+<li><a href="#module-introspection">2.16.2. Module Introspection</a></li>
+<li><a href="#example">2.16.3. Example</a></li>
+</ul>
+</li>
+<li><a href="#modules">2.17. Modules</a>
+<ul>
+<li><a href="#writing-a-module-vs-a-program">2.17.1. Writing A Module Vs A Program</a></li>
+<li><a href="#exporting-variables">2.17.2. Exporting Variables</a></li>
+<li><a href="#importing-modules">2.17.3. Importing Modules</a></li>
 </ul>
 </li>
 </ul>
@@ -214,7 +221,7 @@ For now, you just need to learn about something called <i>memory</i>. A computer
 A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary <i>bits</i> (values that may only be on or off), it is addressed via <i>bytes</i>. In hardware, a byte (the minimum addressable unit in memory) is <i>usually</i> eight bits.
 </p>
 
-<pre class="example" id="org10f64e6">
+<pre class="example" id="org1dfcc9e">
 MEMORY
 | off on  off off off on  off on | ...
 | BYTE 0                         | BYTE 1
@@ -656,7 +663,7 @@ y; <span class="org-comment">;; Error! Unknown symbol y'</span>
 <p>
 The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
 </p>
-<pre class="example" id="org5ac1061">
+<pre class="example" id="org40550ae">
 root
 |-- x
 `-- block
@@ -1705,12 +1712,94 @@ Basically, a templated function is shorthand to define a template that defines a
 </p>
 </div>
 </div>
+<div id="outline-container-expression-expressions" class="outline-3">
+<h3 id="expression-expressions"><span class="section-number-3">2.16.</span> Expression Expressions</h3>
+<div class="outline-text-3" id="text-expression-expressions">
+<p>
+An expression is an expression, er, at least according to the law of identity. Most times, we want the <i>result</i> of an expression (the expression acquired <i>after</i> evaluating the given expression). This means variable references like <code>foo</code> get resolved to their stored value&#x2014;usually exactly what you want. However, sometimes, we want to operate on the expression itself <i>before</i> evaluation. An expression expression is an unevaluated form of expression.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">foo <span class="org-operator">:</span> <span class="org-type">expr</span> <span class="org-number">69</span>;
+
+foo; <span class="org-comment">;; 69 (int)</span>
+
+typeof foo; <span class="org-comment">;; expr (type)</span>
+
+foo.type; <span class="org-comment">;; int (type)</span>
+foo.name; <span class="org-comment">;; void---use with declarations</span>
+foo.source; <span class="org-comment">;; "69" ([byte 3])</span>
+
+<span class="org-comment">;; Expression Multiplication</span>
+<span class="org-number">3</span> foo; <span class="org-comment">;; !{ 69; 69; 69; } ([expr 3])</span>
+</pre>
+</div>
+</div>
+<div id="outline-container-expression-lists" class="outline-4">
+<h4 id="expression-lists"><span class="section-number-4">2.16.1.</span> Expression Lists</h4>
+<div class="outline-text-4" id="text-expression-lists">
+<div class="org-src-container">
+<pre class="src src-glint">foos <span class="org-operator">:</span> <span class="org-type">[expr]</span>
+  <span class="org-operator">!</span><span class="org-delimiter">{</span> <span class="org-number">27</span>; <span class="org-number">42</span>; <span class="org-delimiter">}</span>;
+
+foldl foos, binary+, <span class="org-number">0</span>; <span class="org-comment">;; 69</span>
+foldl foos, binary+, <span class="org-number">351</span>; <span class="org-comment">;; 420</span>
+
+<span class="org-keyword">for</span> foo <span class="org-keyword">in</span> foos,
+  <span class="org-keyword">print</span> foo.type, <span class="org-number">`\n`</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-module-introspection" class="outline-4">
+<h4 id="module-introspection"><span class="section-number-4">2.16.2.</span> Module Introspection</h4>
+<div class="outline-text-4" id="text-module-introspection">
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-comment">;; program &lt;name&gt; allows naming a non-library Glint module, allowing self-</span>
+<span class="org-comment">;; referencing metaprogramming.</span>
+program P;
+<span class="org-comment">;; module P;</span>
+
+P.name; <span class="org-comment">;; "P" ([byte 2])</span>
+P.expressions; <span class="org-comment">;; list of all top-level expressions</span>
+P.declarations; <span class="org-comment">;; list of all top-level declaration expressions</span>
+P.imports; <span class="org-comment">;; list of module expressions</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-example" class="outline-4">
+<h4 id="example"><span class="section-number-4">2.16.3.</span> Example</h4>
+<div class="outline-text-4" id="text-example">
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">module</span> my/numbers;
+
+<span class="org-number">10</span>;
+<span class="org-number">27</span>;
+<span class="org-number">29</span>;
+<span class="org-number">2</span>;
+</pre>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">import</span> my/numbers;
+
+foldl my/numbers.expressions, binary+, <span class="org-number">0</span>;
+</pre>
+</div>
+
+<p>
+The result of running the above program would be <code>69</code>.
+</p>
+</div>
+</div>
+</div>
 <div id="outline-container-modules" class="outline-3">
-<h3 id="modules"><span class="section-number-3">2.16.</span> Modules</h3>
+<h3 id="modules"><span class="section-number-3">2.17.</span> Modules</h3>
 <div class="outline-text-3" id="text-modules">
 </div>
 <div id="outline-container-writing-a-module-vs-a-program" class="outline-4">
-<h4 id="writing-a-module-vs-a-program"><span class="section-number-4">2.16.1.</span> Writing A Module Vs A Program</h4>
+<h4 id="writing-a-module-vs-a-program"><span class="section-number-4">2.17.1.</span> Writing A Module Vs A Program</h4>
 <div class="outline-text-4" id="text-writing-a-module-vs-a-program">
 <p>
 A Glint program is a collection of Glint source code that may be compiled and linked to an executable. A Glint program may import Glint modules.
@@ -1726,7 +1815,7 @@ Programs and modules may import modules, but neither programs nor modules may im
 </div>
 </div>
 <div id="outline-container-exporting-variables" class="outline-4">
-<h4 id="exporting-variables"><span class="section-number-4">2.16.2.</span> Exporting Variables</h4>
+<h4 id="exporting-variables"><span class="section-number-4">2.17.2.</span> Exporting Variables</h4>
 <div class="outline-text-4" id="text-exporting-variables">
 <p>
 A Glint module may export any amount of variables, such that those variables are accessible by any Glint program or module that imports the module. This is done via the <code>export</code> keyword, a storage specifier. Storage specifiers come before the name, within a declaration expression.
@@ -1749,7 +1838,7 @@ In practice, this most often makes the symbol associated with the variable "visi
 </div>
 </div>
 <div id="outline-container-importing-modules" class="outline-4">
-<h4 id="importing-modules"><span class="section-number-4">2.16.3.</span> Importing Modules</h4>
+<h4 id="importing-modules"><span class="section-number-4">2.17.3.</span> Importing Modules</h4>
 <div class="outline-text-4" id="text-importing-modules">
 <div class="org-src-container">
 <pre class="src src-glint"><span class="org-keyword">import</span> Foo;

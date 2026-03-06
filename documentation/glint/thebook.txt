@@ -63,7 +63,11 @@ _________________
 .. 13. Operator Overloading
 .. 14. Templated Types
 .. 15. Templated Functions
-.. 16. Modules
+.. 16. Expression Expressions
+..... 1. Expression Lists
+..... 2. Module Introspection
+..... 3. Example
+.. 17. Modules
 ..... 1. Writing A Module Vs A Program
 ..... 2. Exporting Variables
 ..... 3. Importing Modules
@@ -1632,10 +1636,89 @@ _________________
   place of `auto' in the parameters.
 
 
-2.16 Modules
+2.16 Expression Expressions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  An expression is an expression, er, at least according to the law of
+  identity. Most times, we want the /result/ of an expression (the
+  expression acquired /after/ evaluating the given expression). This
+  means variable references like `foo' get resolved to their stored
+  value---usually exactly what you want. However, sometimes, we want to
+  operate on the expression itself /before/ evaluation. An expression
+  expression is an unevaluated form of expression.
+
+  ,----
+  | foo : expr 69;
+  | 
+  | foo; ;; 69 (int)
+  | 
+  | typeof foo; ;; expr (type)
+  | 
+  | foo.type; ;; int (type)
+  | foo.name; ;; void---use with declarations
+  | foo.source; ;; "69" ([byte 3])
+  | 
+  | ;; Expression Multiplication
+  | 3 foo; ;; !{ 69; 69; 69; } ([expr 3])
+  `----
+
+
+2.16.1 Expression Lists
+-----------------------
+
+  ,----
+  | foos : [expr]
+  |   !{ 27; 42; };
+  | 
+  | foldl foos, binary+, 0; ;; 69
+  | foldl foos, binary+, 351; ;; 420
+  | 
+  | for foo in foos,
+  |   print foo.type, `\n`;
+  `----
+
+
+2.16.2 Module Introspection
+---------------------------
+
+  ,----
+  | ;; program <name> allows naming a non-library Glint module, allowing self-
+  | ;; referencing metaprogramming.
+  | program P;
+  | ;; module P;
+  | 
+  | P.name; ;; "P" ([byte 2])
+  | P.expressions; ;; list of all top-level expressions
+  | P.declarations; ;; list of all top-level declaration expressions
+  | P.imports; ;; list of module expressions
+  `----
+
+
+2.16.3 Example
+--------------
+
+  ,----
+  | module my/numbers;
+  | 
+  | 10;
+  | 27;
+  | 29;
+  | 2;
+  `----
+
+  ,----
+  | import my/numbers;
+  | 
+  | foldl my/numbers.expressions, binary+, 0;
+  `----
+
+  The result of running the above program would be `69'.
+
+
+2.17 Modules
 ~~~~~~~~~~~~
 
-2.16.1 Writing A Module Vs A Program
+2.17.1 Writing A Module Vs A Program
 ------------------------------------
 
   A Glint program is a collection of Glint source code that may be
@@ -1653,7 +1736,7 @@ _________________
   modules may import programs.
 
 
-2.16.2 Exporting Variables
+2.17.2 Exporting Variables
 --------------------------
 
   A Glint module may export any amount of variables, such that those
@@ -1679,7 +1762,7 @@ _________________
   operate on, and interact with the variable.
 
 
-2.16.3 Importing Modules
+2.17.3 Importing Modules
 ------------------------
 
   ,----
