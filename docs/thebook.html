@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-03-01 Sun 12:40 -->
+<!-- 2026-03-06 Fri 02:34 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Programming in Lensor Glint</title>
@@ -297,6 +297,7 @@
 <li><a href="#for">2.7.3. <code>for</code></a></li>
 <li><a href="#cfor">2.7.4. <code>cfor</code></a></li>
 <li><a href="#match">2.7.5. <code>match</code></a></li>
+<li><a href="#switch">2.7.6. <code>switch</code></a></li>
 </ul>
 </li>
 <li><a href="#declared-types">2.8. Declared Types</a>
@@ -398,7 +399,7 @@ For now, you just need to learn about something called <i>memory</i>. A computer
 A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary <i>bits</i> (values that may only be on or off), it is addressed via <i>bytes</i>. In hardware, a byte (the minimum addressable unit in memory) is <i>usually</i> eight bits.
 </p>
 
-<pre class="example" id="org6e9d3af">
+<pre class="example" id="org7fbb254">
 MEMORY
 | off on  off off off on  off on | ...
 | BYTE 0                         | BYTE 1
@@ -840,7 +841,7 @@ y; <span class="org-comment">;; Error! Unknown symbol y'</span>
 <p>
 The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
 </p>
-<pre class="example" id="org27e9882">
+<pre class="example" id="org50df640">
 root
 |-- x
 `-- block
@@ -1300,9 +1301,29 @@ A view is compatible with a ranged for loop expression (more on that later).
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint"><span class="org-keyword">match</span> value_of_sum_type, <span class="org-delimiter">{</span>
+<pre class="src src-glint"><span class="org-keyword">match</span> value_of_sum_type<span class="org-warning">,</span> <span class="org-delimiter">{</span>
   .member0 expr;
   .member1 expr;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-switch" class="outline-4">
+<h4 id="switch"><span class="section-number-4">2.7.6.</span> <code>switch</code></h4>
+<div class="outline-text-4" id="text-switch">
+<p>
+<code>switch</code> selects a control flow depending on which member of an enum type is held.
+</p>
+
+<p>
+<code>switch</code> must handle every possible member an enum type may have.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint">switch value_of_enum_type, <span class="org-delimiter">{</span>
+  <span class="org-warning">.</span>enumerator0 expr;
+  <span class="org-warning">.</span>enumerator1 expr;
 <span class="org-delimiter">}</span>;
 </pre>
 </div>
@@ -1352,7 +1373,7 @@ foo.x <span class="org-operator">+</span> foo.y;
 </div>
 </div>
 <ol class="org-ol">
-<li><a id="orgb18e0fc"></a>Supplanted Members<br />
+<li><a id="org5b76452"></a>Supplanted Members<br />
 <div class="outline-text-5" id="text-2-8-1-1">
 <p>
 A struct may have another struct (or sum) type supplanted within it; this means that the supplanted type's members are now accessible as if they were members of the struct the member resides in. In reality, the compiler does generate a unique name for the member and generates code to access that member by name; this construct is simply for the programmer's convenience.
@@ -1429,7 +1450,35 @@ Enumerators (in Glint) are <i>just named constants</i>. As such, the values of a
 </p>
 
 <p>
-If you come from Rust (you crustacean, you), see sum types for what you may call enums. If you come from C or C++, not too much has changed.
+If you come from Rust (you crustacean, you), see sum types for what you may call enums. If you come from C or C++, not <i>too much</i> has changed.
+</p>
+
+<p>
+To avoid long chains of <code>if</code> expressions comparing against each enumerator of a given enum type, the <code>switch</code> expression may be used in turn. In fact, there are more benefits to using <code>switch</code>, such as the compile-time guarantee that every possible enumerator a valid value may hold has a control flow to handle it.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">A</span> <span class="org-operator">::</span> <span class="org-type">enum</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">::</span> <span class="org-number">0</span>;
+  y <span class="org-operator">::</span> <span class="org-number">1</span>;
+<span class="org-delimiter">}</span>;
+
+foo <span class="org-operator">:</span> <span class="org-type">A</span>;
+foo <span class="org-operator">:=</span> A.x;
+
+switch foo, <span class="org-delimiter">{</span>
+  <span class="org-warning">.</span>x expr;
+  <span class="org-warning">.</span>y expr;
+<span class="org-delimiter">}</span>;
+</pre>
+</div>
+
+<p>
+The switch expression will execute exactly one of it's named body expressions: the one matching the name of the value currently stored in the instance of the given enum type.
+</p>
+
+<p>
+The program would not compile if there were no body expression named <code>x</code> or if there were no body expression named <code>y</code>; every declared enumerator within the enum type must have an expression associated with it in a <code>switch</code> expression on that enum type.
 </p>
 </div>
 </div>
@@ -1539,7 +1588,7 @@ foo <span class="org-operator">:</span> <span class="org-type">A</span>;
 foo.x <span class="org-operator">:=</span> <span class="org-number">69</span>;
 foo.y <span class="org-operator">:=</span> foo.x;
 
-<span class="org-keyword">match</span> foo, <span class="org-delimiter">{</span>
+<span class="org-keyword">match</span> foo<span class="org-warning">,</span> <span class="org-delimiter">{</span>
   .x out <span class="org-operator">:=</span> foo.x;
   .y out <span class="org-operator">:=</span> foo.y;
 <span class="org-delimiter">}</span>;
@@ -1696,7 +1745,7 @@ First, let's look at the most basic template expression: the <i>identity</i> tem
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint"><span class="org-keyword">template</span><span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">expr</span><span class="org-delimiter">)</span> x;
+<pre class="src src-glint">template<span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">expr</span><span class="org-delimiter">)</span> x;
 </pre>
 </div>
 
@@ -1709,7 +1758,7 @@ Often, you want to use a template more than once; for convenience, a Glint progr
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">identity <span class="org-operator">::</span> <span class="org-keyword">template</span><span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">expr</span><span class="org-delimiter">)</span> x;
+<pre class="src src-glint">identity <span class="org-operator">::</span> template<span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">expr</span><span class="org-delimiter">)</span> x;
 
 <span class="org-comment">;; Evaluates to '69420'.</span>
 identity <span class="org-number">69420</span>;
@@ -1809,7 +1858,7 @@ Now, upon invocation of <code>vector_push</code>, the compiler will first look f
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">vector_push <span class="org-operator">::</span> <span class="org-keyword">template</span><span class="org-delimiter">(</span>element <span class="org-operator">:</span> <span class="org-type">type</span><span class="org-delimiter">)</span>
+<pre class="src src-glint">vector_push <span class="org-operator">::</span> template<span class="org-delimiter">(</span>element <span class="org-operator">:</span> <span class="org-type">type</span><span class="org-delimiter">)</span>
   <span class="org-function-name">vector_push_impl</span> <span class="org-operator">:</span> <span class="org-type">void</span><span class="org-delimiter">(</span>vec <span class="org-operator">:</span> <span class="org-delimiter">(</span>vector element<span class="org-delimiter">)</span>, val <span class="org-operator">:</span> <span class="org-type">element</span><span class="org-delimiter">)</span>
     <span class="org-warning">...</span>;
 

@@ -49,6 +49,7 @@ _________________
 ..... 3. `for'
 ..... 4. `cfor'
 ..... 5. `match'
+..... 6. `switch'
 .. 8. Declared Types
 ..... 1. Structs
 ..... 2. Unions
@@ -1029,6 +1030,22 @@ _________________
   `----
 
 
+2.7.6 `switch'
+--------------
+
+  `switch' selects a control flow depending on which member of an enum
+  type is held.
+
+  `switch' must handle every possible member an enum type may have.
+
+  ,----
+  | switch value_of_enum_type, {
+  |   .enumerator0 expr;
+  |   .enumerator1 expr;
+  | };
+  `----
+
+
 2.8 Declared Types
 ~~~~~~~~~~~~~~~~~~
 
@@ -1145,8 +1162,38 @@ _________________
   type may be specified within parentheses.
 
   If you come from Rust (you crustacean, you), see sum types for what
-  you may call enums. If you come from C or C++, not too much has
+  you may call enums. If you come from C or C++, not /too much/ has
   changed.
+
+  To avoid long chains of `if' expressions comparing against each
+  enumerator of a given enum type, the `switch' expression may be used
+  in turn. In fact, there are more benefits to using `switch', such as
+  the compile-time guarantee that every possible enumerator a valid
+  value may hold has a control flow to handle it.
+
+  ,----
+  | A :: enum {
+  |   x :: 0;
+  |   y :: 1;
+  | };
+  | 
+  | foo : A;
+  | foo := A.x;
+  | 
+  | switch foo, {
+  |   .x expr;
+  |   .y expr;
+  | };
+  `----
+
+  The switch expression will execute exactly one of it's named body
+  expressions: the one matching the name of the value currently stored
+  in the instance of the given enum type.
+
+  The program would not compile if there were no body expression named
+  `x' or if there were no body expression named `y'; every declared
+  enumerator within the enum type must have an expression associated
+  with it in a `switch' expression on that enum type.
 
 
 2.8.4 Sums
