@@ -555,8 +555,9 @@ In =Glint=, the =print= keyword acts as a pseudo-function, and inserts code for 
 
 - =void= arguments signal an error.
 - =byte= arguments get printed immediately using =putchar= or similar.
-- =[byte]=, =[byte view]=, and fixed byte arrays (i.e. =[byte 4]=) arguments get each byte printed using =putchar= or similar.
-- Otherwise, a call to =format=, a function that returns a dynamic byte array, is inserted, the contents of that returned dynamic byte array are printed, and then the dynamic array is freed.
+- =[byte]=, =[byte view]=, and fixed =byte= arrays (i.e. =[byte 4]=) arguments get each byte printed using =putchar= or similar.
+- =enum= arguments get converted to a fixed =byte= array representing their name.
+- Otherwise, a call to =format=, a function that returns =[byte]= is inserted, the contents of that returned dynamic byte array are printed, and then the dynamic array is freed.
 
 Since byte literals are of =byte= type, they get printed "verbatim". The following Glint program would print =420= and then a newline (line feed character).
 
@@ -593,13 +594,17 @@ An array view is a non-owning view of a contiguous collection of elements of a g
 
 *** Fixed Arrays
 
-
 A fixed array has the amount of elements known at compile-time. This means that the compiler is able to check every compile-time known subscript to be in range. You should use this type of array if the amount of elements never changes.
 
 # Mention how these are what string literals are.
 The type of a string literal is a fixed array with an element type of =byte=. The size of the fixed array is the amount of bytes needed to contain the contents of the string literal, plus one for the implicit terminating NUL byte.
 
-# TODO: Fixed array interaction with ranged for loop expression
+# Fixed array interaction with ranged for loop expression
+A fixed array is compatible with a ranged for loop expression (more on that later).
+#+begin_src glint
+  for i in "foo",
+    print i, `\n`;
+#+end_src
 
 *** Dynamic Arrays
 
@@ -660,6 +665,13 @@ Finally, when a dynamic array is declared, memory is allocated; that means that,
 #+end_src
 
 A dynamic array is compatible with a ranged for loop expression (more on that later).
+#+begin_src glint
+  x : [byte];
+  x += `6`;
+  x += `9`;
+  for b in x,
+    print b, `\n`;
+#+end_src
 
 *** Array Views
 

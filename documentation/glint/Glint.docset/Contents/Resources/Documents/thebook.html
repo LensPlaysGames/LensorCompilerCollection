@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-03-06 Fri 02:31 -->
+<!-- 2026-03-06 Fri 03:05 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Programming in Lensor Glint</title>
@@ -214,7 +214,7 @@ For now, you just need to learn about something called <i>memory</i>. A computer
 A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary <i>bits</i> (values that may only be on or off), it is addressed via <i>bytes</i>. In hardware, a byte (the minimum addressable unit in memory) is <i>usually</i> eight bits.
 </p>
 
-<pre class="example" id="org67a916e">
+<pre class="example" id="org10f64e6">
 MEMORY
 | off on  off off off on  off on | ...
 | BYTE 0                         | BYTE 1
@@ -656,7 +656,7 @@ y; <span class="org-comment">;; Error! Unknown symbol y'</span>
 <p>
 The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
 </p>
-<pre class="example" id="org3a55089">
+<pre class="example" id="org5ac1061">
 root
 |-- x
 `-- block
@@ -868,8 +868,9 @@ In <code>Glint</code>, the <code>print</code> keyword acts as a pseudo-function,
 <ul class="org-ul">
 <li><code>void</code> arguments signal an error.</li>
 <li><code>byte</code> arguments get printed immediately using <code>putchar</code> or similar.</li>
-<li><code>[byte]</code>, <code>[byte view]</code>, and fixed byte arrays (i.e. <code>[byte 4]</code>) arguments get each byte printed using <code>putchar</code> or similar.</li>
-<li>Otherwise, a call to <code>format</code>, a function that returns a dynamic byte array, is inserted, the contents of that returned dynamic byte array are printed, and then the dynamic array is freed.</li>
+<li><code>[byte]</code>, <code>[byte view]</code>, and fixed <code>byte</code> arrays (i.e. <code>[byte 4]</code>) arguments get each byte printed using <code>putchar</code> or similar.</li>
+<li><code>enum</code> arguments get converted to a fixed <code>byte</code> array representing their name.</li>
+<li>Otherwise, a call to <code>format</code>, a function that returns <code>[byte]</code> is inserted, the contents of that returned dynamic byte array are printed, and then the dynamic array is freed.</li>
 </ul>
 
 <p>
@@ -927,6 +928,15 @@ A fixed array has the amount of elements known at compile-time. This means that 
 <p>
 The type of a string literal is a fixed array with an element type of <code>byte</code>. The size of the fixed array is the amount of bytes needed to contain the contents of the string literal, plus one for the implicit terminating NUL byte.
 </p>
+
+<p>
+A fixed array is compatible with a ranged for loop expression (more on that later).
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-keyword">for</span> i <span class="org-keyword">in</span> <span class="org-string">"foo"</span>,
+  <span class="org-keyword">print</span> i, <span class="org-number">`\n`</span>;
+</pre>
+</div>
 </div>
 </div>
 <div id="outline-container-dynamic-arrays" class="outline-4">
@@ -1013,6 +1023,14 @@ d <span class="org-operator">+=</span> <span class="org-number">`9`</span>;
 <p>
 A dynamic array is compatible with a ranged for loop expression (more on that later).
 </p>
+<div class="org-src-container">
+<pre class="src src-glint">x <span class="org-operator">:</span> <span class="org-type">[byte]</span>;
+x <span class="org-operator">+=</span> <span class="org-number">`6`</span>;
+x <span class="org-operator">+=</span> <span class="org-number">`9`</span>;
+<span class="org-keyword">for</span> b <span class="org-keyword">in</span> x,
+  <span class="org-keyword">print</span> b, <span class="org-number">`\n`</span>;
+</pre>
+</div>
 </div>
 </div>
 <div id="outline-container-array-views" class="outline-4">

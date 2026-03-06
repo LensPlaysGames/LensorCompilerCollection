@@ -793,11 +793,13 @@ _________________
 
   - `void' arguments signal an error.
   - `byte' arguments get printed immediately using `putchar' or similar.
-  - `[byte]', `[byte view]', and fixed byte arrays (i.e. `[byte 4]')
+  - `[byte]', `[byte view]', and fixed `byte' arrays (i.e. `[byte 4]')
     arguments get each byte printed using `putchar' or similar.
-  - Otherwise, a call to `format', a function that returns a dynamic
-    byte array, is inserted, the contents of that returned dynamic byte
-    array are printed, and then the dynamic array is freed.
+  - `enum' arguments get converted to a fixed `byte' array representing
+    their name.
+  - Otherwise, a call to `format', a function that returns `[byte]' is
+    inserted, the contents of that returned dynamic byte array are
+    printed, and then the dynamic array is freed.
 
   Since byte literals are of `byte' type, they get printed
   "verbatim". The following Glint program would print `420' and then a
@@ -849,6 +851,13 @@ _________________
   `byte'. The size of the fixed array is the amount of bytes needed to
   contain the contents of the string literal, plus one for the implicit
   terminating NUL byte.
+
+  A fixed array is compatible with a ranged for loop expression (more on
+  that later).
+  ,----
+  | for i in "foo",
+  |   print i, `\n`;
+  `----
 
 
 2.6.2 Dynamic Arrays
@@ -933,6 +942,13 @@ _________________
 
   A dynamic array is compatible with a ranged for loop expression (more
   on that later).
+  ,----
+  | x : [byte];
+  | x += `6`;
+  | x += `9`;
+  | for b in x,
+  |   print b, `\n`;
+  `----
 
 
 2.6.3 Array Views
