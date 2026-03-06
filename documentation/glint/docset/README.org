@@ -1,0 +1,16 @@
+* HTML Docset Generation from Org Documentation
+
+The generation script is written in Emacs Lisp. To use it, open =docset.el= in Emacs, do =M-x load=file RET RET=, then evaluate =(docset-make-install "../Glint.docset")=.
+
+The org files in the following directories will be converted to HTML and registered in the database as the corresponding docset attribute. This registration will make it possible to find in search in a narrowed sense (i.e. out of =functions=, find me =sum=).
+- =src/guides/*.org= :: Guide
+- =src/attributes/*.org= :: Attribute
+- =src/functions/*.org= :: Function
+- =src/builtins/*.org= :: Builtin
+- =src/keywords/*.org= :: Keyword
+- =src/constants/*.org= :: Constant
+- =src/operators/*.org= :: Operator
+- =src/modules/*.org= :: Module
+- =src/errors/*.org= :: Error
+
+The index file is generated from a special file, =src/index.in.org=. This file has content inserted (like a link to each of the guides) by the generation script.
