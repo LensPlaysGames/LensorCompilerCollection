@@ -2060,10 +2060,10 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
     // ENTRY_BEGIN := "export" [ "import" ] IDENTIFIER
     //              | "import" IDENTIFIER
     //              .
-    while (At(Tk::Ident)) {
+    while (At(Tk::Ident, Tk::Export)) {
         if (tok.artificial) break;
 
-        if (tok.text == "export") {
+        if (tok.kind == Tk::Export) {
             NextToken(); /// Yeet "export".
 
             if (not At(Tk::Ident, Tk::String)) {
