@@ -50,6 +50,8 @@
 (defun docset-get-first-org-heading-title ()
   "Return the title of the first heading in the current org buffer."
   (interactive)
+  (unless (provided-mode-derived-p major-mode 'org-mode)
+    (error "Must be used within org-mode buffer"))
   (let* ((data (org-element-parse-buffer 'greater-elements))
          (first-headline (org-element-map data 'headline
                            (lambda (el) el) nil 'first-match 'no-recursion)))
@@ -192,6 +194,32 @@ Return the absolute file path of the generated HTML."
         (delete-file copied-source-path)
         result))))
 
+(defun docset--org-to-html-registered (input-path db type)
+  "Convert org file at 'INPUT-PATH' into HTML file registered in docset
+database 'DB' as 'TYPE'.
+
+'TYPE' should be one of the recognized types by Zeal/Dash.
+Attribute, Guide, etc. as a string"
+  (let
+      ((input-html-path (docset-org-to-html input-path)))
+    ;; Create an entry in search database.
+    (docset-db-search-entry db
+                            (docset-get-orgfile-title input-path)
+                            type
+                            (file-name-nondirectory input-html-path))))
+
+(defun docset--process-directory-org (directory-path db type)
+  "Convert all org files in given directory to HTML files registered in
+docset database 'DB' as 'TYPE'.
+
+'TYPE' should be one of the recognized types by Zeal/Dash.
+Attribute, Guide, etc."
+  (when (file-directory-p directory-path)
+    ;; Convert each input to HTML.
+    (mapc (lambda (input-path)
+            (docset--org-to-html-registered input-path db type))
+          (directory-files directory-path 'absolute "\\.org\\'"))))
+
 (defun docset-make ()
   (org-link-set-parameters
    "docset"
@@ -237,48 +265,43 @@ Return the absolute file path of the generated HTML."
                             "thebook.html")
 
     ;; Guides -> HTML
-    (mapc
-     (lambda (guide-path)
-       ;; Convert each guide to HTML.
-       (let
-           ((guide-html-path (docset-org-to-html guide-path)))
-         ;; Create an entry in search database.
-         (docset-db-search-entry db
-                                 (docset-get-orgfile-title guide-path)
-                                 "Guide"
-                                 (file-name-nondirectory guide-html-path))))
-     (directory-files "src/guides" 'absolute "\\.org\\'"))
+    ;; We want custom, hand-written guides to help the Glint programmer with
+    ;; expected misconceptions.
+    ;;     src/guides/*.org
+    (docset--process-directory-org "src/guides" db "Guide")
 
     ;; Attributes -> HTML
     ;; We want function attributes like =discardable=.
     ;;     src/attributes/*.org
-    (mapc
-     (lambda (attribute-path)
-       ;; Convert each attribute document to HTML.
-       (let
-           ((attribute-html-path (docset-org-to-html attribute-path)))
-         ;; Create an entry in search database.
-         (docset-db-search-entry db
-                                 (docset-get-orgfile-title attribute-path)
-                                 "Attribute"
-                                 (file-name-nondirectory attribute-html-path))))
-     (directory-files "src/attributes" 'absolute "\\.org\\'"))
+    (docset--process-directory-org "src/attributes" db "Attribute")
 
-    ;; TODO
     ;; We want each function of the standard library.
-    ;;     src/std/*.org
+    ;;     src/functions/*.org
+    (docset--process-directory-org "src/functions" db "Function")
+
     ;; We want built-ins like =print=.
     ;;     src/builtins/*.org
+    (docset--process-directory-org "src/builtins" db "Builtin")
+
     ;; We want keywords like =if=.
     ;;     src/keywords/*.org
+    (docset--process-directory-org "src/keywords" db "Keyword")
+
     ;; We want constants like =true=.
     ;;     src/constants/*.org
+    (docset--process-directory-org "src/constants" db "Constant")
+
     ;; We want operators like =+=.
     ;;     src/operators/*.org
+    (docset--process-directory-org "src/operators" db "Operator")
+
     ;; We want modules like =std.io=.
     ;;     src/modules/*.org
+    (docset--process-directory-org "src/modules" db "Module")
+
     ;; We want errors like =expected=.
     ;;     src/errors/*.org
+    (docset--process-directory-org "src/errors" db "Error")
 
     ;; index.org -> HTML
     (copy-file "./src/index.in.org" "./index.org" t)
@@ -319,8 +342,11 @@ Return the absolute file path of the generated HTML."
     (docset-db-close db))
   "Generated docset")
 
-;; (docset-make)
-;; (docset-install--zeal "../Glint.docset")
+(defun docset-make-install (install-directory)
+  (docset-make)
+  (docset-install--zeal install-directory))
+
+;; (docset-make-install "../Glint.docset")
 
 (provide 'docset)
 
