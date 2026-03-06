@@ -9,7 +9,7 @@
     --error: #e71111;
 
     --keyword: #a40283;
-    --comment: #343434;
+    --comment: #f92a82;
     --constant: #208686;
     --delimiter: #212121;
     --string: #f34213;
@@ -163,7 +163,7 @@ dt { font-weight: bold; }
 
 /* Embedded Source Code */
 pre {
-    border: 1px solid var(--comment);
+    border: 1px solid var(--preprocessor);
     border-radius: 3px;
     background-color: var(--bg);
     padding: 8pt;
