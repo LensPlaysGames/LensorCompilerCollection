@@ -2057,13 +2057,17 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
 
     // Parse module imports.
     // ENTRY := ENTRY_BEGIN [ "as" IDENTIFIER ] .
-    // ENTRY_BEGIN := "export" [ "import" ] IDENTIFIER
-    //              | "import" IDENTIFIER
-    //              .
+    // ENTRY_BEGIN := [ "export" ] "import" IDENTIFIER .
     while (At(Tk::Ident, Tk::Export)) {
         if (tok.artificial) break;
 
         if (tok.kind == Tk::Export) {
+            // Ensure we are at an exported module, not an exported declaration.
+            if (
+                LookAhead(1)->kind == TokenKind::Ident
+                and LookAhead(1)->text != "import"
+            ) break;
+
             NextToken(); /// Yeet "export".
 
             if (not At(Tk::Ident, Tk::String)) {
