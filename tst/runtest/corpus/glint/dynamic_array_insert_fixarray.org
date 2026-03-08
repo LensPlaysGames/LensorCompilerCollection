@@ -1,0 +1,20 @@
+* Dynamic Array Insert String Literal
+
+#+NAME: source
+#+begin_src glint
+  foo : [byte];
+  foo += "bar\n";
+  foo[1] += "foo";
+  print foo;
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+bfooar
+#+end_example
+

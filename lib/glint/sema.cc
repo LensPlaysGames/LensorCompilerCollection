@@ -686,31 +686,37 @@ void lcc::glint::Sema::AnalyseModule() {
         // you can write a standard library without having to riddle everything
         // with double underscores).
         std::string_view templates_source =
-            // Initialise a dynamic array expression with the given capacity.
+            "__zero :: template(x : expr) {\n"
+            "  ;; TODO: sizeof is currently in bits...\n"
+            "  memset &x, 0, (sizeof x) / 8;\n"
+            "};\n"
+            "\n"
+            ";; Initialise a dynamic array with a given capacity.\n"
             "__dynarray_init :: template(dynarray : expr, capacity : expr) {\n"
             "  dynarray.capacity := capacity;\n"
             "  dynarray.size := 0;\n"
-            "  dynarray.data := malloc (capacity (sizeof @dynarray.data))\n"
+            "  dynarray.data := (typeof dynarray.data)\n"
+            "    (malloc (capacity ((sizeof @dynarray.data) / 8)));\n"
             "};\n"
-
-            "__dynarray_grow :: template(dynarray : expr) {\n"
-            "  if dynarray.size >= dynarray.capacity - 1, {\n"
-            //   Allocate memory, capacity *\ 2
-            //   NOTE: Shouldn't have to put parens around the arguments, but there is
-            //   currently a bug in the parser where a "single expression" doesn't
-            //   include a binary expression or something like that.
-            "    newmem :: malloc (2 dynarray.capacity);\n"
-            //   Copy <size> elements into newly-allocated memory
-            "    memcpy newmem, dynarray.data, dynarray.size;\n"
-            //   De-allocate old memory
-            "    free dynarray.data;\n"
-            //   Assign dynarray.data to newly-allocated memory
-            //   dynarray.data <- newmem;
-            "    dynarray.data := (typeof dynarray.data) newmem;\n"
-            //   Assign dynarray.capacity to dynarray.capacity * 2
-            "    dynarray.capacity *= 2;\n"
-            "  };\n"
+            "\n"
+            ";; Grow the given dynamic array, multiplying it's capacity by `FACTOR`.\n"
+            "__dynarray_grow :: template(dynarray : expr, factor : u32) {\n"
+            "  newmem :: malloc (factor dynarray.capacity);\n"
+            "  memcpy newmem, dynarray.data, dynarray.size;\n"
+            "  free dynarray.data;\n"
+            "  dynarray.data := (typeof dynarray.data) newmem;\n"
+            "  dynarray.capacity *= factor;\n"
             "};\n"
+            "\n"
+            ";; Grow the given dynamic array iff it is not able to store `COUNT`\n"
+            ";; elements *in addition to* it's current elements.\n"
+            ";; The `COUNT` is a count of how many elements are being added to the\n"
+            ";; dynamic array, and this operation ensures there is space.\n"
+            "__dynarray_grow_if :: template(dynarray : expr, count : uint) {\n"
+            "  if count > dynarray.capacity - dynarray.size,\n"
+            "    __dynarray_grow dynarray, 2;\n"
+            "};\n"
+            "\n"
             "__putchar_each :: template(container : expr, size : uint)\n"
             "  cfor\n"
             "      __i_ii :: 0;\n"
@@ -749,6 +755,12 @@ void lcc::glint::Sema::AnalyseModule() {
             auto v = as<VarDecl>(c);
             LCC_ASSERT(is<TemplateExpr>(v->init()), "Malformed sema_templates.g: expected named template...");
 
+            LCC_ASSERT(
+                Analyse(&v->init()),
+                "Malformed sema template {}",
+                v->name()
+            );
+
             sema_templates.emplace_back(v->name(), as<TemplateExpr>(v->init()));
         }
     }
@@ -786,6 +798,7 @@ void lcc::glint::Sema::AnalyseModule() {
         {{"status", Type::Int, {}}},
         true
     );
+
     DeclareImportedGlobalFunction(
         "memcpy",
         Type::Void,
@@ -835,7 +848,10 @@ void lcc::glint::Sema::AnalyseModule() {
 
         auto& formatters_source = context->create_file(
             "builtin_formatters.g",
-            std::vector<char>{builtin_formatters.begin(), builtin_formatters.end()}
+            std::vector<char>{
+                builtin_formatters.begin(),
+                builtin_formatters.end()
+            }
         );
 
         auto formatters_module = glint::Parser::ParseFreestanding(
@@ -1159,27 +1175,24 @@ auto lcc::glint::Sema::DefaultInitializeImpl(Expr* accessor, ZeroInitializeOptio
         case Type::Kind::FFIType:
         case Type::Kind::Pointer: {
             if (do_zero) {
-                return apply_template(
-                    "template(x : expr) { memset (&x), 0, (sizeof x) / 8; };",
-                    {accessor}
+                auto zero_operation = new (mod) CallExpr(
+                    named_template("zero"),
+                    {accessor},
+                    accessor->location()
                 );
+                return zero_operation;
             }
             return nullptr;
         }
 
         case Type::Kind::DynamicArray: {
-            auto dynarray_init =
-                "template(dynarray : expr, capacity : expr) {"
-                "  dynarray.capacity := capacity;"
-                "  dynarray.size := 0;"
-                "  dynarray.data := (typeof dynarray.data) (malloc (capacity ((sizeof @dynarray.data) / 8)));"
-                "};";
-
             constexpr usz default_dynamic_array_capacity = 8;
-            return apply_template(
-                dynarray_init,
+
+            return new (mod) CallExpr(
+                named_template("dynarray_init"),
                 {accessor,
-                 new (mod) IntegerLiteral(default_dynamic_array_capacity, {})}
+                 new (mod) IntegerLiteral(default_dynamic_array_capacity, {})},
+                accessor->location()
             );
         };
 
@@ -1189,17 +1202,23 @@ auto lcc::glint::Sema::DefaultInitializeImpl(Expr* accessor, ZeroInitializeOptio
             std::vector<Expr*> exprs{};
 
             if (do_zero) {
-                auto zero_init = apply_template(
-                    "template(x : expr) { memset (&x), 0, (sizeof x) / 8; };",
-                    {accessor}
+                auto zero_operation = new (mod) CallExpr(
+                    named_template("zero"),
+                    {accessor},
+                    accessor->location()
                 );
-                exprs.emplace_back(zero_init);
+                exprs.emplace_back(zero_operation);
             }
 
             for (auto m : s->members()) {
                 // TODO: If member needs default-initialized that is NOT zero
                 // initialization, add that expression to exprs...
-                auto member_accessor = new (mod) MemberAccessExpr(accessor, m.name, {});
+                // i.e. a struct member with a default value.
+                auto member_accessor = new (mod) MemberAccessExpr(
+                    accessor,
+                    m.name,
+                    {}
+                );
                 LCC_ASSERT(
                     Analyse((Expr**) &member_accessor)
                 );
@@ -1214,7 +1233,7 @@ auto lcc::glint::Sema::DefaultInitializeImpl(Expr* accessor, ZeroInitializeOptio
             }
 
             // Don't create an empty block expression in the event that we are not
-            // doing zero initialization and no members required initializing.
+            // doing zero initialization *and* no members required initializing.
             if (exprs.empty()) return nullptr;
 
             // Don't create a needless block expression.
@@ -1935,12 +1954,15 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 Error(t->location(), "A template with no parameters is not allowed");
 
             // Analyse parameter types
-            if (not rgs::any_of(
+            if (not rgs::all_of(
                     t->params_ref(),
                     [&](auto& p) {
                         // Custom compile-time type handling
-                        if (auto n = cast<NamedType>(p.type); n and (n->name() == "expr" or n->name() == "type"))
-                            return true;
+                        if (
+                            auto n = cast<NamedType>(p.type);
+                            n and (n->name() == "expr" or n->name() == "type")
+                        ) return true;
+
                         return Analyse(&p.type);
                     }
                 )) {
@@ -2867,7 +2889,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 //     exit 1;
                 //   };
                 //   ;; If we need to grow, do that
-                //   dynarray_grow dynarray;
+                //   dynarray_grow_if dynarray, 1;
                 //   ;; Copy size - index elements forward one element starting at given index
                 //   memmove dynarray.data[index + 1], dynarray.data[index], dynarray.size - index;
                 //   ;; Insert given element at index, now that everything is moved out of the
@@ -2956,8 +2978,9 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
                     // Grow, if need be.
                     auto grow_if = new (mod) CallExpr(
-                        named_template("dynarray_grow"),
-                        {dynarray_expr},
+                        named_template("dynarray_grow_if"),
+                        {dynarray_expr,
+                         new (mod) IntegerLiteral(1, {})},
                         {}
                     );
                     exprs.emplace_back(grow_if);
@@ -3066,7 +3089,98 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::PlusEq:
             // NOTE: Dynamic array insert handled above
             // Handle dynamic array append.
+            // TODO: Deduplicate with insert operation handled above.
             if (lhs_t->is_dynamic_array()) {
+                // RHS is array with convertible element type
+                // TODO: What if LHS element type *is* an array type?
+                if (
+                    is<ArrayType, ArrayViewType, DynamicArrayType>(rhs_t->strip_references())
+                ) {
+                    if (auto fixarray_t = cast<ArrayType>(rhs_t->strip_references())) {
+                        auto dimension = fixarray_t->dimension();
+                        // Don't do null terminator stuff
+                        if (is<StringLiteral>(b->rhs()))
+                            dimension -= 1;
+
+                        if (not dimension) {
+                            Error(
+                                b->rhs()->location(),
+                                "Cannot append fixed array of zero elements to dynamic array"
+                            );
+                            b->set_sema_errored();
+                            break;
+                        }
+
+                        // If element types are EQUAL, increase lhs size and then do a memcpy.
+                        if (Type::Equal(lhs_t->elem(), fixarray_t->element_type())) {
+                            // Ensure lhs.size + rhs.size < lhs.capacity. Otherwise, grow.
+                            auto grow_if = new (mod) CallExpr(
+                                named_template("dynarray_grow_if"),
+                                {b->lhs(),
+                                 new (mod) IntegerLiteral(
+                                     dimension,
+                                     b->rhs()->location()
+                                 )},
+                                b->location()
+                            );
+
+                            // memcpy lhs.data[lhs.size], rhs.data[0], rhs.size;
+                            auto memcpy_dst = new (mod) BinaryExpr(
+                                TokenKind::Subscript,
+                                new (mod) MemberAccessExpr(b->lhs(), "data", b->lhs()->location()),
+                                new (mod) MemberAccessExpr(b->lhs(), "size", b->lhs()->location()),
+                                b->lhs()->location()
+                            );
+                            auto memcpy_src = new (mod) BinaryExpr(
+                                TokenKind::Subscript,
+                                b->rhs(),
+                                new (mod) IntegerLiteral(0, {}),
+                                b->rhs()->location()
+                            );
+                            auto memcpy_len = new (mod) IntegerLiteral(
+                                dimension,
+                                b->rhs()->location()
+                            );
+                            auto memcpy_call
+                                = new (mod) CallExpr(
+                                    new (mod) NameRefExpr(
+                                        "memcpy",
+                                        mod.global_scope(),
+                                        b->location()
+                                    ),
+                                    {memcpy_dst, memcpy_src, memcpy_len},
+                                    b->location()
+                                );
+
+                            // lhs.size += rhs.size;
+                            auto size_update = new (mod) BinaryExpr(
+                                TokenKind::PlusEq,
+                                new (mod) MemberAccessExpr(b->lhs(), "size", b->lhs()->location()),
+                                memcpy_len,
+                                b->location()
+                            );
+
+                            auto append_operation = new (mod) GroupExpr(
+                                {grow_if, memcpy_call, size_update},
+                                b->location()
+                            );
+
+                            *expr_ptr = append_operation;
+                            LCC_ASSERT(
+                                Analyse(expr_ptr),
+                                "Dynamic array append from fixed array failed sema (oops)"
+                            );
+                            break;
+                        }
+
+                        // If element types differ, load one element from rhs at a time, and store
+                        // it into lhs as a converted value.
+                    }
+
+                    LCC_TODO("Append to {} from array type {}", *lhs_t, *rhs_t);
+                }
+
+                // RHS is a single element.
                 // Ensure rhs is convertible to lhs element type
                 if (not Convert(&b->rhs(), lhs_t->elem())) {
                     Error(b->location(), "Cannot append to {} with value of type {}", lhs_t, rhs_t);
@@ -3074,12 +3188,17 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     break;
                 }
                 // Generate following pseudo-code:
-                //   dynarray_grow b->lhs();
+                //   dynarray_grow_if b->lhs(), 1;
                 //   @b->lhs().data[b->lhs().size] := b->rhs();
                 //   b->lhs().size += 1;
 
-                // dynarray_grow b->lhs();
-                auto grow_if = new (mod) CallExpr(named_template("dynarray_grow"), {b->lhs()}, {});
+                // dynarray_grow_if b->lhs(), 1;
+                auto grow_if = new (mod) CallExpr(
+                    named_template("dynarray_grow_if"),
+                    {b->lhs(),
+                     new (mod) IntegerLiteral(1, {})},
+                    {}
+                );
 
                 // @b->lhs().data[b->lhs().size] := b->rhs()
                 auto lhs_data = new (mod) MemberAccessExpr(b->lhs(), "data", {});
@@ -3098,7 +3217,10 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
                 *expr_ptr = new (mod) BlockExpr({grow_if, assign, update_size}, b->location());
                 (void) Analyse(expr_ptr);
-                LCC_ASSERT((*expr_ptr)->ok(), "Dynamic Array Prepend failed sema (oops)");
+                LCC_ASSERT(
+                    (*expr_ptr)->ok(),
+                    "Dynamic Array Append failed sema (oops)"
+                );
 
                 break;
             }
@@ -3157,7 +3279,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             }
 
             // Generate following pseudo-code:
-            //   dynarray_grow b->lhs();
+            //   dynarray_grow_if b->lhs(), 1;
             //   memmove b->lhs().data[1], b->lhs().data[0], b->lhs().size;
             //   @b->lhs().data := b->rhs();
             //   b->lhs().size += 1;
@@ -3165,8 +3287,13 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             auto dyn_data = new (mod) MemberAccessExpr(b->lhs(), "data", {});
             auto dyn_size = new (mod) MemberAccessExpr(b->lhs(), "size", {});
 
-            // dynarray_grow b->lhs();
-            auto grow_if = new (mod) CallExpr(named_template("dynarray_grow"), {b->lhs()}, {});
+            // dynarray_grow_if b->lhs(), 1;
+            auto grow_if = new (mod) CallExpr(
+                named_template("dynarray_grow_if"),
+                {b->lhs(),
+                 new (mod) IntegerLiteral(1, {})},
+                {}
+            );
 
             // memmove b->lhs().data[1], b->lhs().data, b->lhs().size();
             auto memmove_ref
@@ -3492,7 +3619,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             if (not Convert(&b->rhs(), lhs_type)) {
                 Error(
                     b->rhs()->location(),
-                    "Type {} is not convertible to type {}",
+                    "Type {} is not convertible to type {} (required by assignment)",
                     rhs_t,
                     lhs_type
                 );
@@ -3808,7 +3935,7 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
         );
         expr->set_sema_errored();
     }
-    for (usz i = 0, end = std::min(expr->args().size(), t->params().size()); i < end; i++) {
+    for (usz i = 0, end = std::min(expr->args().size(), t->params().size()); i < end; ++i) {
         auto param_t = t->params().at(i).type;
         // Any expression is valid for "expr" compile-time type.
         // TODO: Should "expr" type cover type expressions? I can't think of a
@@ -5094,46 +5221,53 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
 
         Expr* e = syms.at(0);
 
-        if (not e->ok()) {
-            auto err = Error(
-                expr->location(),
-                "Reference to '{}' before it has been declared (and therefore initialized).\n"
-                "Allowing this access would mean allowing potentially uninitialized data to alter your program!",
-                expr->name()
-            );
-            if (e->location().is_valid())
-                err.attach(Note(e->location(), "Declared here"));
+        // I don't like this specific template check, but, I really don't want to
+        // mark templates as "analysed"...
+        auto is_named_template = is<VarDecl>(e)
+                             and as<VarDecl>(e)->init()
+                             and is<TemplateExpr>(as<VarDecl>(e)->init());
+        if (not is_named_template) {
+            if (not e->ok()) {
+                auto err = Error(
+                    expr->location(),
+                    "Reference to '{}' before it has been declared (and therefore initialized).\n"
+                    "Allowing this access would mean allowing potentially uninitialized data to alter your program!",
+                    expr->name()
+                );
+                if (e->location().is_valid())
+                    err.attach(Note(e->location(), "Declared here"));
 
-            // TODO: Suggestions:
-            //   1) Move the declaration of 'x' to be before this access.
-            //   2) Move the "expression containing this access" to after the
-            //      declaration of 'x'.
-            //      Where "the expression containing this access" refers to the previous
-            //      sibling of the declaration of 'x' that has this access as a child.
-            expr->set_sema_errored();
-            return;
-        }
+                // TODO: Suggestions:
+                //   1) Move the declaration of 'x' to be before this access.
+                //   2) Move the "expression containing this access" to after the
+                //      declaration of 'x'.
+                //      Where "the expression containing this access" refers to the previous
+                //      sibling of the declaration of 'x' that has this access as a child.
+                expr->set_sema_errored();
+                return;
+            }
 
-        if (e->sema() == SemaNode::State::NoLongerViable) {
-            Error(
-                expr->location(),
-                "Reference to a name, {}, that is no longer viable; probably a use-after-free thing",
-                expr->name()
-            );
-        }
+            if (e->sema() == SemaNode::State::NoLongerViable) {
+                Error(
+                    expr->location(),
+                    "Reference to a name, {}, that is no longer viable; probably a use-after-free thing",
+                    expr->name()
+                );
+            }
 
-        // If sema is in progress for the declaration, and there is a name ref we
-        // are trying to resolve that points to the declaration, it means the
-        // declared object is being used in it's own initialiser, which doesn't
-        // make sense.
-        if (e->sema() == SemaNode::State::InProgress) {
-            Error(
-                expr->location(),
-                "Cannot use '{}' in its own initialiser",
-                expr->name()
-            );
-            expr->set_sema_errored();
-            return;
+            // If sema is in progress for the declaration, and there is a name ref we
+            // are trying to resolve that points to the declaration, it means the
+            // declared object is being used in it's own initialiser, which doesn't
+            // make sense.
+            if (e->sema() == SemaNode::State::InProgress) {
+                Error(
+                    expr->location(),
+                    "Cannot use '{}' in its own initialiser",
+                    expr->name()
+                );
+                expr->set_sema_errored();
+                return;
+            }
         }
 
         expr->target(syms.at(0));

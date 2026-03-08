@@ -1,0 +1,22 @@
+* Dynamic Array Append String Literal
+
+#+NAME: source
+#+begin_src glint
+  foo : [byte];
+  foo += "4\n2\n0\n420\n";
+  print foo;
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+4
+2
+0
+420
+#+end_example
+
