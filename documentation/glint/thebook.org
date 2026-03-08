@@ -11,7 +11,7 @@
 # Do not export answer drawers.
 #+options: d:(not "answer")
 
-#+begin_src emacs-lisp :exports none
+#+begin_src emacs-lisp :exports none :results none
   ;; https://amitp.blogspot.com/2021/04/automatically-generate-ids-for-emacs.html
   ;; Thanks, Amit!
   (defun lens/title-to-filename (title)
@@ -604,6 +604,24 @@ A fixed array is compatible with a ranged for loop expression (more on that late
 #+begin_src glint
   for i in "foo",
     print i, `\n`;
+#+end_src
+
+#+begin_src glint
+  ;; Array Declaration
+  foo : [byte 4];
+  bar :: "foo";
+  baz : [byte 4]
+    !{ `4`; `2`; `0`; `\0`; };
+
+  ;; Address Calculation
+  foo/first :: foo[0]; ;; byte.ptr
+  foo/second :: foo[1]; ;; byte.ptr
+
+  ;; Element Access
+  foo/first-value :: @foo[0];
+
+  ;; Modification (here be dragons)
+  @bar[0] := `b`;
 #+end_src
 
 *** Dynamic Arrays

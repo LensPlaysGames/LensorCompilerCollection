@@ -863,6 +863,24 @@ _________________
   |   print i, `\n`;
   `----
 
+  ,----
+  | ;; Array Declaration
+  | foo : [byte 4];
+  | bar :: "foo";
+  | baz : [byte 4]
+  |   !{ `4`; `2`; `0`; `\0`; };
+  | 
+  | ;; Address Calculation
+  | foo/first :: foo[0]; ;; byte.ptr
+  | foo/second :: foo[1]; ;; byte.ptr
+  | 
+  | ;; Element Access
+  | foo/first-value :: @foo[0];
+  | 
+  | ;; Modification (here be dragons)
+  | @bar[0] := `b`;
+  `----
+
 
 2.6.2 Dynamic Arrays
 --------------------
