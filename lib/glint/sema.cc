@@ -716,6 +716,21 @@ void lcc::glint::Sema::AnalyseModule() {
             "  if count > dynarray.capacity - dynarray.size,\n"
             "    __dynarray_grow dynarray, 2;\n"
             "};\n"
+            "__dynarray_insert :: template(dynarray : expr, index : expr, value : expr) {\n"
+            "  if index < 0 or index > dynarray.size, {\n"
+            "    print \"Glint Runtime Error: oob dynarray insertion\\n\";\n"
+            "    exit 1;\n"
+            "  };\n"
+            "\n"
+            "  ;; If we need to grow, do that\n"
+            "  __dynarray_grow_if dynarray, 1;\n"
+            "  ;; Copy size - index elements forward one element starting at given index\n"
+            "  memmove dynarray.data[index + 1], dynarray.data[index], dynarray.size - index;\n"
+            "  ;; Insert given element at index, now that everything is moved out of the\n"
+            "  ;; way.\n"
+            "  @dynarray.data[index] := value;\n"
+            "  dynarray.size += 1;\n"
+            "};\n"
             "\n"
             "__putchar_each :: template(container : expr, size : uint)\n"
             "  cfor\n"
@@ -2862,7 +2877,9 @@ void lcc::glint::Sema::RewriteToBinaryOpThenAssign(
 }
 
 void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
-    // Catch dynarray[index] on lhs before it gets rewritten.
+    // Catch dynarray[index] on lhs before it gets rewritten with a bounds
+    // check for an access (because it's not an access so we don't need *that
+    // kind* of bounds check).
     if (b->op() == TokenKind::PlusEq) {
         if (
             auto subscript = cast<BinaryExpr>(b->lhs());
@@ -2891,183 +2908,14 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     return;
                 }
 
-                // template(dynarray : expr, index : expr, value : expr) {
-                //   if index < 0 or index > dynarray.size, {
-                //     exit 1;
-                //   };
-                //   ;; If we need to grow, do that
-                //   dynarray_grow_if dynarray, 1;
-                //   ;; Copy size - index elements forward one element starting at given index
-                //   memmove dynarray.data[index + 1], dynarray.data[index], dynarray.size - index;
-                //   ;; Insert given element at index, now that everything is moved out of the
-                //   ;; way.
-                //   @dynarray[index] := value;
-                //   dynarray.size += 1;
-                // };
-
-                std::vector<Expr*> exprs{};
-                {
-                    auto dyn_data
-                        = new (mod) MemberAccessExpr(dynarray_expr, "data", {});
-                    auto dyn_size
-                        = new (mod) MemberAccessExpr(dynarray_expr, "size", {});
-
-                    // index less than 0
-                    auto cmp_zero
-                        = new (mod) BinaryExpr(
-                            TokenKind::Lt,
-                            index_expr,
-                            new (mod) IntegerLiteral(0, {}),
-                            {}
-                        );
-                    // index greater than size
-                    auto cmp_size
-                        = new (mod) BinaryExpr(TokenKind::Gt, index_expr, dyn_size, {});
-
-                    auto cmp_or
-                        = new (mod) BinaryExpr(TokenKind::Or, cmp_zero, cmp_size, {});
-
-                    // TODO: if oob_print or something. FIXME: Use frontend option.
-                    auto puts_ref = new (mod) NameRefExpr(
-                        "puts",
-                        mod.global_scope(),
-                        {}
-                    );
-                    std::string str_value = "Glint Runtime Error: oob dynamic array access";
-                    if (b->location().seekable(context)) {
-                        auto locinfo = b->location().seek_line_column(context);
-                        str_value = fmt::format(
-                            "{}:{}:{}: {}",
-                            locinfo.line,
-                            locinfo.col,
-                            context->files().at(b->location().file_id)->path().lexically_normal().string(),
-                            str_value
-                        );
-                    }
-                    auto str = new (mod) StringLiteral(mod, str_value, {});
-                    auto sub_str = new (mod) BinaryExpr(
-                        TokenKind::Subscript,
-                        str,
-                        new (mod) IntegerLiteral(0, {}),
-                        {}
-                    );
-                    auto then_print = new (mod) CallExpr(
-                        puts_ref,
-                        {sub_str},
-                        {}
-                    );
-
-                    auto exit_ref = new (mod) NameRefExpr(
-                        "exit",
-                        mod.global_scope(),
-                        {}
-                    );
-                    auto status_literal = new (mod) IntegerLiteral(1, {});
-                    // TODO: When user defines oob_access handler, call that handler.
-                    auto then_outofbounds = new (mod) CallExpr(
-                        exit_ref,
-                        {status_literal},
-                        {}
-                    );
-                    auto then_block = new (mod) BlockExpr(
-                        {then_print,
-                         then_outofbounds},
-                        {}
-                    );
-
-                    auto if_outofbounds = new (mod) IfExpr(
-                        cmp_or,
-                        then_block,
-                        nullptr,
-                        {}
-                    );
-                    exprs.emplace_back(if_outofbounds);
-
-                    // Grow, if need be.
-                    auto grow_if = new (mod) CallExpr(
-                        named_template("dynarray_grow_if"),
-                        {dynarray_expr,
-                         new (mod) IntegerLiteral(1, {})},
-                        {}
-                    );
-                    exprs.emplace_back(grow_if);
-
-                    auto memmove_ref
-                        = new (mod) NameRefExpr(
-                            "memmove",
-                            mod.global_scope(),
-                            {}
-                        );
-                    // subscript dynarray_expr.data with index_expr + 1 offset
-                    auto index_plusone
-                        = new (mod) BinaryExpr(
-                            TokenKind::Plus,
-                            index_expr,
-                            new (mod) IntegerLiteral(1, {}),
-                            {}
-                        );
-                    auto memmove_dest = new (mod) BinaryExpr(
-                        TokenKind::Subscript,
-                        dyn_data,
-                        index_plusone,
-                        {}
-                    );
-                    // subscript dynarray_expr.data with index_expr
-                    auto memmove_source = new (mod) BinaryExpr(
-                        TokenKind::Subscript,
-                        dyn_data,
-                        index_expr,
-                        {}
-                    );
-                    // subtract index_expr from dynarray_expr.size
-                    auto memmove_size = new (mod) BinaryExpr(
-                        TokenKind::Minus,
-                        dyn_size,
-                        index_expr,
-                        {}
-                    );
-                    auto call_memmove = new (mod) CallExpr(
-                        memmove_ref,
-                        {memmove_dest, memmove_source, memmove_size},
-                        {}
-                    );
-                    exprs.emplace_back(call_memmove);
-
-                    // Subscript dynarray data with index expression
-                    auto assign_lhs_subscript = new (mod) BinaryExpr(
-                        TokenKind::Subscript,
-                        dyn_data,
-                        index_expr,
-                        {}
-                    );
-                    // Dereference subscript
-                    auto assign_lhs = new (mod) UnaryExpr(
-                        TokenKind::Dereference,
-                        assign_lhs_subscript,
-                        false,
-                        {}
-                    );
-                    // @dynarray[index] := value;
-                    auto assign = new (mod) BinaryExpr(
-                        TokenKind::ColonEq,
-                        assign_lhs,
-                        b->rhs(),
-                        {}
-                    );
-                    exprs.emplace_back(assign);
-
-                    // dynarray.size += 1;
-                    auto increase_size = new (mod) BinaryExpr(
-                        TokenKind::PlusEq,
-                        dyn_size,
-                        new (mod) IntegerLiteral(1, {}),
-                        {}
-                    );
-                    exprs.emplace_back(increase_size);
-                }
-
-                *expr_ptr = new (mod) BlockExpr(exprs, b->location());
-                (void) Analyse(expr_ptr);
+                *expr_ptr = new (mod) CallExpr(
+                    named_template("dynarray_insert"),
+                    {dynarray_expr,
+                     index_expr,
+                     b->rhs()},
+                    b->location()
+                );
+                LCC_ASSERT(Analyse(expr_ptr));
 
                 return;
             }
@@ -3096,7 +2944,6 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
         case TokenKind::PlusEq:
             // NOTE: Dynamic array insert handled above
             // Handle dynamic array append.
-            // TODO: Deduplicate with insert operation handled above.
             if (lhs_t->is_dynamic_array()) {
                 // RHS is array with convertible element type
                 // TODO: What if LHS element type *is* an array type?
@@ -3120,6 +2967,9 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
                         // If element types are EQUAL, increase lhs size and then do a memcpy.
                         if (Type::Equal(lhs_t->elem(), fixarray_t->element_type())) {
+                            // TODO: Once we can get the length of a fixed array and a dynamic array
+                            // with the same syntax, we could write this as a sema template.
+
                             // Ensure lhs.size + rhs.size < lhs.capacity. Otherwise, grow.
                             auto grow_if = new (mod) CallExpr(
                                 named_template("dynarray_grow_if"),
@@ -3194,40 +3044,15 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     b->set_sema_errored();
                     break;
                 }
-                // Generate following pseudo-code:
-                //   dynarray_grow_if b->lhs(), 1;
-                //   @b->lhs().data[b->lhs().size] := b->rhs();
-                //   b->lhs().size += 1;
 
-                // dynarray_grow_if b->lhs(), 1;
-                auto grow_if = new (mod) CallExpr(
-                    named_template("dynarray_grow_if"),
+                *expr_ptr = new (mod) CallExpr(
+                    named_template("dynarray_insert"),
                     {b->lhs(),
-                     new (mod) IntegerLiteral(1, {})},
-                    {}
+                     new (mod) MemberAccessExpr(b->lhs(), "size", b->location()),
+                     b->rhs()},
+                    b->location()
                 );
-
-                // @b->lhs().data[b->lhs().size] := b->rhs()
-                auto lhs_data = new (mod) MemberAccessExpr(b->lhs(), "data", {});
-                auto lhs_size = new (mod) MemberAccessExpr(b->lhs(), "size", {});
-                auto subscript_lhs = new (mod) BinaryExpr(TokenKind::Subscript, lhs_data, lhs_size, {});
-                auto dereference_subscript = new (mod) UnaryExpr(TokenKind::Dereference, subscript_lhs, false, {});
-                auto assign = new (mod) BinaryExpr(TokenKind::ColonEq, dereference_subscript, b->rhs(), {});
-
-                // b->lhs().size += 1;
-                auto update_size = new (mod) BinaryExpr(
-                    TokenKind::PlusEq,
-                    lhs_size,
-                    new (mod) IntegerLiteral(1, {}),
-                    {}
-                );
-
-                *expr_ptr = new (mod) BlockExpr({grow_if, assign, update_size}, b->location());
-                (void) Analyse(expr_ptr);
-                LCC_ASSERT(
-                    (*expr_ptr)->ok(),
-                    "Dynamic Array Append failed sema (oops)"
-                );
+                LCC_ASSERT(Analyse(expr_ptr));
 
                 break;
             }
@@ -3285,52 +3110,14 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 break;
             }
 
-            // Generate following pseudo-code:
-            //   dynarray_grow_if b->lhs(), 1;
-            //   memmove b->lhs().data[1], b->lhs().data[0], b->lhs().size;
-            //   @b->lhs().data := b->rhs();
-            //   b->lhs().size += 1;
-
-            auto dyn_data = new (mod) MemberAccessExpr(b->lhs(), "data", {});
-            auto dyn_size = new (mod) MemberAccessExpr(b->lhs(), "size", {});
-
-            // dynarray_grow_if b->lhs(), 1;
-            auto grow_if = new (mod) CallExpr(
-                named_template("dynarray_grow_if"),
+            *expr_ptr = new (mod) CallExpr(
+                named_template("dynarray_insert"),
                 {b->lhs(),
-                 new (mod) IntegerLiteral(1, {})},
-                {}
+                 new (mod) IntegerLiteral(0, {}),
+                 b->rhs()},
+                b->location()
             );
-
-            // memmove b->lhs().data[1], b->lhs().data, b->lhs().size();
-            auto memmove_ref
-                = new (mod) NameRefExpr("memmove", mod.global_scope(), {});
-            auto memmove_dest
-                = new (mod) BinaryExpr(TokenKind::Subscript, dyn_data, new (mod) IntegerLiteral(1, {}), {});
-            auto memmove_source
-                = dyn_data;
-            auto memmove_size
-                = dyn_size;
-            auto call_memmove = new (mod) CallExpr(
-                memmove_ref,
-                {memmove_dest, memmove_source, memmove_size},
-                {}
-            );
-
-            // @b->lhs().data := b->rhs();
-            auto dereference_subscript = new (mod) UnaryExpr(TokenKind::Dereference, dyn_data, false, {});
-            auto assign = new (mod) BinaryExpr(TokenKind::ColonEq, dereference_subscript, b->rhs(), {});
-
-            // b->lhs().size += 1;
-            auto update_size = new (mod) BinaryExpr(
-                TokenKind::PlusEq,
-                dyn_size,
-                new (mod) IntegerLiteral(1, {}),
-                {}
-            );
-
-            *expr_ptr = new (mod) BlockExpr({grow_if, call_memmove, assign, update_size}, b->location());
-            (void) Analyse(expr_ptr);
+            LCC_ASSERT(Analyse(expr_ptr));
         } break;
 
         case TokenKind::And:
