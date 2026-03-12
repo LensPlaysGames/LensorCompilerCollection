@@ -2662,12 +2662,25 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             }
         }
 
+        if (mod->exports().size()) {
+            out += "Exports:\n";
+            for (auto exported_decl : mod->exports())
+                out += fmt::format(
+                    "- {} : {}\n",
+                    exported_decl->name(),
+                    *exported_decl->type()
+                );
+        }
+
         printed_functions.insert(mod->top_level_function());
         PrintTopLevelNode(mod->top_level_function());
 
-        for (auto* f : mod->functions())
-            if (not printed_functions.contains(f))
-                PrintTopLevelNode(f);
+        for (auto* f : mod->functions()) {
+            if (
+                not printed_functions.contains(f)
+                and f->name() != "format"
+            ) PrintTopLevelNode(f);
+        }
     }
 };
 } // namespace
