@@ -1,4 +1,3 @@
-#include "lcc/utils/platform.hh"
 #include <algorithm>
 #include <glint/ast.hh>
 #include <glint/sema.hh>

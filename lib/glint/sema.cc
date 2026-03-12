@@ -668,12 +668,11 @@ void lcc::glint::Sema::AnalyseModule() {
             {},
             {}
         );
-        as<BlockExpr>(mod.top_level_function()->body())
-            ->children()
-            .insert(
-                as<BlockExpr>(mod.top_level_function()->body())->children().begin(),
-                call_init
-            );
+        auto block_body = as<BlockExpr>(mod.top_level_function()->body());
+        block_body->children().insert(
+            block_body->children().begin(),
+            call_init
+        );
     }
 
     // Parse templates that sema will use to expand and/or rewrite things
@@ -2210,8 +2209,10 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 }
             }
 
-            if (v->type()->is_dynamic_array() and not IsExportedLinkage(v->linkage()))
-                curr_func->dangling_dynarrays().push_back(v);
+            if (
+                v->type()->is_dynamic_array()
+                and not IsExportedLinkage(v->linkage())
+            ) curr_func->dangling_dynarrays().push_back(v);
 
             v->set_lvalue();
 

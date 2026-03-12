@@ -9,6 +9,10 @@
 #include <glint/parser.hh>
 #include <glint/sema.hh>
 
+#include <fmt/format.h>
+
+#include <filesystem>
+
 namespace lcc::glint {
 
 auto module_parsed_stats(Module& m) {
