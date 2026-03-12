@@ -2777,25 +2777,26 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     auto* oj = os[j];
                     auto oj_params = oj->param_types();
 
-                    /// Different number of parameters means these two can’t be the same.
-                    if (oi_params.size() != oj_params.size()) continue;
+                    // Different number of parameters means these two can’t be the same.
+                    if (oi_params.size() != oj_params.size())
+                        continue;
 
-                    /// Compare the parameters.
+                    // Compare the parameters.
                     usz k = 0;
                     for (; k < oi_params.size(); ++k) {
                         if (not Type::Equal(oi_params[isz(k)], oj_params[isz(k)]))
                             break;
                     }
 
-                    /// If all of them are equal, then we have a problem.
+                    // If all of them are equal, then we have a duplicate overload.
                     if (k == oi_params.size()) {
-                        // FIXME: There is a bug here, but I don't yet know what it is. I ran into
-                        // a crash when defining two identical functions (format functions).
                         Error(
                             oi->location(),
-                            "Overload set contains two overloads with the same parameter types, {} and {}",
-                            oi_params[isz(k)],
-                            oj_params[isz(k)]
+                            "Overload set contains two overloads with the same parameter types: {}",
+                            vws::transform(
+                                oi->param_types(),
+                                [](const auto t) { return t->string(); }
+                            )
                         );
                         Note(oj->location(), "Conflicting overload is here");
                         expr->set_sema_errored();
