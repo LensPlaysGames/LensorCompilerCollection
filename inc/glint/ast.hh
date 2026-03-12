@@ -305,8 +305,9 @@ public:
         return _imports;
     }
 
-    /// Get the module imports.
-    auto exports() -> std::vector<Decl*>& { return _exports; }
+    /// Get the module exports.
+    auto exports() -> decltype(_exports)& { return _exports; }
+    auto exports() const -> const decltype(_exports)& { return _exports; }
 
     /// Intern a string and return its index.
     [[nodiscard]]

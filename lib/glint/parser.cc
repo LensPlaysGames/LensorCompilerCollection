@@ -2009,25 +2009,7 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
 }
 
 auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module>> {
-    // Parse module name and create the module.
-
-    // TODO: We probably want to implement a compiler directive that a module
-    // can set to turn this on or off for itself. Oh yeah, that reminds me,
-    // also a way to change the code that's inserted based on the LCC target.
-    //
-    //     *^ sum_type_bad_access_check [ true | false ];
-    //
-    // You know what I actually like more than that, I think? What if the act
-    // of installing a handler is the act of enabling it. That way we also
-    // don't have to do stupid by-hand code generation for the case, as well,
-    // we just call the function they define. To me, it makes sense to be
-    // per-module (per-library, in interop terms), because each module's
-    // maintainer should have the ability to control the code they maintain.
-    // So, a well-tested and thoroughly debugged library can omit the handler
-    // in production while a new Glint programmer who wants to make sure they
-    // know about any weirdness going on can install a classic "print message
-    // and crash" handler. This is sort of like operator overloading but on a
-    // module, I guess, lol.
+    // Parse module name.
     std::string module_name{};
     auto module_kind = Module::IsAnExecutable;
 
@@ -2046,12 +2028,14 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
         NextToken(); /// Yeet module name.
     }
 
+    // Create the module.
     auto m = std::make_unique<Module>(
         f,
         module_name,
         module_kind
     );
     mod = m.get();
+    LCC_ASSERT(mod, "Failed to create Glint Module");
 
     while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
 
@@ -2061,32 +2045,11 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
     while (At(Tk::Ident, Tk::Export)) {
         if (tok.artificial) break;
 
+        bool exported{false};
+
         if (tok.kind == Tk::Export) {
-            // Ensure we are at an exported module, not an exported declaration.
-            if (
-                LookAhead(1)->kind == TokenKind::Ident
-                and LookAhead(1)->text != "import"
-            ) break;
-
-            NextToken(); /// Yeet "export".
-
-            if (not At(Tk::Ident, Tk::String)) {
-                return Error(
-                    ErrorId::Expected,
-                    "Expected 'import' or a module name after 'export'"
-                );
-            }
-
-            if (tok.text != "import") {
-                // At a module name
-                // TODO: Export module by name of tok.text
-            }
-
-            // TODO: We currently don't have a way to export anything other than
-            // declarations, and we also currently have no way to refer to a module
-            // via a declaration. So, yeah.
-            //     mod->add_export(module_by_name);
-            LCC_TODO("Exporting a module doesn't work yet.");
+            exported = true;
+            NextToken(); // Yeet "export"
         }
 
         if (tok.text == "import") {
@@ -2121,6 +2084,10 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
                 ref.location = {loc, tok.location};
                 // Yeet declared name following "as".
                 NextToken();
+            }
+
+            if (exported) {
+                LCC_TODO("Export a Module");
             }
 
             while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));
