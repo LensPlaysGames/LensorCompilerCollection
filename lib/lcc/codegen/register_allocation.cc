@@ -23,6 +23,28 @@ struct AdjacencyMatrix {
     std::unique_ptr<bool[]> data;
     usz size;
 
+    // Mapping of Register Value -> Live Index
+    std::unordered_map<usz, usz> live_index_cache{};
+    auto live_index(const std::vector<Register>& registers, usz register_id) {
+        if (live_index_cache.contains(register_id))
+            return live_index_cache.at(register_id);
+
+        auto found = rgs::find_if(
+            registers,
+            [&](const Register& r) {
+                return r.value == register_id;
+            }
+        );
+        LCC_ASSERT(
+            found != registers.end(),
+            "Did not find referenced register in register list"
+        );
+        // Record in cache
+        auto index = usz(found - registers.begin());
+        live_index_cache[register_id] = index;
+        return index;
+    }
+
     explicit AdjacencyMatrix(usz sz)
         : data(std::make_unique<bool[]>(sz * sz)),
           size(sz) {}
@@ -113,24 +135,6 @@ struct AdjacencyList {
 
 namespace {
 
-usz live_idx_from_register_value(const std::vector<Register>& registers, usz value) {
-    auto found = rgs::find_if(
-        registers,
-        [&](const Register& r) {
-            return value == r.value;
-        }
-    );
-    LCC_ASSERT(
-        found != registers.end(),
-        "Did not find referenced register in register list"
-    );
-    return usz(found - registers.begin());
-}
-
-usz live_idx_from_register(const std::vector<Register>& registers, Register r) {
-    return live_idx_from_register_value(registers, r.value);
-}
-
 void remove_defining(std::vector<usz>& live_values, const MInst& inst) {
     // If the defining use of a virtual register is an operand of this
     // instruction, remove it from vector of live vals.
@@ -177,10 +181,10 @@ void matrix_set_clobbers(
         auto op = inst.get_operand(index);
         if (std::holds_alternative<MOperandRegister>(op)) {
             auto reg = std::get<MOperandRegister>(op);
-            auto live_idx = live_idx_from_register(registers, reg);
+            auto live_idx = matrix.live_index(registers, reg.value);
             for (auto live : live_values) {
                 matrix.set(
-                    live_idx_from_register_value(registers, live),
+                    matrix.live_index(registers, live),
                     live_idx
                 );
                 if constexpr (RA_PRINT) {
@@ -195,10 +199,10 @@ void matrix_set_clobbers(
     }
 
     for (auto r_id : inst.register_clobbers()) {
-        auto live_idx = live_idx_from_register_value(registers, r_id);
+        auto live_idx = matrix.live_index(registers, r_id);
         for (auto live : live_values) {
             matrix.set(
-                live_idx_from_register_value(registers, live),
+                matrix.live_index(registers, live),
                 live_idx
             );
             if constexpr (RA_PRINT) {
@@ -218,6 +222,7 @@ struct RegisterPlusLiveValIndex {
 };
 
 std::vector<RegisterPlusLiveValIndex> collect_vreg_operands(
+    AdjacencyMatrix& matrix,
     const std::vector<Register>& registers,
     const MInst& inst
 ) {
@@ -230,14 +235,14 @@ std::vector<RegisterPlusLiveValIndex> collect_vreg_operands(
         };
         reg.defining_use = inst.is_defining();
         vreg_operands.push_back(
-            {reg, live_idx_from_register(registers, reg)}
+            {reg, matrix.live_index(registers, reg.value)}
         );
     }
     for (auto& op : inst.all_operands()) {
         if (std::holds_alternative<MOperandRegister>(op)) {
             auto reg = std::get<MOperandRegister>(op);
             if (reg.value >= +Module::first_virtual_register)
-                vreg_operands.push_back({reg, live_idx_from_register(registers, reg)});
+                vreg_operands.push_back({reg, matrix.live_index(registers, reg.value)});
         }
     }
     return vreg_operands;
@@ -326,7 +331,7 @@ void collect_interferences_from_instruction(
     // used as operands somewhere in the function (i.e. within the list of
     // registers). Cache the index within the adjacency matrix so we don't
     // have to keep recomputing it.
-    auto vreg_operands = collect_vreg_operands(registers, inst);
+    auto vreg_operands = collect_vreg_operands(matrix, registers, inst);
 
     // Collect clobbered registers
     auto clobbered_regs = collect_clobbered_registers(inst);
@@ -381,7 +386,7 @@ void collect_interferences_from_instruction(
         for (auto live : live_values) {
             matrix.set(
                 r.idx,
-                live_idx_from_register_value(registers, live)
+                matrix.live_index(registers, live)
             );
             if constexpr (RA_PRINT) {
                 fmt::print(
