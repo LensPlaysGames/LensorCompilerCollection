@@ -71,11 +71,94 @@ auto produce_module(Context* context, File& source) -> lcc::Module* {
 
     // The error condition is handled by the caller already.
     if (context->has_error()) return {};
+
     // Stop after sema if requested.
     if (context->option_stopat_sema()) return {};
 
     auto* ir = IRGen::Generate(context, *mod);
     if (context->has_error()) return {};
+
+    if (mod->is_module()) {
+        Section metadata_blob{};
+        metadata_blob.name = metadata_section_name;
+        metadata_blob.contents() = mod->serialise();
+
+        // TODO: If we are given a CLI option to save module metadata(s) in a
+        // separate file in a specific directory, do that. For now just always do
+        // it.
+        fs::path p{"./"};
+        p.replace_filename(mod->name());
+        p.replace_extension(metadata_file_extension);
+        (void) File::Write(
+            metadata_blob.contents().data(),
+            metadata_blob.contents().size(),
+            p
+        );
+
+        if (context->has_option("ast-binary")) {
+            // Print bytes like hexdump, kinda
+            const usz size = metadata_blob.contents().size();
+            usz i = 0;
+            if (size > 15) {
+                for (; i < size - 16; i += 16) {
+                    fmt::print(
+                        "      {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}  {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}",
+                        metadata_blob.contents()[i],
+                        metadata_blob.contents()[i + 1],
+                        metadata_blob.contents()[i + 2],
+                        metadata_blob.contents()[i + 3],
+                        metadata_blob.contents()[i + 4],
+                        metadata_blob.contents()[i + 5],
+                        metadata_blob.contents()[i + 6],
+                        metadata_blob.contents()[i + 7],
+                        metadata_blob.contents()[i + 8],
+                        metadata_blob.contents()[i + 9],
+                        metadata_blob.contents()[i + 10],
+                        metadata_blob.contents()[i + 11],
+                        metadata_blob.contents()[i + 12],
+                        metadata_blob.contents()[i + 13],
+                        metadata_blob.contents()[i + 14],
+                        metadata_blob.contents()[i + 15]
+                    );
+
+                    fmt::print("      |");
+                    // Loop over 16 bytes starting at `i`.
+                    for (usz index = i; index < i + 16; ++index) {
+                        char c = char(metadata_blob.contents()[index]);
+                        if (c < ' ' or c > '~') c = '.';
+                        fmt::print("{}", c);
+                    }
+                    fmt::print("|\n");
+                }
+            }
+
+            // Last line
+            if (i < size) {
+                fmt::print("      ");
+                for (usz index = i; index < i + 16; ++index) {
+                    // If inbounds, print byte, otherwise print blank space to keep alignment.
+                    if (index < size) fmt::print("{:02x}", metadata_blob.contents()[index]);
+                    else fmt::print("  ");
+                    // Space after every one except for the last.
+                    if (index - i != 15) fmt::print(" ");
+                    // Inbetween the 7th and 8th (0-based), there is an extra space.
+                    if (index - i == 7) fmt::print(" ");
+                }
+                fmt::print("      |");
+                for (usz index = i; index < i + 16; ++index) {
+                    if (index < size) {
+                        char c = char(metadata_blob.contents()[index]);
+                        if (c < ' ' or c > '~') c = '.';
+                        fmt::print("{}", c);
+                    } else fmt::print(".");
+                }
+                fmt::print("|\n");
+            }
+        }
+
+        // Tell LCC to emit this section in the output code.
+        ir->add_extra_section(metadata_blob);
+    }
 
     return ir;
 };
