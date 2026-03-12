@@ -52,18 +52,14 @@
     };
   #+end_src
   Basically, if we are looping over a container, and it is modified, we need to adjust the loop code to take that into account. Ideally, we would update the "current" iterator reference (=x= in the above example) after every modification that requires it (possible resize).
-- [Parser/Sema]: Named scopes
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
 - [Sema]: Expression expressions
-
-
 - [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=, =T_enum.count=
 - [Parser/Sema]: Unary operator (keyword) for asserting compile time evaluation
   =evaluate=?
   "evaluate 42 + 27" -> "69".
 - [Sema]: =maps_arguments= function attribute
-- [Sema]: =out;= as first expression of function body becomes declaration of return type
-  Or maybe behind a =builds_result= attribute, where =result= is then automagically declared as a variable of the return type.
+- [Sema]: A =builds_result= attribute, where =result= is then automagically declared as a variable of the return type.
 - [Meta]: glintlang website
   Probably a GitHub organisation with a GitHub Pages website.
   Site generated from Org and org-publish or something like that.
@@ -74,7 +70,6 @@
 
 ** Fixes/Changes
 
-- [Sema]: Fix deproceduring of one side of binary operation: =foo : int() 69; foo + 27;=
 - [Parser/Sema]: Module versioning
 
   Require MAJOR.MINOR.PATCH version in module declaration.
@@ -95,8 +90,6 @@
 
   Also a cool thing to support would be "quick debugging" formats.
   So =printf "{dbg:x}";= expands to =printf "x :: {}", x;=.
-- [Sema]: Include an =int= formatter function, so that people can write =print 420=, and it "just works".
-  Ideally, only if it's needed.
 - [Sema]: Use intrinsic memset for initialisation (optimisation)
   I just used an external memset because that seemed easier at the time. I think the word intrinsic scared (scares?) me.
 - [Parser/Sema]: Tokens in the AST
@@ -106,6 +99,7 @@
   Behind =---case-insensitive= flag?
   Or =---case-sensitive=?
 - [Parser/Sema]: Recursive Lambda
+  What would the syntax be for a lambda to call itself, given it has no name?
 - [Module]: =---ast-binary= to emit binary representation of AST
 
   My thought is that a build system could hash the AST instead of the source, so that trivial changes in whitespace or formatting would not actually cause an invalidation.
