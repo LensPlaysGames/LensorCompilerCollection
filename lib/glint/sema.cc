@@ -844,6 +844,13 @@ void lcc::glint::Sema::AnalyseModule() {
             "    __x /= 10;\n"
             "  };\n"
             "  __out;\n"
+            "};\n"
+            "format : [byte](b : bool) {\n"
+            "  out : [byte];\n"
+            "  if b,\n"
+            "    out += \"true\"\n"
+            "  else out += \"false\";\n"
+            "  out;\n"
             "};\n";
 
         auto& formatters_source = context->create_file(
