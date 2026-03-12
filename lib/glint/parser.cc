@@ -2048,6 +2048,11 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
         bool exported{false};
 
         if (tok.kind == Tk::Export) {
+            // "export" without "import" following is not part of the preamble. It is
+            // a "regular" exported declaration that is part of the module.
+            if (LookAhead(1)->kind != Tk::Ident or LookAhead(1)->text != "import")
+                break;
+
             exported = true;
             NextToken(); // Yeet "export"
         }
