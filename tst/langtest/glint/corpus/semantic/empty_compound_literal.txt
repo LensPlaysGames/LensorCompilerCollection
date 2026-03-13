@@ -1,0 +1,129 @@
+================
+Empty Compound Literal implicit cast to int
+================
+
+x : int !{};
+
+---
+
+(block
+ (return (cast (variable_declaration (compound_literal)))))
+
+================
+Empty Compound Literal explicit cast to int
+================
+
+x :: int !{};
+
+---
+
+(block
+ (return (cast (variable_declaration (compound_literal)))))
+
+================
+Empty Compound Literal, Untyped
+:fail_sema
+================
+
+x :: !{};
+
+---
+
+(block
+ (return (cast (variable_declaration (compound_literal)))))
+
+================
+Empty Compound Literal explicit cast to dynamic array of int
+================
+
+x :: [int] !{};
+
+---
+
+(block
+ (variable_declaration (compound_literal))
+ (return (integer_literal)))
+
+
+================
+Empty Compound Literal implicit cast to return type in explicit return expression
+================
+
+x : int() {
+  return !{};
+};
+
+x;
+
+---
+
+(block
+ (function_declaration
+  (return (compound_literal)))
+ (return (call (name))))
+
+================
+Empty Compound Literal implicit cast to return type in implicit return expression
+================
+
+x : int() !{};
+
+x;
+
+---
+
+(block
+ (function_declaration (return (cast (compound_literal))))
+ (return (call (name))))
+
+================
+Empty Compound Literal explicit cast to return type (dynamic array of int) in implicit return expression
+================
+
+x : [int]()
+  [int] !{};
+
+---
+
+(block
+ (function_declaration (return (cast (compound_literal))))
+ (return (integer_literal)))
+
+================
+Empty Compound Literal implicit cast to return type (dynamic array of int) in implicit return expression
+================
+
+x : [int]()
+  !{};
+
+---
+
+(block
+ (function_declaration (return (cast (compound_literal))))
+ (return (integer_literal)))
+
+================
+Empty Compound Literal implicit cast to return type (dynamic array of int) in explicit return expression
+================
+
+x : [int]()
+  return !{};
+
+---
+
+(block
+ (function_declaration (return (cast (compound_literal))))
+ (return (integer_literal)))
+
+================
+Empty Compound Literal explicit cast to return type (dynamic array of int) in explicit return expression
+================
+
+x : [int]()
+  return [int] !{};
+
+---
+
+(block
+ (function_declaration (return (compound_literal)))
+ (return (integer_literal)))
