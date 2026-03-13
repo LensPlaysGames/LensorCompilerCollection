@@ -1,0 +1,33 @@
+* (De)Serialise VarDecl
+
+Test serialisation and deserialisation of variable declaration expressions.
+
+#+NAME: source
+#+begin_src glint
+  import foo_serialise_vardecl;
+
+  x 69;
+
+  foo;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module foo_serialise_vardecl;
+
+  ;; `e` is a VarDecl, and, as it is the body of an exported named
+  ;; template, will be serialised/deserialised in the BMI. This test is
+  ;; meant to test the DeSer.
+  export x :: template(e : expr)
+    foo :: e;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
+
