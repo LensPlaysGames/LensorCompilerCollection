@@ -4,9 +4,6 @@
 
 - [MIRTest]: MIR -> MIR testing facility
   This will allow us to test register allocation, instruction selection, among other things.
-- [Test Coverage]: floats
-  - LCC IR float lexing/parsing
-  - float return value register allocation
 - [Meta]: Move IR optimisations to their own library
   I want =libopt= to be a library LCC uses that operates on LCC IR; that way, other programs may be able to re-use the optimisations if they choose to target LCC IR (without having to use our driver).
 - [Meta]: Move LCC IR to it's own library (in it's own folder under =lib/=)
@@ -22,6 +19,11 @@
   #+end_example
 
 - [Test]: Convert old opt tests in =tst/= into IR tests.
+- [Fractionals]: Test Coverage
+  - LCC IR float lexing/parsing
+  - float return value register allocation
+    This isn't tested in =tst/codetest/x86_64/corpus/return_registers.txt= yet because codetest has no way of parsing fractionals: /sigh/.
+- [Fractionals]: Uhhhh ... negative numbers exist
 - [Fractionals]: deconstruct binary32/64 to sign, exponent, and mantissa
 
   Also helpers to:
