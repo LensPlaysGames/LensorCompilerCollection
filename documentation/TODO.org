@@ -44,6 +44,9 @@
 
 ** Features
 
+- [Necessary]: Export templated function
+- [Necessary]: Export templated type
+- [Necessary]: Use templated type as partial type specification to template/templated function parameter
 - [QoL]: Ability to iterate a container you are editing while iterating it
   #+begin_src glint
     for x in container, {
