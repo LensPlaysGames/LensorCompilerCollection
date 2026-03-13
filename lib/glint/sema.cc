@@ -1069,10 +1069,14 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
 
         // We have a return expression, hurray!
         if (auto* ret = cast<ReturnExpr>(*last)) {
-            LCC_ASSERT(
-                TryConvert(&ret->value(), ty->return_type()).noop(),
-                "Last expression may be a return expression, sure, but the expression it's returning is not convertible to the return type!"
-            );
+            if (not TryConvert(&ret->value(), ty->return_type()).noop()) {
+                Error(
+                    ret->value()->location(),
+                    "Returned expression of type {} is not convertible to return type {}",
+                    ret->value()->type(),
+                    ty->return_type()
+                );
+            }
             return;
         }
 
@@ -2122,7 +2126,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                                     m.value->type(),
                                     c->type()->elem()
                                 );
-                                c->set_sema_errored();
+                                v->set_sema_errored();
                                 return false;
                             }
                         }
@@ -2134,7 +2138,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                                 "Compound Literal has invalid expression count to be converted to {}",
                                 c->type()
                             );
-                            c->set_sema_errored();
+                            v->set_sema_errored();
                             return false;
                         }
                         for (unsigned i = 0; i < c->values().size(); ++i) {
@@ -2147,7 +2151,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                                     compound_literal_member_expression.value->type(),
                                     s->members().at(i).type
                                 );
-                                c->set_sema_errored();
+                                v->set_sema_errored();
                                 return false;
                             }
                         }
@@ -2157,7 +2161,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                             "Sorry, but initialisation of values of {} type from compound literals is not yet supported",
                             c->type()
                         );
-                        c->set_sema_errored();
+                        v->set_sema_errored();
                         return false;
                     }
                 }
