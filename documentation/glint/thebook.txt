@@ -722,6 +722,14 @@ _________________
   subtraction (`-' ), multiplication (`*'), division (`/'), and modulo
   (`%').
 
+  ,----
+  | 9 + 10;
+  | 71 - 2;
+  | x * y;
+  | 5 / 7;
+  | x % 10;
+  `----
+
 
 2.4.2 Bitwise
 -------------
@@ -730,6 +738,13 @@ _________________
   you to operate directly on the data bits, rather than on sets of bits
   with some applied semantics (i.e. an 8-bit signed byte). Bitwise
   operations include AND, OR, XOR, and NOT.
+
+  ,----
+  | 0b11 bit& 0b10; ;; 0b10
+  | 0b00 bit| 0b01; ;; 0b01
+  | 0b10 bit^ 0b11; ;; 0b01
+  | bit~ byte 0x00; ;; 0xff
+  `----
 
 
 2.4.3 Implicit Casting

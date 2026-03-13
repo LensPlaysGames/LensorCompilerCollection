@@ -505,15 +505,32 @@ The following questions relate to the above example.
 
 Glint programs often need to do basic math; for this, there are the arithmetic operators. These include the standard addition (=+=), subtraction (=-= ), multiplication (=*=), division (=/=), and modulo (=%=).
 
+#+begin_src glint
+  9 + 10;
+  71 - 2;
+  x * y;
+  5 / 7;
+  x % 10;
+#+end_src
+
 *** Bitwise
 
 On computers, data is represented as bits. Bitwise operations allow you to operate directly on the data bits, rather than on sets of bits with some applied semantics (i.e. an 8-bit signed byte). Bitwise operations include AND, OR, XOR, and NOT.
+
+#+begin_src glint
+  0b11 bit& 0b10; ;; 0b10
+  0b00 bit| 0b01; ;; 0b01
+  0b10 bit^ 0b11; ;; 0b01
+  bit~ byte 0x00; ;; 0xff
+#+end_src
 
 *** Implicit Casting
 
 # What types of coercion are allowed.
 
 In Glint, the philosophy is that you should have to write less code /when you can/. That means that, as long as everything is clear to the compiler, you don't need to mark up your program with meaning that is already implied. This reduces the code the Glint programmer has to write, and, in turn, reduces chances that they may introduce a bug.
+
+# TODO: When does implicit conversion occur?
 
 An integer is implicitly convertible to a boolean, and vice versa.
 

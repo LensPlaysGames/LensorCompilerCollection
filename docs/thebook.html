@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-03-12 Thu 23:42 -->
+<!-- 2026-03-12 Thu 23:51 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Programming in Lensor Glint</title>
@@ -406,7 +406,7 @@ For now, you just need to learn about something called <i>memory</i>. A computer
 A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary <i>bits</i> (values that may only be on or off), it is addressed via <i>bytes</i>. In hardware, a byte (the minimum addressable unit in memory) is <i>usually</i> eight bits.
 </p>
 
-<pre class="example" id="org55c6c49">
+<pre class="example" id="orgba919d7">
 MEMORY
 | off on  off off off on  off on | ...
 | BYTE 0                         | BYTE 1
@@ -848,7 +848,7 @@ y; <span class="org-comment">;; Error! Unknown symbol y'</span>
 <p>
 The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
 </p>
-<pre class="example" id="orgae105e4">
+<pre class="example" id="org8c4c10a">
 root
 |-- x
 `-- block
@@ -971,6 +971,15 @@ The following questions relate to the above example.
 <p>
 Glint programs often need to do basic math; for this, there are the arithmetic operators. These include the standard addition (<code>+</code>), subtraction (<code>-</code> ), multiplication (<code>*</code>), division (<code>/</code>), and modulo (<code>%</code>).
 </p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-number">9</span> <span class="org-operator">+</span> <span class="org-number">10</span>;
+<span class="org-number">71</span> <span class="org-operator">-</span> <span class="org-number">2</span>;
+x <span class="org-operator">*</span> y;
+<span class="org-number">5</span> <span class="org-operator">/</span> <span class="org-number">7</span>;
+x <span class="org-operator">%</span> <span class="org-number">10</span>;
+</pre>
+</div>
 </div>
 </div>
 <div id="outline-container-bitwise" class="outline-4">
@@ -979,6 +988,14 @@ Glint programs often need to do basic math; for this, there are the arithmetic o
 <p>
 On computers, data is represented as bits. Bitwise operations allow you to operate directly on the data bits, rather than on sets of bits with some applied semantics (i.e. an 8-bit signed byte). Bitwise operations include AND, OR, XOR, and NOT.
 </p>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-number">0b11</span> <span class="org-operator">bit&amp;</span> <span class="org-number">0b10</span>; <span class="org-comment">;; 0b10</span>
+<span class="org-number">0b00</span> <span class="org-operator">bit|</span> <span class="org-number">0b01</span>; <span class="org-comment">;; 0b01</span>
+<span class="org-number">0b10</span> <span class="org-operator">bit^</span> <span class="org-number">0b11</span>; <span class="org-comment">;; 0b01</span>
+<span class="org-operator">bit~</span> <span class="org-type">byte</span> <span class="org-number">0x00</span>; <span class="org-comment">;; 0xff</span>
+</pre>
+</div>
 </div>
 </div>
 <div id="outline-container-implicit-casting" class="outline-4">
@@ -1417,7 +1434,7 @@ foo.x <span class="org-operator">+</span> foo.y;
 </div>
 </div>
 <ol class="org-ol">
-<li><a id="orgfd7a17c"></a>Supplanted Members<br />
+<li><a id="org8aff8f0"></a>Supplanted Members<br />
 <div class="outline-text-5" id="text-2-8-1-1">
 <p>
 A struct may have another struct (or sum) type supplanted within it; this means that the supplanted type's members are now accessible as if they were members of the struct the member resides in. In reality, the compiler does generate a unique name for the member and generates code to access that member by name; this construct is simply for the programmer's convenience.
@@ -2397,7 +2414,7 @@ Writing this example actually caught a bug in the compiler implementation regard
 <div class="org-src-container">
 <pre class="src src-glint"><span class="org-function-name">gcd</span> <span class="org-operator">:</span> <span class="org-type">uint</span><span class="org-delimiter">(</span>a <span class="org-operator">:</span> <span class="org-type">uint</span>, b <span class="org-operator">:</span> <span class="org-type">uint</span><span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
   <span class="org-keyword">if</span> b <span class="org-operator">=</span> <span class="org-number">0</span>, <span class="org-keyword">return</span> a;
-  gcd b, a % b;
+  gcd b, a <span class="org-operator">%</span> b;
 <span class="org-delimiter">}</span>;
 
 <span class="org-comment">;; Calculate the greatest common denominator of 32 and 80, and return</span>
