@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-03-06 Fri 03:41 -->
+<!-- 2026-03-12 Thu 23:42 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Programming in Lensor Glint</title>
@@ -221,7 +221,7 @@ For now, you just need to learn about something called <i>memory</i>. A computer
 A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary <i>bits</i> (values that may only be on or off), it is addressed via <i>bytes</i>. In hardware, a byte (the minimum addressable unit in memory) is <i>usually</i> eight bits.
 </p>
 
-<pre class="example" id="org1dfcc9e">
+<pre class="example" id="orgfa01a2a">
 MEMORY
 | off on  off off off on  off on | ...
 | BYTE 0                         | BYTE 1
@@ -663,7 +663,7 @@ y; <span class="org-comment">;; Error! Unknown symbol y'</span>
 <p>
 The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
 </p>
-<pre class="example" id="org40550ae">
+<pre class="example" id="org7601d2d">
 root
 |-- x
 `-- block
@@ -944,6 +944,25 @@ A fixed array is compatible with a ranged for loop expression (more on that late
   <span class="org-keyword">print</span> i, <span class="org-number">`\n`</span>;
 </pre>
 </div>
+
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-comment">;; Array Declaration</span>
+foo <span class="org-operator">:</span> <span class="org-type">[byte 4]</span>;
+bar <span class="org-operator">::</span> <span class="org-string">"foo"</span>;
+baz <span class="org-operator">:</span> <span class="org-type">[byte 4]</span>
+  <span class="org-operator">!</span><span class="org-delimiter">{</span> <span class="org-number">`4`</span>; <span class="org-number">`2`</span>; <span class="org-number">`0`</span>; <span class="org-number">`\0`</span>; <span class="org-delimiter">}</span>;
+
+<span class="org-comment">;; Address Calculation</span>
+foo/first <span class="org-operator">::</span> foo[<span class="org-number">0</span>]; <span class="org-comment">;; byte.ptr</span>
+foo/second <span class="org-operator">::</span> foo[<span class="org-number">1</span>]; <span class="org-comment">;; byte.ptr</span>
+
+<span class="org-comment">;; Element Access</span>
+foo/first-value <span class="org-operator">::</span> <span class="org-operator">@</span>foo[<span class="org-number">0</span>];
+
+<span class="org-comment">;; Modification (here be dragons)</span>
+<span class="org-operator">@</span>bar[<span class="org-number">0</span>] <span class="org-operator">:=</span> <span class="org-number">`b`</span>;
+</pre>
+</div>
 </div>
 </div>
 <div id="outline-container-dynamic-arrays" class="outline-4">
@@ -1141,7 +1160,7 @@ A view is compatible with a ranged for loop expression (more on that later).
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint"><span class="org-keyword">match</span> value_of_sum_type<span class="org-warning">,</span> <span class="org-delimiter">{</span>
+<pre class="src src-glint"><span class="org-keyword">match</span> value_of_sum_type, <span class="org-delimiter">{</span>
   .member0 expr;
   .member1 expr;
 <span class="org-delimiter">}</span>;
@@ -1161,9 +1180,9 @@ A view is compatible with a ranged for loop expression (more on that later).
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">switch value_of_enum_type, <span class="org-delimiter">{</span>
-  <span class="org-warning">.</span>enumerator0 expr;
-  <span class="org-warning">.</span>enumerator1 expr;
+<pre class="src src-glint"><span class="org-keyword">switch</span> value_of_enum_type, <span class="org-delimiter">{</span>
+  .enumerator0 expr;
+  .enumerator1 expr;
 <span class="org-delimiter">}</span>;
 </pre>
 </div>
@@ -1306,9 +1325,9 @@ To avoid long chains of <code>if</code> expressions comparing against each enume
 foo <span class="org-operator">:</span> <span class="org-type">A</span>;
 foo <span class="org-operator">:=</span> A.x;
 
-switch foo, <span class="org-delimiter">{</span>
-  <span class="org-warning">.</span>x expr;
-  <span class="org-warning">.</span>y expr;
+<span class="org-keyword">switch</span> foo, <span class="org-delimiter">{</span>
+  .x expr;
+  .y expr;
 <span class="org-delimiter">}</span>;
 </pre>
 </div>
@@ -1428,7 +1447,7 @@ foo <span class="org-operator">:</span> <span class="org-type">A</span>;
 foo.x <span class="org-operator">:=</span> <span class="org-number">69</span>;
 foo.y <span class="org-operator">:=</span> foo.x;
 
-<span class="org-keyword">match</span> foo<span class="org-warning">,</span> <span class="org-delimiter">{</span>
+<span class="org-keyword">match</span> foo, <span class="org-delimiter">{</span>
   .x out <span class="org-operator">:=</span> foo.x;
   .y out <span class="org-operator">:=</span> foo.y;
 <span class="org-delimiter">}</span>;
@@ -1585,7 +1604,7 @@ First, let's look at the most basic template expression: the <i>identity</i> tem
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">template<span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">expr</span><span class="org-delimiter">)</span> x;
+<pre class="src src-glint"><span class="org-keyword">template</span><span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">expr</span><span class="org-delimiter">)</span> x;
 </pre>
 </div>
 
@@ -1598,7 +1617,7 @@ Often, you want to use a template more than once; for convenience, a Glint progr
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">identity <span class="org-operator">::</span> template<span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">expr</span><span class="org-delimiter">)</span> x;
+<pre class="src src-glint">identity <span class="org-operator">::</span> <span class="org-keyword">template</span><span class="org-delimiter">(</span>x <span class="org-operator">:</span> <span class="org-type">expr</span><span class="org-delimiter">)</span> x;
 
 <span class="org-comment">;; Evaluates to '69420'.</span>
 identity <span class="org-number">69420</span>;
@@ -1698,7 +1717,7 @@ Now, upon invocation of <code>vector_push</code>, the compiler will first look f
 </p>
 
 <div class="org-src-container">
-<pre class="src src-glint">vector_push <span class="org-operator">::</span> template<span class="org-delimiter">(</span>element <span class="org-operator">:</span> <span class="org-type">type</span><span class="org-delimiter">)</span>
+<pre class="src src-glint">vector_push <span class="org-operator">::</span> <span class="org-keyword">template</span><span class="org-delimiter">(</span>element <span class="org-operator">:</span> <span class="org-type">type</span><span class="org-delimiter">)</span>
   <span class="org-function-name">vector_push_impl</span> <span class="org-operator">:</span> <span class="org-type">void</span><span class="org-delimiter">(</span>vec <span class="org-operator">:</span> <span class="org-delimiter">(</span>vector element<span class="org-delimiter">)</span>, val <span class="org-operator">:</span> <span class="org-type">element</span><span class="org-delimiter">)</span>
     <span class="org-warning">...</span>;
 
