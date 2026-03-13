@@ -790,6 +790,16 @@ _________________
   | byte 42;
   `----
 
+  To explicitly perform default initialization, provide the empty
+  compound literal as the cast expression. This works with any
+  (default-initializable) type.
+  ,----
+  | byte !{}; ;; results in `\0`
+  `----
+
+  The above expression results in ``\0`' because `byte' gets
+  zero-initialized by default.
+
 
 2.4.5 Glint Exercise
 --------------------

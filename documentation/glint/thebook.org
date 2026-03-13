@@ -557,6 +557,13 @@ To cast integer =42= to =byte=:
   byte 42;
 #+end_src
 
+To explicitly perform default initialization, provide the empty compound literal as the cast expression. This works with any (default-initializable) type.
+#+begin_src glint
+  byte !{}; ;; results in `\0`
+#+end_src
+
+The above expression results in =`\0`= because =byte= gets zero-initialized by default.
+
 *** Glint Exercise
 
 TODO
