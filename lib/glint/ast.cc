@@ -873,6 +873,18 @@ auto lcc::glint::Expr::CloneImpl(
             return clone;
         }
 
+        case Kind::ModuleDecl: {
+            auto m = as<ModuleDecl>(expr);
+            auto& r = m->reference();
+            return new (mod) ModuleDecl(
+                {std::string(r.name),
+                 r.module,
+                 std::string(r.aliased_name),
+                 r.location},
+                r.location
+            );
+        }
+
         case Kind::FuncDecl: {
             auto f = as<FuncDecl>(expr);
             return new (mod) FuncDecl(
@@ -1189,6 +1201,7 @@ auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
         case Kind::StringLiteral:
         case Kind::IntrinsicCall:
         case Kind::Module:
+        case Kind::ModuleDecl:
             return {};
 
         case Kind::Group: {
@@ -1362,6 +1375,7 @@ auto lcc::glint::Expr::children() const -> std::vector<lcc::glint::Expr*> {
         case Kind::StringLiteral:
         case Kind::IntrinsicCall:
         case Kind::Module:
+        case Kind::ModuleDecl:
             return {};
 
         case Kind::Group: {
@@ -1544,6 +1558,7 @@ auto lcc::glint::Expr::langtest_name() const -> std::string_view {
         case Kind::VarDecl:
         case Kind::FuncDecl:
         case Kind::TemplatedFuncDecl:
+        case Kind::ModuleDecl:
         case Kind::NameRef:
         case Kind::Apply:
         case Kind::Group:
@@ -1958,6 +1973,7 @@ auto lcc::glint::ToString(lcc::glint::Expr::Kind k) -> std::string_view {
         case K::TypeDecl: return "type_declaration";
         case K::TypeAliasDecl: return "type_alias_declaration";
         case K::EnumeratorDecl: return "enum_declaration";
+        case K::ModuleDecl: return "module_declaration";
         case K::VarDecl: return "variable_declaration";
         case K::FuncDecl: return "function_declaration";
         case K::TemplatedFuncDecl: return "templated_function_declaration";
@@ -2322,6 +2338,18 @@ auto lcc::glint::Module::ToSource(const Expr& e) -> Result<std::string> {
 
             return fmt::format("switch {} {{{}}}", *e_matchee, match_exprs_string);
         }
+
+        case Expr::Kind::ModuleDecl: {
+            auto e_module_decl = as<ModuleDecl>(&e);
+            if (e_module_decl->reference().aliased_name.size()) {
+                return fmt::format(
+                    "import {} as {}",
+                    e_module_decl->reference().name,
+                    e_module_decl->reference().aliased_name
+                );
+            }
+            return fmt::format("import {}", e_module_decl->reference().name);
+        } break;
 
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::IntrinsicCall:

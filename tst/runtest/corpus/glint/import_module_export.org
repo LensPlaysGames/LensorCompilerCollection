@@ -1,0 +1,29 @@
+* P imports B exports import A
+
+#+NAME: source
+#+begin_src glint
+  ;; program P;
+  import B;
+  x;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module B;
+  export import A;
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module A;
+  export x :: 69;
+#+end_src
+
+#+NAME: status
+#+begin_example
+69
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example

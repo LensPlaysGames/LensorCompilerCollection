@@ -550,6 +550,21 @@ auto Module::serialise_expr(
             else write_t(ModuleDescription::bad_expr_index);
         } break;
 
+        // ModuleDecl
+        //     alias_length :u16
+        //     alias :u8[alias_length]
+        case Expr::Kind::ModuleDecl: {
+            auto* m = as<ModuleDecl>(expr);
+            auto& ref = m->reference();
+
+            // NOTE: module's actual name is encoded in declaration header, no need to
+            // also store it here.
+
+            write_tag();
+            write_t(u16(ref.aliased_name.size()));
+            write_each(ref.aliased_name);
+        } break;
+
         case Expr::Kind::FuncDecl:
         case Expr::Kind::TemplatedFuncDecl:
         case Expr::Kind::TypeAliasDecl:
@@ -570,6 +585,10 @@ auto Module::serialise_expr(
 
     auto expr_index = ModuleDescription::ExprIndex(cache.size());
 
+    LCC_ASSERT(
+        indices.contains(expr),
+        "Expression being serialised did not get counted in AoT index calculation"
+    );
     LCC_ASSERT(
         indices.at(expr) == expr_index,
         "Mismatch in AoT index calculation and actual serialisation"

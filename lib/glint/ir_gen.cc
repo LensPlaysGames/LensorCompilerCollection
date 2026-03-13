@@ -1843,6 +1843,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         } break;
 
         // no-op/handled elsewhere
+        case K::ModuleDecl:
         case K::Module:
         case K::Sizeof:
         case K::Alignof:

@@ -94,6 +94,13 @@ auto ASTEvaluator::eval_expr(Expr* expr) -> Expr* {
             LCC_TODO("GlintEval: {}", ToString(expr->kind()));
         } break;
 
+        case Expr::Kind::ModuleDecl: {
+            const auto m = as<ModuleDecl>(expr);
+
+            (void) m;
+            LCC_TODO("GlintEval: {}", ToString(expr->kind()));
+        } break;
+
         case Expr::Kind::EnumeratorDecl: {
             const auto e = as<EnumeratorDecl>(expr);
 

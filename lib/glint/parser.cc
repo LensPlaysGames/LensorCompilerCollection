@@ -2047,6 +2047,8 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
 
         bool exported{false};
 
+        auto import_location = tok.location;
+
         if (tok.kind == Tk::Export) {
             // "export" without "import" following is not part of the preamble. It is
             // a "regular" exported declaration that is part of the module.
@@ -2058,7 +2060,6 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
         }
 
         if (tok.text == "import") {
-            Location loc = tok.location;
             NextToken(); /// Yeet "import".
 
             if (not At(Tk::Ident, Tk::String))
@@ -2067,9 +2068,12 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
                     "Expected a module name after 'import'"
                 );
 
+            // Extend location to include "import <module-name>"
+            import_location = {import_location, tok.location};
+
             // Add the module to be loaded later.
-            mod->add_import(tok.text, {loc, tok.location});
-            std::string imported_module_name{tok.text};
+            mod->add_import(std::move(tok.text), import_location);
+            auto& ref = mod->imports().back();
             NextToken(); // Yeet module name.
 
             // Contextual Keyword
@@ -2083,16 +2087,26 @@ auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module
                         "Expected a declared module name after 'as'"
                     );
                 }
+
+                // Extend location to include "as <declared-name>"
+                import_location = {import_location, tok.location};
+
                 // Update reference with aliased name
-                auto& ref = mod->imports().back();
-                ref.aliased_name = tok.text;
-                ref.location = {loc, tok.location};
+                ref.aliased_name = std::move(tok.text);
+                ref.location = import_location;
                 // Yeet declared name following "as".
                 NextToken();
             }
 
             if (exported) {
-                LCC_TODO("Export a Module");
+                auto module_decl = new (*mod) ModuleDecl(
+                    {std::string(ref.name),
+                     nullptr,
+                     std::string(ref.aliased_name),
+                     ref.location},
+                    import_location
+                );
+                mod->add_export(module_decl);
             }
 
             while (+ConsumeExpressionSeparator(ExpressionSeparator::Hard));

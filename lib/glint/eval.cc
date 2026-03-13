@@ -31,6 +31,7 @@ auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) ->
         case Kind::TypeDecl:
         case Kind::VarDecl:
         case Kind::TemplatedFuncDecl:
+        case Kind::ModuleDecl:
             return not_a_constant_expr();
 
         // TODO: Implement

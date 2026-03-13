@@ -216,21 +216,23 @@ auto ToString(TokenKind kind) -> std::string_view;
 class Module {
 public:
     struct Ref {
-        std::string name;
-        Module* module;
-        Location location;
-        std::string aliased_name;
+        std::string name{};
+        Module* module{};
+        Location location{};
+        std::string aliased_name{};
+
+        Ref() = default;
 
         // STYLE NOTE: Because this is a struct where we are meant to access the members
         // directly, we use a trailing underscore to disambiguate.
         Ref(std::string name_, Module* module_, Location location_)
-            : name(std::move(name_)),
+            : name(name_),
               module(module_),
               location(location_),
               aliased_name("") {}
 
         Ref(std::string name_, Module* module_, std::string alias_, Location location_)
-            : name(std::move(name_)),
+            : name(name_),
               module(module_),
               location(location_),
               aliased_name(alias_) {}
@@ -1645,6 +1647,7 @@ public:
         TypeAliasDecl,
         EnumeratorDecl,
         TemplatedFuncDecl,
+        ModuleDecl,
         VarDecl,
         FuncDecl,
 
@@ -2026,6 +2029,28 @@ public:
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {
         return expr->kind() >= Kind::VarDecl and expr->kind() <= Kind::FuncDecl;
+    }
+};
+
+class ModuleDecl : public Decl {
+    Module::Ref _reference{};
+
+public:
+    ModuleDecl(const Module::Ref reference, Location location)
+        : Decl(
+              Kind::ModuleDecl,
+              std::string(reference.name),
+              Type::Void,
+              location
+          ),
+          _reference(reference) {}
+
+    auto reference() -> decltype(_reference)& { return _reference; }
+    auto reference() const -> const decltype(_reference) { return _reference; }
+
+    [[nodiscard]]
+    static auto classof(const Expr* expr) -> bool {
+        return expr->kind() == Kind::ModuleDecl;
     }
 };
 

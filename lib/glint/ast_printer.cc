@@ -50,6 +50,22 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                 return;
             }
 
+            case K::ModuleDecl: {
+                auto* m = as<lcc::glint::ModuleDecl>(e);
+                PrintBasicHeader("ModuleDecl", e);
+                out += fmt::format(
+                    " {}{}{}",
+                    C(name_colour),
+                    m->name(),
+                    C(Reset)
+                );
+                if (m->reference().aliased_name.size())
+                    out += fmt::format(" as {}{}", C(name_colour), m->reference().name);
+
+                out += '\n';
+                return;
+            }
+
             case K::TemplatedFuncDecl: {
                 auto* t = as<lcc::glint::TemplatedFuncDecl>(e);
                 PrintLinkage(t->linkage());
@@ -341,12 +357,22 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
 
         if (mod->exports().size()) {
             out += "Exports:\n";
-            for (auto exported_decl : mod->exports())
-                out += fmt::format(
-                    "- {} : {}\n",
-                    exported_decl->name(),
-                    *exported_decl->type()
-                );
+            for (auto exported_decl : mod->exports()) {
+                if (is<lcc::glint::ModuleDecl>(exported_decl)) {
+                    auto m = as<lcc::glint::ModuleDecl>(exported_decl);
+                    auto& r = m->reference();
+
+                    out += fmt::format("- module {}", r.name);
+                    if (r.aliased_name.size())
+                        out += fmt::format(" as {}", r.aliased_name);
+                    out += '\n';
+                } else
+                    out += fmt::format(
+                        "- {} : {}\n",
+                        exported_decl->name(),
+                        *exported_decl->type()
+                    );
+            }
         }
 
         printed_functions.insert(mod->top_level_function());

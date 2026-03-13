@@ -48,6 +48,7 @@ void lcc::glint::Module::scope_walk(
 
     switch (e->kind()) {
         // No scope changes
+        case Expr::Kind::ModuleDecl:
         case Expr::Kind::Alignof:
         case Expr::Kind::Binary:
         case Expr::Kind::Call:
@@ -807,6 +808,26 @@ auto lcc::glint::Module::deserialise(
                     exprs.insert(exprs.begin() + expr_index, v);
                 } break;
 
+                // ModuleDecl
+                //     alias_length: u16
+                //     alias: u8[alias_length]
+                case Expr::Kind::ModuleDecl: {
+                    auto alias_length = read_t(u16());
+                    std::string deserialised_alias{};
+                    deserialised_alias.reserve(alias_length);
+                    for (decltype(alias_length) i = 0; i < alias_length; ++i)
+                        deserialised_alias += (char) read_t(u8());
+
+                    auto n = new (*this) ModuleDecl(
+                        {"",
+                         nullptr,
+                         std::move(deserialised_alias),
+                         {}},
+                        {}
+                    );
+                    exprs.insert(exprs.begin() + expr_index, n);
+                } break;
+
                 case Expr::Kind::Module:
                 case Expr::Kind::EnumeratorDecl:
                 case Expr::Kind::FuncDecl:
@@ -1459,6 +1480,7 @@ auto lcc::glint::Module::deserialise(
             case ModuleDescription::DeclarationHeader::Kind::VARIABLE:
             case ModuleDescription::DeclarationHeader::Kind::FUNCTION:
             case ModuleDescription::DeclarationHeader::Kind::TEMPLATE:
+            case ModuleDescription::DeclarationHeader::Kind::MODULE:
                 break;
         }
         // NOTE: Also look above for exhaustive handling of decl header kinds.
@@ -1472,7 +1494,12 @@ auto lcc::glint::Module::deserialise(
                     is<DeclaredType>(ty),
                     "Can't make TypeDecl from a Type that is not derived from DeclaredType"
                 );
-                auto type_decl = new (*this) TypeDecl(this, name, as<DeclaredType>(ty), {});
+                auto type_decl = new (*this) TypeDecl(
+                    this,
+                    name,
+                    as<DeclaredType>(ty),
+                    {}
+                );
                 type_decl->set_sema_done();
                 auto decl = scope->declare(context, std::string(name), type_decl);
             } break;
@@ -1484,7 +1511,7 @@ auto lcc::glint::Module::deserialise(
                 auto decl = scope->declare(context, std::string(name), type_alias_decl);
             } break;
 
-                // Created from Expr::Kind::VarDecl
+            // Created from Expr::Kind::VarDecl
             case ModuleDescription::DeclarationHeader::Kind::TEMPLATE:
             case ModuleDescription::DeclarationHeader::Kind::VARIABLE: {
                 // FIXME: Should possibly be reexported.
@@ -1523,6 +1550,26 @@ auto lcc::glint::Module::deserialise(
                 // we can't assign to it...
                 func_decl->set_sema_done();
                 auto decl = scope->declare(context, std::string(name), func_decl);
+            } break;
+
+            case ModuleDescription::DeclarationHeader::Kind::MODULE: {
+                LCC_ASSERT(
+                    decl_hdr.expr_index != ModuleDescription::bad_expr_index,
+                    "Module must encode ModuleDecl expression and store index in declaration header (for aliased name)"
+                );
+
+                auto* m = cast<ModuleDecl>(exprs.at(decl_hdr.expr_index));
+                LCC_ASSERT(
+                    m,
+                    "Module must encode _ModuleDecl_ expression, not {}",
+                    exprs.at(decl_hdr.expr_index)->string(context->option_use_colour())
+                );
+
+                // Just in case
+                m->reference().name = name;
+
+                add_import(std::string(name));
+                imports().back().aliased_name = m->reference().aliased_name;
             } break;
 
             // Created from Expr::Kind::EnumeratorDecl

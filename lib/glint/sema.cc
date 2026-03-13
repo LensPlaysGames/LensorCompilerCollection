@@ -158,6 +158,7 @@ auto lcc::glint::Sema::HasSideEffects(Expr* expr) -> bool {
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::VarDecl:
         case Expr::Kind::FuncDecl:
+        case Expr::Kind::ModuleDecl:
         case Expr::Kind::TemplatedFuncDecl:
         case Expr::Kind::EnumeratorDecl:
         case Expr::Kind::Apply:
@@ -618,17 +619,24 @@ void lcc::glint::Sema::AnalyseModule() {
     // Load imported modules.
     // Don't load imported modules twice.
     std::unordered_set<Module*> loaded_modules{};
-    for (auto& import_ref : mod.imports()) {
-        if (loaded_modules.contains(import_ref.module))
+    // Don't call module init functions twice
+    std::unordered_set<std::string_view> init_functions_called{};
+    // Index-based loop, such as to avoid iterator invalidation from
+    // deserialising a module that exports a module, effectively adding an
+    // import to this module during the process of deserialisation.
+    for (usz i = 0; i < mod.imports().size(); ++i) {
+        auto* import_ref = &mod.imports().at(i);
+
+        if (loaded_modules.contains(import_ref->module))
             continue;
 
         bool loaded{false};
         std::vector<std::string> paths_tried{};
 
         for (const auto& include_dir : context->include_directories()) {
-            loaded = try_get_metadata_blob_from_gmeta(import_ref, include_dir, paths_tried)
-                  or try_get_metadata_blob_from_object(import_ref, include_dir, paths_tried)
-                  or try_get_metadata_blob_from_assembly(import_ref, include_dir, paths_tried);
+            loaded = try_get_metadata_blob_from_gmeta(*import_ref, include_dir, paths_tried)
+                  or try_get_metadata_blob_from_object(*import_ref, include_dir, paths_tried)
+                  or try_get_metadata_blob_from_assembly(*import_ref, include_dir, paths_tried);
             if (loaded) break;
         }
 
@@ -636,43 +644,60 @@ void lcc::glint::Sema::AnalyseModule() {
             // TODO: Link/reference help documentation on how to point the compiler to
             // look in the proper place for Glint metadata, and how to produce it.
             Error(
-                import_ref.location,
+                import_ref->location,
                 "Could not find imported module {} in any include directory.\n"
                 "Working Directory: {}\n"
                 "Paths tried:\n"
                 "{}",
-                import_ref.name,
+                import_ref->name,
                 std::filesystem::current_path().lexically_normal().string(),
                 fmt::join(paths_tried, "\n")
             );
             std::exit(1);
         }
 
-        LCC_ASSERT(import_ref.module);
-        loaded_modules.emplace(import_ref.module);
+        LCC_ASSERT(import_ref->module);
+        loaded_modules.emplace(import_ref->module);
 
         // Add imported functions from imported module to our list of functions as
         // imported... I'll say imported one more time just so you don't get confused.
-        for (auto f : import_ref.module->functions()) {
+        for (auto f : import_ref->module->functions()) {
             if (IsImportedLinkage(f->linkage()))
                 mod.add_function(f);
         }
+        // Add exported modules from imported module to our list of imports.
+        // When deserialising, we collect imports that should be "bubbled up" into
+        // the deserialising module's import list.
+        for (const auto& m : import_ref->module->imports()) {
+            // The module that imported these has already called the init function
+            // in *their* init function, so no need for us to do that here (afaik).
+            init_functions_called.emplace(m.name);
 
-        // Insert call to init function of imported module.
-        auto call_init = new (mod) CallExpr(
-            new (mod) NameRefExpr(
-                Module::InitFunctionName(import_ref.name),
-                mod.global_scope(),
+            mod.add_import(std::string(m.name));
+            if (m.aliased_name.size())
+                mod.imports().back().aliased_name = m.aliased_name;
+            // iterator invalidation protection
+            import_ref = &mod.imports().at(i);
+        }
+        // Insert call to init function of imported module, if it hasn't already
+        // been called.
+        if (not init_functions_called.contains(import_ref->name)) {
+            auto call_init = new (mod) CallExpr(
+                new (mod) NameRefExpr(
+                    Module::InitFunctionName(import_ref->name),
+                    mod.global_scope(),
+                    {}
+                ),
+                {},
                 {}
-            ),
-            {},
-            {}
-        );
-        auto block_body = as<BlockExpr>(mod.top_level_function()->body());
-        block_body->children().insert(
-            block_body->children().begin(),
-            call_init
-        );
+            );
+            init_functions_called.emplace(import_ref->name);
+            auto block_body = as<BlockExpr>(mod.top_level_function()->body());
+            block_body->children().insert(
+                block_body->children().begin(),
+                call_init
+            );
+        }
     }
 
     // Parse templates that sema will use to expand and/or rewrite things
@@ -2236,6 +2261,29 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
                 *expr_ptr = new (mod) GroupExpr({v, initializer}, v->location());
                 LCC_ASSERT(Analyse(expr_ptr));
+            }
+        } break;
+
+        case Expr::Kind::ModuleDecl: {
+            auto* m = as<ModuleDecl>(expr);
+            auto& ref = m->reference();
+            for (auto& importee : mod.imports()) {
+                if (
+                    importee.name == ref.name
+                    or (ref.aliased_name.size() and importee.aliased_name == ref.aliased_name)
+                ) {
+                    ref.module = importee.module;
+                    break;
+                }
+            }
+            if (not ref.module) {
+                // FIXME: Is this an ICE?
+                Error(
+                    m->location(),
+                    "Could not resolve module referenced by module declaration"
+                );
+                m->set_sema_errored();
+                return false;
             }
         } break;
 
@@ -4873,10 +4921,8 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
     if (syms.empty()) {
         /// Search imported modules here.
         for (const auto& ref : mod.imports()) {
-            if (
-                expr->name() == ref.name
-                or (expr->name() == ref.aliased_name)
-            ) {
+            if (expr->name() == ref.name
+                or (ref.aliased_name.size() and expr->name() == ref.aliased_name)) {
                 // Set expr->target() and expr->type() to something reasonable.
                 auto* module_expr = new (mod) ModuleExpr(
                     ref.module,

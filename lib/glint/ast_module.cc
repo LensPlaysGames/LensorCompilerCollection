@@ -222,6 +222,7 @@ void calculate_indices(
         case Expr::Kind::EvaluatedConstant:
         case Expr::Kind::FractionalLiteral:
         case Expr::Kind::StringLiteral:
+        case Expr::Kind::ModuleDecl:
             break;
 
         // No children, but encodes type.
@@ -464,6 +465,17 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
                     type_index,
                     v->init()
                 );
+            } else if (
+                ModuleDescription::DeclarationHeader::get_kind(decl)
+                == ModuleDescription::DeclarationHeader::Kind::MODULE
+            ) {
+                calculate_indices(
+                    expr_indices,
+                    expr_index,
+                    type_indices,
+                    type_index,
+                    decl
+                );
             }
         }
     }
@@ -517,6 +529,21 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
                 expr_indices,
                 type_context,
                 as<VarDecl>(decl)->init()
+            );
+        } else if (decl_hdr.kind == +ModuleDescription::DeclarationHeader::Kind::MODULE) {
+            auto type_context = TypeSerialisationContext(
+                types_data,
+                type_cache,
+                type_current,
+                type_indices
+            );
+            decl_hdr.expr_index = serialise_expr(
+                exprs_data,
+                expr_cache,
+                expr_current,
+                expr_indices,
+                type_context,
+                decl
             );
         }
 

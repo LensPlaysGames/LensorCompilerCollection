@@ -95,7 +95,8 @@ struct ModuleDescription {
             ENUMERATOR,
             VARIABLE,
             FUNCTION,
-            TEMPLATE, // named templates may be exported
+            TEMPLATE,
+            MODULE
         };
 
         /// One of DeclarationHeader::Kind.
@@ -124,6 +125,7 @@ struct ModuleDescription {
                     return Kind::VARIABLE;
                 }
                 case K::FuncDecl: return Kind::FUNCTION;
+                case K::ModuleDecl: return Kind::MODULE;
 
                 case K::TemplatedFuncDecl:
                     LCC_TODO("Add templated function declaration kind");
