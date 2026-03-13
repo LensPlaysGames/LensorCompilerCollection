@@ -872,22 +872,19 @@ auto lcc::glint::Module::deserialise(
     }
     // Starting at the type table offset, parse all types. Stop after parsing
     // the amount of types specified in the header.
-    LCC_ASSERT(
-        types.size() <= std::numeric_limits<ModuleDescription::TypeIndex>::max(),
-        "Too many types, cannot deserialise with current integer type of type index"
-    );
-    const auto types_zero_index = (ModuleDescription::TypeIndex) types.size();
+    std::unordered_map<ModuleDescription::TypeIndex, Type*> deserialised_types{};
+    deserialised_types.reserve(hdr.type_count);
 
-    auto type_count = hdr.type_count;
+    types.reserve(types.size() + hdr.type_count);
+
     auto type_offset = hdr.type_table_offset;
-    types.reserve(types.size() + type_count);
 
     // NOTE: Please, PLEASE take care when referencing 'types'. The ZERO INDEX
     // is VERY IMPORTANT and MUST be taken into account, lest the code be
     // full 'o' bugs.
     const auto type_at = [&] [[nodiscard]] (ModuleDescription::TypeIndex i) {
         LCC_ASSERT(i != ModuleDescription::bad_type_index);
-        return types.at(types_zero_index + i);
+        return deserialised_types.at(i);
     };
 
     const auto read_t = [&]<typename T> [[nodiscard]] (T _) {
@@ -898,7 +895,7 @@ auto lcc::glint::Module::deserialise(
         return from_bytes<T>(array);
     };
 
-    for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
+    for (decltype(hdr.type_count) type_index = 0; type_index < hdr.type_count; ++type_index) {
         auto tag = module_metadata_blob.at(type_offset++);
         // TODO: Ensure kind is within range/a valid kind.
         auto kind = Type::Kind(tag);
@@ -922,7 +919,11 @@ auto lcc::glint::Module::deserialise(
 
                 // FIXME: This may need to be top level scope, not entirely sure the
                 // semantics of this yet.
-                new (*this) NamedType(deserialised_name, global_scope(), {});
+                deserialised_types[type_index] = new (*this) NamedType(
+                    deserialised_name,
+                    global_scope(),
+                    {}
+                );
 
                 // FIXME: Removed for hack regarding serialising templates before 'expr'
                 // and 'type' become actual types.
@@ -950,7 +951,7 @@ auto lcc::glint::Module::deserialise(
                 );
                 auto builtin_kind = BuiltinType::BuiltinKind(builtin_kind_value);
                 // Purely for the side-effect of recording the type in the module.
-                (void) BuiltinType::Make(*this, builtin_kind, {});
+                deserialised_types[type_index] = BuiltinType::Make(*this, builtin_kind, {});
 
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
@@ -976,14 +977,13 @@ auto lcc::glint::Module::deserialise(
                 );
                 auto ffi_kind = FFIType::FFIKind(ffi_kind_value);
                 // Purely for the side-effect of recording the type in the module.
-                (void) FFIType::Make(*this, ffi_kind, {});
-
+                deserialised_types[type_index] = FFIType::Make(*this, ffi_kind, {});
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             case Type::Kind::ArrayView: {
                 auto elem_type_index = read_t(ModuleDescription::TypeIndex());
-                (void) new (*this) ArrayViewType(type_at(elem_type_index), {});
+                deserialised_types[type_index] = new (*this) ArrayViewType(type_at(elem_type_index), {});
 
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
@@ -991,21 +991,21 @@ auto lcc::glint::Module::deserialise(
             case Type::Kind::DynamicArray: {
                 auto elem_type_index = read_t(ModuleDescription::TypeIndex());
                 // TODO: Size expression
-                (void) new (*this) DynamicArrayType(type_at(elem_type_index), nullptr, {});
+                deserialised_types[type_index] = new (*this) DynamicArrayType(type_at(elem_type_index), nullptr, {});
 
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             case Type::Kind::Pointer: {
                 auto elem_type_index = read_t(ModuleDescription::TypeIndex());
-                (void) new (*this) PointerType(type_at(elem_type_index), {});
+                deserialised_types[type_index] = new (*this) PointerType(type_at(elem_type_index), {});
 
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
             case Type::Kind::Reference: {
                 auto elem_type_index = read_t(ModuleDescription::TypeIndex());
-                (void) new (*this) ReferenceType(type_at(elem_type_index), {});
+                deserialised_types[type_index] = new (*this) ReferenceType(type_at(elem_type_index), {});
 
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
@@ -1022,7 +1022,7 @@ auto lcc::glint::Module::deserialise(
                     (unsigned) is_signed
                 );
 
-                (void) new (*this) IntegerType(bitwidth, is_signed, {});
+                deserialised_types[type_index] = new (*this) IntegerType(bitwidth, is_signed, {});
 
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
@@ -1038,7 +1038,7 @@ auto lcc::glint::Module::deserialise(
                 auto e_size = new (*this) IntegerLiteral(element_count, {});
                 auto t_elem = type_at(element_type_index);
 
-                (void) new (*this) ArrayType(t_elem, e_size, {});
+                deserialised_types[type_index] = new (*this) ArrayType(t_elem, e_size, {});
 
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
@@ -1120,6 +1120,8 @@ auto lcc::glint::Module::deserialise(
                 set_attr(FuncAttr::ReturnsTwice);
                 set_attr(FuncAttr::Used);
 
+                deserialised_types[type_index] = function;
+
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
@@ -1188,7 +1190,11 @@ auto lcc::glint::Module::deserialise(
                     LCC_ASSERT(decl);
                 }
 
-                (void) new (*this) SumType(scope, std::move(members), {});
+                deserialised_types[type_index] = new (*this) SumType(
+                    scope,
+                    std::move(members),
+                    {}
+                );
 
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
@@ -1248,7 +1254,7 @@ auto lcc::glint::Module::deserialise(
                     enumerator_decls.emplace_back(enum_decl);
                 }
 
-                (void) new (*this) EnumType(
+                deserialised_types[type_index] = new (*this) EnumType(
                     scope,
                     type_at(underlying_type_index),
                     std::move(enumerator_decls),
@@ -1340,6 +1346,7 @@ auto lcc::glint::Module::deserialise(
                 }
 
                 auto s = new (*this) StructType(scope, members, {});
+                deserialised_types[type_index] = s;
                 LCC_ASSERT(lcc::glint::Sema::AnalyseType(context, *this, &types.back()));
 
                 s->byte_size(struct_byte_size);
@@ -1408,14 +1415,14 @@ auto lcc::glint::Module::deserialise(
                     LCC_ASSERT(decl);
                 }
 
-                (void) new (*this) UnionType(scope, members, {});
+                deserialised_types[type_index] = new (*this) UnionType(scope, members, {});
 
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
 
             } break;
 
             case Type::Kind::Type: {
-                (void) new (*this) TypeType({});
+                deserialised_types[type_index] = new (*this) TypeType({});
                 LCC_ASSERT(Sema::AnalyseType(context, *this, &types.back()));
             } break;
 
@@ -1427,9 +1434,8 @@ auto lcc::glint::Module::deserialise(
         }
     }
 
-    // for (auto [i, t] : vws::enumerate(types)) {
-    //     if (i < types_zero_index) continue;
-    //     fmt::print("Deserialised type: {}\n", t->string(true));
+    // for (auto [i, t] : deserialised_types) {
+    //     fmt::print("Deserialised type: ({}): {}\n", i, t->string(true));
     // }
 
     // Now that types are deserialised, go back through deserialised
@@ -1466,6 +1472,8 @@ auto lcc::glint::Module::deserialise(
         offset += name_length;
 
         auto* ty = type_at(decl_hdr.type_index);
+
+        // fmt::print("Deserialised {} : {}\n", name, ty->string(true));
 
         // FIXME: Should it be top level scope instead of global?
         auto* scope = global_scope();

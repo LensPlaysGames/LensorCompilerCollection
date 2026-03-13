@@ -493,6 +493,8 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
     for (auto* decl : exports()) {
         // Decl: DeclHeader, length :u8, name :u8[length]
 
+        // fmt::print("Serialising {} : {} ({})\n", decl->name(), decl->type()->string(true), type_indices.at(decl->type()));
+
         // Prepare declaration header
         ModuleDescription::TypeIndex decl_type_index = serialise(
             types_data,
