@@ -713,6 +713,7 @@ void lcc::glint::Sema::AnalyseModule() {
             "__zero :: template(x : expr) {\n"
             "  ;; TODO: sizeof is currently in bits...\n"
             "  memset &x, 0, (sizeof x) / 8;\n"
+            "  x;\n"
             "};\n"
             "\n"
             ";; Initialise a dynamic array with a given capacity.\n"

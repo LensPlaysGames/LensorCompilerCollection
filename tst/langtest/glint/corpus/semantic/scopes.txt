@@ -24,5 +24,5 @@ x;
 (block
  (group
   (variable_declaration)
-  (block (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))))
+  (block (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant)) (name)))
  (return (cast (name))))
