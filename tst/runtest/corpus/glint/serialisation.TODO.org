@@ -1,9 +1,5 @@
 * Serialisation Tests Still TODO
 
-- serialisation_vardecl.org
-  #+begin_src glint
-    a :: 42;
-  #+end_src
 - serialisation_funcdecl.org
   #+begin_src glint
     a : int() 42;
@@ -21,3 +17,4 @@
     struct { a : int; };
   #+end_src
 - serialisation_typealiasdecl.org
+  ??

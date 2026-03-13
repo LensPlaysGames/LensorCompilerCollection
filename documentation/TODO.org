@@ -57,6 +57,7 @@
   Basically, if we are looping over a container, and it is modified, we need to adjust the loop code to take that into account. Ideally, we would update the "current" iterator reference (=x= in the above example) after every modification that requires it (possible resize).
 - [Parser/Sema]: =embed "path";= -> string literal of file contents
 - [Sema]: Expression expressions
+  Dynamic array of =expr=. =for e in exprs, apply foo, e;= type of thing.
 - [Parser/Sema]: =T.bits=, =T.bytes=, =T.align=, =T_enum.count=
 - [Parser/Sema]: Unary operator (keyword) for asserting compile time evaluation
   =evaluate=?
@@ -69,7 +70,6 @@
 - [Sema]: Variable Entanglement
   Tell the compiler that if a variable =A= has a known value (or a range of values), then variable =B= has a known value (or a range of values).
   The compiler would be able to optimise more in certain cases if it knew more about how values were related to each other (if they are).
-- [Sema]: Dynamic array of =expr=. =for e in exprs, apply foo, e;= type of thing.
 
 ** Fixes/Changes
 
