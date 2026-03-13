@@ -1,3 +1,6 @@
+#include <glint/ast.hh>
+
+#include <lcc/core.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/ast_printer.hh>
@@ -7,7 +10,6 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
-#include <glint/ast.hh>
 #include <glint/eval.hh>
 #include <glint/module_description.hh>
 #include <glint/parser.hh>
@@ -16,7 +18,6 @@
 #include <ranges>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -2934,4 +2935,17 @@ auto lcc::glint::EnumType::enumerator_by_name(std::string_view name) -> Enumerat
         }
     }
     return e_decl;
+}
+
+bool lcc::glint::VarDecl::should_default_init() const {
+    // Declarations with errors do not get default initialised.
+    return ok()
+       // Declarations with a non-default initialiser do not get default
+       // initialised.
+       and not init()
+       // Declarations with default initalisation explicitly blocked do not get
+       // default initialised.
+       and not default_init_blocked()
+       // Non-defining declarations do not get default initialised.
+       and not IsImportedLinkage(linkage());
 }

@@ -983,7 +983,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             continue;
         }
 
-        /// Declare the parameter.
+        // Declare the parameter.
         Expr* d = new (mod) VarDecl(
             param.name,
             param.type,
@@ -992,6 +992,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             Linkage::LocalVar,
             param.location
         );
+        as<VarDecl>(d)->default_init_blocked() = true;
         Expr* dd{d};
 
         auto declared = decl->scope()->declare(
@@ -2244,7 +2245,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             if (not v->sema_errored())
                 v->set_sema_done();
 
-            if (v->ok() and not v->init()) {
+            if (v->should_default_init()) {
                 // TODO: Handle warning/, report/
                 if (context->has_option("error/default-init")) {
                     Error(

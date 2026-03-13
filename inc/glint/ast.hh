@@ -2056,6 +2056,8 @@ public:
 
 class VarDecl : public ObjectDecl {
     Expr* _init{};
+    // If this is true, never perform default initialisation.
+    bool _no_default_init{false};
 
 public:
     VarDecl(
@@ -2072,6 +2074,12 @@ public:
     auto init() -> Expr*& { return _init; }
     [[nodiscard]]
     auto init() const { return _init; }
+
+    [[nodiscard]]
+    bool& default_init_blocked() { return _no_default_init; }
+    bool default_init_blocked() const { return _no_default_init; }
+
+    bool should_default_init() const;
 
     static auto classof(const Expr* expr) -> bool {
         return expr->kind() == Kind::VarDecl;
