@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-03-08 Sun 11:57 -->
+<!-- 2026-03-12 Thu 23:42 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Programming in Lensor Glint</title>
@@ -406,7 +406,7 @@ For now, you just need to learn about something called <i>memory</i>. A computer
 A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary <i>bits</i> (values that may only be on or off), it is addressed via <i>bytes</i>. In hardware, a byte (the minimum addressable unit in memory) is <i>usually</i> eight bits.
 </p>
 
-<pre class="example" id="org8998a71">
+<pre class="example" id="org55c6c49">
 MEMORY
 | off on  off off off on  off on | ...
 | BYTE 0                         | BYTE 1
@@ -848,7 +848,7 @@ y; <span class="org-comment">;; Error! Unknown symbol y'</span>
 <p>
 The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
 </p>
-<pre class="example" id="org31c8670">
+<pre class="example" id="orgae105e4">
 root
 |-- x
 `-- block
@@ -1417,7 +1417,7 @@ foo.x <span class="org-operator">+</span> foo.y;
 </div>
 </div>
 <ol class="org-ol">
-<li><a id="org9fee65c"></a>Supplanted Members<br />
+<li><a id="orgfd7a17c"></a>Supplanted Members<br />
 <div class="outline-text-5" id="text-2-8-1-1">
 <p>
 A struct may have another struct (or sum) type supplanted within it; this means that the supplanted type's members are now accessible as if they were members of the struct the member resides in. In reality, the compiler does generate a unique name for the member and generates code to access that member by name; this construct is simply for the programmer's convenience.
