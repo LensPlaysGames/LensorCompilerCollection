@@ -7,7 +7,11 @@ x : int !{};
 ---
 
 (block
- (return (cast (variable_declaration (compound_literal)))))
+ (return (cast (group
+  (variable_declaration)
+  (block
+   (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))
+   (name))))))
 
 ================
 Empty Compound Literal explicit cast to int
