@@ -2112,10 +2112,27 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 // An untyped compound literal initialiser is allowed for typed
                 // declarations.
                 auto* c = cast<CompoundLiteral>(v->init());
+
                 // Set the type of the compound literal from the type of the declaration,
                 // if the compound literal's type isn't already explicitly declared.
                 if (c and c->type()->is_unknown()) {
                     *c->type_ref() = v->type();
+
+                    // No matter the type, an empty compound literal invokes default
+                    // initialisation.
+                    if (c->values().empty()) {
+                        v->init() = nullptr;
+                        v->set_sema_done();
+
+                        auto initializer = DefaultInitialize(v);
+                        if (not Analyse(&initializer))
+                            return false;
+
+                        *expr_ptr = new (mod) GroupExpr({v, initializer}, v->location());
+                        LCC_ASSERT(Analyse(expr_ptr));
+
+                        break;
+                    }
 
                     // TODO: This should be handled via CompoundType. Since we're still
                     // waiting on that, this makes sure invalid code isn't produced silently.
