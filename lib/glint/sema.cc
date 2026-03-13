@@ -2070,6 +2070,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         /// Analyse local and global variable declarations.
         case Expr::Kind::VarDecl: {
             auto* v = as<VarDecl>(expr);
+            v->set_lvalue();
 
             /// If this has an initialiser, analyse it.
             if (v->init()) {
@@ -2243,8 +2244,6 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 v->type()->is_dynamic_array()
                 and not IsExportedLinkage(v->linkage())
             ) curr_func->dangling_dynarrays().push_back(v);
-
-            v->set_lvalue();
 
             if (not v->sema_errored())
                 v->set_sema_done();
