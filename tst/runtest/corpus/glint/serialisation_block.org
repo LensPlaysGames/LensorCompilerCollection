@@ -13,7 +13,7 @@ Test serialisation and deserialisation of block expressions.
 #+begin_src glint
   module foo_serialise_block;
   export x :: template(e : expr)
-    {e; 69};
+    {void e; 69};
 #+end_src
 
 #+NAME: status

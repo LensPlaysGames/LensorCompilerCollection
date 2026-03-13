@@ -15,7 +15,7 @@ Test serialisation and deserialisation of while expressions.
 #+begin_src glint
   module foo_serialise_while;
   export x :: template(e : expr)
-    while 0, 0;
+    while 0, void 0;
 #+end_src
 
 #+NAME: status
