@@ -1,0 +1,17 @@
+================
+Error on Duplicate Overload
+:fail_sema
+================
+
+foo : int(x : int) x;
+
+foo : int(y : int) y;
+
+================
+Error on Duplicate Overload w/ Non-duplicate Overload
+:fail_sema
+================
+
+foo : int(x : int) x;
+foo : int(z : byte) int z;
+foo : int(y : int) y;
