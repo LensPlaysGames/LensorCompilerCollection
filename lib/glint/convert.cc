@@ -54,9 +54,11 @@ auto lcc::glint::Sema::ConvertImpl(
     // Any type can be converted to itself.
     if (Type::Equal(from, to)) {
         // lvalue expression must be converted to rvalue if we want a value of the given type.
+        // Importantly, because the types are equal, there is *nothing to be done*
+        // regarding references.
         if ((*expr_ptr)->is_lvalue()) {
             if constexpr (PerformConversion)
-                LValueToRValue(expr_ptr);
+                LValueToRValue(expr_ptr, false);
             return Score(1);
         }
 
@@ -134,14 +136,16 @@ auto lcc::glint::Sema::ConvertImpl(
     }
 
     // Lvalue to rvalue conversion is required.
+    // NOTE: Does *NOT* strip references.
     score += (*expr_ptr)->is_lvalue();
     if constexpr (PerformConversion)
-        LValueToRValue(expr_ptr, false);
+        LValueToRValue(expr_ptr, false); /** (!) **/
 
     // Get reference-to-reference conversions out of the way early.
     if (from->is_reference() and to->is_reference()) {
         // A reference can be converted to the same reference.
-        if (Type::Equal(from, to)) return NoOp;
+        if (Type::Equal(from, to))
+            return NoOp;
 
         // References to arrays can be converted to references to
         // the first element.
