@@ -289,6 +289,10 @@ private:
     /// \return An expression that default-initializes the given declaration.
     auto DefaultInitialize(VarDecl* decl) -> Expr*;
 
+    /// \return A value expression that represents the default value of the
+    /// given type, as an _rvalue_.
+    auto DefaultExpression(Type*) -> Result<Expr*>;
+
     /// Use like: apply_template("template(x : expr) x", {ast_node0});
     auto apply_template(
         std::string template_source,

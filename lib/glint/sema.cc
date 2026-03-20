@@ -1323,6 +1323,143 @@ auto lcc::glint::Sema::DefaultInitialize(VarDecl* decl) -> Expr* {
     );
 }
 
+auto lcc::glint::Sema::DefaultExpression(Type* ty) -> Result<Expr*> {
+    LCC_ASSERT(ty);
+    LCC_ASSERT(ty->ok());
+    switch (ty->kind()) {
+        case Type::Kind::Builtin: {
+            auto t_builtin = as<BuiltinType>(ty);
+            switch (t_builtin->builtin_kind()) {
+                case BuiltinType::BuiltinKind::Bool:
+                case BuiltinType::BuiltinKind::Byte:
+                case BuiltinType::BuiltinKind::Int:
+                case BuiltinType::BuiltinKind::UInt:
+                    return new (mod) IntegerLiteral(0, {});
+
+                case BuiltinType::BuiltinKind::Float: {
+                    return new (mod) FractionalLiteral(
+                        FixedPointNumber(0, fractional_to_whole(0)),
+                        {}
+                    );
+                }
+                case BuiltinType::BuiltinKind::Unknown:
+                case BuiltinType::BuiltinKind::OverloadSet:
+                case BuiltinType::BuiltinKind::Void:
+                    return Error(
+                        {},
+                        "{} type has no default expression",
+                        *ty
+                    );
+            }
+
+            LCC_UNREACHABLE();
+        }
+
+        case Type::Kind::FFIType:
+        case Type::Kind::Integer:
+        case Type::Kind::Pointer: {
+            // auto t_ffi = as<FFIType>(ty);
+            return new (mod) IntegerLiteral(0, {});
+        }
+
+        case Type::Kind::Type: {
+            // FIXME: _Should_ this be "auto"? void?
+            return new (mod) TypeExpr(
+                mod,
+                new (mod) NamedType("auto", nullptr, {}),
+                {}
+            );
+        }
+
+        case Type::Kind::Named: {
+            return Error(
+                {},
+                "Named type {} has no default expression; initialise it explicitly",
+                *ty
+            );
+        }
+
+        case Type::Kind::Reference: {
+            return Error(
+                {},
+                "Reference type {} has no default expression",
+                *ty
+            );
+        }
+
+        case Type::Kind::DynamicArray: {
+            auto t_dynarray = as<DynamicArrayType>(ty);
+            auto e_capacity = t_dynarray->initial_size()
+                                ? t_dynarray->initial_size()
+                                : new (mod) IntegerLiteral(8, {});
+            return new (mod) CallExpr(
+                named_template("dynarray_initvalue"),
+                {e_capacity,
+                 new (mod) TypeExpr(mod, t_dynarray->element_type(), {})},
+                {}
+            );
+        }
+
+        case Type::Kind::Array: {
+            LCC_TODO("Default expression for array type {}", *ty);
+        }
+
+        case Type::Kind::ArrayView: {
+            return new (mod) CompoundLiteral(
+                {{"data", new (mod) IntegerLiteral(0, {})},
+                 {"size", new (mod) IntegerLiteral(0, {})}},
+                {},
+                ty
+            );
+        }
+
+        case Type::Kind::Function: {
+            return Error(
+                {},
+                "Function type {} has no default expression",
+                *ty
+            );
+        }
+
+        case Type::Kind::Enum: {
+            LCC_TODO("Default expresson for enum type {}", *ty);
+        }
+
+        case Type::Kind::Sum: {
+            // TODO: Specify invalid tag, or something.
+            LCC_TODO("Default expresson for sum type {}", *ty);
+        }
+
+        case Type::Kind::Union: {
+            // TODO: Zero initialized
+            LCC_TODO("Default expresson for union type {}", *ty);
+        }
+        case Type::Kind::Struct: {
+            // TODO: If struct has default values, uh, use those.
+            std::vector<Expr*> member_exprs{};
+            for (auto m : as<StructType>(ty)->members()) {
+                auto member_expression = DefaultExpression(m.type);
+                if (member_expression)
+                    member_exprs.emplace_back(*member_expression);
+                else break;
+            }
+            return new (mod) CompoundLiteral(member_exprs, {}, ty);
+        }
+        case Type::Kind::TemplatedStruct: {
+            LCC_TODO("Default expression for templated struct type {}", *ty);
+        }
+
+        case Type::Kind::Typeof:
+            return Error(
+                {},
+                "Type {} has no default expression",
+                *ty
+            );
+            break;
+    }
+    LCC_UNREACHABLE();
+}
+
 auto lcc::glint::Sema::DeclReference(Decl* decl) -> Expr* {
     LCC_ASSERT(decl);
     return new (mod) NameRefExpr(
