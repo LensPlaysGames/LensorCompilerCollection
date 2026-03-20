@@ -4430,6 +4430,27 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                     continue;
                 }
 
+                // Handle type (print representation of type).
+                bool arg_is_type
+                    = is<TypeExpr>(arg);
+                if (arg_is_type) {
+                    auto relevant_type = as<TypeExpr>(arg)->contained_type();
+                    auto relevant_type_string = relevant_type->string(false);
+                    auto str_literal = new (mod) StringLiteral(
+                        mod,
+                        relevant_type_string,
+                        {}
+                    );
+                    auto print_call = new (mod) CallExpr(
+                        named_template("putchar_each"),
+                        {str_literal,
+                         new (mod) IntegerLiteral(relevant_type_string.size(), {})},
+                        expr->location()
+                    );
+                    exprs.emplace_back(print_call);
+                    continue;
+                }
+
                 // Handle enum value (print name of value).
                 bool arg_is_enum
                     = is<EnumType>(arg->type()->strip_references());
