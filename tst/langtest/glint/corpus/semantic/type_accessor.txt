@@ -1,0 +1,47 @@
+================
+Size in Bytes (int)
+================
+
+int.bytes;
+
+---
+
+(block
+ (return (integer_literal)))
+
+================
+Size in Bytes (named type)
+================
+
+foo :: int;
+
+foo.bytes;
+
+---
+
+(block
+ (return (integer_literal)))
+
+================
+Align in Bytes (int)
+================
+
+int.align;
+
+---
+
+(block
+ (return (integer_literal)))
+
+================
+Align in Bytes (named type)
+================
+
+foo :: int;
+
+foo.align;
+
+---
+
+(block
+ (return (integer_literal)))

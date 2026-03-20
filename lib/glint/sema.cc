@@ -2687,6 +2687,64 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 break;
             }
 
+            if (
+                auto e_type = cast<TypeExpr>(m->object())
+            ) {
+                if (m->name() == "bits") {
+                    *expr_ptr = new (mod) IntegerLiteral(
+                        e_type->contained_type()->size(context),
+                        e_type->contained_type()->location()
+                    );
+                } else if (m->name() == "bytes") {
+                    *expr_ptr = new (mod) IntegerLiteral(
+                        e_type->contained_type()->size_in_bytes(context),
+                        e_type->contained_type()->location()
+                    );
+                } else if (m->name() == "align") {
+                    // FIXME: Target byte width (align is always in bytes)
+                    *expr_ptr = new (mod) IntegerLiteral(
+                        e_type->contained_type()->align(context) / 8,
+                        e_type->contained_type()->location()
+                    );
+                } else if (m->name() == "ptr") {
+                    *expr_ptr = new (mod) TypeExpr(
+                        mod,
+                        Ptr(e_type->contained_type()),
+                        {}
+                    );
+                } else if (m->name() == "ref") {
+                    *expr_ptr = new (mod) TypeExpr(
+                        mod,
+                        Ref(e_type->contained_type()),
+                        {}
+                    );
+                } else if (m->name() == "elem") {
+                    if (not e_type->contained_type()->is_compound_type()) {
+                        Error(
+                            m->location(),
+                            "Type {} has no contained element type",
+                            *e_type->contained_type()
+                        );
+                        m->set_sema_errored();
+                        break;
+                    }
+                    *expr_ptr = new (mod) TypeExpr(
+                        mod,
+                        e_type->contained_type()->elem(),
+                        e_type->contained_type()->location()
+                    );
+                } else {
+                    Error(
+                        m->location(),
+                        "Invalid accessor ({}) on type {}",
+                        m->name(),
+                        *e_type->contained_type()
+                    );
+                    m->set_sema_errored();
+                }
+                break;
+            }
+
             /// ‘object’ is actually a type name.
             if (
                 is<NameRefExpr>(m->object())

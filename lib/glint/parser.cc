@@ -2569,7 +2569,8 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
 
     /// Parse trailing type qualifiers. These are obviously
     /// all left associative.
-    while (TypeQualifierPrecedence(tok.kind) > current_precedence) {
+    bool keep_going{true};
+    while (keep_going and TypeQualifierPrecedence(tok.kind) > current_precedence) {
         switch (tok.kind) {
             default: Diag::ICE("Unhandled trailing type qualifier `{}`", ToString(tok.kind));
 
@@ -2585,47 +2586,40 @@ auto lcc::glint::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                     *ty
                 );
 
+            // We choose to make the parser "smart" enough to directly parse pointer
+            // and reference types.
             case Tk::Dot: {
-                NextToken();
+                const auto& member_token = *LookAhead(1);
 
-                if (tok.kind != Tk::Ident)
-                    return Error(
-                        ErrorId::Expected,
-                        "Expected IDENTIFIER after . following type {}, not {}",
-                        *ty,
-                        ToString(tok.kind)
-                    );
-
-                location = {location, tok.location};
-                if (tok.text == "pptr") {
+                location = {location, member_token.location};
+                if (member_token.text == "pptr") {
                     ty = new (*mod) PointerType(
                         new (*mod) PointerType(ty, location)
                     );
+                    // Eat `.`
+                    NextToken();
                     // Eat "pptr"
                     NextToken();
                     break;
-                }
-                if (tok.text == "ptr") {
+                } else if (member_token.text == "ptr") {
                     ty = new (*mod) PointerType(ty, location);
+                    // Eat `.`
+                    NextToken();
                     // Eat "ptr"
                     NextToken();
                     break;
-                }
-                if (tok.text == "ref") {
+                } else if (member_token.text == "ref") {
                     ty = new (*mod) ReferenceType(ty, location);
+                    // Eat `.`
+                    NextToken();
                     // Eat "ref"
                     NextToken();
                     break;
-                }
-                return Error(
-                    ErrorId::Miscellaneous,
-                    "Unrecognized type member access {}.{}. Did you mean .ptr or .ref?",
-                    *ty,
-                    tok.text
-                );
+                } else keep_going = false;
+
             } break;
 
-            /// Function type.
+            // Function type.
             case Tk::LParen: {
                 auto type = ParseFuncSig(ty);
                 if (not type) return type.diag();
