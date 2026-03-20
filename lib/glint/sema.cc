@@ -1220,8 +1220,14 @@ void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
 
 auto lcc::glint::Sema::DefaultInitializeImpl(Expr* accessor, ZeroInitializeOption do_zero) -> Expr* {
     LCC_ASSERT(accessor);
-    LCC_ASSERT(Analyse(&accessor));
-    LCC_ASSERT(accessor->ok());
+    LCC_ASSERT(
+        Analyse(&accessor),
+        "{}",
+        accessor->string(context->option_use_colour())
+    );
+
+    LCC_ASSERT(not accessor->type()->is_unknown(), "Cannot initialize unknown type");
+    LCC_ASSERT(not accessor->type()->is_void(), "Cannot initialize void type");
 
     switch (accessor->type()->kind()) {
         case Type::Kind::Array:
@@ -2185,7 +2191,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             // TODO: If we know all of the parameters types, then we should be good to analyse the body.
             // Things that would change this are template parameters with "incomplete"
-            // types (like the type type, or the expr type).
+            // types (like the type type, or the expr type, or any type that has_auto()).
 
             // NOTE: TemplateExpr does not have a type, because it can't be operated
             // on like an expression, because it is a code generator.
@@ -2450,16 +2456,20 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         case Expr::Kind::CompoundLiteral: {
             auto* c = as<CompoundLiteral>(expr);
 
-            /// Analyse all subexpressions.
+            // Analyse all contained expressions.
+            // Note that no results are discarded, as a compound literal makes results
+            // of all contained expressions available.
             for (auto& member : c->values()) {
                 if (Analyse(&member.value))
                     LValueToRValue(&member.value);
                 else c->set_sema_errored();
             }
 
-            if (c->sema_errored()) break;
+            if (c->sema_errored())
+                break;
 
-            if ((not c->type() or c->type()->is_unknown()) and not expected_type) {
+            bool compound_literal_type_known = not ((not c->type()) or c->type()->is_unknown());
+            if (not compound_literal_type_known and not expected_type) {
                 // fmt::print("c->type():{}\n", fmt::ptr(c->type()));
                 // if (c->type()) fmt::print("*c->type():{}\n", *c->type());
                 // fmt::print("expected_type:{}\n", fmt::ptr(expected_type));
@@ -2478,7 +2488,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 }
             }
             // If both c->type() and expected_type, Convert to expected_type.
-            else if ((c->type() and not c->type()->is_unknown()) and expected_type) {
+            else if (compound_literal_type_known and expected_type) {
                 if (not Convert(expr_ptr, expected_type)) {
                     Error(
                         c->location(),
@@ -4718,13 +4728,19 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     }
 
     // If the callee is an integer, multiply all the arguments.
-    if (auto* callee_ty = expr->callee()->type(); callee_ty->is_integer()) {
+    if (
+        auto* callee_ty = expr->callee()->type();
+        callee_ty->is_integer()
+    ) {
         AnalyseCall_Integer(expr_ptr, expr);
         return;
     }
 
     // If the callee is an overload set, perform overload resolution.
-    if (is<OverloadSet>(expr->callee()) or expr->callee()->type()->is_overload_set()) {
+    if (
+        is<OverloadSet>(expr->callee())
+        or expr->callee()->type()->is_overload_set()
+    ) {
         OverloadSet* O{nullptr};
         if (is<OverloadSet>(expr->callee())) {
             O = as<OverloadSet>(expr->callee());
