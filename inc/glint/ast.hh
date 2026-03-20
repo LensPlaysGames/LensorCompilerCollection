@@ -1432,8 +1432,8 @@ public:
 class DynamicArrayType : public TypeWithOneElement {
     static constexpr auto K = Kind::DynamicArray;
 
-    Expr* _initial_size;
-    StructType* _cached_struct{nullptr};
+    Expr* _initial_size{};
+    StructType* _cached_struct{};
 
 public:
     static constexpr usz IntegerWidth = 32;
