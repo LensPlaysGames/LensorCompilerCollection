@@ -724,6 +724,14 @@ void lcc::glint::Sema::AnalyseModule() {
             "    (malloc (capacity ((sizeof @dynarray.data) / 8)));\n"
             "};\n"
             "\n"
+            "__dynarray_initvalue :: template(capacity : expr, element_type : type) {\n"
+            "  !{.data element_type.ptr\n"
+            "      (malloc (capacity ((sizeof element_type) / 8))),\n"
+            "    .size 0,\n"
+            "    .capacity capacity\n"
+            "  };\n"
+            "};\n"
+            "\n"
             ";; Grow the given dynamic array, multiplying it's capacity by `FACTOR`.\n"
             "__dynarray_grow :: template(dynarray : expr, factor : u32) {\n"
             "  newmem :: malloc (factor dynarray.capacity);\n"
@@ -2255,22 +2263,6 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 if (c and c->type()->is_unknown()) {
                     *c->type_ref() = v->type();
 
-                    // No matter the type, an empty compound literal invokes default
-                    // initialisation.
-                    if (c->values().empty()) {
-                        v->init() = nullptr;
-                        v->set_sema_done();
-
-                        auto initializer = DefaultInitialize(v);
-                        if (not Analyse(&initializer))
-                            return false;
-
-                        *expr_ptr = new (mod) GroupExpr({v, initializer}, v->location());
-                        LCC_ASSERT(Analyse(expr_ptr));
-
-                        break;
-                    }
-
                     // TODO: This should be handled via CompoundType. Since we're still
                     // waiting on that, this makes sure invalid code isn't produced silently.
                     if (is<ArrayType, DynamicArrayType, ArrayViewType>(c->type())) {
@@ -2497,10 +2489,40 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     c->set_sema_errored();
                 }
             }
+            // If c->type() is unknown but expected type is known, set the type
+            // directly.
+            else if (not compound_literal_type_known and expected_type) {
+                *c->type_ref() = expected_type;
+            }
 
             if (not Analyse(c->type_ref())) {
                 Diag::ICE(context, c->location(), "Failed to analyse type of compound literal");
                 LCC_UNREACHABLE();
+            }
+
+            // An empty compound literal is replaced with a default expression.
+            if (c->values().empty()) {
+                if (not c->type() or c->type()->is_unknown()) {
+                    if (not expected_type) {
+                        // TODO: Figure out a better, more helpful/guiding error message once we
+                        // figure out in what situations it actually arises.
+                        Error(
+                            c->location(),
+                            "Untyped compound literal has no expected type"
+                        );
+                        c->set_sema_errored();
+                        return false;
+                    }
+
+                    *c->type_ref() = expected_type;
+                }
+
+                if (auto init_expr = DefaultExpression(c->type())) {
+                    *expr_ptr = *init_expr;
+                    (void) Analyse(expr_ptr);
+                } else c->set_sema_errored();
+
+                break;
             }
 
             // Ensure named members exist in represented type.

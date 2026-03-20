@@ -7,11 +7,9 @@ x : int !{};
 ---
 
 (block
- (return (cast (group
-  (variable_declaration)
-  (block
-   (call (name) (cast (unary_addressof (name))) (evaluated_constant) (evaluated_constant))
-   (name))))))
+ (return (cast
+  (variable_declaration (integer_literal))
+)))
 
 ================
 Empty Compound Literal explicit cast to int
@@ -22,7 +20,7 @@ x :: int !{};
 ---
 
 (block
- (return (cast (variable_declaration (compound_literal)))))
+ (return (cast (variable_declaration (integer_literal)))))
 
 ================
 Empty Compound Literal, Untyped
@@ -30,11 +28,6 @@ Empty Compound Literal, Untyped
 ================
 
 x :: !{};
-
----
-
-(block
- (return (cast (variable_declaration (compound_literal)))))
 
 ================
 Empty Compound Literal explicit cast to dynamic array of int
@@ -63,7 +56,7 @@ x;
 
 (block
  (function_declaration
-  (return (compound_literal)))
+  (block (return (integer_literal))))
  (return (call (name))))
 
 ================
@@ -77,7 +70,7 @@ x;
 ---
 
 (block
- (function_declaration (return (cast (compound_literal))))
+ (function_declaration (return (integer_literal)))
  (return (call (name))))
 
 ================
