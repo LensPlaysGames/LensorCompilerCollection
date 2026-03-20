@@ -893,12 +893,12 @@ void lcc::glint::Sema::AnalyseModule() {
             "  };\n"
             "  __out;\n"
             "};\n"
-            "format : [byte](b : bool) {\n"
-            "  out : [byte];\n"
-            "  if b,\n"
-            "    out += \"true\"\n"
-            "  else out += \"false\";\n"
-            "  out;\n"
+            "format : [byte](__b : bool) {\n"
+            "  __out : [byte];\n"
+            "  if __b,\n"
+            "    __out += \"true\"\n"
+            "  else __out += \"false\";\n"
+            "  __out;\n"
             "};\n";
 
         auto& formatters_source = context->create_file(
