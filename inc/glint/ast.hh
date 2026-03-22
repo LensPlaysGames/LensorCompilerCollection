@@ -731,8 +731,16 @@ public:
     /// \return The alignment of this type, in bits.
     usz align(const Context* ctx) const;
 
+    /// Check if this type has an element type (contains a singular relevant
+    /// type).
+    /// Pointers, arrays, enums, etc. have element types, whereas a struct or a
+    /// union does not.
+    [[nodiscard]]
+    auto has_elem() const -> bool;
+
     /// Get the element type of this type. This will assert that this type does
     /// have an element type.
+    /// \see has_elem()
     [[nodiscard]]
     auto elem() const -> Type*;
 

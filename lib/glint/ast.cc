@@ -189,19 +189,47 @@ auto lcc::glint::Type::align(const lcc::Context* ctx) const -> usz {
     LCC_UNREACHABLE();
 }
 
+[[nodiscard]]
+auto lcc::glint::Type::has_elem() const -> bool {
+    switch (kind()) {
+        case Kind::Array:
+        case Kind::ArrayView:
+        case Kind::DynamicArray:
+        case Kind::Enum:
+        case Kind::Pointer:
+        case Kind::Reference:
+            return true;
+
+        case Kind::Builtin:
+        case Kind::FFIType:
+        case Kind::Function:
+        case Kind::Integer:
+        case Kind::Named:
+        case Kind::Struct:
+        case Kind::Sum:
+        case Kind::TemplatedStruct:
+        case Kind::Type:
+        case Kind::Typeof:
+        case Kind::Union:
+            return false;
+    }
+    LCC_UNREACHABLE();
+}
+
 auto lcc::glint::Type::elem() const -> Type* {
     switch (kind()) {
-        case Kind::Pointer: return as<PointerType>(this)->element_type();
-        case Kind::Reference: return as<ReferenceType>(this)->element_type();
-        case Kind::Array: return as<ArrayType>(this)->element_type();
-        case Kind::DynamicArray:
-            return as<DynamicArrayType>(this)->element_type();
-
+        case Kind::Array:
+            return as<ArrayType>(this)->element_type();
         case Kind::ArrayView:
             return as<ArrayViewType>(this)->element_type();
-
+        case Kind::DynamicArray:
+            return as<DynamicArrayType>(this)->element_type();
         case Kind::Enum:
             return as<EnumType>(this)->underlying_type();
+        case Kind::Pointer:
+            return as<PointerType>(this)->element_type();
+        case Kind::Reference:
+            return as<ReferenceType>(this)->element_type();
 
         case Kind::Type:
         case Kind::Builtin:
@@ -2453,11 +2481,11 @@ bool lcc::glint::Type::is_compound_type() const {
         case Kind::DynamicArray:
         case Kind::Reference:
         case Kind::Pointer:
+        case Kind::Enum:
             return true;
 
         case Kind::Builtin:
         case Kind::FFIType:
-        case Kind::Enum:
         case Kind::Integer:
             return false;
 
