@@ -118,7 +118,7 @@ auto lcc::glint::Sema::EvaluateAsInt(Expr* expr, Type* int_type, aint& out) -> b
         return false;
     }
 
-    /// Print a diagnostic if the thing doesn’t fit.
+    /// Print a diagnostic if the thing doesn't fit.
     bool ok = true;
     auto bits = int_type->size(context);
     aint val = res.as_int();
@@ -964,10 +964,10 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     tempset curr_func = decl;
     auto* ty = decl->function_type();
 
-    // If the function has no body, then we’re done.
+    // If the function has no body, then we're done.
     if (not decl->body()) return;
 
-    // If the function is templated, then we’re done (unexpanded body is not
+    // If the function is templated, then we're done (unexpanded body is not
     // checked).
     if (is<TemplatedFuncDecl>(decl)) return;
 
@@ -976,7 +976,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     for (auto& param : ty->params()) {
         if (param.name.empty()) continue;
 
-        // Check that we don’t already have a declaration with that
+        // Check that we don't already have a declaration with that
         // name in the function scope.
         auto decls = decl->scope()->find(param.name);
         if (not decls.empty()) {
@@ -1197,7 +1197,7 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
 void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
     LCC_ASSERT(decl);
 
-    /// Set a name for the decl if it’s empty.
+    /// Set a name for the decl if it's empty.
     if (decl->name().empty())
         decl->name(mod.unique_name("emptydecl_"));
 
@@ -1207,8 +1207,8 @@ void lcc::glint::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
         return;
     }
 
-    /// Used attribute is ignored on functions that aren’t internal. If
-    /// the function is internal, then set the linkage to used so it isn’t
+    /// Used attribute is ignored on functions that aren't internal. If
+    /// the function is internal, then set the linkage to used so it isn't
     /// deleted by the optimiser.
     auto* ty = as<FuncType>(decl->type());
     if (ty->has_attr(FuncAttr::Used)) {
@@ -1534,7 +1534,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
     auto* expr = *expr_ptr;
     LCC_ASSERT(expr);
 
-    /// Don’t analyse the same expression twice.
+    /// Don't analyse the same expression twice.
     if (expr->sema() != SemaNode::State::NotAnalysed)
         return expr->ok();
 
@@ -2200,7 +2200,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         /// This mainly handles explicit casts, which allow more
         /// conversions than implicit casts.
         ///
-        /// We don’t ever mark this as errored because there is no
+        /// We don't ever mark this as errored because there is no
         /// type that we *cannot* cast to, and the type this expr
         /// is supposed to have is known.
         case Expr::Kind::Cast:
@@ -2226,7 +2226,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             /// If this has an initialiser, analyse it.
             if (v->init()) {
-                // Obviously, we can only perform top-down type inference if we’re not
+                // Obviously, we can only perform top-down type inference if we're not
                 // already performing bottom-up inference. If the type is known, make sure
                 // that we use a type that is legal in a declaration for inference.
                 const bool infer_type = v->type()->is_unknown();
@@ -2257,7 +2257,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             /// Make sure the initialiser is convertible to that type. Note
             /// that, if this fails, we do not mark this node as errored as
-            /// its type is well-formed; it’s just the initialiser that has
+            /// its type is well-formed; it's just the initialiser that has
             /// a problem.
             if (v->init()) {
                 // An untyped compound literal initialiser is allowed for typed
@@ -2706,7 +2706,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     auto* oj = os[j];
                     auto oj_params = oj->param_types();
 
-                    // Different number of parameters means these two can’t be the same.
+                    // Different number of parameters means these two can't be the same.
                     if (oi_params.size() != oj_params.size())
                         continue;
 
@@ -2769,7 +2769,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         /// The actual work here is analysing the type, so this is a no-op.
         case Expr::Kind::TypeDecl:
         case Expr::Kind::TypeAliasDecl:
-        /// There isn’t really a way these could be malformed.
+        /// There isn't really a way these could be malformed.
         case Expr::Kind::IntegerLiteral:
         case Expr::Kind::FractionalLiteral:
         case Expr::Kind::StringLiteral:
@@ -2787,7 +2787,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 }
 
 void lcc::glint::Sema::AnalyseMemberAccess(Expr** expr_ptr, MemberAccessExpr* expr) {
-    /// If there is an error analysing the object, we don’t know
+    /// If there is an error analysing the object, we don't know
     /// its type and can thus not continue checking this.
     if (not Analyse(&expr->object())) {
         expr->set_sema_errored();
@@ -3701,7 +3701,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
             }
 
             /// The type of the assignment is the same as the type of the lvalue.
-            /// NOTE: As long as the lhs of an assignment is an lvalue, we don’t mark
+            /// NOTE: As long as the lhs of an assignment is an lvalue, we don't mark
             /// the assignment as errored, because we know what its type is going to
             /// be, irrespective of whether the assignment is valid or not.
             b->type(lhs_t);
@@ -4135,7 +4135,7 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
 auto lcc::glint::Sema::AnalyseOverload(OverloadSet* expr, std::vector<Expr*> args) -> Result<FuncDecl*> {
     for (auto*& arg : args) (void) Analyse(&arg);
 
-    // If any of the arguments errored, we can’t resolve this.
+    // If any of the arguments errored, we can't resolve this.
     if (rgs::any_of(args, &Expr::sema_errored)) {
         expr->set_sema_errored();
         // TODO: Er, ideally we would be able to return not a diagnostic but also
@@ -4200,8 +4200,8 @@ auto lcc::glint::Sema::AnalyseOverload(OverloadSet* expr, std::vector<Expr*> arg
     // For candidate C in O, let P_1, ... P_n be the parameters of C. For each
     // argument A_i of the call, iff it is not an unresolved function, check
     // if it is convertible to P_i. Remove C from O if it is not. Note down
-    // the number of A_i’s that required a (series of) implicit conversions to
-    // their corresponding P_i’s. Also collect unresolved function references.
+    // the number of A_i's that required a (series of) implicit conversions to
+    // their corresponding P_i's. Also collect unresolved function references.
 
     // For candidate C in O,
     for (auto* C : O) {
@@ -4789,7 +4789,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         return;
     }
 
-    /// If analysing the callee fails, we can’t do anything else.
+    /// If analysing the callee fails, we can't do anything else.
     if (not Analyse(&expr->callee())) {
         expr->set_sema_errored();
         return;
@@ -4827,7 +4827,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 
     for (auto*& arg : expr->args()) (void) Analyse(&arg);
 
-    // If any of the arguments errored, we can’t resolve this.
+    // If any of the arguments errored, we can't resolve this.
     if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
         expr->set_sema_errored();
         return;
@@ -4870,7 +4870,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         ty->is_pointer() and ty->elem()->is_function()
     ) InsertImplicitCast(&expr->callee(), ty->elem());
 
-    // If the type is not already a function type, we can’t call this.
+    // If the type is not already a function type, we can't call this.
     if (not expr->callee()->type()->is_function()) {
         auto e = Error(
             expr->callee()->location(),
@@ -5038,7 +5038,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 
 void lcc::glint::Sema::AnalyseCast(CastExpr* c) {
     /// Implicit casts and lvalue-to-rvalue conversions are only ever created
-    /// by sema, so we know they’re fine.
+    /// by sema, so we know they're fine.
     /// FIXME: The above sounds like a bunch of malarkey made up by an arrogant
     /// mad-man.
     if (c->is_implicit_cast() or c->is_lvalue_to_rvalue()
@@ -5047,7 +5047,7 @@ void lcc::glint::Sema::AnalyseCast(CastExpr* c) {
         return;
     }
 
-    /// If analysis of the operand failed, we don’t know its
+    /// If analysis of the operand failed, we don't know its
     /// type and thus have no way of checking whether the cast
     /// makes sense.
     if (not Analyse(&c->operand(), c->type())) return;
@@ -5059,10 +5059,10 @@ void lcc::glint::Sema::AnalyseCast(CastExpr* c) {
     if (Convert(&c->operand(), c->type())) return;
 
     /// All conversions that rely on references have already been
-    /// taken care of by Convert(), so we don’t care about references
+    /// taken care of by Convert(), so we don't care about references
     /// anymore at this point.
     ///
-    /// Thus, the type we’re casting to must not be a reference type.
+    /// Thus, the type we're casting to must not be a reference type.
     auto* from = c->operand()->type();
     auto* to = c->type();
     if (to->is_reference()) {
@@ -5093,7 +5093,7 @@ void lcc::glint::Sema::AnalyseCast(CastExpr* c) {
     /// Hard casts between pointers and from pointers to integers are
     /// allowed. Note that, if the pointers are compatible, the call to
     /// Convert() above will have already taken care of this case, so we
-    /// don’t need to check for that here.
+    /// don't need to check for that here.
     if (to->is_pointer() and (from->is_integer() or from->is_pointer())) return HardCast();
 
     /// Hard casts between types that have the same size are allowed.
@@ -5172,7 +5172,7 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
             LValueToRValue(&expr->args()[1]);
             LValueToRValue(&expr->args()[2]);
 
-            /// Unlike C’s memcpy()/memmove(), this returns nothing.
+            /// Unlike C's memcpy()/memmove(), this returns nothing.
             expr->type(Type::Void);
         } break;
 
@@ -5190,7 +5190,7 @@ void lcc::glint::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* 
             LValueToRValue(&expr->args()[1]);
             LValueToRValue(&expr->args()[2]);
 
-            /// Unlike C’s memset(), this returns nothing.
+            /// Unlike C's memset(), this returns nothing.
             expr->type(Type::Void);
         } break;
 
@@ -5219,7 +5219,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
     auto* const scope = expr->scope();
     std::vector<Decl*> syms = scope->find_recursive(expr->name());
 
-    // If we’re at the global scope and there still is no symbol, then this
+    // If we're at the global scope and there still is no symbol, then this
     // symbol is apparently not declared.
     if (syms.empty()) {
         /// Search imported modules here.
@@ -5458,7 +5458,7 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
 
     // Unary postfix operators.
     if (u->is_postfix()) {
-        /// We currently don’t have postfix operators.
+        /// We currently don't have postfix operators.
         Diag::ICE("Invalid postfix operator {}", ToString(u->op()));
         LCC_UNREACHABLE();
     }
