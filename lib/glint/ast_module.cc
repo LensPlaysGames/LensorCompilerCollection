@@ -503,6 +503,10 @@ auto lcc::glint::Module::serialise() -> std::vector<lcc::u8> {
             type_indices,
             decl->type()
         );
+        LCC_ASSERT(
+            type_indices.at(decl->type()) == decl_type_index,
+            "Mismatch in AoT type index calculation and actual declaration type index"
+        );
         ModuleDescription::DeclarationHeader decl_hdr{
             u16(ModuleDescription::DeclarationHeader::get_kind(decl)),
             decl_type_index
