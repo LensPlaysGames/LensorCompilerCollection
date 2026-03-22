@@ -1467,7 +1467,7 @@ For a real world use case: use unions to convert between a type and it's binary 
 #+begin_src glint
   union {
     value : int;
-    bytes : [byte (sizeof int)];
+    bytes : [byte (int.bytes)];
   };
 #+end_src
 
@@ -1477,15 +1477,51 @@ A sum type is a type-safe way of storing a group of types in one location. A sum
 
 A sum type's members are much like a union type's: only one member is valid at a given point in the program, and all the members share an address. However, the sum type has a hidden =tag= value that stores which member is currently valid (if any). Whenever an access occurs, this tag may be checked against, and an access to an invalid value will error. This means that sum types do not allow you to convert between types, like a union, but they do allow you to have one variable have "one of a group of" types.
 
-** =sizeof= and =alignof=
+** Type Introspection
 
-=sizeof T= where =T= is any valid type will return the size *IN BITS* of the given type.
+A type may be accessed to query information about it. This is similar to accessing members of a struct, but /definitely not the same/.
 
-=alignof T= where =T= is any valid type will return the size *IN BYTES* of the given type.
+All types support the following accessors.
+#+begin_src glint
+  int.bits; ;; 64
+  int.bytes; ;; 8
+  int.align; ;; 8
+  int.ptr; ;; pointer to integer type
+  int.ref; ;; reference to integer type
+#+end_src
+
+All types that contain a singular relevant type support the =elem= accessor.
+#+begin_src glint
+  ;; Enums
+  foo/enum :: enum {
+    x :: 0;
+  };
+  bar/enum :: enum(byte) {
+    x :: 0;
+  };
+
+  foo/enum.elem; ;; int
+  bar/enum.elem; ;; byte
+
+  ;; Arrays
+  foo/array : [byte 8];
+  foo/array.elem; ;; byte
+  ;; Same for dynamic arrays and array views.
+
+  ;; Pointers
+  foo/ptr : int.ptr;
+  foo/ptr.elem; ;; int
+
+  ;; References
+  foo/ref : int.ref;
+  foo/ref.elem; ;; int
+#+end_src
+
+Given that there isn't a special syntax for type introspection, it is likely a good idea to avoid naming enumerators the same exact thing as any valid type accessor.
 
 *** On bits vs bytes
 
-Bit alignment is not something that is supported by any real machine or language. By definition, a byte is the minimum addressable unit in any computer. So, when it comes to alignment of an address, bytes are relevant. However, when it comes to the size of a type in Glint, bits are definitely relevant, since you may have a =u27= or a =s42=.
+Bit alignment is not something that is supported by any real machine or language. By definition, a byte is the minimum addressable unit in any computer. So, when it comes to alignment of an address, bytes are relevant. However, when it comes to the size of a type in Glint, bits are definitely relevant, since you may have a =u27= or an =s42=.
 
 * Postface
 

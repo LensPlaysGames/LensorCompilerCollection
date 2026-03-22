@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-03-13 Fri 14:20 -->
+<!-- 2026-03-22 Sun 12:26 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Programming in Lensor Glint</title>
@@ -353,7 +353,7 @@
 <li><a href="#sum-types">3.5.3. Sum Types</a></li>
 </ul>
 </li>
-<li><a href="#sizeof-and-alignof">3.6. <code>sizeof</code> and <code>alignof</code></a>
+<li><a href="#type-introspection">3.6. Type Introspection</a>
 <ul>
 <li><a href="#on-bits-vs-bytes">3.6.1. On bits vs bytes</a></li>
 </ul>
@@ -406,7 +406,7 @@ For now, you just need to learn about something called <i>memory</i>. A computer
 A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary <i>bits</i> (values that may only be on or off), it is addressed via <i>bytes</i>. In hardware, a byte (the minimum addressable unit in memory) is <i>usually</i> eight bits.
 </p>
 
-<pre class="example" id="orga48006a">
+<pre class="example" id="org9f36ede">
 MEMORY
 | off on  off off off on  off on | ...
 | BYTE 0                         | BYTE 1
@@ -848,7 +848,7 @@ y; <span class="org-comment">;; Error! Unknown symbol y'</span>
 <p>
 The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
 </p>
-<pre class="example" id="org192ae0b">
+<pre class="example" id="orgffb1415">
 root
 |-- x
 `-- block
@@ -1446,7 +1446,7 @@ foo.x <span class="org-operator">+</span> foo.y;
 </div>
 </div>
 <ol class="org-ol">
-<li><a id="org7a554af"></a>Supplanted Members<br />
+<li><a id="org272473d"></a>Supplanted Members<br />
 <div class="outline-text-5" id="text-2-8-1-1">
 <p>
 A struct may have another struct (or sum) type supplanted within it; this means that the supplanted type's members are now accessible as if they were members of the struct the member resides in. In reality, the compiler does generate a unique name for the member and generates code to access that member by name; this construct is simply for the programmer's convenience.
@@ -2322,7 +2322,7 @@ For a real world use case: use unions to convert between a type and it's binary 
 <div class="org-src-container">
 <pre class="src src-glint"><span class="org-type">union</span> <span class="org-delimiter">{</span>
   value <span class="org-operator">:</span> <span class="org-type">int</span>;
-  bytes <span class="org-operator">:</span> <span class="org-type">[byte (sizeof int)]</span>;
+  bytes <span class="org-operator">:</span> <span class="org-type">[byte (int.bytes)]</span>;
 <span class="org-delimiter">}</span>;
 </pre>
 </div>
@@ -2341,22 +2341,64 @@ A sum type's members are much like a union type's: only one member is valid at a
 </div>
 </div>
 </div>
-<div id="outline-container-sizeof-and-alignof" class="outline-3">
-<h3 id="sizeof-and-alignof"><span class="section-number-3">3.6.</span> <code>sizeof</code> and <code>alignof</code></h3>
-<div class="outline-text-3" id="text-sizeof-and-alignof">
+<div id="outline-container-type-introspection" class="outline-3">
+<h3 id="type-introspection"><span class="section-number-3">3.6.</span> Type Introspection</h3>
+<div class="outline-text-3" id="text-type-introspection">
 <p>
-<code>sizeof T</code> where <code>T</code> is any valid type will return the size <b>IN BITS</b> of the given type.
+A type may be accessed to query information about it. This is similar to accessing members of a struct, but <i>definitely not the same</i>.
 </p>
 
 <p>
-<code>alignof T</code> where <code>T</code> is any valid type will return the size <b>IN BYTES</b> of the given type.
+All types support the following accessors.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-type">int</span>.bits; <span class="org-comment">;; 64</span>
+<span class="org-type">int</span>.bytes; <span class="org-comment">;; 8</span>
+<span class="org-type">int</span>.align; <span class="org-comment">;; 8</span>
+<span class="org-type">int.ptr</span>; <span class="org-comment">;; pointer to integer type</span>
+<span class="org-type">int.ref</span>; <span class="org-comment">;; reference to integer type</span>
+</pre>
+</div>
+
+<p>
+All types that contain a singular relevant type support the <code>elem</code> accessor.
+</p>
+<div class="org-src-container">
+<pre class="src src-glint"><span class="org-comment">;; Enums</span>
+<span class="org-type">foo/enum</span> <span class="org-operator">::</span> <span class="org-type">enum</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">::</span> <span class="org-number">0</span>;
+<span class="org-delimiter">}</span>;
+<span class="org-type">bar/enum</span> <span class="org-operator">::</span> <span class="org-type">enum</span><span class="org-delimiter">(</span><span class="org-type">byte</span><span class="org-delimiter">)</span> <span class="org-delimiter">{</span>
+  x <span class="org-operator">::</span> <span class="org-number">0</span>;
+<span class="org-delimiter">}</span>;
+
+foo/enum.elem; <span class="org-comment">;; int</span>
+bar/enum.elem; <span class="org-comment">;; byte</span>
+
+<span class="org-comment">;; Arrays</span>
+foo/array <span class="org-operator">:</span> <span class="org-type">[byte 8]</span>;
+foo/array.elem; <span class="org-comment">;; byte</span>
+<span class="org-comment">;; Same for dynamic arrays and array views.</span>
+
+<span class="org-comment">;; Pointers</span>
+foo/ptr <span class="org-operator">:</span> <span class="org-type">int.ptr</span>;
+foo/ptr.elem; <span class="org-comment">;; int</span>
+
+<span class="org-comment">;; References</span>
+foo/ref <span class="org-operator">:</span> <span class="org-type">int.ref</span>;
+foo/ref.elem; <span class="org-comment">;; int</span>
+</pre>
+</div>
+
+<p>
+Given that there isn't a special syntax for type introspection, it is likely a good idea to avoid naming enumerators the same exact thing as any valid type accessor.
 </p>
 </div>
 <div id="outline-container-on-bits-vs-bytes" class="outline-4">
 <h4 id="on-bits-vs-bytes"><span class="section-number-4">3.6.1.</span> On bits vs bytes</h4>
 <div class="outline-text-4" id="text-on-bits-vs-bytes">
 <p>
-Bit alignment is not something that is supported by any real machine or language. By definition, a byte is the minimum addressable unit in any computer. So, when it comes to alignment of an address, bytes are relevant. However, when it comes to the size of a type in Glint, bits are definitely relevant, since you may have a <code>u27</code> or a <code>s42</code>.
+Bit alignment is not something that is supported by any real machine or language. By definition, a byte is the minimum addressable unit in any computer. So, when it comes to alignment of an address, bytes are relevant. However, when it comes to the size of a type in Glint, bits are definitely relevant, since you may have a <code>u27</code> or an <code>s42</code>.
 </p>
 </div>
 </div>

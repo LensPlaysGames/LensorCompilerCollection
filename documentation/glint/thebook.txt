@@ -82,7 +82,7 @@ _________________
 ..... 1. Struct Types
 ..... 2. Union Types
 ..... 3. Sum Types
-.. 6. `sizeof' and `alignof'
+.. 6. Type Introspection
 ..... 1. On bits vs bytes
 4. Postface
 .. 1. Example Programs
@@ -2041,7 +2041,7 @@ _________________
   ,----
   | union {
   |   value : int;
-  |   bytes : [byte (sizeof int)];
+  |   bytes : [byte (int.bytes)];
   | };
   `----
 
@@ -2065,14 +2065,52 @@ _________________
   variable have "one of a group of" types.
 
 
-3.6 `sizeof' and `alignof'
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+3.6 Type Introspection
+~~~~~~~~~~~~~~~~~~~~~~
 
-  `sizeof T' where `T' is any valid type will return the size *IN BITS*
-  of the given type.
+  A type may be accessed to query information about it. This is similar
+  to accessing members of a struct, but /definitely not the same/.
 
-  `alignof T' where `T' is any valid type will return the size *IN
-  BYTES* of the given type.
+  All types support the following accessors.
+  ,----
+  | int.bits; ;; 64
+  | int.bytes; ;; 8
+  | int.align; ;; 8
+  | int.ptr; ;; pointer to integer type
+  | int.ref; ;; reference to integer type
+  `----
+
+  All types that contain a singular relevant type support the `elem'
+  accessor.
+  ,----
+  | ;; Enums
+  | foo/enum :: enum {
+  |   x :: 0;
+  | };
+  | bar/enum :: enum(byte) {
+  |   x :: 0;
+  | };
+  | 
+  | foo/enum.elem; ;; int
+  | bar/enum.elem; ;; byte
+  | 
+  | ;; Arrays
+  | foo/array : [byte 8];
+  | foo/array.elem; ;; byte
+  | ;; Same for dynamic arrays and array views.
+  | 
+  | ;; Pointers
+  | foo/ptr : int.ptr;
+  | foo/ptr.elem; ;; int
+  | 
+  | ;; References
+  | foo/ref : int.ref;
+  | foo/ref.elem; ;; int
+  `----
+
+  Given that there isn't a special syntax for type introspection, it is
+  likely a good idea to avoid naming enumerators the same exact thing as
+  any valid type accessor.
 
 
 3.6.1 On bits vs bytes
@@ -2082,7 +2120,7 @@ _________________
   or language. By definition, a byte is the minimum addressable unit in
   any computer. So, when it comes to alignment of an address, bytes are
   relevant. However, when it comes to the size of a type in Glint, bits
-  are definitely relevant, since you may have a `u27' or a `s42'.
+  are definitely relevant, since you may have a `u27' or an `s42'.
 
 
 4 Postface
