@@ -1,6 +1,11 @@
 #ifndef LCC_UTILS_HH
 #define LCC_UTILS_HH
 
+// TODO: Get rid of this file! We do _not_ want any "catch-all" headers
+// like "misc", "utils", etc. It should be it's own library, or it should
+// have it's own file in the LCC library, if it's worth implementing.
+
+#include <lcc/assert.hh>
 #include <lcc/typedefs.hh>
 
 #include <fmt/color.h>
@@ -30,28 +35,6 @@
 
 namespace lcc {
 
-#define LCC_STR_(X) #X
-#define LCC_STR(X)  LCC_STR_(X)
-
-#define LCC_CAT_(X, Y) X##Y
-#define LCC_CAT(X, Y)  LCC_CAT_(X, Y)
-
-// clang-format off
-#define LCC_ASSERT(cond, ...) (cond ? void(0) :                \
-    ::lcc::detail::AssertFail(                                 \
-        fmt::format(                                           \
-            "Assertion failed: \"" #cond "\" in {} at line {}" \
-            __VA_OPT__(".\nMessage: {}"), __FILE__, __LINE__   \
-            __VA_OPT__(, fmt::format(__VA_ARGS__))             \
-        )                                                      \
-    )                                                          \
-)
-// clang-format on
-
-#define LCC_UNREACHABLE() LCC_ASSERT(false, "Unreachable")
-
-#define LCC_TODO(...) LCC_ASSERT(false, "TODO" __VA_OPT__(": {}", fmt::format(__VA_ARGS__)))
-
 template <typename>
 concept always_false = false;
 
@@ -65,7 +48,6 @@ constexpr std::underlying_type_t<t> operator+(t e) {
 
 /// Internal stuff.
 namespace lcc::detail {
-[[noreturn]] void AssertFail(std::string&& msg);
 
 /// Hash for string maps.
 struct StringHash {

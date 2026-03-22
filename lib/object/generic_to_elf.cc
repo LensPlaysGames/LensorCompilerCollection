@@ -1,6 +1,8 @@
 #include <object/elf.h>
 #include <object/generic.hh>
 
+#include <lcc/assert.hh>
+
 #include <cstdio>
 
 #include <algorithm>

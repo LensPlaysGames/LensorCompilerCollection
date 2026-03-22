@@ -3,8 +3,9 @@
 #include <object/generic.hh>
 
 #include <fmt/format.h>
+
+#include <lcc/assert.hh>
 #include <lcc/file.hh>
-#include <lcc/utils.hh>
 
 #include <filesystem>
 #include <string>

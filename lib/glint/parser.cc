@@ -1,3 +1,4 @@
+#include <lcc/assert.hh>
 #include <lcc/diags.hh>
 #include <lcc/location.hh>
 #include <lcc/target.hh>

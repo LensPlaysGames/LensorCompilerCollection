@@ -4,6 +4,7 @@
 
 #include <fmt/format.h>
 
+#include <lcc/assert.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/format.hh>

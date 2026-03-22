@@ -1,3 +1,4 @@
+#include <lcc/assert.hh>
 #include <lcc/diags.hh>
 #include <lcc/utf8.hh>
 #include <lcc/utils.hh>

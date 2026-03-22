@@ -1,3 +1,4 @@
+#include <lcc/assert.hh>
 #include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/utils.hh>

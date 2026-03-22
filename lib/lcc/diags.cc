@@ -1,3 +1,4 @@
+#include <lcc/assert.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/utils.hh>
@@ -47,12 +48,6 @@ constexpr auto Name(lcc::Diag::Kind kind) -> std::string_view {
     }
 }
 } // namespace
-
-// Exit due to assertion failure.
-[[noreturn]]
-void lcc::detail::AssertFail(std::string&& msg) {
-    Diag::ICE("{}", std::move(msg));
-}
 
 void lcc::Diag::HandleFatalErrors() {
     // Print backtrace, if requested.

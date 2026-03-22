@@ -1,13 +1,13 @@
-#include <cstring>
 #include <object/coff.h>
 #include <object/generic.hh>
 
-#include <lcc/utils.hh>
+#include <lcc/assert.hh>
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <numeric>
 #include <string>

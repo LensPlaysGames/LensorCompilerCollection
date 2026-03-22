@@ -1,6 +1,7 @@
 #include <cli.hh>
 #include <version.hh>
 
+#include <lcc/assert.hh>
 #include <lcc/context.hh>
 #include <lcc/utils/platform.hh>
 #include <lcc/utils/string_distance.hh>
