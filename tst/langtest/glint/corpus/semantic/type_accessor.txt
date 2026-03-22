@@ -20,6 +20,7 @@ foo.bytes;
 ---
 
 (block
+ (type_alias_declaration)
  (return (integer_literal)))
 
 ================
@@ -44,4 +45,5 @@ foo.align;
 ---
 
 (block
+ (type_alias_declaration)
  (return (integer_literal)))

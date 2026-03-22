@@ -6,7 +6,7 @@
 
   bar :: foo();
 
-  print bar;
+  print bar, `\n`;
 
   -bar;
 #+end_src
