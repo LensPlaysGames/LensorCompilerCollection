@@ -1281,7 +1281,6 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
 
                     NextToken(); // yeet identifier
                 }
-                // FIXME: Why zero precedence?
                 auto element = ParseExpr();
                 if (not element) return element.diag();
                 elements.emplace_back(name, element.value());

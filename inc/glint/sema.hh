@@ -116,6 +116,8 @@ private:
     // expr_ptr points to unary expression `u`
     void AnalyseUnary(Expr** expr_ptr, UnaryExpr* u);
 
+    void AnalyseMemberAccess(Expr** expr_ptr, MemberAccessExpr* expr);
+
     /// Rewrite given expression pointer to:
     /// BINARY :=
     /// |-- lhs

@@ -2657,375 +2657,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         /// LHS must be a (pointer to a) struct, and the identifier must
         /// exist in the struct.
         case Expr::Kind::MemberAccess: {
-            auto* m = as<MemberAccessExpr>(expr);
-            /// If there is an error analysing the object, we don’t know
-            /// its type and can thus not continue checking this.
-            if (not Analyse(&m->object())) {
-                m->set_sema_errored();
-                break;
-            }
-
-            /// Accessing ‘members’ of modules.
-            if (
-                is<NameRefExpr>(m->object())
-                and is<ModuleExpr>(as<NameRefExpr>(m->object())->target())
-            ) {
-                // m->name() == name of member we are accessing
-                // m->object() == NameRef to module we are accessing
-                auto* name_ref = as<NameRefExpr>(m->object());
-                auto* module_expr = as<ModuleExpr>(name_ref->target());
-                auto* referenced_module = module_expr->mod();
-                LCC_ASSERT(referenced_module, "ModuleExpr invalid");
-                auto* scope = referenced_module->global_scope();
-                // Replace member access with a name ref
-                *expr_ptr = new (mod) NameRefExpr(
-                    m->name(),
-                    scope,
-                    m->location()
-                );
-                AnalyseNameRef(as<NameRefExpr>(*expr_ptr));
-                break;
-            }
-
-            if (
-                auto e_type = cast<TypeExpr>(m->object())
-            ) {
-                if (m->name() == "bits") {
-                    *expr_ptr = new (mod) IntegerLiteral(
-                        e_type->contained_type()->size(context),
-                        e_type->contained_type()->location()
-                    );
-                } else if (m->name() == "bytes") {
-                    *expr_ptr = new (mod) IntegerLiteral(
-                        e_type->contained_type()->size_in_bytes(context),
-                        e_type->contained_type()->location()
-                    );
-                } else if (m->name() == "align") {
-                    // FIXME: Target byte width (align is always in bytes)
-                    *expr_ptr = new (mod) IntegerLiteral(
-                        e_type->contained_type()->align(context) / 8,
-                        e_type->contained_type()->location()
-                    );
-                } else if (m->name() == "ptr") {
-                    *expr_ptr = new (mod) TypeExpr(
-                        mod,
-                        Ptr(e_type->contained_type()),
-                        {}
-                    );
-                } else if (m->name() == "ref") {
-                    *expr_ptr = new (mod) TypeExpr(
-                        mod,
-                        Ref(e_type->contained_type()),
-                        {}
-                    );
-                } else if (m->name() == "elem") {
-                    if (not e_type->contained_type()->is_compound_type()) {
-                        Error(
-                            m->location(),
-                            "Type {} has no contained element type",
-                            *e_type->contained_type()
-                        );
-                        m->set_sema_errored();
-                        break;
-                    }
-                    *expr_ptr = new (mod) TypeExpr(
-                        mod,
-                        e_type->contained_type()->elem(),
-                        e_type->contained_type()->location()
-                    );
-                } else {
-                    Error(
-                        m->location(),
-                        "Invalid accessor ({}) on type {}",
-                        m->name(),
-                        *e_type->contained_type()
-                    );
-                    m->set_sema_errored();
-                }
-                break;
-            }
-
-            /// ‘object’ is actually a type name.
-            if (
-                is<NameRefExpr>(m->object())
-                and is<TypeDecl>(as<NameRefExpr>(m->object())->target())
-            ) {
-                auto* t = as<TypeDecl>(as<NameRefExpr>(m->object())->target());
-
-                /// Handle accessing enumerators.
-                if (auto* e = cast<EnumType>(t->type())) {
-                    auto it = rgs::find_if(
-                        e->enumerators(),
-                        [&](auto&& en) { return en->name() == m->name(); }
-                    );
-                    if (it == e->enumerators().end()) {
-                        auto err = Error(m->location(), "Type {} has no enumerator named '{}'", e, m->name());
-                        err.attach(Note(
-                            e->location(),
-                            "Available members:\n\t{}",
-                            fmt::join(
-                                vws::transform(
-                                    e->enumerators(),
-                                    [](auto d) { return d->name(); }
-                                ),
-                                "\n\t"
-                            )
-                        ));
-                        m->set_sema_errored();
-                        break;
-                    }
-
-                    auto* enumerator = *it;
-                    if (enumerator->sema_errored()) {
-                        m->set_sema_errored();
-                        break;
-                    }
-
-                    if (not enumerator->ok()) {
-                        Error(
-                            m->location(),
-                            "Enumerator {} cannot be used before it is defined",
-                            enumerator->name()
-                        );
-                        m->set_sema_errored();
-                        break;
-                    }
-
-                    m->type(enumerator->type());
-                    m->set_sema_done();
-                    *expr_ptr = new (mod) ConstantExpr(expr, enumerator->value());
-                    break;
-                }
-
-                Error(
-                    m->location(),
-                    "Type '{}' does not have member '{}'",
-                    *t->type(),
-                    m->name()
-                );
-                m->set_sema_errored();
-                return false;
-            }
-
-            /// Type must be a struct type (or something that represents one, like a
-            /// DynamicArrayType or SumType)
-            auto* stripped_object_type = m->object()->type()->strip_pointers_and_references();
-
-            // Access to union member
-            if (
-                auto* union_type = cast<UnionType>(stripped_object_type)
-            ) {
-                auto& members = union_type->members();
-                auto it = rgs::find_if(
-                    members,
-                    [&](auto& member) { return member.name == m->name(); }
-                );
-                if (it == members.end()) {
-                    Error(m->location(), "Union {} has no member named '{}'", union_type, m->name());
-                    m->set_sema_errored();
-                    break;
-                }
-
-                auto* cast = new (mod) CastExpr(m->object(), it->type, CastKind::HardCast, m->location());
-                cast->set_lvalue(m->object()->is_lvalue());
-                *expr_ptr = cast;
-                break;
-            }
-
-            // Access to sum type member
-            if (auto* sum_type = cast<SumType>(stripped_object_type)) {
-                auto& members = sum_type->members();
-                auto it = rgs::find_if(members, [&](auto& member) { return member.name == m->name(); });
-                if (it == members.end()) {
-                    Error(m->location(), "Sum type {} has no member named '{}'", sum_type, m->name());
-                    m->set_sema_errored();
-                    break;
-                }
-
-                // The type of the sum type member access is the type of the accessed
-                // member.
-                m->type(it->type);
-
-                m->finalise(
-                    sum_type->struct_type(),
-                    usz(std::distance(members.begin(), it))
-                );
-
-                m->set_lvalue();
-
-                // fmt::print("\nOOHWEE\n");
-                // mod.print(true);
-
-                // The following
-                //   foo : sum { x :cint 0, y :uint 0 };
-                // turns into
-                //   foo : struct { tag :enum { x:0 y:1 }; data :union { :cint :uint }; }
-                //
-                // bar :foo;
-                //
-                // The following
-                //   bar.x := 69;
-                // should turn into
-                //   bar.tag := foo.tag.x;
-                //   (:cint.ptr &bar.data) := 69;
-                //
-                // The following
-                //   bar.x;
-                // should turn into (if tag, then access)
-                //   if (bar.tag = foo.tag.x)
-                //     @(:cint.ptr &bar.data);
-                //   else default_constant_expression foo.x;
-                //
-                // It might be interesting to require a constant expression initialiser in
-                // sum type declarations and then have an `else` that returns that if the
-                // accessed sum type has the wrong data in it.
-                //
-                // The following
-                //   has bar.x;
-                // should turn into
-                //   bar.tag = foo.tag.x;
-
-                break;
-            }
-
-            auto* struct_type = cast<StructType>(stripped_object_type);
-
-            if (not struct_type and is<DynamicArrayType>(stripped_object_type))
-                struct_type = as<DynamicArrayType>(stripped_object_type)->struct_type(mod);
-
-            if (not struct_type and is<ArrayViewType>(stripped_object_type))
-                struct_type = as<ArrayViewType>(stripped_object_type)->struct_type(mod);
-
-            if (not struct_type) {
-                auto e = Error(
-                    m->object()->location(),
-                    "LHS of member access must be a struct, but was {}",
-                    m->object()->type()
-                );
-                // Special error for trying to access an enumerator off a value of an
-                // enum.
-                if (is<EnumType>(m->object()->type())) {
-                    e.attach(
-                        Note(
-                            m->object()->type()->location(),
-                            "If you meant to access an enumerator, access the type itself (not a value of the type)."
-                        )
-                    );
-                    if (
-                        is<NameRefExpr>(m->object())
-                        and is<Decl>(as<NameRefExpr>(m->object())->target())
-                    ) {
-                        // TODO: fixes
-                        e.attach(Note(
-                            as<NameRefExpr>(m->object())->target()->location(),
-                            "Did you mean to use `::` in this declaration?"
-                        ));
-                    }
-                }
-
-                m->set_sema_errored();
-                break;
-            }
-
-            /// The struct type must contain the member.
-            auto& members = struct_type->members();
-            auto member_predicate = [&](auto& member) {
-                return member.name == m->name();
-            };
-            auto it = rgs::find_if(members, member_predicate);
-            if (it == members.end()) {
-                // If the struct (or struct-like) type does not contain a member with the
-                // exact name given, go on to check if any members are supplanted: if
-                // there are supplanted members, look in their namespaces for the named
-                // member (and eventually insert the necessary extra member access).
-                std::function<bool(StructType::Member&)> supplanted_member_predicate = [&](auto& member) {
-                    if (member.name == m->name()) return true;
-                    if (member.supplanted) {
-                        // Confidence Check
-                        if (not is<StructType>(member.type)) {
-                            Error(m->location(), "supplant does not support non-struct types (yet?): {}", member.type);
-                            m->set_sema_errored();
-                            return false;
-                        }
-                        auto supplanted_members = as<StructType>(member.type)->members();
-                        auto supplanted_it = rgs::find_if(supplanted_members, supplanted_member_predicate);
-                        return supplanted_it != supplanted_members.end();
-                    }
-                    return false;
-                };
-
-                it = rgs::find_if(members, supplanted_member_predicate);
-                if (m->sema_errored()) break;
-                if (it == members.end()) {
-                    // Member access name doesn't match any member's name, nor the name of any
-                    // member of any supplanted member.
-                    auto e = Error(
-                        m->location(),
-                        "{} has no member named '{}'",
-                        struct_type,
-                        m->name()
-                    );
-                    if (struct_type->members().size()) {
-                        e.attach(
-                            Note(
-                                m->location(),
-                                "Valid members include: {}",
-                                fmt::join(
-                                    vws::transform(
-                                        struct_type->members(),
-                                        [&](StructType::Member& member) {
-                                            if (member.supplanted)
-                                                return "members of supplanted " + member.type->string();
-                                            return member.name;
-                                        }
-                                    ),
-                                    ","
-                                )
-                            )
-                        );
-                    } else {
-                        // Struct type being accessed has NO members
-                        e.attach(
-                            Note(
-                                struct_type->location(),
-                                "{} has NO members!",
-                                struct_type
-                            )
-                        );
-                    }
-                    m->set_sema_errored();
-                    break;
-                }
-
-                // Member access to supplanted member
-                // (m->object) . (m->name)  ->  (m->object) . (supplanted_member) . (m->name)
-                auto* supplanted_member_access
-                    = new (mod) MemberAccessExpr(
-                        m->object(),
-                        it->name,
-                        m->location()
-                    );
-                auto* new_member_access
-                    = new (mod) MemberAccessExpr(
-                        supplanted_member_access,
-                        m->name(),
-                        m->location()
-                    );
-                *expr_ptr = new_member_access;
-                if (not Analyse(expr_ptr)) {
-                    m->set_sema_errored();
-                    break;
-                }
-                break;
-            }
-
-            /// Set the struct and member index.
-            m->finalise(struct_type, usz(std::distance(members.begin(), it)));
-
-            /// Dereference pointers until we have an lvalue to struct. The
-            /// member access is an lvalue, iff the struct is an lvalue.
-            m->set_lvalue(ImplicitDereference(&m->object()));
-            m->type(it->type);
+            AnalyseMemberAccess(expr_ptr, as<MemberAccessExpr>(expr));
         } break;
 
         case Expr::Kind::Sizeof: {
@@ -3152,6 +2784,401 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         (*expr_ptr)->set_sema_done();
 
     return (*expr_ptr)->ok();
+}
+
+void lcc::glint::Sema::AnalyseMemberAccess(Expr** expr_ptr, MemberAccessExpr* expr) {
+    /// If there is an error analysing the object, we don’t know
+    /// its type and can thus not continue checking this.
+    if (not Analyse(&expr->object())) {
+        expr->set_sema_errored();
+        return;
+    }
+
+    /// Collapse NameRef so we don't have a bunch of extra "if this is a named
+    /// reference to what we are talking about" all over the place.
+    auto resolved_object = expr->object();
+    if (auto e_nameref = cast<NameRefExpr>(resolved_object))
+        resolved_object = e_nameref->target();
+    LCC_ASSERT(resolved_object);
+
+    /// Accessing exports of modules.
+    if (auto e_module = cast<ModuleExpr>(resolved_object)) {
+        auto* referenced_module = e_module->mod();
+        LCC_ASSERT(referenced_module, "ModuleExpr invalid: NULL module");
+        // An export will be made available in the global scope.
+        auto* scope = referenced_module->global_scope();
+        // Replace member access with a name ref to the global scope.
+        *expr_ptr = new (mod) NameRefExpr(
+            expr->name(),
+            scope,
+            expr->location()
+        );
+        AnalyseNameRef(as<NameRefExpr>(*expr_ptr));
+        return;
+    }
+
+    /// Accessing type information on types.
+
+    // Helper to get the type referenced by any expression that references a
+    // type, or NULL if the expression does not reference a type.
+    // Does not handle name references, as those are handled above.
+    const auto type_reference = [&](Expr* object) -> Type* {
+        if (auto e_type = cast<TypeExpr>(object))
+            return e_type->contained_type();
+
+        if (auto d_type_alias = cast<TypeAliasDecl>(object))
+            return d_type_alias->type();
+
+        if (auto d_type = cast<TypeDecl>(object))
+            return d_type->type();
+
+        return nullptr;
+    };
+    if (auto t_object = type_reference(resolved_object)) {
+        // Handle accessing type information.
+        if (expr->name() == "bits") {
+            *expr_ptr = new (mod) IntegerLiteral(
+                t_object->size(context),
+                t_object->location()
+            );
+        } else if (expr->name() == "bytes") {
+            *expr_ptr = new (mod) IntegerLiteral(
+                t_object->size_in_bytes(context),
+                t_object->location()
+            );
+        } else if (expr->name() == "align") {
+            // FIXME: Target byte width (align is always in bytes)
+            *expr_ptr = new (mod) IntegerLiteral(
+                t_object->align(context) / 8,
+                t_object->location()
+            );
+        } else if (expr->name() == "ptr") {
+            *expr_ptr = new (mod) TypeExpr(
+                mod,
+                Ptr(t_object),
+                {}
+            );
+        } else if (expr->name() == "ref") {
+            *expr_ptr = new (mod) TypeExpr(
+                mod,
+                Ref(t_object),
+                {}
+            );
+        } else if (expr->name() == "elem") {
+            if (not t_object->has_elem()) {
+                Error(
+                    expr->location(),
+                    "Type {} has no contained element type",
+                    *t_object
+                );
+                expr->set_sema_errored();
+                return;
+            }
+            *expr_ptr = new (mod) TypeExpr(
+                mod,
+                t_object->elem(),
+                t_object->location()
+            );
+        }
+
+        // TODO: Handle member introspection of structs/unions/sums
+
+        // Handle accessing enumerators.
+        else if (auto* t_enum = cast<EnumType>(t_object)) {
+            auto it = rgs::find_if(
+                t_enum->enumerators(),
+                [&](auto&& en) { return en->name() == expr->name(); }
+            );
+            if (it == t_enum->enumerators().end()) {
+                auto err = Error(
+                    expr->location(),
+                    "Type {} has no enumerator named '{}'",
+                    t_enum,
+                    expr->name()
+                );
+                // NOTE: This message would be ugly given the case of no valid
+                // enumerators, but, that is not possible at this stage (a valid enum type
+                // must have at least one enumerator).
+                err.attach(Note(
+                    t_enum->location(),
+                    "Valid enumerators:\n\t{}",
+                    fmt::join(
+                        vws::transform(
+                            t_enum->enumerators(),
+                            [](auto d) { return d->name(); }
+                        ),
+                        "\n\t"
+                    )
+                ));
+                expr->set_sema_errored();
+                return;
+            }
+
+            auto* enumerator = *it;
+            if (enumerator->sema_errored()) {
+                expr->set_sema_errored();
+                return;
+            }
+
+            if (not enumerator->ok()) {
+                Error(
+                    expr->location(),
+                    "Enumerator {} cannot be used before it is defined",
+                    enumerator->name()
+                );
+                expr->set_sema_errored();
+                return;
+            }
+
+            expr->type(enumerator->type());
+            expr->set_sema_done();
+            *expr_ptr = new (mod) ConstantExpr(expr, enumerator->value());
+            return;
+        } else {
+            Error(
+                expr->location(),
+                "Invalid accessor ({}) on type {}",
+                expr->name(),
+                *t_object
+            );
+            expr->set_sema_errored();
+        }
+
+        return;
+    }
+
+    /// Type must be a struct type (or something that represents one, like a
+    /// DynamicArrayType or SumType)
+    auto* stripped_object_type = expr->object()->type()->strip_pointers_and_references();
+
+    // Access to union member
+    if (
+        auto* union_type = cast<UnionType>(stripped_object_type)
+    ) {
+        auto& members = union_type->members();
+        auto it = rgs::find_if(
+            members,
+            [&](auto& member) { return member.name == expr->name(); }
+        );
+        if (it == members.end()) {
+            Error(expr->location(), "Union {} has no member named '{}'", union_type, expr->name());
+            expr->set_sema_errored();
+            return;
+        }
+
+        auto* cast = new (mod) CastExpr(expr->object(), it->type, CastKind::HardCast, expr->location());
+        cast->set_lvalue(expr->object()->is_lvalue());
+        *expr_ptr = cast;
+        return;
+    }
+
+    // Access to sum type member
+    if (auto* sum_type = cast<SumType>(stripped_object_type)) {
+        auto& members = sum_type->members();
+        auto it = rgs::find_if(members, [&](auto& member) { return member.name == expr->name(); });
+        if (it == members.end()) {
+            Error(expr->location(), "Sum type {} has no member named '{}'", sum_type, expr->name());
+            expr->set_sema_errored();
+            return;
+        }
+
+        // The type of the sum type member access is the type of the accessed
+        // member.
+        expr->type(it->type);
+
+        expr->finalise(
+            sum_type->struct_type(),
+            usz(std::distance(members.begin(), it))
+        );
+
+        expr->set_lvalue();
+
+        // fmt::print("\nOOHWEE\n");
+        // mod.print(true);
+
+        // The following
+        //   foo : sum { x :cint 0, y :uint 0 };
+        // turns into
+        //   foo : struct { tag :enum { x:0 y:1 }; data :union { :cint :uint }; }
+        //
+        // bar :foo;
+        //
+        // The following
+        //   bar.x := 69;
+        // should turn into
+        //   bar.tag := foo.tag.x;
+        //   (:cint.ptr &bar.data) := 69;
+        //
+        // The following
+        //   bar.x;
+        // should turn into (if tag, then access)
+        //   if (bar.tag = foo.tag.x)
+        //     @(:cint.ptr &bar.data);
+        //   else default_constant_expression foo.x;
+        //
+        // It might be interesting to require a constant expression initialiser in
+        // sum type declarations and then have an `else` that returns that if the
+        // accessed sum type has the wrong data in it.
+        //
+        // The following
+        //   has bar.x;
+        // should turn into
+        //   bar.tag = foo.tag.x;
+
+        return;
+    }
+
+    // Helper to get the struct type that represents the actual in-memory
+    // representation of struct and array types.
+    const auto struct_reference = [&](Type* object_type) -> StructType* {
+        if (auto t_struct = cast<StructType>(object_type))
+            return t_struct;
+
+        if (auto t_dynamic_array = cast<DynamicArrayType>(object_type))
+            return t_dynamic_array->struct_type();
+
+        if (auto t_array_view = cast<ArrayViewType>(object_type))
+            return t_array_view->struct_type();
+
+        return nullptr;
+    };
+
+    auto* struct_type = struct_reference(stripped_object_type);
+    if (not struct_type) {
+        auto e = Error(
+            expr->object()->location(),
+            "LHS of member access is of type {}",
+            expr->object()->type()
+        );
+
+        // Special error for trying to access an enumerator off a value of an
+        // enum.
+        if (is<EnumType>(expr->object()->type())) {
+            e.attach(
+                Note(
+                    expr->object()->type()->location(),
+                    "If you meant to access an enumerator, access the type itself (not a value of the type)."
+                )
+            );
+            if (
+                is<NameRefExpr>(expr->object())
+                and is<Decl>(as<NameRefExpr>(expr->object())->target())
+            ) {
+                // TODO: fixes
+                e.attach(Note(
+                    as<NameRefExpr>(expr->object())->target()->location(),
+                    "Did you mean to use `::` in this declaration?"
+                ));
+            }
+        }
+
+        expr->set_sema_errored();
+        return;
+    }
+
+    // The struct type *must* contain the member.
+    auto& members = struct_type->members();
+    auto member_predicate = [&](auto& member) {
+        return member.name == expr->name();
+    };
+    auto it = rgs::find_if(members, member_predicate);
+    if (it == members.end()) {
+        // If the struct (or struct-like) type does not contain a member with the
+        // exact name given, go on to check if any members are supplanted: if
+        // there are supplanted members, look in their namespaces for the named
+        // member (and eventually insert the necessary extra member access).
+        std::function<bool(StructType::Member&)> supplanted_member_predicate = [&](auto& member) {
+            if (member.name == expr->name()) return true;
+            if (member.supplanted) {
+                // Confidence Check
+                if (not is<StructType>(member.type)) {
+                    Error(expr->location(), "supplant does not support non-struct types (yet?): {}", member.type);
+                    expr->set_sema_errored();
+                    return false;
+                }
+                auto supplanted_members = as<StructType>(member.type)->members();
+                auto supplanted_it = rgs::find_if(supplanted_members, supplanted_member_predicate);
+                return supplanted_it != supplanted_members.end();
+            }
+            return false;
+        };
+
+        it = rgs::find_if(members, supplanted_member_predicate);
+        if (expr->sema_errored())
+            return;
+
+        if (it == members.end()) {
+            // Member access name doesn't match any member's name, nor the name of any
+            // member of any supplanted member.
+            auto e = Error(
+                expr->location(),
+                "{} has no member named '{}'",
+                struct_type,
+                expr->name()
+            );
+            if (struct_type->members().size()) {
+                e.attach(
+                    Note(
+                        expr->location(),
+                        "Valid members include: {}",
+                        fmt::join(
+                            vws::transform(
+                                struct_type->members(),
+                                [&](StructType::Member& member) {
+                                    if (member.supplanted)
+                                        return "members of supplanted " + member.type->string();
+                                    return member.name;
+                                }
+                            ),
+                            ","
+                        )
+                    )
+                );
+            } else {
+                // Struct type being accessed has NO members
+                e.attach(
+                    Note(
+                        struct_type->location(),
+                        "{} has NO members!",
+                        struct_type
+                    )
+                );
+            }
+            expr->set_sema_errored();
+            return;
+        }
+
+        // Member access to supplanted member
+        // *   (m->object) . (m->name)
+        // >   (m->object) . (supplanted_member) . (m->name)
+        auto* supplanted_member_access = new (mod) MemberAccessExpr(
+            expr->object(),
+            it->name,
+            expr->location()
+        );
+        auto* new_member_access = new (mod) MemberAccessExpr(
+            supplanted_member_access,
+            expr->name(),
+            expr->location()
+        );
+        *expr_ptr = new_member_access;
+        if (not Analyse(expr_ptr)) {
+            expr->set_sema_errored();
+            return;
+        }
+        return;
+    }
+
+    // Set the struct and member index.
+    expr->finalise(
+        struct_type,
+        usz(std::distance(members.begin(), it))
+    );
+
+    // Dereference pointers until we have an lvalue to struct. The
+    // member access is an lvalue, iff the struct is an lvalue.
+    expr->set_lvalue(ImplicitDereference(&expr->object()));
+    expr->type(it->type);
 }
 
 void lcc::glint::Sema::RewriteToBinaryOpThenAssign(
