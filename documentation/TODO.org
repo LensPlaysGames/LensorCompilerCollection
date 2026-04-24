@@ -2,6 +2,11 @@
 
 * LCC
 
+- [All Test Frameworks]: Produce SARIF
+  That way all test frameworks' results get displayed uniformly.
+- [Tests Meta]: SARIF Viewer Program
+  Tailored to specifically be the program we use to see test framework results in. Basically, I want each framework to produce SARIF, then this program to consume it. That way each developer could view SARIF in their preferred SARIF viewer of choice, which, if they don't have one, will be the one we optionally provide.
+  At first, just print results with inline contents. Eventually support artifact locations.
 - [MIRTest]: MIR -> MIR testing facility
   This will allow us to test register allocation, instruction selection, among other things.
 - [Meta]: Move IR optimisations to their own library

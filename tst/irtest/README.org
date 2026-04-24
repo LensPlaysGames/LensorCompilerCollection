@@ -1,0 +1,3 @@
+* LCC IR Testing
+
+This tests the parser, as well as any transformations applied to the IR that do not transform it into a separate data structure. Think optimisations, lowering, etc.

@@ -1,0 +1,9 @@
+* Vew, the LCC SARIF Viewer
+
+=Vew= is a program used to generate uniform (but not perfect) representations of the meaningful results of SARIF input files.
+
+Minimum capability: print results of any SARIF files given in the terminal.
+
+Hopeful capability: generate a serveable website with interactive, good-looking HTML.
+
+Legendary capability: real-time updating website showing test results with a button that makes the test server (dev machine) run tests and display the results.
