@@ -7,10 +7,10 @@
 #include <variant>
 #include <vector>
 
-struct SARIFProperty; // forward declaration
-struct SARIFObject;   // forward declaration
-struct SARIFArray;    // forward declaration
-struct SARIFItem;     // forward declaration
+struct SARIFProperty; /** (!) forward declaration **/
+struct SARIFObject;   /** (!) forward declaration **/
+struct SARIFArray;    /** (!) forward declaration **/
+struct SARIFItem;     /** (!) forward declaration **/
 
 struct SARIFObject {
     std::vector<SARIFProperty> properties;
