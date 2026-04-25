@@ -71,7 +71,10 @@ struct GlintTest : langtest::Test {
     };
 
     auto run() -> bool {
-        LCC_ASSERT(not name.empty(), "Refusing to run test with empty name");
+        LCC_ASSERT(
+            not name.empty(),
+            "Refusing to run test with empty name"
+        );
 
         // Parse test source as Glint
 

@@ -9,5 +9,6 @@ if (NOT TARGET lcc)
 endif()
 
 add_executable(irtest_target main.cpp)
-target_link_libraries(irtest_target options)
-target_link_libraries(irtest_target liblcc)
+target_link_libraries(irtest_target PRIVATE options)
+target_link_libraries(irtest_target PRIVATE liblcc)
+target_link_libraries(irtest_target PRIVATE liblccjson)

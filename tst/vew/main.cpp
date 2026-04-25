@@ -8,9 +8,11 @@
 
 // TODO: String cache for deduplication (I have a feeling we'll be dealing
 // with sometimes hundreds of duplicate strings).
-
 struct SARIFResult {
+    // NOTE: For any other value, level must be "none".
+    std::string kind{"fail"};
     std::string rule_identifier{};
+    // One of error, warning, note, or none.
     std::string level{};
     std::string message{};
     // TODO: artifact + region location information
@@ -23,43 +25,51 @@ struct TextualResultsDisplay {
     static auto display_result(SARIFResult& result) -> std::string {
         std::string out{};
 
-        std::string downcased_level{};
-        std::ranges::transform(
-            result.level,
-            std::back_inserter(downcased_level),
-            tolower
-        );
-        if (downcased_level == "error") {
+        if (result.kind == "pass") {
             fmt::format_to(
                 std::back_inserter(out),
-                "{}error{}:",
-                "\033[31;1m",
-                "\033[0m"
-            );
-        } else if (downcased_level == "warning") {
-            fmt::format_to(
-                std::back_inserter(out),
-                "{}warning{}:",
-                "\033[33;1m",
-                "\033[0m"
-            );
-        } else if (downcased_level == "note") {
-            fmt::format_to(
-                std::back_inserter(out),
-                "{}note{}:",
-                "\033[32:1m",
+                "{}O{}",
+                "\033[32;1m",
                 "\033[0m"
             );
         } else {
-            fmt::format_to(std::back_inserter(out), "[{}]:", result.level);
+            // If kind is "fail" (the default), level should be taken into account.
+            std::string downcased_level{};
+            std::ranges::transform(
+                result.level,
+                std::back_inserter(downcased_level),
+                tolower
+            );
+            if (downcased_level == "error") {
+                fmt::format_to(
+                    std::back_inserter(out),
+                    "{}X{}",
+                    "\033[31;1m",
+                    "\033[0m"
+                );
+            } else if (downcased_level == "warning") {
+                fmt::format_to(
+                    std::back_inserter(out),
+                    "{}O{}",
+                    "\033[33;1m",
+                    "\033[0m"
+                );
+            } else if (downcased_level == "note") {
+                fmt::format_to(
+                    std::back_inserter(out),
+                    "|"
+                );
+            } else {
+                fmt::format_to(std::back_inserter(out), "[{}]:", result.level);
+            }
         }
+
         // Indent long or complex messages.
         bool long_or_complex = result.message.contains('\n')
                             or result.message.length() > 384;
         if (long_or_complex)
             out += "\n\t";
         else out += ' ';
-
         out += result.message;
 
         // Rule ID
@@ -148,6 +158,8 @@ int main(int argc, const char** argv) {
                     // An element of the results array is a result!
                     auto& result_object = std::get<JSONObject>(element.value);
 
+                    // TODO: More comprehensive result parsing
+
                     SARIFResult sarif_result{};
                     auto prop_rule_id = json_property(
                         result_object,
@@ -164,9 +176,21 @@ int main(int argc, const char** argv) {
                         result_object,
                         "level"
                     );
-                    sarif_result.level = std::get<std::string>(
-                        prop_level->value.value
+                    if (prop_level) {
+                        sarif_result.level = std::get<std::string>(
+                            prop_level->value.value
+                        );
+                    }
+
+                    auto prop_kind = json_property(
+                        result_object,
+                        "kind"
                     );
+                    if (prop_kind) {
+                        sarif_result.kind = std::get<std::string>(
+                            prop_kind->value.value
+                        );
+                    }
 
                     auto prop_message = json_property(
                         result_object,
@@ -190,13 +214,12 @@ int main(int argc, const char** argv) {
             }
         }
 
+        // TODO: Display results of *all SARIF inputs* in a reasonable and uniform
+        // way (sorted?).
         TextualResultsDisplay d{results};
 
         fmt::print("{}", d.display());
     }
-
-    // TODO: Display results of all SARIF inputs in a reasonable and uniform
-    // way (sorting results?).
 
     // TODO: Emit website (HTML) that may be viewed in a browser.
 

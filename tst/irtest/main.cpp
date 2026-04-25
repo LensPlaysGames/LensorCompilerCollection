@@ -1,9 +1,6 @@
-#include "lcc/opt/opt.hh"
-#include <cctype>
-#include <fmt/format.h>
-
-#include <iterator>
 #include <langtest/langtest.hh>
+
+#include <fmt/format.h>
 
 #include <lcc/context.hh>
 #include <lcc/core.hh>
@@ -11,10 +8,15 @@
 #include <lcc/format.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
+#include <lcc/opt/opt.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 
+#include <lccjson/lccjson.hh>
+
+#include <cctype>
 #include <filesystem>
+#include <iterator>
 
 const lcc::Target* default_target =
 #if defined(LCC_PLATFORM_WINDOWS)
@@ -41,6 +43,87 @@ struct TestContext {
 
     bool option_per_directory_count{true};
 };
+
+[[nodiscard]]
+auto to_sarif(
+    decltype(TestContext::results) results_in,
+    std::string_view command_line = ""
+) -> std::string {
+    JSONObject sarif{};
+    sarif.add_property("$schema", "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json");
+    sarif.add_property("version", "2.1.0");
+    JSONArray runs{};
+    JSONObject run{};
+
+    JSONObject tool{};
+    JSONObject driver{};
+    driver.add_property("name", "lcc.irtest");
+    driver.add_property("semanticVersion", "0.420.69");
+    driver.add_property(
+        "informationUri",
+        "https://github.com/LensPlaysGames/LensorCompilerCollection"
+    );
+    driver.add_property("rules", JSONArray{});
+    tool.add_property("driver", std::move(driver));
+    run.add_property("tool", std::move(tool));
+
+    JSONObject baseIds{};
+    JSONObject pwd{};
+    const auto pwd_path = std::filesystem::absolute(std::filesystem::current_path());
+    pwd.add_property(
+        "uri",
+        fmt::format(
+            "file://{}/",
+            pwd_path.string()
+        )
+    );
+    baseIds.add_property("PWD", std::move(pwd));
+    run.add_property("originalUriBaseIds", std::move(baseIds));
+
+    // run artifacts
+    JSONArray artifacts{};
+    run.add_property("artifacts", std::move(artifacts));
+
+    // SARIF run object invocations array property
+    JSONArray invocations{};
+
+    // SARIF invocation object
+    JSONObject invocation{};
+    // Add "commandLine" property
+    invocation.add_property(
+        "commandLine",
+        std::string(command_line)
+    );
+    invocations.add_element(std::move(invocation));
+    run.add_property("invocations", std::move(invocations));
+
+    // run results
+    JSONArray results_out{};
+
+    for (auto& data : results_in) {
+        JSONObject result{};
+        result.add_property("ruleId", "IRTest");
+        // Record pass vs fail.
+        if (data.passed) {
+            result.add_property("kind", "pass");
+        } else {
+            result.add_property("level", "error");
+        }
+
+        JSONObject message{};
+        message.add_property("text", std::string(data.name));
+        result.add_property("message", std::move(message));
+
+        results_out.add_element(std::move(result));
+    }
+
+    run.add_property("results", std::move(results_out));
+
+    runs.add_element(std::move(run));
+    sarif.add_property("runs", std::move(runs));
+
+    return sarif.emit();
+}
 
 struct IRTest {
     std::string_view name;
@@ -363,6 +446,17 @@ int main(int argc, char** argv) {
     };
     TestContext test_context{context};
     visit_directory(test_context, "corpus");
+
+    std::string command_line{};
+    for (auto i = 0; i < argc; ++i) {
+        if (i > 0) command_line += ' ';
+        command_line += argv[i];
+    }
+    auto sarif_file = fopen("irtest.sarif", "wb");
+    if (sarif_file) {
+        fmt::print(sarif_file, "{}", to_sarif(test_context.results, command_line));
+        fclose(sarif_file);
+    }
 
     fmt::print(
         "\nFINAL REPORT:\n{}",
