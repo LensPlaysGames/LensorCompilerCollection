@@ -435,6 +435,15 @@ target_link_libraries(glint PRIVATE options)
 target_link_libraries(glint PRIVATE object)
 target_link_libraries(glint PRIVATE liblcc)
 
+# Simple JSON Library
+add_library(
+  liblccjson STATIC
+  inc/lccjson/lccjson.hh
+  lib/lccjson/lccjson.cc
+)
+target_include_directories(liblccjson PUBLIC inc)
+target_link_libraries(liblccjson PRIVATE options)
+
 # Add the driver.
 add_executable(
   lcc
@@ -454,6 +463,9 @@ configure_file(
   @ONLY
 )
 target_include_directories(lcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+
+# Link lcc driver with simple json library.
+target_link_libraries(lcc PRIVATE liblccjson)
 
 # Link lcc driver with main lcc library.
 target_link_libraries(lcc PRIVATE liblcc)
