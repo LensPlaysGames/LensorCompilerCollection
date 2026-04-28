@@ -115,7 +115,7 @@ in the expected output and what we got."
       (message
        "UNEXPECTED OUTPUT: %s\n\tEXPECTED FUNCTION MATCHER TO RETURN t, BUT GOT nil INSTEAD\n\tmatcher: %S\n\tGOT: %s"
        test-name expected-output got-output)))
-   (t (error "Unhandled expected-output type..."))))
+   (t (error "Unhandled expected-output type (%s)...\n%s" (type-of expected-output) expected-output))))
 
 (defun run-test--wait-for-test-completion (test)
   "Sit until a test is registered as completed"
@@ -387,6 +387,31 @@ strings were stored to."
            (length run-test--completed-list)
            (length run-test--passed-list)))
 
+(defun run-test--sarif-results ()
+  "Generate a vector of SARIF Result objects"
+  (apply #'vector
+         (mapcar (lambda (test-name)
+		           `((ruleId . "RunTest")
+		             ,(if (member test-name run-test--passed-list)
+		                  '(kind . "pass")
+		                '(level . "error"))
+		             (message . ((text . ,test-name)))))
+	             run-test--completed-list)))
+
+(defun run-test--sarif ()
+  "Emit results in SARIF"
+  (json-serialize
+   `((version . "2.1.0")
+     ($schema . "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json")
+     (runs . [((tool . ((driver . ((name . "lcc.runtest") (version . "0.420.69")))))
+               (results . ,(run-test--sarif-results)))]))))
+
+(defun run-test--sarif-file ()
+  "Emit SARIF into a file"
+  (with-current-buffer (find-file-noselect "runtest.sarif")
+    (insert (run-test--sarif))
+    (save-buffer)))
+
 (defun run-test--main ()
   ""
   ;; Initialize state
@@ -399,6 +424,8 @@ strings were stored to."
     ;; Run the tests...
     (run-test--ir-tests)
     (run-test--glint-tests)
+    ;; Emit Results in SARIF
+    (run-test--sarif-file)
     ;; Print test overview (what happened)
     (message "Ran %s Total Tests: %s Passed"
              (length run-test--completed-list)
