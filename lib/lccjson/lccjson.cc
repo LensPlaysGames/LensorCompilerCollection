@@ -49,7 +49,8 @@ std::string JSONItem::emit() {
         // (JSON does not allow un-escaped control characters).
         for (auto c : std::get<std::string>(value)) {
             if (c == '\n') s += "\n";
-            if (c == '\t') s += "\t";
+            else if (c == '\t') s += "\t";
+            else if (c == '"') s += "\\\"";
             else if (c < ' ' or c > '~')
                 s += fmt::format("\\u{:04x}", (uint32_t) c);
             else s += c;
@@ -155,9 +156,11 @@ struct JSONParseContext {
 
         // Collect Contents Until Closing Quote
         auto begin = c.iterator;
-        // TODO: Handle escape characters including quotes
-        while (c and *c != '"')
+        while (c and *c != '"') {
+            // Skip escaped double-quotes
+            if (*c == '\\') ++c; // Yeet escape character
             ++c;
+        }
 
         auto text = std::string{
             begin,
