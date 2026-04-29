@@ -387,6 +387,7 @@ strings were stored to."
            (length run-test--completed-list)
            (length run-test--passed-list)))
 
+;; TODO: locations property to record relevant test source file
 (defun run-test--sarif-results ()
   "Generate a vector of SARIF Result objects"
   (apply #'vector
@@ -401,10 +402,15 @@ strings were stored to."
 (defun run-test--sarif ()
   "Emit results in SARIF"
   (json-serialize
-   `((version . "2.1.0")
-     ($schema . "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json")
-     (runs . [((tool . ((driver . ((name . "lcc.runtest") (version . "0.420.69")))))
-               (results . ,(run-test--sarif-results)))]))))
+   `(($schema . "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json")
+     (version . "2.1.0")
+     (runs
+      . [((tool
+           . ((driver .
+                      ((name . "lcc.runtest")
+                       (semanticVersion . "0.420.69")
+                       (informationUri . "https://codeberg.org/LensPlaysGames/LensorCompilerCollection")))))
+          (results . ,(run-test--sarif-results)))]))))
 
 (defun run-test--sarif-file ()
   "Emit SARIF into a file"
