@@ -1089,7 +1089,7 @@ void to_sarif(const CodeTestContext& context, std::string command_line) {
 
     for (auto& test_name : context.completed_tests()) {
         JSONObject result{};
-        result.add_property("ruleId", "LangTest");
+        result.add_property("ruleId", "CodeTest");
         // Record pass vs fail.
         if (context.test_passed(test_name)) {
             result.add_property("kind", "pass");
