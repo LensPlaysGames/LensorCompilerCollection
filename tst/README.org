@@ -47,3 +47,13 @@ See [[file:../documentation/lcc/RunTest.org][relevant documentation]].
 The =runtest= cmake target will run all RunTest tests.
 
 Implemented at [[file:./runtest/][tst/runtest/]].
+
+** IRTest
+
+Tests =IR -> IR=.
+
+See [[file:../documentation/lcc/IRTest.org][relevant documentation]].
+
+The =irtest= cmake target will run all IRTest tests.
+
+Implemented at [[file:./irtest/][tst/irtest/]].

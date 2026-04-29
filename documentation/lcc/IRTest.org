@@ -1,0 +1,62 @@
+* LCC IR Parsing and Transformation Testing Framework
+
+IRTest ensures that the compiler does the /correct/ and /proper/ fucky-wucky to the IR, for one reason or another.
+
+** Writing Tests
+
+First, we name the test.
+#+begin_example
+================
+Named Example Test
+================
+#+end_example
+
+As you can see, the name is a single, non-empty line that goes between two lines with === /in the first column/.
+
+*** Specifiers
+
+Optionally, there are test specifiers that you may declare (one on each line) before the closing line of ===.
+
+#+begin_example
+================
+Named Example Test
+:example-specifier
+================
+#+end_example
+
+Non-exhaustive list of accepted specifiers:
+- =:optimise N= :: where N is the integer 0, 1, 2, or 3; tells LCC to optimise to the given optimisation level.
+
+*** Input
+
+The input IR is written directly after the closing line of the name of the test, on the next line.
+
+#+begin_example
+================
+Named Example Test
+================
+
+func (internal): ccc void():
+  bb0:
+    return
+#+end_example
+
+To specify what IR is expected for LCC to output from the given input IR, place it directly after a line containing =-= /in the first column/.
+
+#+begin_example
+================
+Named Example Test
+================
+
+func (internal): ccc void():
+  bb0:
+    return
+
+---
+
+func (internal): ccc void():
+  bb0:
+    return
+#+end_example
+
+And that is a simple IRTest test.
