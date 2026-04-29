@@ -179,25 +179,43 @@ struct Test {
 };
 
 class TestContext {
-    size_t _count;
-    size_t _count_failed;
+    // PERFORMANCE: We could technically have a single list of test names,
+    // but, for now, we duplicate them.
+    std::vector<std::string> _completed_tests{};
+    std::vector<std::string> _passing_tests{};
 
 public:
     [[nodiscard]]
-    auto count() const -> size_t { return _count; }
+    auto count() const -> size_t { return _completed_tests.size(); }
     [[nodiscard]]
-    auto count_failed() const -> size_t { return _count_failed; }
+    auto count_failed() const -> size_t { return _completed_tests.size() - _passing_tests.size(); }
     [[nodiscard]]
-    auto count_passed() const -> size_t { return _count - count_failed(); }
+    auto count_passed() const -> size_t { return _passing_tests.size(); }
 
-    void merge(const TestContext& other) {
-        _count += other._count;
-        _count_failed += other._count_failed;
+    // The names of all tests recorded as completed AND passing within this context.
+    [[nodiscard]]
+    auto passing_tests() const -> const std::vector<std::string>& {
+        return _passing_tests;
+    }
+    // The names of all tests recorded as completed within this context.
+    [[nodiscard]]
+    auto completed_tests() const -> const std::vector<std::string>& {
+        return _completed_tests;
     }
 
-    void record_test(bool passed) {
-        ++_count;
-        if (not passed) ++_count_failed;
+    bool test_passes(std::string_view test_name) const {
+        return std::ranges::contains(_passing_tests, test_name);
+    }
+
+    void merge(const TestContext& other) {
+        _completed_tests.append_range(other._completed_tests);
+        _passing_tests.append_range(other._passing_tests);
+    }
+
+    void record_test(const Test& test, bool passed) {
+        _completed_tests.emplace_back(test.name);
+        if (passed)
+            _passing_tests.emplace_back(test.name);
     }
 };
 
@@ -785,7 +803,7 @@ auto parse_and_run_tests(
         if (bol and c == '=') {
             TTest test{};
             if (parse_test(contents, fsize, i, test))
-                context.record_test(test.run());
+                context.record_test(test, test.run());
             bol = true;
         } else bol = c == '\n';
     }

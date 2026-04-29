@@ -11,6 +11,7 @@ endif()
 add_executable(glinttests main.cpp)
 target_link_libraries(glinttests options)
 target_link_libraries(glinttests liblcc)
+target_link_libraries(glinttests liblccjson)
 target_link_libraries(glinttests glint)
 
 target_compile_definitions(

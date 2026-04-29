@@ -12,6 +12,8 @@
 #include <glint/parser.hh>
 #include <glint/sema.hh>
 
+#include <lccjson/lccjson.hh>
+
 #include <algorithm>
 #include <filesystem>
 #include <string>
@@ -154,7 +156,9 @@ struct GlintTest : langtest::Test {
             fmt::print("  {}: {}FAIL{}\n\n", name, C(Colour::Red), C(Colour::Reset));
             if (not ast_matches) {
                 std::string expected = matcher.print();
-                std::string got = langtest::print_node<lcc::glint::Expr>(parse_info.mod->top_level_function()->body());
+                std::string got = langtest::print_node<lcc::glint::Expr>(
+                    parse_info.mod->top_level_function()->body()
+                );
 
                 // find_different_from_begin()
                 size_t diff_begin{0};
@@ -325,6 +329,92 @@ void visit_directory(langtest::TestContext& out, std::filesystem::path directory
     }
 }
 
+void emit_sarif_file(
+    const langtest::TestContext& results,
+    std::filesystem::path outpath,
+    std::string_view command_line = ""
+) {
+    JSONObject sarif{};
+    sarif.add_property(
+        "$schema",
+        "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json"
+    );
+    sarif.add_property("version", "2.1.0");
+    JSONArray runs{};
+    JSONObject run{};
+
+    JSONObject tool{};
+    JSONObject driver{};
+    driver.add_property("name", "lcc.langtest.glint");
+    driver.add_property("semanticVersion", "0.420.69");
+    driver.add_property(
+        "informationUri",
+        "https://codeberg.org/LensPlaysGames/LensorCompilerCollection"
+    );
+    driver.add_property("rules", JSONArray{});
+    tool.add_property("driver", std::move(driver));
+    run.add_property("tool", std::move(tool));
+
+    JSONObject baseIds{};
+    JSONObject pwd{};
+    const auto pwd_path = std::filesystem::absolute(std::filesystem::current_path());
+    pwd.add_property(
+        "uri",
+        fmt::format(
+            "file://{}/",
+            pwd_path.string()
+        )
+    );
+    baseIds.add_property("PWD", std::move(pwd));
+    run.add_property("originalUriBaseIds", std::move(baseIds));
+
+    // run artifacts
+    JSONArray artifacts{};
+    run.add_property("artifacts", std::move(artifacts));
+
+    // SARIF run object invocations array property
+    JSONArray invocations{};
+
+    // SARIF invocation object
+    JSONObject invocation{};
+    // Add "commandLine" property
+    invocation.add_property(
+        "commandLine",
+        std::string(command_line)
+    );
+    invocations.add_element(std::move(invocation));
+    run.add_property("invocations", std::move(invocations));
+
+    // run results
+    JSONArray results_out{};
+
+    for (auto& test_name : results.completed_tests()) {
+        JSONObject result{};
+        result.add_property("ruleId", "LangTest");
+        // Record pass vs fail.
+        if (results.test_passes(test_name)) {
+            result.add_property("kind", "pass");
+        } else {
+            result.add_property("level", "error");
+        }
+
+        JSONObject message{};
+        message.add_property("text", std::string(test_name));
+        result.add_property("message", std::move(message));
+
+        results_out.add_element(std::move(result));
+    }
+
+    run.add_property("results", std::move(results_out));
+
+    runs.add_element(std::move(run));
+    sarif.add_property("runs", std::move(runs));
+
+    // Try to write it, if it doesn't happen it's not the end of the world.
+    auto sarif_data = sarif.emit();
+    (void) lcc::File::Write(sarif_data.data(), sarif_data.size(), outpath);
+}
+
 int main(int argc, const char** argv) {
     bool option_count{false};
     std::filesystem::path p{""};
@@ -426,6 +516,14 @@ int main(int argc, const char** argv) {
     langtest::TestContext out{};
 
     visit_directory(out, "corpus", option_count);
+
+    // Emit Results in a SARIF file
+    std::string command_line{argv[0]};
+    for (auto i = 1; i < argc; ++i) {
+        command_line += ' ';
+        command_line += argv[i];
+    }
+    emit_sarif_file(out, "langtest.sarif", command_line);
 
     // Print stats if CLI options request it or if all tests did not pass.
     if (option_print or out.count_passed() != out.count()) {
