@@ -14,6 +14,8 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 
+#include <lccjson/lccjson.hh>
+
 #include <span>
 #include <string>
 #include <string_view>
@@ -1002,8 +1004,118 @@ std::string_view ToString(const lcc::Target* t) {
     LCC_UNREACHABLE();
 }
 
+class CodeTestContext {
+    std::vector<std::string> _completed_tests{};
+    std::vector<std::string> _passing_tests{};
+
+    [[nodiscard]]
+    static auto encoded_name(const lcc::Target* t, std::string_view test_name) -> std::string {
+        return fmt::format("{}: {}", ToString(t), test_name);
+    }
+
+public:
+    [[nodiscard]]
+    auto completed_tests() const -> const std::vector<std::string>& {
+        return _completed_tests;
+    }
+
+    [[nodiscard]]
+    bool test_passed(std::string_view test_name) const {
+        return lcc::rgs::contains(_passing_tests, test_name);
+    }
+
+    void record_test(bool passed, const lcc::Target* t, std::string_view test_name) {
+        auto n = encoded_name(t, test_name);
+        _completed_tests.emplace_back(n);
+        if (passed)
+            _passing_tests.emplace_back(n);
+    }
+};
+
+void to_sarif(const CodeTestContext& context, std::string command_line) {
+    JSONObject sarif{};
+    sarif.add_property(
+        "$schema",
+        "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json"
+    );
+    sarif.add_property("version", "2.1.0");
+    JSONArray runs{};
+    JSONObject run{};
+
+    JSONObject tool{};
+    JSONObject driver{};
+    driver.add_property("name", "lcc.langtest.glint");
+    driver.add_property("semanticVersion", "0.420.69");
+    driver.add_property(
+        "informationUri",
+        "https://codeberg.org/LensPlaysGames/LensorCompilerCollection"
+    );
+    driver.add_property("rules", JSONArray{});
+    tool.add_property("driver", std::move(driver));
+    run.add_property("tool", std::move(tool));
+
+    JSONObject baseIds{};
+    JSONObject pwd{};
+    const auto pwd_path = std::filesystem::absolute(std::filesystem::current_path());
+    pwd.add_property(
+        "uri",
+        fmt::format(
+            "file://{}/",
+            pwd_path.string()
+        )
+    );
+    baseIds.add_property("PWD", std::move(pwd));
+    run.add_property("originalUriBaseIds", std::move(baseIds));
+
+    // run artifacts
+    JSONArray artifacts{};
+    run.add_property("artifacts", std::move(artifacts));
+
+    // SARIF run object invocations array property
+    JSONArray invocations{};
+
+    // SARIF invocation object
+    JSONObject invocation{};
+    // Add "commandLine" property
+    invocation.add_property(
+        "commandLine",
+        std::string(command_line)
+    );
+    invocations.add_element(std::move(invocation));
+    run.add_property("invocations", std::move(invocations));
+
+    // run results
+    JSONArray results_out{};
+
+    for (auto& test_name : context.completed_tests()) {
+        JSONObject result{};
+        result.add_property("ruleId", "LangTest");
+        // Record pass vs fail.
+        if (context.test_passed(test_name)) {
+            result.add_property("kind", "pass");
+        } else {
+            result.add_property("level", "error");
+        }
+
+        JSONObject message{};
+        message.add_property("text", std::string(test_name));
+        result.add_property("message", std::move(message));
+
+        results_out.add_element(std::move(result));
+    }
+
+    run.add_property("results", std::move(results_out));
+
+    runs.add_element(std::move(run));
+    sarif.add_property("runs", std::move(runs));
+
+    auto sarif_data = sarif.emit();
+    (void) lcc::File::Write(sarif_data.data(), sarif_data.size(), "codetest.sarif");
+}
+
 int main(int argc, char** argv) {
     lcc::utils::Colours C{true};
+    CodeTestContext context{};
     {
         // Read all files in corpus/
         // TODO: Recursively
@@ -1021,16 +1133,16 @@ int main(int argc, char** argv) {
                         fmt::print("  {}: ", ToString(m.target));
                         // Run the test with the given matcher and target,
                         // and print a useful message.
-                        if (
-                            run_test(
-                                m.matcher,
-                                t.source,
-                                m.target,
-                                lcc::Format::gnu_as_att_assembly,
-                                0,
-                                ""
-                            )
-                        ) {
+                        bool passed = run_test(
+                            m.matcher,
+                            t.source,
+                            m.target,
+                            lcc::Format::gnu_as_att_assembly,
+                            0,
+                            ""
+                        );
+                        context.record_test(passed, m.target, t.name);
+                        if (passed) {
                             fmt::print(
                                 "{}PASSED{}\n",
                                 C(lcc::utils::Colour::BoldGreen),
@@ -1048,6 +1160,13 @@ int main(int argc, char** argv) {
             }
         }
     }
+
+    std::string command_line{argv[0]};
+    for (auto i = 1; i < argc; ++i) {
+        command_line += ' ';
+        command_line += argv[i];
+    }
+    to_sarif(context, command_line);
 
     return 0;
 }
