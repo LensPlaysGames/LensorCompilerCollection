@@ -1,6 +1,11 @@
-#include <fmt/format.h>
-#include <lcc/file.hh>
+// vew
+// Display results of SARIF in a reasonable and uniform way.
+
 #include <lccjson/lccjson.hh>
+
+#include <lcc/file.hh>
+
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <iterator>
@@ -22,7 +27,7 @@ struct SARIFResult {
 struct TextualResultsDisplay {
     std::vector<SARIFResult>& results;
 
-    static auto display_result(SARIFResult& result) -> std::string {
+    static auto display_result(const SARIFResult& result) -> std::string {
         std::string out{};
 
         if (result.kind == "pass") {
@@ -55,10 +60,7 @@ struct TextualResultsDisplay {
                     "\033[0m"
                 );
             } else if (downcased_level == "note") {
-                fmt::format_to(
-                    std::back_inserter(out),
-                    "|"
-                );
+                out += '|';
             } else {
                 fmt::format_to(std::back_inserter(out), "[{}]:", result.level);
             }
@@ -89,12 +91,32 @@ struct TextualResultsDisplay {
 
     auto display() -> std::string {
         std::string out{};
+        auto it = std::back_inserter(out);
+        std::vector<SARIFResult*> failures{};
         for (auto& r : results) {
             fmt::format_to(
-                std::back_inserter(out),
+                it,
                 "{}\n",
                 display_result(r)
             );
+            if (r.kind != "pass")
+                failures.emplace_back(&r);
+        }
+
+        if (not failures.empty()) {
+            fmt::format_to(
+                it,
+                "{} {}FAILING{} RESULTS\n",
+                failures.size(),
+                "\033[31;1m",
+                "\033[0m"
+            );
+            for (
+                const auto& r : std::ranges::views::transform(
+                    failures,
+                    [](auto x) { return *x; }
+                )
+            ) fmt::format_to(it, "  {}\n", display_result(r));
         }
 
         return out;
@@ -131,28 +153,44 @@ auto json_drill(JSONObject& object, std::string_view keys) -> JSONProperty* {
 }
 
 int main(int argc, const char** argv) {
+    std::vector<SARIFResult> results{};
+
     // Get SARIF files from command line arguments
     for (auto i = 1; i < argc; ++i) {
         auto contents = lcc::File::Read(argv[i]);
         // Parse contents as JSON/SARIF.
         auto data = json_read(std::string_view{contents});
 
-        // Display results of SARIF in a reasonable and uniform way.
-        std::vector<SARIFResult> results{};
-
         // SARIF validation + data collection
+        // TODO: For index-references (numeric ruleId, formatted message
+        // placeholders, etc), we need to resolve those *file-wide* before merging
+        // the results into the pool of all collected results.
         if (auto o = std::get_if<JSONObject>(&data.value)) {
             auto runs_data = json_property(*o, "runs");
-            if (not runs_data)
+            if (not runs_data) {
+                fmt::print(
+                    stderr,
+                    "Argument {}: invalid SARIF in file at `{}`: unable to parse `runs` property",
+                    i,
+                    argv[i]
+                );
                 continue;
+            }
             auto& runs_array = std::get<JSONArray>(runs_data->value.value);
             for (auto& run : runs_array.elements) {
                 auto results_data = json_property(
                     std::get<JSONObject>(run.value),
                     "results"
                 );
-                if (not results_data)
+                if (not results_data) {
+                    fmt::print(
+                        stderr,
+                        "Argument {}: invalid SARIF in file at `{}`: unable to parse `results` property",
+                        i,
+                        argv[i]
+                    );
                     continue;
+                }
                 auto& results_array = std::get<JSONArray>(results_data->value.value);
                 for (auto& element : results_array.elements) {
                     // An element of the results array is a result!
@@ -213,14 +251,12 @@ int main(int argc, const char** argv) {
                 }
             }
         }
-
-        // TODO: Display results of *all SARIF inputs* in a reasonable and uniform
-        // way (sorted?).
-        TextualResultsDisplay d{results};
-
-        fmt::print("{}", d.display());
     }
 
+    {
+        TextualResultsDisplay d{results};
+        fmt::print("{}", d.display());
+    }
     // TODO: Emit website (HTML) that may be viewed in a browser.
 
     return 0;
