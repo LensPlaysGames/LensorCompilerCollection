@@ -61,7 +61,7 @@ auto to_sarif(
     driver.add_property("semanticVersion", "0.420.69");
     driver.add_property(
         "informationUri",
-        "https://github.com/LensPlaysGames/LensorCompilerCollection"
+        "https://codeberg.org/LensPlaysGames/LensorCompilerCollection"
     );
     driver.add_property("rules", JSONArray{});
     tool.add_property("driver", std::move(driver));
