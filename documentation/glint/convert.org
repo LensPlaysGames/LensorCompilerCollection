@@ -1,0 +1,25 @@
+* Glint's Extensible =convert= Feature
+
+=convert= is a function, just like any other function. The caveat is that, much like =print= automatically inserts calls to =format=, Glint automatically inserts calls to this function.
+
+Glint will insert a call to =format= when a defined type (not a language built-in) is implicitly being converted/coerced to another type.
+
+#+begin_src glint
+  my-type :: struct {
+    x : s16;
+    y : byte;
+    z : byte;
+  };
+
+  ;; Here is where Glint will insert a call to convert (if it exists).
+  ;; In this case, it doesn't, so this would generate an error diagnostic
+  ;; about how `int` is not convertible to `my-type`.
+  foo : my-type 32;
+#+end_src
+
+However, if *either* the author of =my-type= /or/ the user of =my-type= writes a =convert= function for =int= (or a type =int= is otherwise convertible to), as seen below, it will "just work".
+
+#+begin_src glint
+  convert : my-type(x : int)
+    my-type !{.x x; .y 0b01; .z 0xf; };
+#+end_src
