@@ -283,22 +283,18 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             const auto& decl = as<VarDecl>(expr);
 
             // Named template is a no-op
-            if (decl->init() and is<TemplateExpr>(decl->init())) {
+            if (decl->init() and is<TemplateExpr>(decl->init()))
                 return;
-            }
 
             // Named struct template is a no-op
-            if (decl->init() and is<TemplatedStructType>(decl->init()->type())) {
+            if (decl->init() and is<TemplatedStructType>(decl->init()->type()))
                 return;
-            }
 
             // Type is a no-op
             if (
                 is<TypeType>(decl->type())
                 or (decl->init() and is<TypeType>(decl->init()->type()))
-            ) {
-                return;
-            }
+            ) return;
 
             switch (decl->linkage()) {
                 case Linkage::LocalVar: {
@@ -430,10 +426,6 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                     generated_ir[expr] = global;
                 } break;
-
-                default:
-                    fmt::print("Unhandled VarDecl linkage {} (WIP)\n", (int) decl->linkage());
-                    break;
             }
 
         } break;
