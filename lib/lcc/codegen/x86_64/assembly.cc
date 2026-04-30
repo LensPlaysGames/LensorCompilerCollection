@@ -712,6 +712,18 @@ void emit_gnu_att_assembly(
         LCC_ASSERT(defines);
 
         switch (var->init()->kind()) {
+            default:
+                Diag::ICE(
+                    "The x86_64 Assembly Backend does not handle global variable initialisation from value kind {}\n"
+                    "It seems the global variable {} has an unsupported initialiser\n"
+                    "{}",
+                    Value::ToString(var->init()->kind()),
+                    vws::transform(var->names(), [](const auto& n) {
+                        return n.name;
+                    }),
+                    var->init()->string()
+                );
+
             case Value::Kind::ArrayConstant: {
                 auto* array_constant = as<ArrayConstant>(var->init());
                 out += fmt::format(
@@ -741,13 +753,6 @@ void emit_gnu_att_assembly(
                         out += ", ";
                 }
             } break;
-
-            default:
-                LCC_ASSERT(
-                    false,
-                    "Sorry, but global variable initialisation with value kind {} is not supported.",
-                    Value::ToString(var->init()->kind())
-                );
         }
         out += '\n';
     }
