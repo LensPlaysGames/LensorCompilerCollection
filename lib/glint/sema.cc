@@ -2388,9 +2388,6 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                         v->init()->type(),
                         v->type()
                     );
-
-                    // FIXME: This needed? Convert above should insert this.
-                    LValueToRValue(&v->init());
                 }
             }
 
