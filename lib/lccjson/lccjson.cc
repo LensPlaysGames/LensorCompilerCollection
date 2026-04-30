@@ -1,10 +1,9 @@
-#include <cctype>
-#include <iterator>
 #include <lccjson/lccjson.hh>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
+#include <cctype>
 #include <ranges>
 #include <string>
 #include <utility>
@@ -184,7 +183,11 @@ struct JSONParseContext {
         // TODO: Parse 0x/0b/0o base prefix
 
         size_t length{};
-        auto n = std::stoi(c.iterator, &length, 10);
+        auto n = std::stoi(
+            std::string{c.iterator, c.characters.end()}, // (!) emscripten sucks
+            &length,
+            10
+        );
         if (length == 0)
             return {};
 

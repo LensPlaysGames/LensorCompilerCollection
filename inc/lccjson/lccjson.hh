@@ -11,7 +11,7 @@ struct JSONArray;    /** (!) forward declaration **/
 struct JSONItem;     /** (!) forward declaration **/
 
 struct JSONObject {
-    std::vector<JSONProperty> properties{};
+    std::vector<JSONProperty> properties;
 
     void add_property(std::string key, int value);
     void add_property(std::string key, std::string value);
@@ -23,7 +23,7 @@ struct JSONObject {
 };
 
 struct JSONArray {
-    std::vector<JSONItem> elements{};
+    std::vector<JSONItem> elements;
 
     void add_element(int value);
     void add_element(std::string value);
@@ -35,7 +35,7 @@ struct JSONArray {
 };
 
 struct JSONItem {
-    std::variant<JSONObject, JSONArray, std::string, int> value{};
+    std::variant<JSONObject, JSONArray, std::string, int> value;
 
     std::string emit();
 };
