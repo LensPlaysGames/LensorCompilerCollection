@@ -38,6 +38,8 @@ project(lcctest)
 # testing facility. We don't need the LCC binary, basically.
 add_subdirectory("./../" "lcc" EXCLUDE_FROM_ALL)
 
+add_subdirectory("./vew/" "vew" EXCLUDE_FROM_ALL)
+
 # LangTest
 add_subdirectory("./langtest/glint/" "langtest_glint")
 
@@ -123,3 +125,17 @@ add_custom_target(
   irtest
 )
 
+add_custom_target(
+  view
+  COMMAND
+  vew
+  ./codetest/x86_64/codetest.sarif
+  ./irtest/irtest.sarif
+  ./langtest/glint/langtest.sarif
+  ./runtest/runtest.sarif
+  DEPENDS
+  vew
+  WORKING_DIRECTORY
+  ${CMAKE_CURRENT_LIST_DIR}
+  USES_TERMINAL
+)
