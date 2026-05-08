@@ -77,32 +77,78 @@ auto PrintMInstImpl(const MInst& inst, auto&& inst_opcode) -> std::string {
             fmt::join(vws::transform(inst.all_operands(), PrintMOperand), " ")
         );
 
-    // FIXME: lmao
+    const auto PrintMInstRegister = [](const MInst& i) {
+        return fmt::format(
+            "{}r{}.{}{}",
+            i.is_defining() ? "DEF " : "",
+            i.reg(),
+            i.regsize(),
+            register_category_fmt((Register::Category) i.regcategory())
+        );
+    };
+
+    bool used = inst.use_count()
+             or MInst::is_terminator(MInst::Kind(inst.opcode()));
+
+    const auto PrintMInstClobbers = [](const MInst& i) {
+        bool has_clobbers = i.operand_clobbers().empty()
+                        and i.register_clobbers().empty();
+
+        // FIXME: possibly confusing parameter naming to avoid shadowing
+        const auto PrintMInstRegisterClobbers = [](const MInst& ii) {
+            return fmt::join(
+                vws::transform(
+                    ii.register_clobbers(),
+                    [&](usz clobbered_register) {
+                        return fmt::format("r.{}", clobbered_register);
+                    }
+                ),
+                ", "
+            );
+        };
+
+        const auto PrintMInstOperandClobbers = [](const MInst& ii) {
+            return fmt::join(
+                vws::transform(
+                    ii.operand_clobbers(),
+                    [&](usz operand_index) {
+                        return fmt::format("op.{}", operand_index);
+                    }
+                ),
+                ", "
+            );
+        };
+
+        return fmt::format(
+            "{}{}{}{}{}",
+            (not has_clobbers) ? "" : " {CLOBBERS: ",
+            PrintMInstOperandClobbers(i),
+            // If there are register clobbers *and* operand clobbers, we have to
+            // separate them somehow.
+            i.operand_clobbers().empty() or i.register_clobbers().empty() ? "" : ", ",
+            PrintMInstRegisterClobbers(i),
+            (not has_clobbers) ? "" : "}"
+        );
+    };
+
+    const auto PrintMInstOperands = [](const MInst& i) {
+        return fmt::format(
+            "{}{}",
+            i.all_operands().empty() ? "" : " ",
+            fmt::join(
+                vws::transform(i.all_operands(), PrintMOperand),
+                " "
+            )
+        );
+    };
+
     return fmt::format(
-        "    {}r{}.{}{} | {}{}{}{}{}{}{}{}{}",
-        inst.is_defining() ? "DEF " : "",
-        inst.reg(),
-        inst.regsize(),
-        register_category_fmt(
-            (Register::Category) inst.regcategory()
-        ),
-        inst.use_count() or MInst::is_terminator(MInst::Kind(inst.opcode())) ? "" : "Unused ",
+        "    {} | {}{}{}{}",
+        PrintMInstRegister(inst),
+        used ? "" : "Unused ",
         inst_opcode(inst.opcode()),
-        inst.all_operands().empty() ? "" : " ",
-        fmt::join(vws::transform(inst.all_operands(), PrintMOperand), " "),
-        (inst.operand_clobbers().empty() and inst.register_clobbers().empty()) ? "" : " {CLOBBERS: ",
-        fmt::join(
-            vws::transform(inst.operand_clobbers(), [&](usz operand_index) {
-                return fmt::format("op.{}", operand_index);
-            }),
-            ", "
-        ),
-        inst.register_clobbers().empty() ? "" : ", ",
-        fmt::join(vws::transform(inst.register_clobbers(), [&](usz clobbered_register) {
-                      return fmt::format("r.{}", clobbered_register);
-                  }),
-                  ", "),
-        (inst.operand_clobbers().empty() and inst.register_clobbers().empty()) ? "" : "}"
+        PrintMInstOperands(inst),
+        PrintMInstClobbers(inst)
     );
 }
 
