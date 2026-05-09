@@ -145,6 +145,10 @@ private:
         );
     }
 
+    // Reorder children based on member indices of underlying struct
+    // type (so that IRGen doesn't have to jump around).
+    void ReorderCompoundLiteralNamedChildrenToMatchStruct(CompoundLiteral*, StructType*);
+
     // Declare an external function (imported) at the global scope with the
     // given name. Useful for registering C library functions that may be
     // called by expressions inserted by semantic analysis.

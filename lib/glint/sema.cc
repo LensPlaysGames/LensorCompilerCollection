@@ -726,7 +726,8 @@ void lcc::glint::Sema::AnalyseModule() {
             "};\n"
             "\n"
             "__dynarray_initvalue :: template(capacity : expr, element_type : type) {\n"
-            "  !{.data element_type.ptr\n"
+            "  [element_type] !{\n"
+            "    .data element_type.ptr\n"
             "      (malloc (capacity ((sizeof element_type) / 8))),\n"
             "    .size 0,\n"
             "    .capacity capacity\n"
@@ -1473,6 +1474,38 @@ auto lcc::glint::Sema::DefaultExpression(Type* ty) -> Result<Expr*> {
             break;
     }
     LCC_UNREACHABLE();
+}
+
+void lcc::glint::Sema::ReorderCompoundLiteralNamedChildrenToMatchStruct(CompoundLiteral* c, StructType* s) {
+    std::vector<CompoundLiteral::Member> new_order{};
+    new_order.reserve(c->values().size());
+    for (usz i = 0; i < c->values().size(); ++i) {
+        const auto& member = c->values().at(i);
+        isz struct_member_index = isz(i);
+        if (not member.name.empty()) {
+            struct_member_index = s->member_index_by_name(member.name);
+            if (struct_member_index == StructType::Member::BadIndex) {
+                Error(
+                    member.value->location(),
+                    "Named member {} of compound literal does not correspond to any member of {}",
+                    member.name,
+                    c->type()
+                );
+                c->set_sema_errored();
+                continue;
+            }
+        }
+        new_order.insert(
+            std::min(new_order.begin() + struct_member_index, new_order.end()),
+            CompoundLiteral::Member{member}
+        );
+    }
+
+    LCC_ASSERT(
+        new_order.size() == c->values().size(),
+        "Messed up sorting of named compound literal member expressions"
+    );
+    c->values() = new_order;
 }
 
 auto lcc::glint::Sema::DeclReference(Decl* decl) -> Expr* {
@@ -2473,16 +2506,23 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 // fmt::print("expected_type:{}\n", fmt::ptr(expected_type));
                 // if (expected_type) fmt::print("*expected_type:{}\n", *expected_type);
 
-                if (c->values().size() != 1) {
-                    Error(
-                        c->location(),
-                        "Cannot infer type of Untyped Compound Literal with multiple subexpressions"
-                    );
-                    c->set_sema_errored();
-                } else {
+                if (c->values().size() == 1) {
                     // Set type of compound literal to type of singular subexpression.
                     // "bubble up"
                     c->type(c->values().at(0).value->type());
+                } else {
+                    c->set_sema_errored();
+                    if (c->values().empty()) {
+                        Error(
+                            c->location(),
+                            "Cannot infer type of Untyped Compound Literal with no subexpressions, and no expected type"
+                        );
+                    } else {
+                        Error(
+                            c->location(),
+                            "Cannot infer type of Untyped Compound Literal with multiple subexpressions"
+                        );
+                    }
                 }
             }
             // If both c->type() and expected_type, Convert to expected_type.
@@ -2537,11 +2577,13 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             if (auto* union_t = cast<UnionType>(c->type())) {
                 (void) union_t;
                 LCC_TODO("Compound literal to union");
+                // TODO: Ensure compound literal has one member expression.
+                // If it's named, ensure the name exists as a member of the union.
             } else if (auto* array_t = cast<ArrayType>(c->type())) {
                 if (c->values().size() != array_t->dimension()) {
                     Error(
                         c->location(),
-                        "Compound literal for array type must have number of member expressions equal to array dimension {}, but got {} instead\n",
+                        "Compound literal of array type must have number of member expressions equal to array dimension {}, but got {} instead\n",
                         array_t->dimension(),
                         c->values().size()
                     );
@@ -2552,7 +2594,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     if (not Convert(&m.value, array_t->element_type())) {
                         Error(
                             m.value->location(),
-                            "Every member of a compound literal for an array type must be convertible to the array element type, but {} is not convertible to {}",
+                            "Every member of a compound literal of array type must be convertible to the array element type, but {} is not convertible to {}",
                             m.value->type(),
                             array_t->element_type()
                         );
@@ -2597,38 +2639,11 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 }
 
             } else if (auto* struct_t = cast<StructType>(c->type())) {
-                // TODO: Reorder children based on member indices of underlying struct
-                // type so that IRGen doesn't have to jump around.
-                std::vector<CompoundLiteral::Member> new_order{};
-                new_order.reserve(c->values().size());
-                for (usz i = 0; i < c->values().size(); ++i) {
-                    const auto& member = c->values().at(i);
-                    isz struct_member_index = isz(i);
-                    if (not member.name.empty()) {
-                        struct_member_index = struct_t->member_index_by_name(member.name);
-                        if (struct_member_index == StructType::Member::BadIndex) {
-                            Error(
-                                member.value->location(),
-                                "Named member {} of compound literal does not correspond to any member of {}",
-                                member.name,
-                                c->type()
-                            );
-                            c->set_sema_errored();
-                            continue;
-                        }
-                    }
-                    new_order.insert(
-                        std::min(new_order.begin() + struct_member_index, new_order.end()),
-                        CompoundLiteral::Member{member}
-                    );
-                }
-
-                LCC_ASSERT(
-                    new_order.size() == c->values().size(),
-                    "Messed up sorting of named compound literal member expressions"
-                );
-                c->values() = new_order;
-
+                ReorderCompoundLiteralNamedChildrenToMatchStruct(c, struct_t);
+            } else if (auto* dynarray_t = cast<DynamicArrayType>(c->type())) {
+                ReorderCompoundLiteralNamedChildrenToMatchStruct(c, dynarray_t->struct_type());
+            } else if (auto* view_t = cast<ArrayViewType>(c->type())) {
+                ReorderCompoundLiteralNamedChildrenToMatchStruct(c, view_t->struct_type());
             } else {
                 // Even if the member is named, the name wouldn't mean anything anyway
                 // (since the represented type doesn't support the concept of named
