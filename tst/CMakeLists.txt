@@ -60,6 +60,8 @@ add_custom_target(
   --load ./runtest.el
   DEPENDS
   lcc
+  BYPRODUCTS
+  ${CMAKE_CURRENT_LIST_DIR}/runtest/runtest.sarif
   VERBATIM
   USES_TERMINAL
 )
@@ -71,6 +73,8 @@ add_custom_target(
   irtest_target
   DEPENDS
   irtest_target
+  BYPRODUCTS
+  ${CMAKE_CURRENT_LIST_DIR}/irtest/irtest.sarif
   WORKING_DIRECTORY
   "${CMAKE_CURRENT_LIST_DIR}/irtest/"
   USES_TERMINAL
@@ -82,6 +86,8 @@ add_custom_target(
   glinttests
   DEPENDS
   glinttests
+  BYPRODUCTS
+  ${CMAKE_CURRENT_LIST_DIR}/langtest/glint/langtest.sarif
   WORKING_DIRECTORY
   "${CMAKE_CURRENT_LIST_DIR}/langtest/glint/"
   USES_TERMINAL
@@ -93,6 +99,8 @@ add_custom_target(
   codetest_x86_64
   DEPENDS
   codetest_x86_64
+  BYPRODUCTS
+  ${CMAKE_CURRENT_LIST_DIR}/codetest/x86_64/codetest.sarif
   WORKING_DIRECTORY
   "${CMAKE_CURRENT_LIST_DIR}/codetest/x86_64/"
   USES_TERMINAL
@@ -126,7 +134,7 @@ add_custom_target(
 )
 
 add_custom_target(
-  view
+  view_command
   COMMAND
   vew
   ./codetest/x86_64/codetest.sarif
@@ -138,4 +146,36 @@ add_custom_target(
   WORKING_DIRECTORY
   ${CMAKE_CURRENT_LIST_DIR}
   USES_TERMINAL
+)
+
+add_custom_target(
+  test_and_view_command
+  COMMAND
+  vew
+  ./codetest/x86_64/codetest.sarif
+  ./irtest/irtest.sarif
+  ./langtest/glint/langtest.sarif
+  ./runtest/runtest.sarif
+  DEPENDS
+  vew
+  ./codetest/x86_64/codetest.sarif
+  ./irtest/irtest.sarif
+  ./langtest/glint/langtest.sarif
+  ./runtest/runtest.sarif
+  test
+  WORKING_DIRECTORY
+  ${CMAKE_CURRENT_LIST_DIR}
+  USES_TERMINAL
+)
+
+add_custom_target(
+  view
+  DEPENDS
+  view_command
+)
+
+add_custom_target(
+  test_and_view
+  DEPENDS
+  test_and_view_command
 )
