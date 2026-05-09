@@ -1,5 +1,8 @@
 #include <sarif.hh>
+
 #include <version.hh>
+
+#include <lccjson/lccjson.hh>
 
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
@@ -42,7 +45,7 @@ std::string as_sarif(lcc::Context& ctx, std::string_view command_line) {
     driver.add_property("semanticVersion", LCC_VERSION_STRING);
     driver.add_property(
         "informationUri",
-        "https://github.com/LensPlaysGames/LensorCompilerCollection"
+        "https://codeberg.org/LensPlaysGames/LensorCompilerCollection"
     );
     driver.add_property("rules", JSONArray{});
     tool.add_property("driver", driver);
