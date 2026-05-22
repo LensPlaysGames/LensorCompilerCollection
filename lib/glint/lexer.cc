@@ -1,5 +1,6 @@
 #include <lcc/assert.hh>
 #include <lcc/diags.hh>
+#include <lcc/stringmap.hh>
 #include <lcc/utf8.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
@@ -112,7 +113,10 @@ void lcc::glint::Lexer::NextToken() {
     }
 
     /// Pop empty macro expansions off the expansion stack.
-    std::erase_if(macro_expansion_stack, [](MacroExpansion& x) { return x.done(); });
+    std::erase_if(
+        macro_expansion_stack,
+        [](MacroExpansion& x) { return x.done(); }
+    );
 
     /// Iff there are macro expansions to handle, get tokens from there
     /// instead of from the file.

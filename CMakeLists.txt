@@ -340,6 +340,7 @@ add_library(
   inc/lcc/lcc-c.h
   inc/lcc/location.hh
   inc/lcc/opt/opt.hh
+  inc/lcc/stringmap.hh
   inc/lcc/syntax/lexer.hh
   inc/lcc/syntax/token.hh
   inc/lcc/target.hh

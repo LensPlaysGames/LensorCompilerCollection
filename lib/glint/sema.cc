@@ -1,6 +1,7 @@
 #include <lcc/assert.hh>
 #include <lcc/context.hh>
 #include <lcc/core.hh>
+#include <lcc/stringmap.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/string_distance.hh>

@@ -1,6 +1,7 @@
 #include <lcc/assert.hh>
 #include <lcc/diags.hh>
 #include <lcc/location.hh>
+#include <lcc/stringmap.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>

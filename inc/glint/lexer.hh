@@ -2,6 +2,7 @@
 #define GLINT_LEXER_HH
 
 #include <lcc/context.hh>
+#include <lcc/stringmap.hh>
 #include <lcc/syntax/lexer.hh>
 #include <lcc/utils.hh>
 

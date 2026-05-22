@@ -3,6 +3,7 @@
 
 #include <lcc/core.hh>
 #include <lcc/diags.hh>
+#include <lcc/stringmap.hh>
 #include <lcc/syntax/token.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
