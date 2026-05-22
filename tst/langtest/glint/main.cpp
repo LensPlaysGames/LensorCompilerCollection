@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 static lcc::utils::Colours C{true};
 using lcc::utils::Colour;
