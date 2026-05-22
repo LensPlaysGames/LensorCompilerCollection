@@ -16,6 +16,46 @@ auto Node::get_past_location() -> Location {
     return out;
 }
 
+#ifdef LCC_LANGTEST
+auto Node::langtest_name() -> std::string_view {
+    switch (kind()) {
+        case NodeKind::Invalid: return "invalid";
+        case NodeKind::Group: return "group";
+        case NodeKind::Block: return "block";
+        case NodeKind::Declaration: return "declaration";
+        case NodeKind::IntegerLiteral: return "integer_literal";
+        case NodeKind::Return: return "return";
+        case NodeKind::Count: break;
+    }
+    Diag::ICE("unreachable");
+}
+auto Node::langtest_children() -> std::vector<Node*> {
+    switch (kind()) {
+        case NodeKind::IntegerLiteral:
+            return {};
+
+        case NodeKind::Group: return ((Group*) this)->constituents();
+        case NodeKind::Block: return ((Block*) this)->constituents();
+        case NodeKind::Declaration: {
+            auto d = (Declaration*) this;
+            if (d->initialising_expression())
+                return {d->initialising_expression()};
+            return {};
+        };
+        case NodeKind::Return: {
+            auto r = ((Return*) this);
+            if (r->expression())
+                return {r->expression()};
+            return {};
+        }
+
+        case NodeKind::Invalid:
+        case NodeKind::Count: break;
+    }
+    Diag::ICE("unreachable");
+}
+#endif
+
 } // namespace lcc::language_c
 
 auto fmt::formatter<lcc::language_c::Node>::indent(format_context::iterator out, size_t depth) const

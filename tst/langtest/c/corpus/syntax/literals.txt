@@ -1,0 +1,47 @@
+================
+Integer: 0
+:syntax
+:desc just zero
+================
+
+0
+
+---
+
+(block (integer_literal))
+
+================
+Integer: 10
+:syntax
+:desc integer with multiple digits
+================
+
+10
+
+---
+
+(block (integer_literal))
+
+================
+Integer: 0100
+:syntax
+:desc integer with a leading zero is valid in C (and base 8)
+================
+
+0100
+
+---
+
+(block (integer_literal))
+
+================
+Integer: 0b01001001
+:syntax
+:desc binary integer
+================
+
+0b01001001
+
+---
+
+(block (integer_literal))

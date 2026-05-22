@@ -44,6 +44,11 @@ public:
     // Given "  _return 69_  ", where the underscores delineate the node's
     // location, return a location like "  return 69_ _ ".
     auto get_past_location() -> Location;
+
+#ifdef LCC_LANGTEST
+    auto langtest_name() -> std::string_view;
+    auto langtest_children() -> std::vector<Node*>;
+#endif
 };
 
 struct Group : public Node {
