@@ -230,6 +230,77 @@ strings were stored to."
      (make-temp-file (expand-file-name "glinttest") nil ".g" source))
    sources))
 
+(defun run-test--ir-tests ()
+  ""
+  (message "Running LCC IR Tests...")
+  (defvar test '(error "NOT A GLOBAL"))
+
+  (mapc
+   (lambda (org-filepath)
+     (let ((test (run-test--parse-test-from-org org-filepath)))
+       (if (not test)
+           (message
+            "Error: Failed to parse test from org file %s"
+            org-filepath)
+         (let
+             ((source-files
+               (run-test--sources-to-files (plist-get test :source)))
+              (output-file
+               (make-temp-file (expand-file-name "irtest")))
+              (program-output ""))
+           ;; Run LCC
+           (make-process
+            :name "lcc"
+            :buffer nil
+            :command
+            `(,lcc-path
+              ,@source-files
+              "-x" "ir"
+              "-o" ,output-file
+              "--run")
+            :filter
+            (lambda (p o) (setf program-output (concat program-output o)))
+            :sentinel
+            (lambda (p e)
+              ;; (message "Process: %s had the event '%s' (process-status:%s)" p e (process-status p))
+              (when (memq (process-status p) '(exit signal))
+                ;; Once the program has exited, we no longer need it's executable...
+                ;; (message "Test %s: Deleting executable file %s" (plist-get test :name) output-file)
+                (delete-file output-file)
+
+                ;; Set failure flag if status or output is unexpected.
+                ;; Record test as passing if test passed.
+                (if (or
+                     (run-test--process-status-unexpected-p
+                      (plist-get test :name) (process-status p) e)
+                     (run-test--output-unexpected-p
+                      (plist-get test :name) (plist-get test :output) program-output)
+                     (run-test--status-unexpected-p
+                      (plist-get test :name) (plist-get test :status) (process-exit-status p)))
+                    (setf test (plist-put test :failed t))
+                  (run-test--mark-passed (plist-get test :name)))
+
+                ;; Mark test as completed
+                (run-test--mark-completed (plist-get test :name)))))
+
+           (run-test--wait-for-test-completion test)
+           (run-test--print-test-result test)
+
+           ;; Delete intermediate assembly files
+           (mapc
+            (lambda (source-path)
+              (delete-file (file-name-with-extension source-path ".s")))
+            source-files)
+
+           ;; Delete source files
+           (mapc #'delete-file source-files)))))
+   (directory-files "corpus/ir/" t "\\.org\\'"))
+
+  ;; Print rundown of LCC IR tests (what happened)
+  (message "Ran %s LCC IR Tests: %s Passed"
+           (length run-test--completed-list)
+           (length run-test--passed-list)))
+
 (defun run-test--glint-tests ()
   "Run each of the tests in the Glint corpus"
   (message "Running Glint Tests...")
@@ -316,11 +387,14 @@ strings were stored to."
            (length run-test--completed-list)
            (length run-test--passed-list)))
 
-(defun run-test--ir-tests ()
-  ""
-  (message "Running LCC IR Tests...")
-  (defvar test '(error "NOT A GLOBAL"))
+(defun run-test--c-tests ()
+  "Run each of the tests in the C language corpus"
+  (message "Running C Tests...")
 
+  ;; For every .org file in corpus/glint/ directory, parse and run the test.
+  ;; NOTE: If we used a child emacs process to operate on the parsed test,
+  ;; we could dispatch each test as soon as it's parsed, running them in
+  ;; parallel. We may even be able to parse tests in parallel.
   (mapc
    (lambda (org-filepath)
      (let ((test (run-test--parse-test-from-org org-filepath)))
@@ -332,7 +406,7 @@ strings were stored to."
              ((source-files
                (run-test--sources-to-files (plist-get test :source)))
               (output-file
-               (make-temp-file (expand-file-name "irtest")))
+               (make-temp-file (expand-file-name "glinttest")))
               (program-output ""))
            ;; Run LCC
            (make-process
@@ -341,7 +415,7 @@ strings were stored to."
             :command
             `(,lcc-path
               ,@source-files
-              "-x" "ir"
+              "-x" "c"
               "-o" ,output-file
               "--run")
             :filter
@@ -350,10 +424,6 @@ strings were stored to."
             (lambda (p e)
               ;; (message "Process: %s had the event '%s' (process-status:%s)" p e (process-status p))
               (when (memq (process-status p) '(exit signal))
-                ;; Once the program has exited, we no longer need it's executable...
-                ;; (message "Test %s: Deleting executable file %s" (plist-get test :name) output-file)
-                (delete-file output-file)
-
                 ;; Set failure flag if status or output is unexpected.
                 ;; Record test as passing if test passed.
                 (if (or
@@ -372,6 +442,12 @@ strings were stored to."
            (run-test--wait-for-test-completion test)
            (run-test--print-test-result test)
 
+           ;; TODO: GMeta files
+
+           ;; Once the program has exited, we no longer need it's executable...
+           ;; (message "Test %s: Deleting executable file %s" (plist-get test :name) output-file)
+           (delete-file output-file)
+
            ;; Delete intermediate assembly files
            (mapc
             (lambda (source-path)
@@ -380,10 +456,20 @@ strings were stored to."
 
            ;; Delete source files
            (mapc #'delete-file source-files)))))
-   (directory-files "corpus/ir/" t "\\.org\\'"))
+   (directory-files "corpus/c/" 'absolute "\\.org\\'"))
 
-  ;; Print rundown of LCC IR tests (what happened)
-  (message "Ran %s LCC IR Tests: %s Passed"
+  ;; Hacky fix: I'm not exactly sure where these are coming from, but I can't
+  ;; seem to get all of the executables to delete...
+  (mapc #'delete-file
+        (directory-files "." 'absolute "\\glinttest.*\\'"))
+
+  ;; Once tests are over, we should probably clean up any .gmeta files that
+  ;; we may have created over the course of compiling the tests.
+  (mapc #'delete-file
+        (directory-files "." 'absolute "\\.gmeta\\'"))
+
+  ;; Print rundown of Glint tests (what happened)
+  (message "Ran %s Glint Tests: %s Passed"
            (length run-test--completed-list)
            (length run-test--passed-list)))
 
@@ -430,6 +516,7 @@ strings were stored to."
     ;; Run the tests...
     (run-test--ir-tests)
     (run-test--glint-tests)
+    (run-test--c-tests)
     ;; Emit Results in SARIF
     (run-test--sarif-file)
     ;; Print test overview (what happened)
