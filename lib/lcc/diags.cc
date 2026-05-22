@@ -369,15 +369,18 @@ void lcc::Diag::print() {
 
                     // We first pad the line based on the number of digits in the line number
                     // and append more spaces to line us up with the range.
-                    for (usz i = 0; i < digits + before.size() + sizeof("  | ") - 1; ++i)
-                        fmt::print(stderr, " ");
+                    fmt::print(
+                        stderr,
+                        "{:{}}",
+                        "",
+                        digits + insert_before.size() + sizeof("  | ") - 1
+                    );
 
                     // Finally, print the underline itself.
                     fmt::print(stderr, "{}", C(Bold));
                     for (usz i = 0; i < insert_range.size(); ++i)
                         fmt::print(stderr, "~");
                     fmt::print(stderr, "{}\n", C(Reset));
-
                 } break;
             }
         }

@@ -68,7 +68,7 @@ auto lcc::Location::seek(const lcc::Context* ctx) const -> LocInfo {
     // Seek forward to the end of the line.
     const char* const end = data + f->size();
     LCC_ASSERT(len, "Location with zero length is not seekable");
-    info.line_end = data + pos + len;
+    info.line_end = data + pos + len - 1;
     while (info.line_end < end and *info.line_end != '\n')
         ++info.line_end;
 

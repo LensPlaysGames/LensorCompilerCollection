@@ -86,7 +86,8 @@ public:
           where(other.where),
           id(std::move(other.id)),
           message(std::move(other.message)),
-          attached(std::move(other.attached)) {
+          attached(std::move(other.attached)),
+          fixes(std::move(other.fixes)) {
         other.kind = Kind::None;
     }
 
@@ -98,6 +99,7 @@ public:
         id = std::move(other.id);
         message = std::move(other.message);
         attached = std::move(other.attached);
+        fixes = std::move(other.fixes);
         other.kind = Kind::None;
         return *this;
     }
@@ -173,7 +175,7 @@ public:
         kind = Kind::None;
     }
 
-    void fix_by(Fix fix) { fixes.emplace_back(fix); }
+    void fix_by(Fix&& fix) { fixes.emplace_back(fix); }
 
     void fix_by_replacing_with(
         Location where_to_replace,
