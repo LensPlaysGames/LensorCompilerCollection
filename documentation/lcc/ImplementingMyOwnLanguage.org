@@ -1,0 +1,88 @@
+* So, You Want to Write A Programming Language?
+
+Well, you've come to the right place. This file is meant as a VERY BASIC OVERVIEW/RUNDOWN of the steps you would take to introduce any new language to the LCC codebase.
+
+** The Driver Library
+
+Basically, the =lcc= CLI needs to be able to produce an LCC IR module from an LCC Context and a source file reference.
+
+#+begin_src cpp
+  #ifndef LCC_LANGUAGE_DRIVER_HH
+  #define LCC_LANGUAGE_DRIVER_HH
+
+  #include <lcc/context.hh>
+  #include <lcc/file.hh>
+
+  namespace lcc::language {
+      auto produce_module(Context* context, File& source) -> lcc::Module*;
+  } // namespace lcc::language
+
+  #endif /* LCC_LANGUAGE_DRIVER_HH */
+#+end_src
+
+*** The Driver Implementation
+
+Technically you could produce an LCC module however you see fit. For most languages, though, this is a good framework to start from:
+
+#+begin_src cpp
+  auto produce_module(Context* context, File& source) -> lcc::Module* {
+      // Parse the file.
+      auto mod = Parser::Parse(context, source);
+      if (context->has_error()) return {};
+      if (context->option_stopat_syntax()) return {};
+
+      // Perform semantic analysis.
+      Sema::Analyse(
+          context,
+          ,*mod,
+          context->option_use_colour()
+      );
+      if (context->has_error()) return {};
+      if (context->option_stopat_sema()) return {};
+
+      auto* ir = IRGen::Generate(context, *mod);
+      if (context->has_error()) return {};
+
+      return ir;
+  }
+#+end_src
+
+** =src/lcc.cc=
+
+Update =GenerateOutputFile= to include another =if= which eventually calls =lcc::language::produce_module()= and passes the result to =EmitModule=.
+
+#+begin_src cpp
+  if (
+      options.language == "language"
+      or (options.language == "default" and path_str.ends_with(".language"))
+  ) {
+      auto* ir = lcc::language::produce_module(&context, file);
+      EmitModule(ir, path_str, output_file_path, options);
+      return;
+  }
+#+end_src
+
+You'll likely need to include your =driver.hh=.
+
+*** CMake
+
+You'll also need to link =lcc= (the driver) with your language's library.
+
+This involves editing the CMakeLists.txt to include an =add_library()= with your language's sources specified, like so,
+#+begin_src cmake
+  # Your language library
+  add_library(
+    languagec STATIC
+    inc/language/driver.hh
+    lib/language/driver.cc
+  )
+  target_include_directories(language PUBLIC inc)
+  target_link_libraries(language PRIVATE options)
+#+end_src
+
+and then specifying =lcc= to link with it.
+#+begin_src cmake
+  # Link lcc driver with language libraries.
+  # ...
+  target_link_libraries(lcc PUBLIC language)
+#+end_src
