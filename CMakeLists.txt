@@ -401,6 +401,25 @@ target_link_libraries(liblcc PUBLIC object)
 # Apply options to main lcc library
 target_link_libraries(liblcc PRIVATE options)
 
+# C language library
+add_library(
+  languagec STATIC
+  inc/language_c/ast.hh
+  inc/language_c/driver.hh
+  inc/language_c/irgen.hh
+  inc/language_c/parser.hh
+  inc/language_c/sema.hh
+  inc/language_c/type.hh
+  lib/language_c/ast.cc
+  lib/language_c/driver.cc
+  lib/language_c/irgen.cc
+  lib/language_c/parser.cc
+  lib/language_c/sema.cc
+  lib/language_c/type.cc
+)
+target_include_directories(languagec PUBLIC inc)
+target_link_libraries(languagec PRIVATE options)
+
 # Glint language library
 add_library(
   glint STATIC
@@ -473,6 +492,7 @@ target_link_libraries(lcc PRIVATE liblcc)
 
 # Link lcc driver with language libraries.
 target_link_libraries(lcc PUBLIC glint)
+target_link_libraries(lcc PUBLIC languagec)
 
 # Copy lcc.html, lcc.js, and lcc.wasm to `docs/` when emscripten.
 if (EMSCRIPTEN)

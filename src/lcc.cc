@@ -17,6 +17,7 @@
 #include <lcc/utils/twocolumnlayouthelper.hh>
 
 #include <glint/driver.hh>
+#include <language_c/driver.hh>
 
 #include <cstdio>  // fopen and friends
 #include <cstdlib> // system
@@ -390,6 +391,15 @@ void GenerateOutputFile(
         or (options.language == "default" and path_str.ends_with(".g"))
     ) {
         auto* ir = lcc::glint::produce_module(&context, file);
+        EmitModule(ir, path_str, output_file_path, options);
+        return;
+    }
+
+    if (
+        options.language == "c"
+        or (options.language == "default" and path_str.ends_with(".c"))
+    ) {
+        auto* ir = lcc::language_c::produce_module(&context, file);
         EmitModule(ir, path_str, output_file_path, options);
         return;
     }
