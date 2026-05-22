@@ -14,6 +14,7 @@ enum class TypeKind {
     Invalid,
 
     Int,
+    Void,
     Pointer,
     Function,
     Array,
@@ -37,6 +38,10 @@ public:
 class IntType : public Type {
 public:
     IntType(Location location) : Type(TypeKind::Int, location) {}
+};
+class VoidType : public Type {
+public:
+    VoidType(Location location) : Type(TypeKind::Void, location) {}
 };
 
 class PointerType : public Type {

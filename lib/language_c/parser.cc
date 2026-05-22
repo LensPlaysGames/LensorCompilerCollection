@@ -17,6 +17,7 @@ std::string_view ToString(TokenKind k) {
         case TokenKind::Identifier: return "identifier";
         case TokenKind::Integer: return "integer-literal";
         case TokenKind::Fractional: return "float-literal";
+        case TokenKind::KwVoid: return "void";
         case TokenKind::KwInt: return "int";
         case TokenKind::KwReturn: return "return";
         case TokenKind::OpAsterisk: return "*";
@@ -36,6 +37,7 @@ std::string_view ToString(TokenKind k) {
 
 StringMap<TokenKind> keywords{
     {"int", TokenKind::KwInt},
+    {"void", TokenKind::KwVoid},
     {"return", TokenKind::KwReturn}
 };
 
@@ -155,19 +157,11 @@ void Parser::NextNumber() {
         // Discard the zero.
         NextChar();
 
-        // Another digit is an error: no leading zeroes are allowed unless they
+        // Another digit is an octal: no leading zeroes are allowed unless they
         // lead to a number base specifier.
-        if (IsDecimalDigit(lastc)) {
-            Error(
-                "c/invalid-literal",
-                "Leading zeroes are not allowed in number literals."
-            );
-            // TODO: Two possible fixes; either replace second zero (currently lastc)
-            // with `o` to make it an octal literal, or remove all leading zeroes
-            // (unless the literal is all zeroes, in which case, all but one).
-        } else if (lastc == 'b' or lastc == 'B')
+        if (lastc == 'b' or lastc == 'B')
             ParseNumber("binary", IsBinaryDigit, 2);
-        else if (lastc == 'o' or lastc == 'O')
+        else if (IsDecimalDigit(lastc) or lastc == 'o' or lastc == 'O')
             ParseNumber("octal", IsOctalDigit, 8);
         else if (lastc == 'x' or lastc == 'X')
             ParseNumber("hexadecimal", IsHexDigit, 16);
@@ -454,6 +448,17 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
     return parsed_declarations;
 }
 
+auto Parser::ParseDeclarations(Type* type_specifier) -> Result<Node*> {
+    auto maybe_decls = ParseDeclarators(type_specifier);
+    if (maybe_decls) {
+        auto out = Node::MaybeToGroup(*maybe_decls);
+        // FIXME: Should we return an "empty" node?
+        if (not out)
+            Diag::ICE("No declarations parsed, but no error returned");
+        return out;
+    } else return maybe_decls.diag();
+}
+
 auto Parser::ParseExpression() -> Result<Node*> {
     Location start_location = tok.location;
     switch (tok.kind) {
@@ -484,17 +489,13 @@ auto Parser::ParseExpression() -> Result<Node*> {
         case TokenKind::KwInt: {
             NextToken();
             // Encountering just 'int' implies a declaration follows.
-            auto maybe_decls = ParseDeclarators(new IntType(start_location));
-            if (maybe_decls) {
-                if (maybe_decls->size() > 1)
-                    return new Group(
-                        *maybe_decls,
-                        {start_location, maybe_decls->back()->location()}
-                    );
-                else if (maybe_decls->size() == 1)
-                    return maybe_decls->at(0);
-                else Diag::ICE("No declarations parsed, but no error returned");
-            } else return maybe_decls.diag();
+            return ParseDeclarations(new IntType(start_location));
+        } break;
+
+        case TokenKind::KwVoid: {
+            NextToken();
+            // Encountering just 'void' implies a declaration follows.
+            return ParseDeclarations(new VoidType(start_location));
         } break;
 
         case TokenKind::Semicolon: {

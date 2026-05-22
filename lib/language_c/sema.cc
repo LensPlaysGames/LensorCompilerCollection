@@ -33,10 +33,10 @@ auto Sema::analyse(Node* node) -> Result<void> {
             auto d = (Declaration*) node;
 
             if (d->initialising_expression()) {
-                if (
-                    auto result = analyse(d->initialising_expression());
-                    not result
-                ) return result;
+                defining = d;
+                auto result = analyse(d->initialising_expression());
+                if (not result) return result;
+                defining = nullptr;
             }
 
             return {};
@@ -45,9 +45,35 @@ auto Sema::analyse(Node* node) -> Result<void> {
         }
 
         case NodeKind::Return: {
+            if (not defining)
+                return Error(node->location(), "c/unexpected", "Encountered return outside of a function");
+
+            if (defining->type()->kind() != TypeKind::Function)
+                Diag::ICE("defining function is not a function");
+
             auto* r = (Return*) node;
-            if (r->expression())
+
+            if (r->expression()) {
+                if (((FunctionType*) defining->type())->return_type()->kind() == TypeKind::Void) {
+                    return Error(
+                        r->expression()->location(),
+                        "c/return-value",
+                        "Return statement MUST NOT return any value in a function that returns void",
+                        *((FunctionType*) defining->type())->return_type()
+                    );
+                }
+
                 return analyse(r->expression());
+            } else {
+                if (((FunctionType*) defining->type())->return_type()->kind() != TypeKind::Void)
+                    return Error(
+                        node->location(),
+                        "c/return-value",
+                        "Return statement MUST return a value in a function that returns non-void ({} returns {})",
+                        defining->name(),
+                        *((FunctionType*) defining->type())->return_type()
+                    );
+            }
             return {};
         }
 
@@ -78,9 +104,9 @@ bool Sema::Analyse(Context* context, TranslationUnit& tu) {
             // declaration at top level: ensure it's exported
             if (c->kind() == NodeKind::Declaration) {
                 auto d = (const Declaration*) c;
-                if (d->type()->kind() == TypeKind::Function) {
+                if (d->type()->kind() == TypeKind::Function)
                     tu.functions.emplace_back(d);
-                } else tu.globals.emplace_back(d);
+                else tu.globals.emplace_back(d);
             }
         }
     }

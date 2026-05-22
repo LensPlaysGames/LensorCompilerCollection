@@ -9,6 +9,8 @@
 auto fmt::formatter<lcc::language_c::Type>::format(const lcc::language_c::Type& t, format_context& ctx) const
     -> format_context::iterator {
     switch (t.kind()) {
+        case lcc::language_c::TypeKind::Void:
+            return fmt::format_to(ctx.out(), "void");
         case lcc::language_c::TypeKind::Int:
             return fmt::format_to(ctx.out(), "int");
         case lcc::language_c::TypeKind::Pointer:

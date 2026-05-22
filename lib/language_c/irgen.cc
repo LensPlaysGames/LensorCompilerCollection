@@ -21,6 +21,9 @@ lcc::Type* IRGen::convert(const Type* t) {
             );
         }
 
+        case TypeKind::Void:
+            return lcc::Type::VoidTy;
+
         case TypeKind::Pointer:
             return lcc::Type::PtrTy;
 

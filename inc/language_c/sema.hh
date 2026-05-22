@@ -12,6 +12,7 @@ namespace lcc::language_c {
 class Sema {
     lcc::Context* context;
     std::unordered_set<Node*> analysed{};
+    Declaration* defining{};
     Node* _root{};
 
     Result<void> analyse(Node*);

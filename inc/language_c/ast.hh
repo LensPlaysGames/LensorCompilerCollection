@@ -45,6 +45,10 @@ public:
     // location, return a location like "  return 69_ _ ".
     auto get_past_location() -> Location;
 
+    // Turn a list of nodes into a single node, or nullptr if the list was
+    // empty.
+    static auto MaybeToGroup(std::vector<Node*> nodes) -> Node*;
+
 #ifdef LCC_LANGTEST
     auto langtest_name() -> std::string_view;
     auto langtest_children() -> std::vector<Node*>;
@@ -98,12 +102,17 @@ struct Declaration : public Node {
     Node* _initialising_expression{};
 
 public:
-    Declaration(Type* type, std::string owned_name, Scope* encapsulating_scope, Node* initialising_expression, Location location)
-        : Node(NodeKind::Declaration, location),
-          _type(type),
-          _name(std::string(owned_name)),
-          _encapsulating_scope(encapsulating_scope),
-          _initialising_expression(initialising_expression) {
+    Declaration(
+        Type* type,
+        std::string owned_name,
+        Scope* encapsulating_scope,
+        Node* initialising_expression,
+        Location location
+    ) : Node(NodeKind::Declaration, location),
+        _type(type),
+        _name(std::string(owned_name)),
+        _encapsulating_scope(encapsulating_scope),
+        _initialising_expression(initialising_expression) {
         // Declare itself in the given scope
         encapsulating_scope->declarations.emplace(_name, this);
     };

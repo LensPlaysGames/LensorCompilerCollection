@@ -23,6 +23,7 @@ enum class TokenKind : unsigned int {
     Integer,
     Fractional,
 
+    KwVoid,
     KwInt,
     KwReturn,
 
@@ -53,10 +54,8 @@ private:
     void NextToken();
     void NextNumber();
 
-    [[nodiscard]]
     Result<std::vector<Node*>> ParseDeclarators(Type* type_specifier);
-
-    [[nodiscard]]
+    Result<Node*> ParseDeclarations(Type* type_specifier);
     Result<Node*> ParseExpression();
 
     // @param of_file
