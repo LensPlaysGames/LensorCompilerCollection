@@ -6,6 +6,17 @@
 #include <fmt/format.h>
 #include <type_traits>
 
+auto fmt::formatter<lcc::language_c::Node>::indent(format_context::iterator out, size_t depth) const
+    -> format_context::iterator {
+    return fmt::format_to(out, "{:{}}", "", depth * indent_width);
+}
+
+auto fmt::formatter<lcc::language_c::Node>::tag(format_context::iterator out, size_t depth, std::string_view tag) const
+    -> format_context::iterator {
+    indent(out, depth);
+    return fmt::format_to(out, "{}\n", tag);
+}
+
 auto fmt::formatter<lcc::language_c::Node>::format(
     const lcc::language_c::Node& n,
     format_context& ctx
@@ -19,45 +30,62 @@ auto fmt::formatter<lcc::language_c::Node>::format(
         });
     }
 
-    fmt::format_to(ctx.out(), "{:{}}", "", depth * indent_width);
-
     switch (n.kind()) {
         case lcc::language_c::NodeKind::Invalid:
-            return fmt::format_to(ctx.out(), "<invalid>");
+            return tag(ctx.out(), depth, "<invalid>");
 
         case lcc::language_c::NodeKind::Group: {
-            return fmt::format_to(
+            const auto* g = (const lcc::language_c::Group*) &n;
+
+            if (g->constituents().empty())
+                return tag(ctx.out(), depth, "<group/>");
+
+            tag(ctx.out(), depth, "<group>");
+            ++depth;
+            fmt::format_to(
                 ctx.out(),
-                "<group>\n{}</group>\n",
+                "{}",
                 fmt::join(
                     std::ranges::views::transform(
-                        ((lcc::language_c::Group*) &n)->constituents(),
+                        g->constituents(),
                         [&](const lcc::language_c::Node* constituent) {
-                            return fmt::format("{:{}}", *constituent, depth + 1);
+                            return fmt::format("{:{}}", *constituent, depth);
                         }
                     ),
                     "\n"
                 )
             );
+            --depth;
+            return tag(ctx.out(), depth, "<group/>");
         }
 
         case lcc::language_c::NodeKind::Block: {
-            return fmt::format_to(
+            const auto* b = (const lcc::language_c::Block*) &n;
+
+            if (b->constituents().empty())
+                return tag(ctx.out(), depth, "<block/>");
+
+            tag(ctx.out(), depth, "<block>");
+            ++depth;
+            fmt::format_to(
                 ctx.out(),
-                "<block>\n{}</block>\n",
+                "{}",
                 fmt::join(
                     std::ranges::views::transform(
-                        ((lcc::language_c::Group*) &n)->constituents(),
+                        b->constituents(),
                         [&](const lcc::language_c::Node* constituent) {
-                            return fmt::format("{:{}}", *constituent, depth + 1);
+                            return fmt::format("{:{}}", *constituent, depth);
                         }
                     ),
                     "\n"
                 )
             );
+            --depth;
+            return tag(ctx.out(), depth, "<block/>");
         }
 
         case lcc::language_c::NodeKind::IntegerLiteral: {
+            indent(ctx.out(), depth);
             return fmt::format_to(
                 ctx.out(),
                 "<integer-literal>{}</integer-literal>\n",
@@ -67,34 +95,38 @@ auto fmt::formatter<lcc::language_c::Node>::format(
 
         case lcc::language_c::NodeKind::Return: {
             const auto& r = (*(lcc::language_c::Return*) &n);
-            if (r.expression()) {
-                return fmt::format_to(
-                    ctx.out(),
-                    "<return>{:{}}</return>",
-                    *r.expression(),
-                    depth + 1
-                );
-            }
-            return fmt::format_to(ctx.out(), "<return/>");
+            if (not r.expression())
+                return tag(ctx.out(), depth, "<return/>");
+
+            tag(ctx.out(), depth, "<return>");
+            fmt::format_to(ctx.out(), "{:{}}", *r.expression(), depth + 1);
+            return tag(ctx.out(), depth, "<return/>");
         }
 
         case lcc::language_c::NodeKind::Declaration: {
             const auto* d = (const lcc::language_c::Declaration*) &n;
-            fmt::format_to(ctx.out(), "<declaration>\n");
-
+            tag(ctx.out(), depth, "<declaration>");
             ++depth;
 
-            fmt::format_to(ctx.out(), "{:{}}", "", depth * indent_width);
+            indent(ctx.out(), depth);
             fmt::format_to(ctx.out(), "<name>{}</name>\n", d->name());
 
-            fmt::format_to(ctx.out(), "{:{}}", "", depth * indent_width);
+            indent(ctx.out(), depth);
             fmt::format_to(ctx.out(), "<type>{}</type>\n", *d->type());
 
-            --depth;
+            if (d->initialising_expression()) {
+                tag(ctx.out(), depth, "<initial>");
+                fmt::format_to(
+                    ctx.out(),
+                    "{:{}}",
+                    *d->initialising_expression(),
+                    depth + 1
+                );
+                tag(ctx.out(), depth, "</initial>");
+            } else tag(ctx.out(), depth, "<initial/>\n");
 
-            fmt::format_to(ctx.out(), "{:{}}", "", depth * indent_width);
-            fmt::format_to(ctx.out(), "</declaration>\n");
-            return ctx.out();
+            --depth;
+            return tag(ctx.out(), depth, "</declaration>");
         }
 
         case lcc::language_c::NodeKind::Count:

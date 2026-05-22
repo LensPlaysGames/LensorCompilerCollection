@@ -511,9 +511,6 @@ auto Parser::ParseExpression() -> Result<Node*> {
 };
 
 auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {
-    TranslationUnit tu{};
-    tu.trees.emplace(of_file, nullptr);
-
     std::vector<Node*> top_level{};
     while (tok.kind != TokenKind::Eof) {
         auto e = ParseExpression();
@@ -521,17 +518,18 @@ auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {
         top_level.push_back(*e);
     }
     tree = new Block(top_level);
-    fmt::print("{}", *tree);
 
-    for (auto [i, s] : std::ranges::views::enumerate(scopes())) {
-        fmt::print("Scope[{}] ({}):\n", i, fmt::ptr(s));
-        for (auto [n, d] : s->declarations) {
-            fmt::print("- {} <- {} ({})\n", *d->type(), d->name(), fmt::ptr(d));
+    if (context->option_print_ast()) {
+        fmt::print("{}", *tree);
+        for (auto [i, s] : std::ranges::views::enumerate(scopes())) {
+            fmt::print("Scope[{}] ({}):\n", i, fmt::ptr(s));
+            for (auto [n, d] : s->declarations) {
+                fmt::print("- {} <- {} ({})\n", *d->type(), d->name(), fmt::ptr(d));
+            }
         }
     }
 
-    tu.trees.at(of_file) = tree;
-    return tu;
+    return {.tree = tree};
 }
 
 auto Parser::Parse(Context* context, File& file) -> TranslationUnit {

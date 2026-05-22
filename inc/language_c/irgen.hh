@@ -14,11 +14,28 @@ namespace lcc::language_c {
 class IRGen {
     lcc::Context* context{};
     lcc::Module* ir_module{};
-    std::unordered_map<Node*, lcc::Value*> generated_ir{};
+    std::unordered_map<const Node*, lcc::Value*> generated_ir{};
 
-    void create_function(Declaration* d);
+    struct InsertContext {
+        lcc::Function* function{};
+        lcc::Block* block{};
+    } insert_context{};
 
-    lcc::Type* convert(const Type* t);
+    void create_function(const Declaration*);
+
+    void insert(lcc::Inst*);
+
+    lcc::Type* convert(const Type*);
+
+    void generate_expression(const Node*);
+    void generate_function(const Declaration*);
+
+    void update_block(lcc::Block* new_block) {
+        if (not insert_context.function)
+            Diag::ICE("Invalid insert context: nullptr encountered");
+        insert_context.function->append_block(new_block);
+        insert_context.block = new_block;
+    }
 
 public:
     IRGen(lcc::Context* context_)

@@ -100,10 +100,16 @@ public:
     }
     auto type() const { return _type; }
     auto scope() const { return _encapsulating_scope; }
+    auto initialising_expression() const { return _initialising_expression; }
 };
 
 struct TranslationUnit {
-    StringMap<Node*> trees{};
+    // Produced by the parser.
+    Node* tree{};
+
+    // Filled in by semantic analysis.
+    std::vector<const Declaration*> functions{};
+    std::vector<const Declaration*> globals{};
 };
 
 } // namespace lcc::language_c
@@ -134,6 +140,12 @@ struct fmt::formatter<lcc::language_c::Node> {
         }
         return it;
     }
+
+    auto indent(format_context::iterator out, size_t depth) const
+        -> format_context::iterator;
+
+    auto tag(format_context::iterator out, size_t depth, std::string_view tag) const
+        -> format_context::iterator;
 
     auto format(const lcc::language_c::Node&, format_context& ctx) const
         -> format_context::iterator;
