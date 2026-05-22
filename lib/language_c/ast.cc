@@ -1,10 +1,22 @@
 #include <language_c/ast.hh>
 
 #include <lcc/diags.hh>
+#include <lcc/location.hh>
 
 #include <fmt/base.h>
 #include <fmt/format.h>
 #include <type_traits>
+
+namespace lcc::language_c {
+
+auto Node::get_past_location() -> Location {
+    Location out{location()};
+    out.pos += out.len;
+    out.len = 1;
+    return out;
+}
+
+} // namespace lcc::language_c
 
 auto fmt::formatter<lcc::language_c::Node>::indent(format_context::iterator out, size_t depth) const
     -> format_context::iterator {

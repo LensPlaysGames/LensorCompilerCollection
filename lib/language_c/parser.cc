@@ -351,8 +351,9 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
                     break;
 
                 case TokenKind::OpAsterisk:
+                    auto location = Location{current_declarator_type->location(), tok.location};
                     NextToken();
-                    current_declarator_type = new PointerType(current_declarator_type);
+                    current_declarator_type = new PointerType(current_declarator_type, location);
                     break;
             }
             NextToken();
@@ -380,19 +381,44 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
                         current_declarator_name
                     );
                 }
+                auto location = Location{current_declarator_type->location(), tok.location};
                 // Eat ")".
                 NextToken();
 
                 current_declarator_type = new FunctionType(
                     current_declarator_type,
-                    {}
+                    {},
+                    location
                 );
             } break;
 
             case TokenKind::LeftSquareBracket: {
+                auto opening_location = tok.location;
                 NextToken();
-                Diag::ICE("Parse array size");
-                current_declarator_type = new ArrayType(current_declarator_type);
+
+                auto dimension = ParseExpression();
+                if (not dimension) return dimension.diag();
+
+                if (tok.kind != TokenKind::RightSquareBracket) {
+                    auto e = Error("c/expected", "Expected closing square bracket");
+                    e.attach(
+                        Note(
+                            opening_location,
+                            "c/expected",
+                            "To close this opening square bracket"
+                        ),
+                        true
+                    );
+                    return e;
+                }
+                auto location = Location{current_declarator_type->location(), tok.location};
+                NextToken();
+
+                current_declarator_type = new ArrayType(
+                    current_declarator_type,
+                    *dimension,
+                    location
+                );
             }
         }
 
@@ -415,7 +441,8 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
                 current_declarator_type,
                 current_declarator_name,
                 current_scope(),
-                initialiser
+                initialiser,
+                Location{type_specifier->location(), tok.location}
             )
         );
 
@@ -428,6 +455,7 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
 }
 
 auto Parser::ParseExpression() -> Result<Node*> {
+    Location start_location = tok.location;
     switch (tok.kind) {
         case TokenKind::Invalid:
         case TokenKind::Count:
@@ -445,18 +473,24 @@ auto Parser::ParseExpression() -> Result<Node*> {
             if (tok.kind != TokenKind::Semicolon and tok.kind != TokenKind::Eof) {
                 auto expression = ParseExpression();
                 if (not expression) return expression.diag();
-                return new Return(*expression);
+                return new Return(
+                    *expression,
+                    {start_location, expression->location()}
+                );
             }
-            return new Return();
+            return new Return(nullptr, start_location);
         }
 
         case TokenKind::KwInt: {
             NextToken();
             // Encountering just 'int' implies a declaration follows.
-            auto maybe_decls = ParseDeclarators(new IntType());
+            auto maybe_decls = ParseDeclarators(new IntType(start_location));
             if (maybe_decls) {
                 if (maybe_decls->size() > 1)
-                    return new Group(*maybe_decls);
+                    return new Group(
+                        *maybe_decls,
+                        {start_location, maybe_decls->back()->location()}
+                    );
                 else if (maybe_decls->size() == 1)
                     return maybe_decls->at(0);
                 else Diag::ICE("No declarations parsed, but no error returned");
@@ -481,20 +515,41 @@ auto Parser::ParseExpression() -> Result<Node*> {
                 constituents.emplace_back(*maybe_expression);
                 if (tok.kind == TokenKind::Semicolon)
                     NextToken();
+                else {
+                    auto e = Error("c/expected", "Expected `;` but got `{}`", ToString(tok.kind));
+                    if (maybe_expression and maybe_expression->location().seekable(context)) {
+                        e.fix_by_inserting_at(maybe_expression->get_past_location(), ";");
+                        e.attach(
+                            Note(
+                                maybe_expression->location(),
+                                "c/expected",
+                                "After this"
+                            ),
+                            true
+                        );
+                    } else e.fix_by_inserting_at(tok.location, ";");
+                    return e;
+                }
             }
 
             if (tok.kind != TokenKind::RightCurlyBrace) {
-                Error("c/expected", "Expected right curly brace to close block expression");
-                break;
+                auto e = Error(
+                    "c/expected",
+                    "Expected right curly brace to close block expression"
+                );
+                e.fix_by_inserting_at(tok.location, "}");
+                return e;
             }
+
+            auto location = Location{start_location, tok.location};
             // Eat "}"
             NextToken();
 
-            return new Block(constituents);
+            return new Block(constituents, location);
         }
 
         case TokenKind::Integer: {
-            auto i = new IntegerLiteral(tok.integer_value);
+            auto i = new IntegerLiteral(tok.integer_value, tok.location);
             NextToken();
             return i;
         }
@@ -517,7 +572,7 @@ auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {
         if (not e) break;
         top_level.push_back(*e);
     }
-    tree = new Block(top_level);
+    tree = new Block(top_level, {});
 
     if (context->option_print_ast()) {
         fmt::print("{}", *tree);

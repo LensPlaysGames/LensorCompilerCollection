@@ -5,21 +5,83 @@
 
 namespace lcc::language_c {
 
+auto Sema::analyse(Node* node) -> Result<void> {
+    // Don't analyse any node more than once.
+    if (analysed.contains(node))
+        return {};
+    analysed.emplace(node);
+
+    switch (node->kind()) {
+        case NodeKind::Group: {
+            auto g = (Group*) node;
+            for (auto* c : g->constituents()) {
+                if (auto d = analyse(c); not d)
+                    return d;
+            }
+            return {};
+        }
+        case NodeKind::Block: {
+            auto b = (Block*) node;
+            for (auto* c : b->constituents()) {
+                if (auto result = analyse(c); not result)
+                    return result;
+            }
+            return {};
+        }
+
+        case NodeKind::Declaration: {
+            auto d = (Declaration*) node;
+
+            if (d->initialising_expression()) {
+                if (
+                    auto result = analyse(d->initialising_expression());
+                    not result
+                ) return result;
+            }
+
+            return {};
+
+            // TODO: Ensure no duplicate declarations
+        }
+
+        case NodeKind::Return: {
+            auto* r = (Return*) node;
+            if (r->expression())
+                return analyse(r->expression());
+            return {};
+        }
+
+        case NodeKind::IntegerLiteral:
+            return {};
+
+        case NodeKind::Invalid:
+        case NodeKind::Count:
+            break;
+    }
+    Diag::ICE("unreachable");
+}
+
 bool Sema::Analyse(Context* context, TranslationUnit& tu) {
+    if (context->has_error())
+        Diag::ICE("cannot analyse when context already has errors");
+
     if (not tu.tree)
         Diag::ICE("cannot analyse nullptr");
 
-    if (tu.tree->kind() != NodeKind::Block)
-        Diag::ICE("expected block at top level");
+    Sema semantic{context, tu.tree};
+    bool passed = semantic.analyse(semantic.root()).is_value();
+    if (not passed) return false;
 
-    const auto* block = (const Block*) tu.tree;
-    for (auto c : block->constituents()) {
-        // declaration at top level: ensure it's exported
-        if (c->kind() == NodeKind::Declaration) {
-            auto d = (const Declaration*) c;
-            if (d->type()->kind() == TypeKind::Function) {
-                tu.functions.emplace_back(d);
-            } else tu.globals.emplace_back(d);
+    if (semantic.root()->kind() == NodeKind::Block) {
+        auto* block = (Block*) semantic.root();
+        for (auto c : block->constituents()) {
+            // declaration at top level: ensure it's exported
+            if (c->kind() == NodeKind::Declaration) {
+                auto d = (const Declaration*) c;
+                if (d->type()->kind() == TypeKind::Function) {
+                    tu.functions.emplace_back(d);
+                } else tu.globals.emplace_back(d);
+            }
         }
     }
 

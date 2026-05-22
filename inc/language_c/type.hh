@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include <lcc/location.hh>
+
 namespace lcc::language_c {
 
 enum class TypeKind {
@@ -19,36 +21,42 @@ enum class TypeKind {
     Count
 };
 
+struct Node;
+
 class Type {
     TypeKind _kind{TypeKind::Invalid};
+    Location _location{};
 
 public:
-    Type(TypeKind kind) : _kind(kind) {}
+    Type(TypeKind kind, Location location) : _kind(kind), _location(location) {}
 
     auto kind() const { return _kind; }
+    auto location() { return _location; }
 };
 
 class IntType : public Type {
 public:
-    IntType() : Type(TypeKind::Int) {}
+    IntType(Location location) : Type(TypeKind::Int, location) {}
 };
 
 class PointerType : public Type {
     Type* _element_type;
 
 public:
-    PointerType(Type* element_type)
-        : Type(TypeKind::Pointer), _element_type(element_type) {}
+    PointerType(Type* element_type, Location location)
+        : Type(TypeKind::Pointer, location), _element_type(element_type) {}
 };
 
 class ArrayType : public Type {
 private:
     Type* _element_type;
+    Node* _dimension;
 
 public:
-    ArrayType(Type* element_type)
-        : Type(TypeKind::Array),
-          _element_type(element_type) {}
+    ArrayType(Type* element_type, Node* dimension, Location location)
+        : Type(TypeKind::Array, location),
+          _element_type(element_type),
+          _dimension(dimension) {}
 
     auto element_type() const { return _element_type; };
 };
@@ -65,8 +73,8 @@ private:
     std::vector<Parameter> _parameters;
 
 public:
-    FunctionType(Type* return_type, decltype(_parameters) parameters)
-        : Type(TypeKind::Function),
+    FunctionType(Type* return_type, decltype(_parameters) parameters, Location location)
+        : Type(TypeKind::Function, location),
           _return_type(return_type),
           _parameters(parameters) {}
 
