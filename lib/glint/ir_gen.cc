@@ -21,7 +21,7 @@ namespace lcc::glint {
 void IRGen::insert(lcc::Inst* inst) {
     LCC_ASSERT(inst, "Invalid argument");
     LCC_ASSERT(ctx, "Invalid context");
-    LCC_ASSERT(function && block, "Invalid insert point");
+    LCC_ASSERT(function and block, "Invalid insert point");
     block->insert(inst);
 }
 
