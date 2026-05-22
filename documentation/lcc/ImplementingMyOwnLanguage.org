@@ -64,7 +64,22 @@ Update =GenerateOutputFile= to include another =if= which eventually calls =lcc:
 
 You'll likely need to include your =driver.hh=.
 
-*** CMake
+** =src/cli.cc=
+
+Update the CLI option parsing to include your language as a valid language value.
+#+begin_src cpp
+  auto lang = next_arg();
+  if (
+      lang != "glint" and lang != "ir"
+      and lang != "language"
+  ) {
+      fmt::print("CLI ERROR: Invalid lang {}\n", lang);
+      std::exit(1);
+  }
+  o.language = lang;
+#+end_src
+
+** CMake
 
 You'll also need to link =lcc= (the driver) with your language's library.
 
