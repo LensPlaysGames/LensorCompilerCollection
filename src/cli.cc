@@ -199,7 +199,7 @@ auto parse(int argc, const char** argv) -> Options {
         } else if (arg == "-x") {
             // What language to parse input code as
             auto lang = next_arg();
-            if (lang != "glint" and lang != "ir") {
+            if (lang != "glint" and lang != "ir" and lang != "c") {
                 fmt::print("CLI ERROR: Invalid lang {}\n", lang);
                 std::exit(1);
             }

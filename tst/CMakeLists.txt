@@ -42,6 +42,7 @@ add_subdirectory("./vew/" "vew" EXCLUDE_FROM_ALL)
 
 # LangTest
 add_subdirectory("./langtest/glint/" "langtest_glint")
+add_subdirectory("./langtest/c/" "langtest_c")
 
 # CodeTest
 add_subdirectory("./codetest/x86_64/" "codetest_x86_64")
@@ -92,6 +93,18 @@ add_custom_target(
   "${CMAKE_CURRENT_LIST_DIR}/langtest/glint/"
   USES_TERMINAL
 )
+add_custom_target(
+  langtest_c_command
+  COMMAND
+  lccctests
+  DEPENDS
+  lccctests
+  BYPRODUCTS
+  ${CMAKE_CURRENT_LIST_DIR}/langtest/c/langtest.sarif
+  WORKING_DIRECTORY
+  "${CMAKE_CURRENT_LIST_DIR}/langtest/c/"
+  USES_TERMINAL
+)
 
 add_custom_target(
   codetest_x86_64_command
@@ -113,6 +126,7 @@ add_custom_target(
   langtest
   DEPENDS
   langtest_glint_command
+  langtest_c_command
 )
 
 # codetest target
@@ -140,6 +154,7 @@ add_custom_target(
   ./codetest/x86_64/codetest.sarif
   ./irtest/irtest.sarif
   ./langtest/glint/langtest.sarif
+  ./langtest/c/langtest.sarif
   ./runtest/runtest.sarif
   DEPENDS
   vew
