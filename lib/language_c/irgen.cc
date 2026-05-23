@@ -160,6 +160,7 @@ void IRGen::generate_expression(const Node* n) {
                     Diag::ICE("unreachable");
             }
 #undef BINARY_ARGS
+            LCC_ASSERT(inst, "Binary operation should have created instruction");
             generated_ir[n] = inst;
             insert(inst);
             return;
