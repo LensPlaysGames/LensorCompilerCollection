@@ -335,7 +335,7 @@ void emit_sarif_file(
 
     for (auto& test_name : results.completed_tests()) {
         JSONObject result{};
-        result.add_property("ruleId", "LangTest");
+        result.add_property("ruleId", "LangTest.C");
         // Record pass vs fail.
         if (results.test_passes(test_name)) {
             result.add_property("kind", "pass");
