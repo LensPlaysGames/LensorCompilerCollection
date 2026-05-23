@@ -459,6 +459,48 @@ auto Parser::ParseDeclarations(Type* type_specifier) -> Result<Node*> {
     } else return maybe_decls.diag();
 }
 
+bool Parser::IsFunctionDefinition(Node* node) {
+    if (node->kind() == NodeKind::Group)
+        node = ((Group*) node)->constituents().back();
+    if (node->kind() == NodeKind::Declaration) {
+        auto d = (Declaration*) node;
+        if (d->type()->kind() == TypeKind::Function and d->initialising_expression()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
+    std::vector<Node*> constituents{};
+    while (
+        tok.kind != TokenKind::Eof
+        and tok.kind != TokenKind::Invalid
+        and tok.kind != until) {
+        auto maybe_expression = ParseExpression();
+        if (not maybe_expression) return maybe_expression.diag();
+        constituents.emplace_back(*maybe_expression);
+        if (tok.kind == TokenKind::Semicolon)
+            NextToken();
+        else if (not IsFunctionDefinition(*maybe_expression)) {
+            auto e = Error("c/expected", "Expected `;` but got `{}`", ToString(tok.kind));
+            if (maybe_expression and maybe_expression->location().seekable(context)) {
+                e.fix_by_inserting_at(maybe_expression->get_past_location(), ";");
+                e.attach(
+                    Note(
+                        maybe_expression->location(),
+                        "c/expected",
+                        "After this"
+                    ),
+                    true
+                );
+            } else e.fix_by_inserting_at(tok.location, ";");
+            return e;
+        }
+    }
+    return constituents;
+}
+
 auto Parser::ParseExpression() -> Result<Node*> {
     Location start_location = tok.location;
     switch (tok.kind) {
@@ -507,31 +549,8 @@ auto Parser::ParseExpression() -> Result<Node*> {
             // Eat "{"
             NextToken();
 
-            std::vector<Node*> constituents{};
-            while (tok.kind != TokenKind::Eof
-                   and tok.kind != TokenKind::Invalid
-                   and tok.kind != TokenKind::RightCurlyBrace) {
-                auto maybe_expression = ParseExpression();
-                if (not maybe_expression) return maybe_expression.diag();
-                constituents.emplace_back(*maybe_expression);
-                if (tok.kind == TokenKind::Semicolon)
-                    NextToken();
-                else {
-                    auto e = Error("c/expected", "Expected `;` but got `{}`", ToString(tok.kind));
-                    if (maybe_expression and maybe_expression->location().seekable(context)) {
-                        e.fix_by_inserting_at(maybe_expression->get_past_location(), ";");
-                        e.attach(
-                            Note(
-                                maybe_expression->location(),
-                                "c/expected",
-                                "After this"
-                            ),
-                            true
-                        );
-                    } else e.fix_by_inserting_at(tok.location, ";");
-                    return e;
-                }
-            }
+            auto constituents = ParseExpressions(TokenKind::RightCurlyBrace);
+            if (not constituents) return constituents.diag();
 
             if (tok.kind != TokenKind::RightCurlyBrace) {
                 auto e = Error(
@@ -546,7 +565,7 @@ auto Parser::ParseExpression() -> Result<Node*> {
             // Eat "}"
             NextToken();
 
-            return new Block(constituents, location);
+            return new Block(*constituents, location);
         }
 
         case TokenKind::Integer: {
@@ -567,13 +586,9 @@ auto Parser::ParseExpression() -> Result<Node*> {
 };
 
 auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {
-    std::vector<Node*> top_level{};
-    while (tok.kind != TokenKind::Eof) {
-        auto e = ParseExpression();
-        if (not e) break;
-        top_level.push_back(*e);
-    }
-    tree = new Block(top_level, {});
+    auto top_level = ParseExpressions(TokenKind::Eof);
+    if (not top_level) return {};
+    tree = new Block(*top_level, {});
 
     if (context->option_print_ast()) {
         fmt::print("{}", *tree);

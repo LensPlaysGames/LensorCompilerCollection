@@ -54,9 +54,12 @@ private:
     void NextToken();
     void NextNumber();
 
+    bool IsFunctionDefinition(Node*);
+
     Result<std::vector<Node*>> ParseDeclarators(Type* type_specifier);
     Result<Node*> ParseDeclarations(Type* type_specifier);
     Result<Node*> ParseExpression();
+    Result<std::vector<Node*>> ParseExpressions(TokenKind until);
 
     // @param of_file
     // name of file that we are parsing the top level of.

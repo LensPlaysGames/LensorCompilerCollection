@@ -58,7 +58,7 @@ auto fmt::formatter<lcc::language_c::Node>::format(
                 )
             );
             --depth;
-            return tag(ctx.out(), depth, "<group/>");
+            return tag(ctx.out(), depth, "</group>");
         }
 
         case lcc::language_c::NodeKind::Block: {
@@ -83,7 +83,7 @@ auto fmt::formatter<lcc::language_c::Node>::format(
                 )
             );
             --depth;
-            return tag(ctx.out(), depth, "<block/>");
+            return tag(ctx.out(), depth, "</block>");
         }
 
         case lcc::language_c::NodeKind::IntegerLiteral: {
@@ -102,7 +102,7 @@ auto fmt::formatter<lcc::language_c::Node>::format(
 
             tag(ctx.out(), depth, "<return>");
             fmt::format_to(ctx.out(), "{:{}}", *r.expression(), depth + 1);
-            return tag(ctx.out(), depth, "<return/>");
+            return tag(ctx.out(), depth, "</return>");
         }
 
         case lcc::language_c::NodeKind::Declaration: {

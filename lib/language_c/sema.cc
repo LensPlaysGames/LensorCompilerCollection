@@ -36,20 +36,32 @@ auto Sema::analyse(Node* node) -> Result<void> {
                 defining = d;
                 auto result = analyse(d->initialising_expression());
                 if (not result) return result;
+
+                // Function declaration returning void defined with empty block:
+                // -> insert implicit return.
+                if (
+                    d->type()->kind() == TypeKind::Function
+                    and d->initialising_expression()->kind() == NodeKind::Block
+                    and ((Block*) (d->initialising_expression()))->constituents().empty()
+                ) {
+                    ((Block*) (d->initialising_expression()))
+                        ->_constituents
+                        .emplace_back(
+                            new Return(nullptr, {})
+                        );
+                }
+
                 defining = nullptr;
             }
 
             return {};
 
-            // TODO: Ensure no duplicate declarations
+            // TODO: Ensure no duplicate definitions
         }
 
         case NodeKind::Return: {
-            if (not defining)
+            if (not defining or defining->type()->kind() != TypeKind::Function)
                 return Error(node->location(), "c/unexpected", "Encountered return outside of a function");
-
-            if (defining->type()->kind() != TypeKind::Function)
-                Diag::ICE("defining function is not a function");
 
             auto* r = (Return*) node;
 

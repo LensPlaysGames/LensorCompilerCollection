@@ -64,7 +64,7 @@ void IRGen::create_function(const Declaration* d) {
         ir_module,
         std::string(d->name()),
         as<lcc::FunctionType>(convert(d->type())),
-        Linkage::Exported,
+        d->initialising_expression() ? Linkage::Exported : Linkage::Imported,
         CallConv::C,
         {}
     );
