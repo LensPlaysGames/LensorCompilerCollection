@@ -125,6 +125,8 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::OpAsterisk: {
                     auto inst = new (*ir_module) lcc::MulInst(generated_ir[b->lhs()], generated_ir[b->rhs()], b->location());
                     generated_ir[n] = inst;
+                    insert(inst);
+                    return;
                 }
 
                 case TokenKind::Invalid:
@@ -145,7 +147,7 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::Eof:
                 case TokenKind::Count: break;
             }
-        }
+        } break;
 
         case NodeKind::Invalid:
         case NodeKind::Count: break;
