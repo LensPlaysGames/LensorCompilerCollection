@@ -14,6 +14,7 @@
 namespace lcc::language_c {
 
 struct Declaration;
+enum struct TokenKind : unsigned int;
 
 struct Scope {
     Scope* parent{};
@@ -27,6 +28,7 @@ enum class NodeKind {
     Declaration,
     IntegerLiteral,
     Return,
+    BinaryOperation,
     Count
 };
 
@@ -39,7 +41,8 @@ public:
         : _kind(kind), _location(location) {}
 
     auto kind() const { return _kind; }
-    auto location() { return _location; }
+    auto location() const { return _location; }
+    auto location() -> Location& { return _location; }
 
     // Given "  _return 69_  ", where the underscores delineate the node's
     // location, return a location like "  return 69_ _ ".
@@ -83,6 +86,21 @@ public:
         : Node(NodeKind::IntegerLiteral, location), _value(value) {}
 
     auto value() const { return _value; }
+};
+
+struct BinaryOperation : public Node {
+    TokenKind _operator;
+    Node* _lhs;
+    Node* _rhs;
+
+public:
+    BinaryOperation(TokenKind operator_, Node* lhs, Node* rhs, Location location)
+        : Node(NodeKind::BinaryOperation, location),
+          _operator(operator_), _lhs(lhs), _rhs(rhs) {}
+
+    auto binary_operator() const { return _operator; }
+    auto lhs() const { return _lhs; }
+    auto rhs() const { return _rhs; }
 };
 
 struct Return : public Node {

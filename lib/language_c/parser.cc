@@ -234,6 +234,16 @@ void Parser::NextToken() {
             tok.kind = TokenKind::Eof;
         } break;
 
+        case '*':
+            tok.kind = TokenKind::OpAsterisk;
+            NextChar();
+            break;
+
+        case ',':
+            tok.kind = TokenKind::OpComma;
+            NextChar();
+            break;
+
         case ';':
             tok.kind = TokenKind::Semicolon;
             NextChar();
@@ -503,6 +513,7 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
 
 auto Parser::ParseExpression() -> Result<Node*> {
     Location start_location = tok.location;
+    Result<Node*> lhs = Result<Node*>::Null(); /** (!) **/
     switch (tok.kind) {
         case TokenKind::Invalid:
         case TokenKind::Count:
@@ -520,30 +531,29 @@ auto Parser::ParseExpression() -> Result<Node*> {
             if (tok.kind != TokenKind::Semicolon and tok.kind != TokenKind::Eof) {
                 auto expression = ParseExpression();
                 if (not expression) return expression.diag();
-                return new Return(
+                lhs = new Return(
                     *expression,
                     {start_location, expression->location()}
                 );
-            }
-            return new Return(nullptr, start_location);
-        }
+            } else lhs = new Return(nullptr, start_location);
+        } break;
 
         case TokenKind::KwInt: {
             NextToken();
             // Encountering just 'int' implies a declaration follows.
-            return ParseDeclarations(new IntType(start_location));
+            lhs = ParseDeclarations(new IntType(start_location));
         } break;
 
         case TokenKind::KwVoid: {
             NextToken();
             // Encountering just 'void' implies a declaration follows.
-            return ParseDeclarations(new VoidType(start_location));
+            lhs = ParseDeclarations(new VoidType(start_location));
         } break;
 
         case TokenKind::Semicolon: {
-            Warning("c/empty-statement", "Empty statement");
             NextToken();
-        } break;
+            return Warning("c/empty-statement", "Empty statement");
+        };
 
         case TokenKind::LeftCurlyBrace: {
             // Eat "{"
@@ -565,14 +575,13 @@ auto Parser::ParseExpression() -> Result<Node*> {
             // Eat "}"
             NextToken();
 
-            return new Block(*constituents, location);
-        }
+            lhs = new Block(*constituents, location);
+        } break;
 
         case TokenKind::Integer: {
-            auto i = new IntegerLiteral(tok.integer_value, tok.location);
+            lhs = new IntegerLiteral(tok.integer_value, tok.location);
             NextToken();
-            return i;
-        }
+        } break;
 
         case TokenKind::Identifier:
         case TokenKind::Fractional:
@@ -582,7 +591,48 @@ auto Parser::ParseExpression() -> Result<Node*> {
             Diag::ICE("{} is unhandled...", tok.kind);
     }
 
-    Diag::ICE("unreachable");
+    if (not lhs) return lhs.diag();
+
+    // Once we've parsed an expression, we should check if that expression is
+    // the lhs of a binary expression.
+    switch (tok.kind) {
+        case TokenKind::OpAsterisk: {
+            const auto operator_ = tok.kind;
+            NextToken();
+            auto rhs = ParseExpression();
+            if (not rhs) return rhs.diag();
+            lhs = new BinaryOperation(
+                operator_,
+                *lhs,
+                *rhs,
+                {lhs->location(), rhs->location()}
+            );
+        } break;
+
+        case TokenKind::LeftParenthesis: [[fallthrough]];
+        case TokenKind::LeftSquareBracket:
+            Diag::ICE("Unhandled binary operator");
+
+        // These are NOT binary operators
+        case TokenKind::OpComma:
+        case TokenKind::Invalid:
+        case TokenKind::Identifier:
+        case TokenKind::Integer:
+        case TokenKind::Fractional:
+        case TokenKind::KwVoid:
+        case TokenKind::KwInt:
+        case TokenKind::KwReturn:
+        case TokenKind::RightParenthesis:
+        case TokenKind::RightSquareBracket:
+        case TokenKind::LeftCurlyBrace:
+        case TokenKind::RightCurlyBrace:
+        case TokenKind::Semicolon:
+        case TokenKind::Eof:
+        case TokenKind::Count:
+            break;
+    }
+
+    return lhs;
 };
 
 auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {

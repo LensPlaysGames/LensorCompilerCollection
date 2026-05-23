@@ -9,6 +9,7 @@
 #include <lcc/target.hh>
 
 #include <language_c/ast.hh>
+#include <language_c/parser.hh>
 
 namespace lcc::language_c {
 
@@ -116,6 +117,34 @@ void IRGen::generate_expression(const Node* n) {
             generated_ir[n] = inst;
             insert(inst);
             return;
+        }
+
+        case NodeKind::BinaryOperation: {
+            const auto* b = (BinaryOperation*) n;
+            switch (b->binary_operator()) {
+                case TokenKind::OpAsterisk: {
+                    auto inst = new (*ir_module) lcc::MulInst(generated_ir[b->lhs()], generated_ir[b->rhs()], b->location());
+                    generated_ir[n] = inst;
+                }
+
+                case TokenKind::Invalid:
+                case TokenKind::Identifier:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
+                case TokenKind::KwVoid:
+                case TokenKind::KwInt:
+                case TokenKind::KwReturn:
+                case TokenKind::OpComma:
+                case TokenKind::LeftParenthesis:
+                case TokenKind::RightParenthesis:
+                case TokenKind::LeftSquareBracket:
+                case TokenKind::RightSquareBracket:
+                case TokenKind::LeftCurlyBrace:
+                case TokenKind::RightCurlyBrace:
+                case TokenKind::Semicolon:
+                case TokenKind::Eof:
+                case TokenKind::Count: break;
+            }
         }
 
         case NodeKind::Invalid:

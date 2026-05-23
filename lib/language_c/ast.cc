@@ -1,5 +1,7 @@
 #include <language_c/ast.hh>
 
+#include <language_c/parser.hh>
+
 #include <lcc/diags.hh>
 #include <lcc/location.hh>
 
@@ -131,6 +133,25 @@ auto fmt::formatter<lcc::language_c::Node>::format(
             return tag(ctx.out(), depth, "</declaration>");
         }
 
+        case lcc::language_c::NodeKind::BinaryOperation: {
+            const auto* b = (const lcc::language_c::BinaryOperation*) &n;
+            tag(ctx.out(), depth, "<binary>");
+            ++depth;
+
+            indent(ctx.out(), depth);
+            fmt::format_to(ctx.out(), "<operator>{}</operator>\n", b->binary_operator());
+
+            tag(ctx.out(), depth, "<lhs>");
+            fmt::format_to(ctx.out(), "{:{}}", *b->lhs(), depth + 1);
+            tag(ctx.out(), depth, "</lhs>");
+            tag(ctx.out(), depth, "<rhs>");
+            fmt::format_to(ctx.out(), "{:{}}", *b->rhs(), depth + 1);
+            tag(ctx.out(), depth, "</rhs>");
+
+            --depth;
+            return tag(ctx.out(), depth, "</binary>");
+        }
+
         case lcc::language_c::NodeKind::Count:
             break;
     }
@@ -155,6 +176,31 @@ auto Node::langtest_name() -> std::string_view {
         case NodeKind::Declaration: return "declaration";
         case NodeKind::IntegerLiteral: return "integer_literal";
         case NodeKind::Return: return "return";
+        case NodeKind::BinaryOperation: {
+            auto* b = ((BinaryOperation*) this);
+            switch (b->binary_operator()) {
+                case TokenKind::OpAsterisk: return "binary_multiply";
+                case TokenKind::LeftSquareBracket: return "binary_subscript";
+
+                case TokenKind::Invalid:
+                case TokenKind::Identifier:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
+                case TokenKind::KwVoid:
+                case TokenKind::KwInt:
+                case TokenKind::KwReturn:
+                case TokenKind::OpComma:
+                case TokenKind::LeftParenthesis:
+                case TokenKind::RightParenthesis:
+                case TokenKind::RightSquareBracket:
+                case TokenKind::LeftCurlyBrace:
+                case TokenKind::RightCurlyBrace:
+                case TokenKind::Semicolon:
+                case TokenKind::Eof:
+                case TokenKind::Count:
+                    Diag::ICE("Invalid binary operator `{}`", b->binary_operator());
+            }
+        }
         case NodeKind::Count: break;
     }
     Diag::ICE("unreachable");
@@ -166,6 +212,12 @@ auto Node::langtest_children() -> std::vector<Node*> {
 
         case NodeKind::Group: return ((Group*) this)->constituents();
         case NodeKind::Block: return ((Block*) this)->constituents();
+
+        case NodeKind::BinaryOperation: {
+            auto* b = (BinaryOperation*) this;
+            return {b->lhs(), b->rhs()};
+        }
+
         case NodeKind::Declaration: {
             auto d = (Declaration*) this;
             if (d->initialising_expression())

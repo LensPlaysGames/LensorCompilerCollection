@@ -4,7 +4,7 @@ Integer: 0
 :desc just zero
 ================
 
-0
+0;
 
 ---
 
@@ -16,7 +16,7 @@ Integer: 10
 :desc integer with multiple digits
 ================
 
-10
+10;
 
 ---
 
@@ -28,7 +28,7 @@ Integer: 0100
 :desc integer with a leading zero is valid in C (and base 8)
 ================
 
-0100
+0100;
 
 ---
 
@@ -40,7 +40,7 @@ Integer: 0b01001001
 :desc binary integer
 ================
 
-0b01001001
+0b01001001;
 
 ---
 
