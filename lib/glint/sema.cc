@@ -713,8 +713,7 @@ void lcc::glint::Sema::AnalyseModule() {
         // with double underscores).
         std::string_view templates_source =
             "__zero :: template(x : expr) {\n"
-            "  ;; TODO: sizeof is currently in bits...\n"
-            "  memset &x, 0, (sizeof x) / 8;\n"
+            "  memset &x, 0, (typeof x).bytes;\n"
             "  x;\n"
             "};\n"
             "\n"
@@ -728,8 +727,7 @@ void lcc::glint::Sema::AnalyseModule() {
             "\n"
             "__dynarray_initvalue :: template(capacity : expr, element_type : type) {\n"
             "  [element_type] !{\n"
-            "    .data element_type.ptr\n"
-            "      (malloc (capacity ((sizeof element_type) / 8))),\n"
+            "    .data element_type.ptr (malloc (capacity ((sizeof element_type) / 8))),\n"
             "    .size 0,\n"
             "    .capacity capacity\n"
             "  };\n"

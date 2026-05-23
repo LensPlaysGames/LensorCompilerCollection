@@ -247,14 +247,16 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             case K::EvaluatedConstant: {
                 auto c = as<lcc::glint::ConstantExpr>(e);
                 PrintBasicNode("ConstantExpr", e, e->type(), false);
-                if (c->value().is_null()) out += " NULL";
-                else if (c->value().is_int()) out += fmt::format(" INT {}", c->value().as_int());
-                else if (c->value().is_string()) out += fmt::format(" STR.IDX {}", c->value().as_string()->string_index());
+                if (c->value().is_null())
+                    out += " NULL";
+                else if (c->value().is_int())
+                    out += fmt::format(" INT {}", c->value().as_int());
+                else if (c->value().is_string())
+                    out += fmt::format(" STR.IDX {}", c->value().as_string()->string_index());
                 out += '\n';
                 return;
             }
 
-            case K::OverloadSet: PrintBasicGlintNode("OverloadSet", e, e->type()); return;
             case K::Type:
                 PrintBasicGlintNode("TypeExpr", e, as<lcc::glint::TypeExpr>(e)->contained_type());
                 return;
@@ -262,6 +264,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
             case K::TypeAliasDecl: PrintBasicGlintNode("TypeAliasDecl", e, e->type()); return;
             case K::StringLiteral: PrintBasicGlintNode("StringLiteral", e, e->type()); return;
             case K::CompoundLiteral: PrintBasicGlintNode("CompoundLiteral", e, e->type()); return;
+            case K::OverloadSet: PrintBasicGlintNode("OverloadSet", e, e->type()); return;
             case K::MemberAccess:
                 PrintBasicHeader("MemberAccessExpr", e);
 
@@ -368,7 +371,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
                     out += '\n';
                 } else
                     out += fmt::format(
-                        "- {} : {}\n",
+                        "- variable {} : {}\n",
                         exported_decl->name(),
                         *exported_decl->type()
                     );
