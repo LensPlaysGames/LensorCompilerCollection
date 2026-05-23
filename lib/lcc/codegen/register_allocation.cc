@@ -1,5 +1,6 @@
-#include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
+
+#include <lcc/codegen/mir.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/utils.hh>
 
@@ -513,6 +514,13 @@ auto allocate_registers(
     // Don't allocate registers for empty functions.
     if (function.blocks().empty())
         return {};
+
+    // It's annoying, but functions may have blocks that are all completely
+    // empty.
+    for (auto b : function.blocks()) {
+        if (b.instructions().empty())
+            Diag::ICE("IR block is completely empty");
+    }
 
     // Steps:
     //   1. Collect all existing registers, both hardware and virtual.
