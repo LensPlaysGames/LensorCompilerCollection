@@ -8,8 +8,13 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <iterator>
+#include <ranges>
+#include <string>
+#include <string_view>
 #include <variant>
+#include <vector>
 
 // TODO: String cache for deduplication (I have a feeling we'll be dealing
 // with sometimes hundreds of duplicate strings).
@@ -103,20 +108,29 @@ struct TextualResultsDisplay {
                 failures.emplace_back(&r);
         }
 
+        fmt::format_to(
+            it,
+            "{} RESULTS\n"
+            "{} {}PASSING{}\n",
+            results.size(),
+            results.size() - failures.size(),
+            "\033[32;1m",
+            "\033[0m"
+        );
         if (not failures.empty()) {
             fmt::format_to(
                 it,
-                "{} {}FAILING{} RESULTS\n",
+                "{} {}FAILING{}\n",
                 failures.size(),
                 "\033[31;1m",
                 "\033[0m"
             );
-            for (
-                const auto& r : std::ranges::views::transform(
-                    failures,
-                    [](auto x) { return *x; }
-                )
-            ) fmt::format_to(it, "  {}\n", display_result(r));
+            for (const auto& r : std::ranges::views::transform(
+                     failures,
+                     [](auto x) { return *x; }
+                 )) {
+                fmt::format_to(it, "  {}\n", display_result(r));
+            }
         }
 
         return out;
