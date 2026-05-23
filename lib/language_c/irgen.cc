@@ -121,13 +121,24 @@ void IRGen::generate_expression(const Node* n) {
 
         case NodeKind::BinaryOperation: {
             const auto* b = (BinaryOperation*) n;
+            Inst* inst{};
+#define BINARY_ARGS generated_ir[b->lhs()], generated_ir[b->rhs()], b->location()
             switch (b->binary_operator()) {
-                case TokenKind::OpAsterisk: {
-                    auto inst = new (*ir_module) lcc::MulInst(generated_ir[b->lhs()], generated_ir[b->rhs()], b->location());
-                    generated_ir[n] = inst;
-                    insert(inst);
-                    return;
-                }
+                case TokenKind::OpPlus:
+                    inst = new (*ir_module) lcc::AddInst(BINARY_ARGS);
+                    break;
+                case TokenKind::OpMinus:
+                    inst = new (*ir_module) lcc::SubInst(BINARY_ARGS);
+                    break;
+                case TokenKind::OpAsterisk:
+                    inst = new (*ir_module) lcc::MulInst(BINARY_ARGS);
+                    break;
+                case TokenKind::OpSlash:
+                    inst = new (*ir_module) lcc::SDivInst(BINARY_ARGS);
+                    break;
+                case TokenKind::OpPercent:
+                    inst = new (*ir_module) lcc::SRemInst(BINARY_ARGS);
+                    break;
 
                 case TokenKind::Invalid:
                 case TokenKind::Identifier:
@@ -145,9 +156,14 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::RightCurlyBrace:
                 case TokenKind::Semicolon:
                 case TokenKind::Eof:
-                case TokenKind::Count: break;
+                case TokenKind::Count:
+                    Diag::ICE("unreachable");
             }
-        } break;
+#undef BINARY_ARGS
+            generated_ir[n] = inst;
+            insert(inst);
+            return;
+        }
 
         case NodeKind::Invalid:
         case NodeKind::Count: break;

@@ -179,7 +179,11 @@ auto Node::langtest_name() -> std::string_view {
         case NodeKind::BinaryOperation: {
             auto* b = ((BinaryOperation*) this);
             switch (b->binary_operator()) {
+                case TokenKind::OpPlus: return "binary_add";
+                case TokenKind::OpMinus: return "binary_subtract";
                 case TokenKind::OpAsterisk: return "binary_multiply";
+                case TokenKind::OpSlash: return "binary_divide";
+                case TokenKind::OpPercent: return "binary_remainder";
                 case TokenKind::LeftSquareBracket: return "binary_subscript";
 
                 case TokenKind::Invalid:

@@ -1,0 +1,21 @@
+================
+Return
+:syntax
+================
+
+return;
+
+---
+
+(block (return))
+
+================
+Return Expression
+:syntax
+================
+
+return 69;
+
+---
+
+(block (return (integer_literal)))

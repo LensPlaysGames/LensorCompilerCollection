@@ -1,0 +1,69 @@
+================
+Add
+:syntax
+================
+
+0 + 0;
+
+---
+
+(block
+ (binary_add
+  (integer_literal)
+  (integer_literal)))
+
+================
+Subtract
+:syntax
+================
+
+0 - 0;
+
+---
+
+(block
+ (binary_subtract
+  (integer_literal)
+  (integer_literal)))
+
+================
+Multiply
+:syntax
+================
+
+0 * 0;
+
+---
+
+(block
+ (binary_multiply
+  (integer_literal)
+  (integer_literal)))
+
+================
+Divide
+:syntax
+================
+
+0 / 0;
+
+---
+
+(block
+ (binary_divide
+  (integer_literal)
+  (integer_literal)))
+
+================
+Remainder
+:syntax
+================
+
+0 % 0;
+
+---
+
+(block
+ (binary_remainder
+  (integer_literal)
+  (integer_literal)))

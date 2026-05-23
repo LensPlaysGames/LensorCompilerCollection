@@ -20,7 +20,11 @@ std::string_view ToString(TokenKind k) {
         case TokenKind::KwVoid: return "void";
         case TokenKind::KwInt: return "int";
         case TokenKind::KwReturn: return "return";
+        case TokenKind::OpPlus: return "+";
+        case TokenKind::OpMinus: return "-";
         case TokenKind::OpAsterisk: return "*";
+        case TokenKind::OpSlash: return "/";
+        case TokenKind::OpPercent: return "%";
         case TokenKind::OpComma: return ",";
         case TokenKind::LeftParenthesis: return "(";
         case TokenKind::RightParenthesis: return ")";
@@ -37,8 +41,8 @@ std::string_view ToString(TokenKind k) {
 
 StringMap<TokenKind> keywords{
     {"int", TokenKind::KwInt},
+    {"return", TokenKind::KwReturn},
     {"void", TokenKind::KwVoid},
-    {"return", TokenKind::KwReturn}
 };
 
 bool IsSpace(uint32_t c) {
@@ -208,6 +212,26 @@ void Parser::NextNumber() {
     }
 }
 
+// Sometimes a single codepoint turns into a token kind with no token data
+// required other than the kind.
+// This is a quick-and-easy way to implement those sort of tokens.
+std::unordered_map<uint32_t, TokenKind> easy_tokens{
+    {0, TokenKind::Eof},
+    {'+', TokenKind::OpPlus},
+    {'-', TokenKind::OpMinus},
+    {'*', TokenKind::OpAsterisk},
+    {'/', TokenKind::OpSlash},
+    {'%', TokenKind::OpPercent},
+    {',', TokenKind::OpComma},
+    {';', TokenKind::Semicolon},
+    {'(', TokenKind::LeftParenthesis},
+    {')', TokenKind::RightParenthesis},
+    {'[', TokenKind::LeftSquareBracket},
+    {']', TokenKind::RightSquareBracket},
+    {'{', TokenKind::LeftCurlyBrace},
+    {'}', TokenKind::RightCurlyBrace},
+};
+
 void Parser::NextToken() {
     // Return EOF if we’re at EOF.
     if (not lastc) {
@@ -229,50 +253,21 @@ void Parser::NextToken() {
 
     // Determine token starting at current offset.
     switch (lastc) {
-        /// EOF.
-        case 0: {
-            tok.kind = TokenKind::Eof;
-        } break;
-
+        case 0:
+        case '+':
+        case '-':
         case '*':
-            tok.kind = TokenKind::OpAsterisk;
-            NextChar();
-            break;
-
+        case '/':
+        case '%':
         case ',':
-            tok.kind = TokenKind::OpComma;
-            NextChar();
-            break;
-
         case ';':
-            tok.kind = TokenKind::Semicolon;
-            NextChar();
-            break;
-
         case '(':
-            tok.kind = TokenKind::LeftParenthesis;
-            NextChar();
-            break;
         case ')':
-            tok.kind = TokenKind::RightParenthesis;
-            NextChar();
-            break;
-
         case '[':
-            tok.kind = TokenKind::LeftSquareBracket;
-            NextChar();
-            break;
         case ']':
-            tok.kind = TokenKind::RightSquareBracket;
-            NextChar();
-            break;
-
         case '{':
-            tok.kind = TokenKind::LeftCurlyBrace;
-            NextChar();
-            break;
         case '}':
-            tok.kind = TokenKind::RightCurlyBrace;
+            tok.kind = easy_tokens.at(lastc);
             NextChar();
             break;
 
@@ -520,6 +515,8 @@ auto Parser::ParseExpression() -> Result<Node*> {
         case TokenKind::Eof:
             Diag::ICE("Parser encountered unexpected token kind `{}`...", tok.kind);
 
+        case TokenKind::OpSlash:
+        case TokenKind::OpPercent:
         case TokenKind::OpComma:
         case TokenKind::RightParenthesis:
         case TokenKind::RightSquareBracket:
@@ -588,6 +585,8 @@ auto Parser::ParseExpression() -> Result<Node*> {
         case TokenKind::OpAsterisk:
         case TokenKind::LeftParenthesis:
         case TokenKind::LeftSquareBracket:
+        case TokenKind::OpPlus:
+        case TokenKind::OpMinus:
             Diag::ICE("{} is unhandled...", tok.kind);
     }
 
@@ -596,7 +595,12 @@ auto Parser::ParseExpression() -> Result<Node*> {
     // Once we've parsed an expression, we should check if that expression is
     // the lhs of a binary expression.
     switch (tok.kind) {
-        case TokenKind::OpAsterisk: {
+        case TokenKind::OpPlus:
+        case TokenKind::OpMinus:
+        case TokenKind::OpAsterisk:
+        case TokenKind::OpSlash:
+        case TokenKind::OpPercent:
+        case TokenKind::LeftSquareBracket: {
             const auto operator_ = tok.kind;
             NextToken();
             auto rhs = ParseExpression();
@@ -609,8 +613,7 @@ auto Parser::ParseExpression() -> Result<Node*> {
             );
         } break;
 
-        case TokenKind::LeftParenthesis: [[fallthrough]];
-        case TokenKind::LeftSquareBracket:
+        case TokenKind::LeftParenthesis:
             Diag::ICE("Unhandled binary operator");
 
         // These are NOT binary operators

@@ -35,7 +35,11 @@ Result<void> Sema::analyse_declaration(Declaration* d) {
 }
 Result<void> Sema::analyse_binary(BinaryOperation* b) {
     switch (b->binary_operator()) {
+        case TokenKind::OpPlus:
+        case TokenKind::OpMinus:
         case TokenKind::OpAsterisk:
+        case TokenKind::OpSlash:
+        case TokenKind::OpPercent:
         case TokenKind::LeftParenthesis:
         case TokenKind::LeftSquareBracket:
             Diag::ICE("Unhandled binary operator `{}` (sema)", b->binary_operator());

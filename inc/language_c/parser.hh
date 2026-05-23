@@ -27,7 +27,11 @@ enum class TokenKind : unsigned int {
     KwInt,
     KwReturn,
 
+    OpPlus,
+    OpMinus,
     OpAsterisk,
+    OpSlash,
+    OpPercent,
     OpComma,
 
     LeftParenthesis,
