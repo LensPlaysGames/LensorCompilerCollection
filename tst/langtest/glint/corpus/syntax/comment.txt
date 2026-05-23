@@ -16,11 +16,35 @@ Block Comment
 
 [-
 cool
--]
+beans -]
 
 ---
 
 (block)
+
+================
+Nested Block Comment, Unbalanced
+:syntax_error
+================
+
+[-
+[-
+-]
+
+================
+Nested Block Comment, Balanced
+:syntax_error
+================
+
+[-
+[--]-]
+
+================
+Block Comment, No Terminator
+:syntax_error
+================
+
+[-
 
 ================
 Empty Block Comment
