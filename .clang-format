@@ -1,433 +1,320 @@
 ---
-## C++, latest standard.
 Language: Cpp
-Standard: Latest
-
-## How far `public:`, `private:`, and `protected:` are indented.
+AlignAfterOpenBracket: true
 AccessModifierOffset: -4
-
-## If a function decl or call's opening paren is at the end of a line,
-## format its arguments like so:
-##
-##     int foo(
-##         int a,
-##         int b
-##     );
-##
-## As of clang-format 22 this option is a bool with the previous option of
-## Align replaced with true, DontAlign replaced with false, and the
-## options of AlwaysBreak and BlockIndent replaced with true and with
-## setting of new style options using BreakAfterOpenBracketBracedList,
-## BreakAfterOpenBracketFunction, BreakAfterOpenBracketIf,
-## BreakBeforeCloseBracketBracedList, BreakBeforeCloseBracketFunction, and
-## BreakBeforeCloseBracketIf.
-AlignAfterOpenBracket: BlockIndent
-
-## Don’t align arrays or initialiser lists.
 AlignArrayOfStructures: None
-
-## Don’t align assignments because that leads to too much extra whitespace.
-AlignConsecutiveAssignments: None
-
-## So is aligning bitfields.
-AlignConsecutiveBitFields: Consecutive
-
-## Same as declarations: nope.
-AlignConsecutiveDeclarations: None
-
-## Aligning macros is usually fine tho.
-AlignConsecutiveMacros: Consecutive
-
-## Escaped newlines in macros should be aligned like so:
-##
-##   #define foo(x)  \
-##       do {        \
-##           bar(x); \
-##           baz(x); \
-##       } while (0)
+AlignConsecutiveAssignments:
+  Enabled: false
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: false
+  AlignFunctionDeclarations: false
+  AlignFunctionPointers: false
+  PadOperators: false
+AlignConsecutiveBitFields:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: false
+  AlignFunctionDeclarations: true
+  AlignFunctionPointers: false
+  PadOperators: true
+AlignConsecutiveDeclarations:
+  Enabled: false
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: false
+  AlignFunctionDeclarations: false
+  AlignFunctionPointers: false
+  PadOperators: false
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: false
+  AlignFunctionDeclarations: false
+  AlignFunctionPointers: false
+  PadOperators: true
+AlignConsecutiveShortCaseStatements:
+  Enabled: false
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCaseArrows: false
+  AlignCaseColons: false
+AlignConsecutiveTableGenBreakingDAGArgColons:
+  Enabled: false
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: false
+  AlignFunctionDeclarations: false
+  AlignFunctionPointers: false
+  PadOperators: false
+AlignConsecutiveTableGenCondOperatorColons:
+  Enabled: false
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: false
+  AlignFunctionDeclarations: false
+  AlignFunctionPointers: false
+  PadOperators: false
+AlignConsecutiveTableGenDefinitionColons:
+  Enabled: false
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: false
+  AlignFunctionDeclarations: false
+  AlignFunctionPointers: false
+  PadOperators: false
 AlignEscapedNewlines: Left
-
-## Align operands of binary expressions like so:
-##
-##     int a = 1 + 2 + 3 + 4
-##           + 5 + 6 + 7 + 8
-##           + 9 + 10;
-##
-## Note: BreakBeforeBinaryOperators also needs to be set appropriately.
 AlignOperands: AlignAfterOperator
-
-## This option also allows you to define across how many empty
-## lines comments should be aligned, but I don’t want that so
-## I just use a bool here.
-##
-## This aligns comments like so:
-##
-##     int bar = 42;               /// Comment.
-##     std::string foobarbaz = ""; /// Another comment.
-AlignTrailingComments: true
-
-## Don’t allow this:
-##
-##     foobarbaz(
-##         a, b, c, d);
-##
-## Instead, BinPackArguments will format it like so:
-##
-##     foobarbaz(
-##         a,
-##         b,
-##         c,
-##         d
-##     );
+AlignTrailingComments:
+  AlignPPAndNotPP: true
+  Kind: Always
+  OverEmptyLines: 0
 AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
-
-## Allow these:
-##
-##     for (;;) { foo(); }
-##
-##     case 1: foo(); break;
-##
-##     enum { A, B };
-##
-##     int foo() { bar(); }
-##
-##     if (foo()) bar();
-##     else baz();
-##
-##     auto lambda []() { return 0; }
-##
-##     for (;;) foo();
+AllowBreakBeforeNoexceptSpecifier: Never
+AllowBreakBeforeQtProperty: false
 AllowShortBlocksOnASingleLine: Always
+AllowShortCaseExpressionOnASingleLine: true
 AllowShortCaseLabelsOnASingleLine: true
+AllowShortCompoundRequirementOnASingleLine: true
 AllowShortEnumsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: All
 AllowShortIfStatementsOnASingleLine: AllIfsAndElse
 AllowShortLambdasOnASingleLine: All
 AllowShortLoopsOnASingleLine: true
-
-## Don’t do this horribleness, ever:
-##
-##     int
-##     foo() { ...
-AlwaysBreakAfterReturnType: None
-
-## Break before multiline strings like so:
-##
-##     auto s =
-##         "This is a "
-##         "multiline string.";
+AllowShortNamespacesOnASingleLine: false
+AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakBeforeMultilineStrings: true
-
-## Don’t force break template declarations (i.e. the template
-## param list and the rest of the signature/definition may be
-## on the same line).
-AlwaysBreakTemplateDeclarations: No
-
-## Identifiers that should be interpreted as attributes.
-AttributeMacros: ['__forceinline']
-
-## Function parameters are either all on the same line,
-## or all on separate lines.
+AttributeMacros:
+  - __forceinline
 BinPackArguments: false
-BinPackParameters: false
-
-## Space before and after the ':' in bitfields.
+BinPackLongBracedList: true
+BinPackParameters: OnePerLine
 BitFieldColonSpacing: Both
-
-## Leave line breaks around attributes alone.
+BracedInitializerIndentWidth: -1
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: false
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterExternBlock: false
+  AfterFunction: false
+  AfterNamespace: false
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  BeforeCatch: false
+  BeforeElse: false
+  BeforeLambdaBody: false
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+BreakAdjacentStringLiterals: true
 BreakAfterAttributes: Leave
-
-## Break before operators.
+BreakAfterJavaFieldAnnotations: false
+BreakAfterOpenBracketBracedList: true
+BreakAfterOpenBracketFunction: true
+BreakAfterOpenBracketIf: true
+BreakAfterOpenBracketLoop: true
+BreakAfterOpenBracketSwitch: true
+BreakAfterReturnType: None
+BreakArrays: true
 BreakBeforeBinaryOperators: All
-
-## NEVER put opening braces on a new line.
+BreakBeforeCloseBracketBracedList: true
+BreakBeforeCloseBracketFunction: true
+BreakBeforeCloseBracketIf: true
+BreakBeforeCloseBracketLoop: true
+BreakBeforeCloseBracketSwitch: true
+BreakBeforeConceptDeclarations: Always
 BreakBeforeBraces: Attach
-
-## This is AlwaysBreakTemplateDeclarations, but for concept decls.
-BreakBeforeConceptDeclarations: Allowed
-
-## Put the colons of multiline inline ASM on new lines.
 BreakBeforeInlineASMColon: OnlyMultiline
-
-## Format ternaries like so:
-##
-##     auto foo = bar
-##         ? baz
-##         : qux;
+BreakBeforeTemplateCloser: false
 BreakBeforeTernaryOperators: true
-
-## Format ctors like so:
-##
-##     Constructor()
-##         : bar(42),
-##           baz(23)
-#BreakConstructorInitializers: BeforeComma
-
-## Same thing, but for class declarations.
+BreakBinaryOperations: Never
+BreakConstructorInitializers: BeforeComma
+BreakFunctionDefinitionParameters: false
 BreakInheritanceList: AfterColon
-
-## Allow breaking long string literals across multiple lines.
-BreakStringLiterals: true
-
-## This disables the column limit. Rather unintuitively, this is
-## also the only way to get clang-format to not remove all manually
-## inserted line breaks.
+BreakStringLiterals: false
+BreakTemplateDeclarations: 'Yes'
 ColumnLimit: 0
-
-## Nested namespace declarations are on different lines. If they
-## should be on the same line, just write `namespace foo::bar` instead.
+CommentPragmas: '^ IWYU pragma:'
 CompactNamespaces: false
-
-## Set to the same value as IndentWidth.
 ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
-
-## Format braced init lists appropriately.
-##
-## > Fundamentally, C++11 braced lists are formatted exactly like
-## > function calls would be formatted in their place. If the braced
-## > list follows a name (e.g. a type or variable name), clang-format
-## > formats as if the {} were the parentheses of a function call with
-## > that name.
-Cpp11BracedListStyle: true
-
-## Do NOT attempt to infer pointer alignment. Format it to what I want
-## it to be.
+Cpp11BracedListStyle: FunctionCall
 DerivePointerAlignment: false
-
-## Duh.
 DisableFormat: false
-
-## Never put empty lines after `private:` etc.
 EmptyLineAfterAccessModifier: Never
-
-## Empty lines before access modifiers should be left alone.
-EmptyLineBeforeAccessModifier: Leave
-
-## Insert a `// namespace foo` comment after the closing brace of a
-## namespace.
+EmptyLineBeforeAccessModifier: LogicalBlock
+EnumTrailingComma: Leave
+ExperimentalAutoDetectBinPacking: false
 FixNamespaceComments: true
-
-## Macros that should be formatted like the `for` keyword.
-ForEachMacros: []
-
-## Same thing, but for `if`.
-IfMacros: []
-
-## Merge include blocks, sort them, and resplit.
+ForEachMacros:
+  - foreach
+  - Q_FOREACH
+  - BOOST_FOREACH
+IfMacros:
+  - KJ_IF_MAYBE
 IncludeBlocks: Preserve
-
-## Enable outdenting `private:`.
-# NOTE: This setting currently causes the content of structs
-# to be indented twice.
-#IndentAccessModifiers: true
-
-## Don’t indent case blocks. Note, this is not about case *labels*,
-## but the actual blocks of code. The labels *will* be indented, so
-## we don’t need any extra indentation here.
+IncludeCategories:
+  - Regex: ^"(llvm|llvm-c|clang|clang-c)/
+    Priority: 2
+    SortPriority: 0
+    CaseSensitive: false
+  - Regex: ^(<|"(gtest|gmock|isl|json)/)
+    Priority: 3
+    SortPriority: 0
+    CaseSensitive: false
+  - Regex: .*
+    Priority: 1
+    SortPriority: 0
+    CaseSensitive: false
+IncludeIsMainRegex: (Test)?$
+IncludeIsMainSourceRegex: ''
+IndentAccessModifiers: false
 IndentCaseBlocks: false
-
-## Indent `case foo:` relative to the `switch`. We do this is because,
-## otherwise, we can end up w/ two `}` on the same line like so:
-##
-##     switch (foo) {
-##     case 1: {
-##         bar();
-##         break;
-##     }
-##     }
 IndentCaseLabels: true
-
-## We disable indenting the contents of `extern "C" {}` blocks, simply
-## because indentation in such blocks is pretty useless as they tend to
-## be rather long and often enough, an entire file would just end up
-## being indented more than it needs to be.
+IndentExportBlock: true
 IndentExternBlock: NoIndent
-
-## We want goto labels to be indented relative to the current scope.
 IndentGotoLabels: true
-
-## Indent CPP directives after the `#` sign.
 IndentPPDirectives: AfterHash
-
-## Do NOT indent requires clauses.
 IndentRequiresClause: false
-
-## Four spaces. This is the only correct value.
 IndentWidth: 4
-
-## This should never happen anyway, but just in case, don’t.
 IndentWrappedFunctionNames: false
-
-## This would do the opposite of what I have spent far too much
-## time to fix manually.
 InsertBraces: false
-
-## I keep forgetting about this, and I’d prefer to be consistent
-## about it, so, therefore:
 InsertNewlineAtEOF: true
-
-## Format integer literals:
-#IntegerLiteralSeparator:
-#  Binary: 4
-#  Decimal: 3
-#  Hex: 4
-
-## This one is pretty self-explanatory.
-KeepEmptyLinesAtTheStartOfBlocks: false
-
-## Indent lambda bodies relative to the outer scope, and not
-## relative to the indentation of the signature.
-# LambdaBodyIndentation: OuterScope
-
-## Use LF, never CRLF.
+InsertTrailingCommas: None
+IntegerLiteralSeparator:
+  Binary: 0
+  BinaryMinDigitsInsert: 0
+  BinaryMaxDigitsRemove: 0
+  Decimal: 0
+  DecimalMinDigitsInsert: 0
+  DecimalMaxDigitsRemove: 0
+  Hex: 0
+  HexMinDigitsInsert: 0
+  HexMaxDigitsRemove: 0
+  BinaryMinDigits: 0
+  DecimalMinDigits: 0
+  HexMinDigits: 0
+JavaScriptQuotes: Leave
+JavaScriptWrapImports: true
+KeepEmptyLines:
+  AtEndOfFile: false
+  AtStartOfBlock: false
+  AtStartOfFile: true
+KeepFormFeed: false
+LambdaBodyIndentation: Signature
 LineEnding: LF
-
-## Don’t allow multiple consecutive empty lines.
+MacroBlockBegin: ''
+MacroBlockEnd: ''
+MainIncludeChar: Quote
 MaxEmptyLinesToKeep: 1
-
-## Don’t indent namespaces. See the `extern "C"` option above,
-## for more information as to why we disable this.
 NamespaceIndentation: None
-
-## Reuse IndentWidth.
-PPIndentWidth: -1
-
-## Format ctor initialisers sensibly. Put all of them on the same line if
-## they fit, and put them on separate lines if they don’t.
-#PackConstructorInitializers: CurrentLine
-
-## We don’t want this to happen. Ever.
+NumericLiteralCase:
+  ExponentLetter: Leave
+  HexDigit: Leave
+  Prefix: Leave
+  Suffix: Leave
+ObjCBinPackProtocolList: Auto
+ObjCBlockIndentWidth: 2
+ObjCBreakBeforeNestedBlockParam: true
+ObjCSpaceAfterProperty: false
+ObjCSpaceBeforeProtocolList: true
+OneLineFormatOffRegex: ''
+PackConstructorInitializers: BinPack
+PenaltyBreakAssignment: 2
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakBeforeMemberAccess: 150
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakOpenParenthesis: 0
+PenaltyBreakScopeResolution: 500
+PenaltyBreakString: 1000
+PenaltyBreakTemplateDeclaration: 10
+PenaltyExcessCharacter: 1000000
+PenaltyIndentedWhitespace: 0
 PenaltyReturnTypeOnItsOwnLine: 4294967295
-
-## Left for C++, Right for C.
 PointerAlignment: Left
-
-## Leave qualifiers where they are as the docs state that this option
-## may lead to incorrect code.
+PPIndentWidth: -1
 QualifierAlignment: Leave
-
-## I suck at being consistent about this, so therefore:
-## TODO: Figure out why CLion’s clang-format is rejecting this...
-#QualifierOrder: ['friend', 'static', 'inline', 'constexpr', 'const', 'volatile', 'restrict', 'type']
-
-## Should always be left, unless C decides to add references some day.
 ReferenceAlignment: Left
-
-## Allow reflowing comments. Not sure if this does anything since we’ve disabled the col limit.
-ReflowComments: true
-
-## Requires clauses go on a separate line.
+ReflowComments: Always
+RemoveBracesLLVM: false
+RemoveEmptyLinesInUnwrappedLines: false
+RemoveParentheses: Leave
+RemoveSemicolon: false
 RequiresClausePosition: OwnLine
-
-## Thank goodness they finally added this. The default formatting used to be
-## absolutely atrocious, because no, I don’t want all of my concept declarations
-## to be indented 10 spaces or whatnot.
 RequiresExpressionIndentation: OuterScope
-
-## I know better when to separate stuff than clang-format.
 SeparateDefinitionBlocks: Leave
-
-## Five lines is short, I guess.
 ShortNamespaceLines: 5
-
-## Sort include directives.
-SortIncludes: CaseInsensitive
-
-## Sort using decls alphabetically.
-# TODO: Set to Lexicographic
-SortUsingDeclarations: true
-
-## Space after C-style cast.
+SkipMacroDefinitionBody: false
+SortIncludes:
+  Enabled: true
+  IgnoreCase: true
+  IgnoreExtension: false
+SortJavaStaticImport: Before
+SortUsingDeclarations: LexicographicNumeric
 SpaceAfterCStyleCast: true
-
-## Space after `not`.
 SpaceAfterLogicalNot: true
-
-## Put a space after `template`
+SpaceAfterOperatorKeyword: false
 SpaceAfterTemplateKeyword: true
-
-## Ignore this option and use PointerAlignment instead.
 SpaceAroundPointerQualifiers: Default
-
-## Put spaces around `=` and friends.
 SpaceBeforeAssignmentOperators: true
-
-## We *definitely* don’t want spaces before a case colon.
 SpaceBeforeCaseColon: false
-
-## We want to treat init lists like function calls, so no space.
 SpaceBeforeCpp11BracedList: false
-
-## Funnily enough, we *do* want spaces before these colons
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
-SpaceBeforeRangeBasedForLoopColon: true
-
-## Spaces before parens:
+SpaceBeforeJsonColon: false
 SpaceBeforeParens: Custom
 SpaceBeforeParensOptions:
   AfterControlStatements: true
   AfterForeachMacros: true
-  AfterFunctionDeclarationName: false
   AfterFunctionDefinitionName: false
+  AfterFunctionDeclarationName: false
   AfterIfMacros: true
+  AfterNot: true
   AfterOverloadedOperator: false
+  AfterPlacementOperator: true
   AfterRequiresInClause: true
   AfterRequiresInExpression: true
   BeforeNonEmptyParentheses: false
-  AfterNot: true
-
-## No space before subscripts.
+SpaceBeforeRangeBasedForLoopColon: true
 SpaceBeforeSquareBrackets: false
-
-## Empty block should be {}, not { }.
-SpaceInEmptyBlock: false
-
-## Same thing for parens.
-SpaceInEmptyParentheses: false
-
-## At least one space before trailing comments.
+SpaceInEmptyBraces: Never
 SpacesBeforeTrailingComments: 1
-
-## Never put spaces in angle brackets.
 SpacesInAngles: Never
-
-## We definitely don’t want this.
-SpacesInCStyleCastParentheses: false
-## Or this.
-SpacesInConditionalStatement: false
-
-## Spaces at the beginning of line comments.
-## Minimum: At least one.
-## Maximum: More are allowed.
+SpacesInContainerLiterals: true
 SpacesInLineCommentPrefix:
   Minimum: 1
   Maximum: -1
-
-## Disable this too.
-SpacesInParentheses: false
-
-## And this.
+SpacesInParens: Never
+SpacesInParensOptions:
+  ExceptDoubleParentheses: false
+  InCStyleCasts: false
+  InConditionalStatements: false
+  InEmptyParentheses: false
+  Other: false
 SpacesInSquareBrackets: false
-
-## Currently not used, but it’s here for future reference.
-StatementAttributeLikeMacros: []
-
-## Macros that should be treated as statements.
-StatementMacros: []
-
-## Tabs are four columns.
+Standard: Latest
+StatementAttributeLikeMacros:
+  - Q_EMIT
+StatementMacros:
+  - Q_UNUSED
+  - QT_REQUIRE_VERSION
+TableGenBreakInsideDAGArg: DontBreak
 TabWidth: 4
-
-## Macros that create type names.
-TypenameMacros: []
-
-## NEVER use tabs. They only cause problems.
 UseTab: Never
-
-## Some macros care about whitespace.
-WhitespaceSensitiveMacros: ['LCC_STR', 'LCC_STR_']
-
+VerilogBreakBetweenInstancePorts: true
+WhitespaceSensitiveMacros:
+  - LCC_STR
+  - LCC_STR_
+  - NS_SWIFT_NAME
+  - PP_STRINGIZE
+  - STRINGIZE
+WrapNamespaceBodyWithEmptyLines: Leave
 ...
