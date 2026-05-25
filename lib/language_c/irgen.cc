@@ -121,8 +121,12 @@ void IRGen::generate_expression(const Node* n) {
 
         case NodeKind::BinaryOperation: {
             const auto* b = (BinaryOperation*) n;
-            Inst* inst{};
+
+            generate_expression(b->lhs());
+            generate_expression(b->rhs());
 #define BINARY_ARGS generated_ir[b->lhs()], generated_ir[b->rhs()], b->location()
+
+            Inst* inst{};
             switch (b->binary_operator()) {
                 case TokenKind::OpPlus:
                     inst = new (*ir_module) lcc::AddInst(BINARY_ARGS);
