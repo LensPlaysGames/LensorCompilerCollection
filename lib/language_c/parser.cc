@@ -315,7 +315,47 @@ void Parser::NextToken() {
         tok.location.len += 1;
 }
 
-Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
+// @return zero for non operators, otherwise the precedence value.
+constexpr size_t precedence(TokenKind kind) {
+    switch (kind) {
+        case TokenKind::OpComma:
+            return 15;
+
+        case TokenKind::OpPlus:
+        case TokenKind::OpMinus:
+            return 4;
+
+        case TokenKind::OpAsterisk:
+        case TokenKind::OpSlash:
+        case TokenKind::OpPercent:
+            return 3;
+
+        case TokenKind::LeftSquareBracket:
+            return 1;
+
+        case TokenKind::Invalid:
+        case TokenKind::Identifier:
+        case TokenKind::Integer:
+        case TokenKind::Fractional:
+        case TokenKind::KwVoid:
+        case TokenKind::KwInt:
+        case TokenKind::KwReturn:
+        case TokenKind::LeftParenthesis:
+        case TokenKind::RightParenthesis:
+        case TokenKind::RightSquareBracket:
+        case TokenKind::LeftCurlyBrace:
+        case TokenKind::RightCurlyBrace:
+        case TokenKind::Semicolon:
+        case TokenKind::Eof:
+        case TokenKind::Count:
+            return 0;
+    }
+    Diag::ICE("unreachable");
+}
+constexpr size_t reset_precedence{0};
+
+Result<std::vector<Node*>>
+Parser::ParseDeclarators(Type* type_specifier) {
     std::vector<Node*> parsed_declarations{};
     // We have just parsed a type specifier (like "int").
     // We are now at the beginning of the list of declarators.
@@ -337,7 +377,8 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
             tok.kind != TokenKind::Invalid and tok.kind != TokenKind::Count
             and tok.kind != TokenKind::Eof
             and tok.kind != TokenKind::OpComma and tok.kind != TokenKind::Semicolon
-            and tok.kind != TokenKind::LeftParenthesis and tok.kind != TokenKind::LeftSquareBracket) {
+            and tok.kind != TokenKind::LeftParenthesis and tok.kind != TokenKind::LeftSquareBracket
+        ) {
             switch (tok.kind) {
                 default:
                     return Error("c/expected", "Invalid start of declarator");
@@ -370,7 +411,8 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
                 while (
                     tok.kind != TokenKind::RightParenthesis
                     and tok.kind != TokenKind::Eof
-                    and tok.kind != TokenKind::Invalid) {
+                    and tok.kind != TokenKind::Invalid
+                ) {
                     Diag::ICE("Parse parameters (at `{}`)...", tok.kind);
                 }
                 if (tok.kind != TokenKind::RightParenthesis) {
@@ -395,7 +437,9 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
                 auto opening_location = tok.location;
                 NextToken();
 
-                auto dimension = ParseExpression();
+                auto dimension = ParseExpression(
+                    precedence(TokenKind::LeftSquareBracket)
+                );
                 if (not dimension) return dimension.diag();
 
                 if (tok.kind != TokenKind::RightSquareBracket) {
@@ -425,7 +469,7 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
         if (definition_possible and current_declarator_type->kind() == TypeKind::Function) {
             // Look for function definition
             if (tok.kind == TokenKind::LeftCurlyBrace) {
-                auto body = ParseExpression();
+                auto body = ParseExpression(reset_precedence);
                 if (not body) return body.diag();
                 initialiser = *body;
             }
@@ -481,8 +525,9 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
     while (
         tok.kind != TokenKind::Eof
         and tok.kind != TokenKind::Invalid
-        and tok.kind != until) {
-        auto maybe_expression = ParseExpression();
+        and tok.kind != until
+    ) {
+        auto maybe_expression = ParseExpression(reset_precedence);
         if (not maybe_expression) return maybe_expression.diag();
         constituents.emplace_back(*maybe_expression);
         if (tok.kind == TokenKind::Semicolon)
@@ -506,7 +551,7 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
     return constituents;
 }
 
-auto Parser::ParseExpression() -> Result<Node*> {
+auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
     Location start_location = tok.location;
     Result<Node*> lhs = Result<Node*>::Null(); /** (!) **/
     switch (tok.kind) {
@@ -526,7 +571,7 @@ auto Parser::ParseExpression() -> Result<Node*> {
         case TokenKind::KwReturn: {
             NextToken();
             if (tok.kind != TokenKind::Semicolon and tok.kind != TokenKind::Eof) {
-                auto expression = ParseExpression();
+                auto expression = ParseExpression(reset_precedence);
                 if (not expression) return expression.diag();
                 lhs = new Return(
                     *expression,
@@ -594,45 +639,53 @@ auto Parser::ParseExpression() -> Result<Node*> {
 
     // Once we've parsed an expression, we should check if that expression is
     // the lhs of a binary expression.
-    switch (tok.kind) {
-        case TokenKind::OpPlus:
-        case TokenKind::OpMinus:
-        case TokenKind::OpAsterisk:
-        case TokenKind::OpSlash:
-        case TokenKind::OpPercent:
-        case TokenKind::LeftSquareBracket: {
-            const auto operator_ = tok.kind;
-            NextToken();
-            auto rhs = ParseExpression();
-            if (not rhs) return rhs.diag();
-            lhs = new BinaryOperation(
-                operator_,
-                *lhs,
-                *rhs,
-                {lhs->location(), rhs->location()}
-            );
-        } break;
+    // NOTE: non-zero precedence = an operator
+    while (precedence(tok.kind)) {
+        if (
+            current_precedence
+            and precedence(tok.kind) > current_precedence
+        ) return lhs;
 
-        case TokenKind::LeftParenthesis:
-            Diag::ICE("Unhandled binary operator");
+        switch (tok.kind) {
+            case TokenKind::OpPlus:
+            case TokenKind::OpMinus:
+            case TokenKind::OpAsterisk:
+            case TokenKind::OpSlash:
+            case TokenKind::OpPercent:
+            case TokenKind::LeftSquareBracket: {
+                const auto operator_ = tok.kind;
+                NextToken();
+                auto rhs = ParseExpression(precedence(operator_));
+                if (not rhs) return rhs.diag();
+                lhs = new BinaryOperation(
+                    operator_,
+                    *lhs,
+                    *rhs,
+                    {lhs->location(), rhs->location()}
+                );
+            } break;
 
-        // These are NOT binary operators
-        case TokenKind::OpComma:
-        case TokenKind::Invalid:
-        case TokenKind::Identifier:
-        case TokenKind::Integer:
-        case TokenKind::Fractional:
-        case TokenKind::KwVoid:
-        case TokenKind::KwInt:
-        case TokenKind::KwReturn:
-        case TokenKind::RightParenthesis:
-        case TokenKind::RightSquareBracket:
-        case TokenKind::LeftCurlyBrace:
-        case TokenKind::RightCurlyBrace:
-        case TokenKind::Semicolon:
-        case TokenKind::Eof:
-        case TokenKind::Count:
-            break;
+            case TokenKind::LeftParenthesis:
+                Diag::ICE("Unhandled binary operator");
+
+            // These are NOT binary operators
+            case TokenKind::OpComma:
+            case TokenKind::Invalid:
+            case TokenKind::Identifier:
+            case TokenKind::Integer:
+            case TokenKind::Fractional:
+            case TokenKind::KwVoid:
+            case TokenKind::KwInt:
+            case TokenKind::KwReturn:
+            case TokenKind::RightParenthesis:
+            case TokenKind::RightSquareBracket:
+            case TokenKind::LeftCurlyBrace:
+            case TokenKind::RightCurlyBrace:
+            case TokenKind::Semicolon:
+            case TokenKind::Eof:
+            case TokenKind::Count:
+                break;
+        }
     }
 
     return lhs;

@@ -1,0 +1,127 @@
+================
+2 * 2 + 2 = 6
+:syntax
+================
+
+2 * 2 + 2;
+
+---
+
+(block
+ (binary_add
+  (binary_multiply
+   (integer_literal)
+   (integer_literal))
+  (integer_literal)))
+
+================
+2 + 2 * 2 = 6
+:syntax
+================
+
+2 + 2 * 2;
+
+---
+
+(block
+ (binary_add
+  (integer_literal)
+  (binary_multiply
+   (integer_literal)
+   (integer_literal))))
+
+================
+2 / 2 + 2 = 3
+:syntax
+================
+
+2 / 2 + 2;
+
+---
+
+(block
+ (binary_add
+  (binary_divide
+   (integer_literal)
+   (integer_literal))
+  (integer_literal)))
+
+================
+2 + 2 / 2 = 3
+:syntax
+================
+
+2 + 2 / 2;
+
+---
+
+(block
+ (binary_add
+  (integer_literal)
+  (binary_divide
+   (integer_literal)
+   (integer_literal))))
+
+================
+2 % 2 + 2
+:syntax
+================
+
+2 % 2 + 2;
+
+---
+
+(block
+ (binary_add
+  (binary_remainder
+   (integer_literal)
+   (integer_literal))
+  (integer_literal)))
+
+================
+2 + 2 % 2
+:syntax
+================
+
+2 + 2 % 2;
+
+---
+
+(block
+ (binary_add
+  (integer_literal)
+  (binary_remainder
+   (integer_literal)
+   (integer_literal))))
+
+================
+2 + 2 - 2
+:syntax
+================
+
+2 + 2 - 2;
+
+---
+
+(block
+ (binary_add
+  (integer_literal)
+  (binary_subtract
+   (integer_literal)
+   (integer_literal))))
+
+================
+2 - 2 + 2
+:syntax
+================
+
+2 - 2 + 2;
+
+---
+
+(block
+ (binary_subtract
+  (integer_literal)
+  (binary_add
+   (integer_literal)
+   (integer_literal))))

@@ -62,7 +62,7 @@ private:
 
     Result<std::vector<Node*>> ParseDeclarators(Type* type_specifier);
     Result<Node*> ParseDeclarations(Type* type_specifier);
-    Result<Node*> ParseExpression();
+    Result<Node*> ParseExpression(size_t precedence);
     Result<std::vector<Node*>> ParseExpressions(TokenKind until);
 
     // @param of_file
@@ -70,7 +70,8 @@ private:
     auto ParseTopLevel(std::string of_file) -> TranslationUnit;
 
 public:
-    Parser(Context* c, File& f) : Lexer(c, &f) {
+    Parser(Context* c, File& f)
+        : Lexer(c, &f) {
         // Initialise first token.
         NextToken();
         // Create global scope

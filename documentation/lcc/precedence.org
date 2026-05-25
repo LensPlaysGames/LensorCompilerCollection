@@ -1,0 +1,88 @@
+* Precedence Isn't Complicated
+
+First of all, there's too much "historical muck" regarding the term, so, for this document, we are going to be calling precedence the /stop value/.
+
+** The Problem
+
+#+begin_example
+2 * 2 + 2
+#+end_example
+
+Writing a naive parser that chomps up binary operators as they appear, this is the tree we end up building.
+
+#+begin_example
+_                # 0
+
+(integer 2) _    # 1
+
+(multiply        # 2
+ (integer 2)
+ _)
+
+(multiply        # 3
+ (integer 2)
+ (integer 2) _)
+
+(multiply        # 4
+ (integer 2)
+ (add
+  (integer 2)
+  _))
+
+(multiply        # 5
+ (integer 2)
+ (add
+  (integer 2)
+  (integer 2)))
+#+end_example
+
+Of course, executing that tree would result in first calculating =2 + 2= to result in =4= (right subtree of multiply), and then multiply that by =2=, resulting in =8= ... which is wrong.  In math, operations have a very specific order to be applied in, and our naive parser implementation didn't take this into account.
+
+So ... how would it? Do we have to hard-code a ton of complicated rules such that if we just parsed a =add=, then the next thing we parse can't be a =multiply=?
+
+Luckily, all we have to do is tell the parser when to /stop/ parsing binary operations in the current context.  We'll make a function that takes in an operator and returns an integer value.  When parsing a binary operator, we first check if the /operator's/ stop value is higher than ours. The stop value prevents the parser from being "too greedy", and allows it to "wait" to parse an operator until it is the right time to do so in the tree.
+
+The stop value of =add= is =4=, while the stop value of =multiply= is =3=.
+
+Let's look at our example, this time taking the stop value into account.
+#+begin_example
+2 * 2 + 2
+#+end_example
+
+#+begin_example
+_               # 1
+
+(integer 2) _   # 2
+
+(multiply       # 3
+ (integer 2)
+ _)
+
+(multiply       # 4
+ (integer 2)
+ (integer 2) _)
+
+# Stop value of `+`, 4, is greater than stop value of `*`, 3.
+# Stopping.
+
+(multiply       # 5
+ (integer 2)
+ (integer 2))
+_
+
+(add            # 6
+ (multiply
+  (integer 2)
+  (integer 2))
+ _)
+
+(add            # 7
+ (multiply
+  (integer 2)
+  (integer 2))
+ (integer 2))
+#+end_example
+
+Executing /this/ tree would result in first multiplying =2= and =2= (left subtree of =add=). Hey, that's the correct answer!
+
+As you can see, precedence allows us to respect the expected order of operations without the programmer having to mark up their source with lots and lots of parentheses. It turns operators in a programming language into a "what you see is what you get" situation, with fewer surprises.
