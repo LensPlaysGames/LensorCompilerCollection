@@ -9,6 +9,8 @@
 #include <fmt/format.h>
 #include <fmt/std.h>
 
+#include <ranges>
+
 namespace lcc::language_c {
 
 std::string_view ToString(TokenKind k) {
@@ -37,6 +39,53 @@ std::string_view ToString(TokenKind k) {
         case TokenKind::Count: break;
     }
     Diag::ICE("unreachable");
+}
+
+Result<std::string> ToSource(Token& t) {
+    switch (t.kind) {
+        case TokenKind::Eof:
+        case TokenKind::Count:
+        case TokenKind::Invalid:
+            return Diag::Error("c/token-to-source", "invalid token");
+
+        case TokenKind::Identifier:
+            return t.text;
+
+        case TokenKind::Integer:
+            return fmt::format("{}", t.integer_value);
+
+        case TokenKind::Fractional:
+            return fmt::format("{}", t.fractional_value);
+
+        case TokenKind::KwVoid:
+        case TokenKind::KwInt:
+        case TokenKind::KwReturn:
+        case TokenKind::OpPlus:
+        case TokenKind::OpMinus:
+        case TokenKind::OpAsterisk:
+        case TokenKind::OpSlash:
+        case TokenKind::OpPercent:
+        case TokenKind::OpComma:
+        case TokenKind::LeftParenthesis:
+        case TokenKind::RightParenthesis:
+        case TokenKind::LeftSquareBracket:
+        case TokenKind::RightSquareBracket:
+        case TokenKind::LeftCurlyBrace:
+        case TokenKind::RightCurlyBrace:
+        case TokenKind::Semicolon:
+            return std::string{ToString(t.kind)};
+    }
+    Diag::ICE("unreachable");
+}
+
+Result<void> Parser::preprocessor_define(std::string_view name, std::vector<Token> contents) {
+    if (_simple_defines.contains(name))
+        return Error("c/preprocessor", "Redefinition of `{}`", name);
+    _simple_defines.emplace(name, contents);
+    return {};
+}
+void Parser::preprocessor_undefine(std::string_view name) {
+    _simple_defines.erase(name);
 }
 
 StringMap<TokenKind> keywords{
@@ -212,6 +261,28 @@ void Parser::NextNumber() {
     }
 }
 
+void Parser::NextIdentifier() {
+    tok.kind = TokenKind::Identifier;
+    tok.text.clear();
+
+    // Note: Istg if anyone gets the genius idea of extracting a substring
+    // instead of appending character by character, DON’T. There is a REASON
+    // why NextChar() exists. Character != byte in the source file.
+    tok.location.pos = CurrentOffset();
+    auto start_position = tok.location.pos;
+    do {
+        if (lastc > 0xff)
+            Diag::ICE("Handle unicode codepoint in identifier");
+        tok.text += char(lastc);
+        NextChar();
+    } while (IsIdentifierContinueCharacter(lastc));
+
+    tok.location.len = (u16) Location::length_from_two_offsets_exclusive(
+        start_position,
+        CurrentOffset()
+    );
+}
+
 // Sometimes a single codepoint turns into a token kind with no token data
 // required other than the kind.
 // This is a quick-and-easy way to implement those sort of tokens.
@@ -231,8 +302,17 @@ std::unordered_map<uint32_t, TokenKind> easy_tokens{
     {'{', TokenKind::LeftCurlyBrace},
     {'}', TokenKind::RightCurlyBrace},
 };
+// TODO: Fill with OpPlus -> OpPlusEq mappings
+std::unordered_map<TokenKind, TokenKind> from_trailing_equal{};
 
 void Parser::NextToken() {
+    // If the preprocessor asks for a token, don't replace it.
+    if (not _next_tokens.empty()) {
+        tok = _next_tokens.front();
+        _next_tokens.pop_front();
+        return;
+    }
+
     // Return EOF if we’re at EOF.
     if (not lastc) {
         tok.kind = TokenKind::Eof;
@@ -244,8 +324,13 @@ void Parser::NextToken() {
     tok.kind = TokenKind::Invalid;
     tok.artificial = false;
 
-    // Skip whitespace.
-    while (IsSpace(lastc)) NextChar();
+    // Skip different kinds of whitespace depending on if we are preprocessing
+    // or not.
+    // TODO: Handle escaped newlines
+    if (preprocessing)
+        while (preprocessor_whitespace.contains((char) lastc)) NextChar();
+    else
+        while (IsSpace(lastc)) NextChar();
 
     // Record start of token.
     tok.location.pos = CurrentOffset();
@@ -254,11 +339,6 @@ void Parser::NextToken() {
     // Determine token starting at current offset.
     switch (lastc) {
         case 0:
-        case '+':
-        case '-':
-        case '*':
-        case '/':
-        case '%':
         case ',':
         case ';':
         case '(':
@@ -270,6 +350,104 @@ void Parser::NextToken() {
             tok.kind = easy_tokens.at(lastc);
             NextChar();
             break;
+
+        case '+':
+        case '-':
+        case '*':
+        case '/':
+        case '%':
+            tok.kind = easy_tokens.at(lastc);
+            NextChar();
+
+            // Line comment
+            if (tok.kind == TokenKind::OpSlash and lastc == '/') {
+                NextChar();
+
+                while (lastc and lastc != '\n') NextChar();
+
+                // The actual token beyond the comment.
+                NextToken();
+                return;
+            }
+
+            if (lastc == '=')
+                tok.kind = from_trailing_equal.at(tok.kind);
+            break;
+
+        // The only way to get here is if the preprocessor calls NextToken but
+        // there isn't another one in the line, and the newline isn't escaped.
+        case '\n':
+            tok.kind = TokenKind::Invalid;
+            break;
+
+        case '#': {
+            NextChar();
+
+            if (lastc == '#')
+                Diag::ICE("TODO: pp Concatenation");
+
+            else if (IsIdentifierStartCharacter(lastc)) {
+                NextIdentifier();
+
+                preprocessing = true;
+
+                if (tok.text == "define") {
+                    NextToken();
+                    if (tok.kind != TokenKind::Identifier) {
+                        Error("c/preprocessor", "Macro name missing");
+                        tok.kind = TokenKind::Eof;
+                        return;
+                    }
+
+                    std::string name = tok.text;
+                    NextToken();
+
+                    std::vector<Token> contents{};
+                    while (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid)) {
+                        contents.emplace_back(tok);
+                        NextToken();
+                    }
+
+                    (void) preprocessor_define(name, contents);
+                } else if (tok.text == "undef") {
+                    NextToken();
+                    if (tok.kind != TokenKind::Identifier) {
+                        Error("c/preprocessor", "Macro name missing!");
+                        tok.kind = TokenKind::Eof;
+                        return;
+                    }
+
+                    std::string name = tok.text;
+
+                    NextToken();
+                    while (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid)) {
+                        Warning("c/preprocessor", "Junk following macro name of #undef directive");
+                        NextToken();
+                    }
+
+                    preprocessor_undefine(name);
+                } else {
+                    Error(
+                        "c/preprocessor",
+                        "Unrecognized preprocessor statement.\nIf you believe this should be a conditionally supported directive, let the maintainers know."
+                    );
+                    tok.kind = TokenKind::Eof;
+                    return;
+                }
+
+                if (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid))
+                    Diag::ICE("Preprocessor lexing must not have lexed regular token");
+
+                preprocessing = false;
+
+                // This fetches the *actual* token, not preprocessor stuff.
+                NextToken();
+
+                break;
+            } else Diag::ICE("TODO: pp Stringization");
+
+            Diag::ICE("unreachable");
+        }
 
         default: {
             if (IsDecimalDigit(lastc)) {
@@ -285,23 +463,21 @@ void Parser::NextToken() {
             }
 
             if (IsIdentifierStartCharacter(lastc)) {
-                tok.kind = TokenKind::Identifier;
-                tok.text.clear();
+                NextIdentifier();
 
-                // Note: Istg if anyone gets the genius idea of extracting a substring
-                // instead of appending character by character, DON’T. There is a REASON
-                // why NextChar() exists. Character != byte in the source file.
-                do {
-                    if (lastc > 0xff)
-                        Diag::ICE("Handle unicode codepoint in identifier");
-                    tok.text += char(lastc);
-                    NextChar();
-                } while (IsIdentifierContinueCharacter(lastc));
+                // Detect simple macros.
+                if (not preprocessing and _simple_defines.contains(tok.text)) {
+                    // TODO: We need a way to "queue" tokens to come up next
+                    _next_tokens.append_range(
+                        _simple_defines.at(tok.text)
+                    );
+                    NextToken();
+                }
 
                 // Detect keywords.
-                if (keywords.contains(tok.text)) {
+                else if (keywords.contains(tok.text))
                     tok.kind = keywords.at(tok.text);
-                }
+
                 break;
             }
         } break;
@@ -626,6 +802,8 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
         } break;
 
         case TokenKind::Identifier:
+            Diag::ICE("identifier is unhandled (got `{}`)...", tok.text);
+
         case TokenKind::Fractional:
         case TokenKind::OpAsterisk:
         case TokenKind::LeftParenthesis:
@@ -703,6 +881,21 @@ auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {
             for (auto [n, d] : s->declarations) {
                 fmt::print("- {} <- {} ({})\n", *d->type(), d->name(), fmt::ptr(d));
             }
+        }
+        for (auto [name, contents] : _simple_defines) {
+            fmt::print(
+                "-D{}=\"{}\"\n",
+                name,
+                fmt::join(
+                    std::ranges::views::transform(contents, [](auto token) {
+                        auto token_source = ToSource(token);
+                        if (not token_source)
+                            Diag::ICE("Invalid token recorded in preprocessor definition");
+                        return fmt::format("{}", *token_source);
+                    }),
+                    " "
+                )
+            );
         }
     }
 

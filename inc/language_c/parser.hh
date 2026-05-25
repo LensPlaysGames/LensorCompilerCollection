@@ -11,7 +11,9 @@
 
 #include <fmt/base.h>
 
+#include <list>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace lcc::language_c {
@@ -54,9 +56,19 @@ class Parser : Lexer {
     std::vector<Scope*> _scopes{};
     Scope* _current_scope{};
 
+    std::list<Token> _next_tokens{};
+
+    bool preprocessing{false};
+    StringMap<std::vector<Token>> _simple_defines{};
+
 private:
-    void NextToken();
+    static constexpr std::string_view preprocessor_whitespace{" \t\f"};
+    Result<void> preprocessor_define(std::string_view name, std::vector<Token> contents);
+    void preprocessor_undefine(std::string_view name);
+
     void NextNumber();
+    void NextIdentifier();
+    void NextToken();
 
     bool IsFunctionDefinition(Node*);
 
@@ -86,6 +98,7 @@ public:
 };
 
 std::string_view ToString(TokenKind k);
+Result<std::string> ToSource(Token&);
 
 } // namespace lcc::language_c
 
