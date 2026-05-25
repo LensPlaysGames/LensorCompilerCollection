@@ -101,7 +101,12 @@ struct GlintTest : langtest::Test {
 
         auto parse_info = parse(context);
         bool failed_parse = context.has_error();
-        bool warned_parse = warning_reported(context);
+        bool warned_parse = lcc::rgs::any_of(
+            parse_info.diagnostics,
+            [](const lcc::Context::DiagnosticReport d) {
+                return d.kind == lcc::Diag::Kind::Warning;
+            }
+        );
 
         bool do_checking = should_check() and not failed_parse;
 
