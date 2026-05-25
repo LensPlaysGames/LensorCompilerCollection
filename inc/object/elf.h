@@ -7,7 +7,7 @@
 #define EI_CLASS_64BIT 2
 
 #define EI_DATA_LITTLE_ENDIAN 1
-#define EI_DATA_BIG_ENDIAN 2
+#define EI_DATA_BIG_ENDIAN    2
 
 #define EI_OSABI_SYSV 0x00
 
@@ -31,7 +31,7 @@
 #define EI_OSABI 7
 /// Version field whose meaning changes based on OSABI.
 #define EI_ABIVERSION 8
-#define EI_PAD 9
+#define EI_PAD        9
 
 /// Unknown
 #define ET_NONE 0x00
@@ -118,35 +118,35 @@
 #define SHF_EXCLUDE 0x8000000
 
 typedef struct elf64_header {
-  /// Identifying information. See EI_* macros for more info.
-  uint8_t e_ident[16];
-  /// Type of file (executable, object, etc). See ET_* macros for more info.
-  uint16_t e_type;
-  /// Machine that is targeted (instruction set architecture).
-  /// See EM_* macros for more info.
-  uint16_t e_machine;
-  /// Version of ELF this is based upon; set to 1 for original version of ELF.
-  uint32_t e_version;
-  /// Virtual address of the entry point of the program
-  uint64_t e_entry;
-  /// Byte offset within file of the program header table.
-  uint64_t e_phoff;
-  /// Byte offset within file of the section header table.
-  uint64_t e_shoff;
-  /// Target-architecture dependent flags.
-  uint32_t e_flags;
-  /// Size of this header (64).
-  uint16_t e_ehsize;
-  /// Size of each entry within the program header table.
-  uint16_t e_phentsize;
-  /// Amount of entries present in the program header table.
-  uint16_t e_phnum;
-  /// Size of each entry within the section header table.
-  uint16_t e_shentsize;
-  /// Amount of entries present in the section header table.
-  uint16_t e_shnum;
-  /// Index of the section header table entry that contains the section names.
-  uint16_t e_shstrndx;
+    /// Identifying information. See EI_* macros for more info.
+    uint8_t e_ident[16];
+    /// Type of file (executable, object, etc). See ET_* macros for more info.
+    uint16_t e_type;
+    /// Machine that is targeted (instruction set architecture).
+    /// See EM_* macros for more info.
+    uint16_t e_machine;
+    /// Version of ELF this is based upon; set to 1 for original version of ELF.
+    uint32_t e_version;
+    /// Virtual address of the entry point of the program
+    uint64_t e_entry;
+    /// Byte offset within file of the program header table.
+    uint64_t e_phoff;
+    /// Byte offset within file of the section header table.
+    uint64_t e_shoff;
+    /// Target-architecture dependent flags.
+    uint32_t e_flags;
+    /// Size of this header (64).
+    uint16_t e_ehsize;
+    /// Size of each entry within the program header table.
+    uint16_t e_phentsize;
+    /// Amount of entries present in the program header table.
+    uint16_t e_phnum;
+    /// Size of each entry within the section header table.
+    uint16_t e_shentsize;
+    /// Amount of entries present in the section header table.
+    uint16_t e_shnum;
+    /// Index of the section header table entry that contains the section names.
+    uint16_t e_shstrndx;
 } elf64_header;
 
 /// Executable
@@ -162,57 +162,57 @@ typedef struct elf64_header {
 
 /// ELF 64-bit Program Header
 typedef struct elf64_phdr {
-  /// Type of segment. See PT_* macros for more info.
-  uint32_t p_type;
-  /// Segment-dependent flags. See PF_* macros for more info.
-  uint32_t p_flags;
-  /// Byte offset of the segment in the file.
-  uint64_t p_offset;
-  /// Virtual address of the segment in memory.
-  uint64_t p_vaddr;
-  /// Physical address of the segment in memory.
-  uint64_t p_paddr;
-  /// Size in bytes of the segment within the file (may be 0).
-  uint64_t p_filesz;
-  /// Size in bytes of the segment within memory (may be 0).
-  /// Segments may be larger in memory than in the file; taken to the
-  /// extreme, some segments (like `.bss`) have 0 bytes in the file and a
-  /// varying amount in memory.
-  uint64_t p_memsz;
-  /// 0 and 1 specify NO alignment.
-  /// Otherwise should be a positive integral power of 2, with p_vaddr
-  /// equating p_offset modulus p_align.
-  uint64_t p_align;
+    /// Type of segment. See PT_* macros for more info.
+    uint32_t p_type;
+    /// Segment-dependent flags. See PF_* macros for more info.
+    uint32_t p_flags;
+    /// Byte offset of the segment in the file.
+    uint64_t p_offset;
+    /// Virtual address of the segment in memory.
+    uint64_t p_vaddr;
+    /// Physical address of the segment in memory.
+    uint64_t p_paddr;
+    /// Size in bytes of the segment within the file (may be 0).
+    uint64_t p_filesz;
+    /// Size in bytes of the segment within memory (may be 0).
+    /// Segments may be larger in memory than in the file; taken to the
+    /// extreme, some segments (like `.bss`) have 0 bytes in the file and a
+    /// varying amount in memory.
+    uint64_t p_memsz;
+    /// 0 and 1 specify NO alignment.
+    /// Otherwise should be a positive integral power of 2, with p_vaddr
+    /// equating p_offset modulus p_align.
+    uint64_t p_align;
 } elf64_phdr;
 
 /// ELF 64-bit Section Header
 typedef struct elf64_shdr {
-  /// Offset into the `.shstrtab` section that represents the name of this section.
-  uint32_t sh_name;
-  /// Type of this section.
-  /// See SHT_* macros for more info.
-  uint32_t sh_type;
-  /// Attributes of the section.
-  /// See SHF_* macros for more info.
-  uint64_t sh_flags;
-  /// Virtual address of the section in memory (only for sections that are loaded).
-  uint64_t sh_addr;
-  /// Byte offset of the section data within the file.
-  uint64_t sh_offset;
-  /// Size in bytes of the section in the file (may be 0).
-  uint64_t sh_size;
-  /// Contains the section index of an associated section. This field
-  /// is used for several purposes, depending on the type of section.
-  uint32_t sh_link;
-  /// Contains extra information about the section. This field is used
-  /// for several purposes, depending on the type of section.
-  uint32_t sh_info;
-  /// Contains the required alignment of the section. This field must
-  /// be a power of two.
-  uint64_t sh_addralign;
-  /// Contains the size, in bytes, of each entry, for sections that
-  /// contain fixed-size entries. Otherwise, this field contains zero.
-  uint64_t sh_entsize;
+    /// Offset into the `.shstrtab` section that represents the name of this section.
+    uint32_t sh_name;
+    /// Type of this section.
+    /// See SHT_* macros for more info.
+    uint32_t sh_type;
+    /// Attributes of the section.
+    /// See SHF_* macros for more info.
+    uint64_t sh_flags;
+    /// Virtual address of the section in memory (only for sections that are loaded).
+    uint64_t sh_addr;
+    /// Byte offset of the section data within the file.
+    uint64_t sh_offset;
+    /// Size in bytes of the section in the file (may be 0).
+    uint64_t sh_size;
+    /// Contains the section index of an associated section. This field
+    /// is used for several purposes, depending on the type of section.
+    uint32_t sh_link;
+    /// Contains extra information about the section. This field is used
+    /// for several purposes, depending on the type of section.
+    uint32_t sh_info;
+    /// Contains the required alignment of the section. This field must
+    /// be a power of two.
+    uint64_t sh_addralign;
+    /// Contains the size, in bytes, of each entry, for sections that
+    /// contain fixed-size entries. Otherwise, this field contains zero.
+    uint64_t sh_entsize;
 } elf64_shdr;
 
 #define STT_NOTYPE 0x0
@@ -245,8 +245,8 @@ typedef struct elf64_shdr {
 #define STB_LOPROC 0xe
 #define STB_HIPROC 0xf
 
-#define ELF64_ST_BIND(st_info) ((st_info) >> 4)
-#define ELF64_ST_TYPE(st_info) ((st_info) & 0b1111)
+#define ELF64_ST_BIND(st_info)       ((st_info) >> 4)
+#define ELF64_ST_TYPE(st_info)       ((st_info) & 0b1111)
 #define ELF64_ST_INFO(binding, type) (((binding) << 4) | ((type) & 0b1111))
 
 /// ELF 64-bit Symbol Table Entry (a symbol)
@@ -256,23 +256,23 @@ typedef struct elf64_shdr {
 /// table index is a subscript into this array. Index 0 both designates the
 /// first entry in the table and serves as the undefined symbol index.
 typedef struct elf64_sym {
-  /// Index into symbol string table ".strtab", or zero for unnamed.
-  uint32_t st_name;
-  /// Contains both type and binding of symbol. See ELF64_ST_*, STT_*,
-  // and STB_* macros for more info.
-  uint8_t st_info;
-  /// Currently zero and has no meaning.
-  uint8_t st_other;
-  /// Index of section header within section header table that this
-  /// symbol is associated with.
-  uint16_t st_shndx;
-  uint64_t st_value;
-  uint64_t st_size;
+    /// Index into symbol string table ".strtab", or zero for unnamed.
+    uint32_t st_name;
+    /// Contains both type and binding of symbol. See ELF64_ST_*, STT_*,
+    // and STB_* macros for more info.
+    uint8_t st_info;
+    /// Currently zero and has no meaning.
+    uint8_t st_other;
+    /// Index of section header within section header table that this
+    /// symbol is associated with.
+    uint16_t st_shndx;
+    uint64_t st_value;
+    uint64_t st_size;
 } elf64_sym;
 
-#define ELF64_R_SYM(r_info) ((r_info) >> 32)
-#define ELF64_R_TYPE(r_info) ((uint32_t)(r_info))
-#define ELF64_R_INFO(sym, type) (((sym) << 32) | (uint32_t)(type))
+#define ELF64_R_SYM(r_info)     ((r_info) >> 32)
+#define ELF64_R_TYPE(r_info)    ((uint32_t) (r_info))
+#define ELF64_R_INFO(sym, type) (((sym) << 32) | (uint32_t) (type))
 
 /// A: Addend of relocation entries that have them (*_rela).
 /// B: Image base where the shared object was loaded in process virtual address space.
@@ -289,7 +289,7 @@ typedef struct elf64_sym {
 // dword S + A – P
 #define R_X86_64_PC32 2
 // dword S + A
-#define R_X86_64_32	10
+#define R_X86_64_32 10
 // dword L + A – P
 // ffs...
 // https://github.com/torvalds/linux/commit/b21ebf2fb4cde1618915a97cc773e287ff49173e
@@ -313,10 +313,10 @@ typedef struct elf64_sym {
 /// the dynamic linker, the section offset (file interpretation) gives
 /// way to a virtual address (memory interpretation).
 typedef struct elf64_rela {
-  uint64_t r_offset;
-  /// See ELF64_R_* macros for more info.
-  uint64_t r_info;
-  int64_t r_addend;
+    uint64_t r_offset;
+    /// See ELF64_R_* macros for more info.
+    uint64_t r_info;
+    int64_t r_addend;
 } elf64_rela;
 
 #endif /* ELF_H */
