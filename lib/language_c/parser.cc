@@ -370,6 +370,26 @@ void Parser::NextToken() {
                 return;
             }
 
+            // Block comment
+            if (tok.kind == TokenKind::OpSlash and lastc == '*') {
+                NextChar();
+
+                while (lastc) {
+                    NextChar();
+                    if (lastc == '*') {
+                        NextChar();
+                        if (lastc == '/') {
+                            NextChar();
+                            break;
+                        }
+                    }
+                }
+
+                // The actual token beyond the comment.
+                NextToken();
+                return;
+            }
+
             if (lastc == '=')
                 tok.kind = from_trailing_equal.at(tok.kind);
             break;
