@@ -85,7 +85,13 @@ Result<void> Parser::preprocessor_define(std::string_view name, std::vector<Toke
     return {};
 }
 void Parser::preprocessor_undefine(std::string_view name) {
+    // FIXME: Remove this shit once libc++ actually supports any semblance of
+    // the modern language.
+#ifdef __cpp_lib_associative_heterogeneous_erasure
     _simple_defines.erase(name);
+#else
+    _simple_defines.erase(std::string{name});
+#endif
 }
 
 StringMap<TokenKind> keywords{
