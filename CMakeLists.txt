@@ -61,21 +61,17 @@ if (USE_COLOUR)
   endif()
 endif()
 
-# Use mold as the default linker, if it exists.
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  find_program(MOLD_LINKER "mold")
-  if (MOLD_LINKER)
-    add_link_options(-fuse-ld=mold)
-  endif()
-endif()
-
 if (USE_LTO)
   # Do link time optimisation
-  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  # NOTE: We must ensure the linker matches the compiler toolchain for LTO
+  # to work properly.
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-flto)
-    add_link_options(-flto)
-  endif()
-  if (MSVC)
+    add_link_options(-flto -fuse-ld=bfd)
+  elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-flto)
+    add_link_options(-flto -fuse-ld=lld)
+  elseif (MSVC)
     add_compile_options(/GL)
     add_link_options(/LTCG)
   endif()
