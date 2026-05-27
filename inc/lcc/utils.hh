@@ -64,7 +64,8 @@ struct static_string {
 
     consteval static_string() {}
 
-    consteval static_string(const char (&raw)[sz]) : elem_count{sz} {
+    consteval static_string(const char (&raw)[sz])
+        : elem_count{sz} {
         std::copy_n(raw, sz, chars);
     }
 
@@ -103,8 +104,8 @@ public:
 
     /// Create a new buffer that can hold N elements.
     explicit Buffer(usz size)
-        : buffer{std::make_unique<T[]>(size)},
-          element_count{size} {}
+        : buffer{std::make_unique<T[]>(size)}
+        , element_count{size} {}
 
     /// Create a new buffer that can hold N elements and initialize it with a value.
     explicit Buffer(usz size, T val)
@@ -115,15 +116,16 @@ public:
     /// Create a new buffer from an iterator range.
     template <typename Iter>
     explicit Buffer(Iter begin, Iter end)
-        : buffer{std::make_unique<T[]>(std::distance(begin, end))},
-          element_count{std::distance(begin, end)} {
+        : buffer{std::make_unique<T[]>(std::distance(begin, end))}
+        , element_count{std::distance(begin, end)} {
         std::copy(begin, end, buffer.get());
     }
 
     /// Create a new buffer from a range.
     template <typename Range>
     requires (not std::is_same_v<std::remove_cvref_t<Range>, Buffer<T>>)
-    explicit Buffer(Range&& range) : Buffer{std::begin(range), std::end(range)} {}
+    explicit Buffer(Range&& range)
+        : Buffer{std::begin(range), std::end(range)} {}
 
     /// Get an iterator to the start of the buffer.
     auto begin() const -> const_iterator { return buffer.get(); }
@@ -267,7 +269,8 @@ enum struct Colour {
 /// \endcode
 struct Colours {
     bool use_colours{};
-    constexpr Colours(bool should_use_colours) : use_colours{should_use_colours} {}
+    constexpr Colours(bool should_use_colours)
+        : use_colours{should_use_colours} {}
     constexpr auto operator()(Colour c) const -> std::string_view {
         if (not use_colours) return "";
         switch (c) {
