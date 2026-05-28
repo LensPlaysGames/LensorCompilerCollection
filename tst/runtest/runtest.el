@@ -2,7 +2,7 @@
 
 ;; Author: Lens_r
 ;; Maintainer: Lens_r
-;; Version: 0.1.0
+;; Version: 0.2.0
 ;; Package-Requires: ()
 ;; Homepage: www.github.com/LensPlaysGames/LensorCompilerCollection
 ;; Keywords: LCC, Glint
@@ -29,6 +29,8 @@
 
 ;; For parsing test declarations written in Org-mode.
 (require 'org-element)
+(require 'sqlite)
+(require 'cl-extra)
 
 (defcustom
   lcc-path "/home/lens_r/Programming/play/LensorCompilerCollection/dbg/lcc"
@@ -43,10 +45,20 @@
   "The face to propertize \"FAILED\" with in output.")
 
 (defvar run-test--completed-list ()
-  "List of completed tests")
+  "List of completed tests.")
 
-(defvar run-test--passed-list ()
-  "List of completed tests that passed their assertions")
+(defvar run-test--test-database-path "runtest.sqlite"
+  "Path to test database.")
+
+(defun run-test--record-test-result (test-name test-path test-passed)
+  ""
+  (let ((db (sqlite-open run-test--test-database-path)))
+    (sqlite-execute db "PRAGMA busy_timeout = 5000;")
+    (sqlite-execute
+     db
+     "INSERT INTO tests (name, path, passed) VALUES (?, ?, ?)"
+     (list test-name test-path (if test-passed 1 0)))
+    (sqlite-close db)))
 
 (defun run-test--print-test-result (test)
   "Print PASSED or FAILED, basically"
@@ -67,11 +79,6 @@
   (unless (stringp test-name)
     (error "Expected 'test-name' to be a string"))
   (push test-name run-test--completed-list))
-
-(defun run-test--mark-passed (test-name)
-  (unless (stringp test-name)
-    (error "Expected 'test-name' to be a string"))
-  (push test-name run-test--passed-list))
 
 (defun run-test--process-status-unexpected-p
     (test-name p-status event)
@@ -219,7 +226,18 @@ Additional properties are included, but not necessary:
           nil
         test))))
 
-(defun run-test--sources-to-files (sources)
+(defun run-test--ir-sources-to-files (sources)
+  "Given a list of strings, write each string to a separate file,
+returning a list of strings representing file names where the input
+strings were stored to."
+  (unless (listp sources)
+    (error "Expected list of strings representing a test's sources"))
+  (mapcar
+   (lambda (source)
+     (make-temp-file (expand-file-name "irtest") nil ".lcc" source))
+   sources))
+
+(defun run-test--glint-sources-to-files (sources)
   "Given a list of strings, write each string to a separate file,
 returning a list of strings representing file names where the input
 strings were stored to."
@@ -230,76 +248,180 @@ strings were stored to."
      (make-temp-file (expand-file-name "glinttest") nil ".g" source))
    sources))
 
+(defun run-test--c-sources-to-files (sources)
+  "See run-test--glint-sources-to-files"
+  (unless (listp sources)
+    (error "Expected list of strings representing a test's sources"))
+  (mapcar
+   (lambda (source)
+     (make-temp-file (expand-file-name "ctest") nil ".c" source))
+   sources))
+
+(defun run-test--ir-orgtest (org-filepath)
+  ""
+  (let ((test (run-test--parse-test-from-org org-filepath)))
+    (if (not test)
+        (message
+         "Error: Failed to parse test from org file %s"
+         org-filepath)
+      (let
+          ((source-files
+            (run-test--ir-sources-to-files (plist-get test :source)))
+           (output-file
+            (make-temp-file (expand-file-name "irtest")))
+           (program-output ""))
+        ;; Run LCC
+        (make-process
+         :name "lcc"
+         :buffer nil
+         :command
+         `(,lcc-path
+           ,@source-files
+           "-x" "ir"
+           "-o" ,output-file
+           "--run")
+         :filter
+         (lambda (p o) (setf program-output (concat program-output o)))
+         :sentinel
+         (lambda (p e)
+           ;; (message "Process: %s had the event '%s' (process-status:%s)" p e (process-status p))
+           (when (memq (process-status p) '(exit signal))
+             ;; Once the program has exited, we no longer need it's executable...
+             ;; (message "Test %s: Deleting executable file %s" (plist-get test :name) output-file)
+             (delete-file output-file)
+
+             ;; Set failure flag if status or output is unexpected.
+             (when (or
+                    (run-test--process-status-unexpected-p
+                     (plist-get test :name) (process-status p) e)
+                    (run-test--output-unexpected-p
+                     (plist-get test :name) (plist-get test :output) program-output)
+                    (run-test--status-unexpected-p
+                     (plist-get test :name) (plist-get test :status) (process-exit-status p)))
+               (setf test (plist-put test :failed t)))
+
+             ;; Mark test as completed
+             (run-test--mark-completed (plist-get test :name)))))
+
+        (run-test--wait-for-test-completion test)
+
+        ;; Once completed, record test and it's pass/fail result in the test
+        ;; database.
+        (run-test--record-test-result
+         (plist-get test :name)
+         (plist-get test :path)
+         (not (plist-get test :failed)))
+
+        ;; Print the test result
+        (run-test--print-test-result test)
+
+        ;; Delete intermediate assembly files
+        (mapc
+         (lambda (source-path)
+           (delete-file (file-name-with-extension source-path ".s")))
+         source-files)
+
+        ;; Delete source files
+        (mapc #'delete-file source-files)))))
+
 (defun run-test--ir-tests ()
   ""
   (message "Running LCC IR Tests...")
-  (defvar test '(error "NOT A GLOBAL"))
-
   (mapc
-   (lambda (org-filepath)
-     (let ((test (run-test--parse-test-from-org org-filepath)))
-       (if (not test)
-           (message
-            "Error: Failed to parse test from org file %s"
-            org-filepath)
-         (let
-             ((source-files
-               (run-test--sources-to-files (plist-get test :source)))
-              (output-file
-               (make-temp-file (expand-file-name "irtest")))
-              (program-output ""))
-           ;; Run LCC
-           (make-process
-            :name "lcc"
-            :buffer nil
-            :command
-            `(,lcc-path
-              ,@source-files
-              "-x" "ir"
-              "-o" ,output-file
-              "--run")
-            :filter
-            (lambda (p o) (setf program-output (concat program-output o)))
-            :sentinel
-            (lambda (p e)
-              ;; (message "Process: %s had the event '%s' (process-status:%s)" p e (process-status p))
-              (when (memq (process-status p) '(exit signal))
-                ;; Once the program has exited, we no longer need it's executable...
-                ;; (message "Test %s: Deleting executable file %s" (plist-get test :name) output-file)
-                (delete-file output-file)
-
-                ;; Set failure flag if status or output is unexpected.
-                ;; Record test as passing if test passed.
-                (if (or
-                     (run-test--process-status-unexpected-p
-                      (plist-get test :name) (process-status p) e)
-                     (run-test--output-unexpected-p
-                      (plist-get test :name) (plist-get test :output) program-output)
-                     (run-test--status-unexpected-p
-                      (plist-get test :name) (plist-get test :status) (process-exit-status p)))
-                    (setf test (plist-put test :failed t))
-                  (run-test--mark-passed (plist-get test :name)))
-
-                ;; Mark test as completed
-                (run-test--mark-completed (plist-get test :name)))))
-
-           (run-test--wait-for-test-completion test)
-           (run-test--print-test-result test)
-
-           ;; Delete intermediate assembly files
-           (mapc
-            (lambda (source-path)
-              (delete-file (file-name-with-extension source-path ".s")))
-            source-files)
-
-           ;; Delete source files
-           (mapc #'delete-file source-files)))))
+   #'run-test--ir-orgtest
    (directory-files "corpus/ir/" t "\\.org\\'"))
 
-  ;; Print rundown of LCC IR tests (what happened)
-  (message "Ran %s LCC IR Tests: %s Passed"
-           (length run-test--completed-list)
-           (length run-test--passed-list)))
+  (mapc #'delete-file
+        (directory-files "." 'absolute "irtest.*\\'")))
+
+(defun run-test--glint-orgtest (org-filepath)
+  ""
+  ;; (message "Running glint test at %s" org-filepath)
+  (let ((test (run-test--parse-test-from-org org-filepath)))
+    (if (not test)
+        (message
+         "Error: Failed to parse test from org file %s"
+         org-filepath)
+      (let
+          ((source-files
+            (run-test--glint-sources-to-files (plist-get test :source)))
+           (output-file
+            (make-temp-file (expand-file-name "glinttest")))
+           (program-output ""))
+        ;; Run LCC
+        (make-process
+         :name "lcc"
+         :buffer nil
+         :command
+         `(,lcc-path
+           ,@source-files
+           "-x" "glint"
+           "-o" ,output-file
+           "--run")
+         :filter
+         (lambda (p o) (setf program-output (concat program-output o)))
+         :sentinel
+         (lambda (p e)
+           ;; (message "Process: %s had the event '%s' (process-status:%s)" p e (process-status p))
+           (when (memq (process-status p) '(exit signal))
+             ;; Set failure flag if status or output is unexpected.
+             (when (or
+                    (run-test--process-status-unexpected-p
+                     (plist-get test :name) (process-status p) e)
+                    (run-test--output-unexpected-p
+                     (plist-get test :name) (plist-get test :output) program-output)
+                    (run-test--status-unexpected-p
+                     (plist-get test :name) (plist-get test :status) (process-exit-status p)))
+               (setf test (plist-put test :failed t)))
+
+             ;; Mark test as completed
+             (run-test--mark-completed (plist-get test :name)))))
+
+        (run-test--wait-for-test-completion test)
+
+        ;; Once completed, record test and it's pass/fail result in the test
+        ;; database.
+        (run-test--record-test-result
+         (plist-get test :name)
+         (plist-get test :path)
+         (not (plist-get test :failed)))
+
+        (run-test--print-test-result test)
+
+        ;; TODO: GMeta files
+
+        ;; Once the program has exited, we no longer need it's executable...
+        ;; (message "Test %s: Deleting executable file %s" (plist-get test :name) output-file)
+        (delete-file output-file)
+
+        ;; Delete intermediate assembly files
+        (mapc
+         (lambda (source-path)
+           (delete-file (file-name-with-extension source-path ".s")))
+         source-files)
+
+        ;; Delete source files
+        (mapc #'delete-file source-files)))))
+
+(defun run-test--glint-dispatch (org-filepath)
+  ""
+  (let ((command `("emacs" "-Q"
+                   "--batch"
+                   "--load" "./runtest.el"
+                   "--eval"
+                   ,(concat
+                     "(progn"
+                     "(setf lcc-path " (prin1-to-string lcc-path) ")"
+                     "(run-test--glint-orgtest " (prin1-to-string org-filepath)  ")"
+                     ;; "(run-test--glint-orgtest " (prin1-to-string org-filepath) ")"
+                     ")"
+                     ))))
+    (make-process
+     :name "emacs"
+     :buffer nil
+     :command command
+     :filter
+     (lambda (p o) (message "%s" (string-trim o))))))
 
 (defun run-test--glint-tests ()
   "Run each of the tests in the Glint corpus"
@@ -308,84 +430,91 @@ strings were stored to."
   ;; For every .org file in corpus/glint/ directory, parse and run the test.
   ;; NOTE: If we used a child emacs process to operate on the parsed test,
   ;; we could dispatch each test as soon as it's parsed, running them in
-  ;; parallel. We may even be able to parse tests in parallel.
-  (mapc
-   (lambda (org-filepath)
-     (let ((test (run-test--parse-test-from-org org-filepath)))
-       (if (not test)
-           (message
-            "Error: Failed to parse test from org file %s"
-            org-filepath)
-         (let
-             ((source-files
-               (run-test--sources-to-files (plist-get test :source)))
-              (output-file
-               (make-temp-file (expand-file-name "glinttest")))
-              (program-output ""))
-           ;; Run LCC
-           (make-process
-            :name "lcc"
-            :buffer nil
-            :command
-            `(,lcc-path
-              ,@source-files
-              "-x" "glint"
-              "-o" ,output-file
-              "--run")
-            :filter
-            (lambda (p o) (setf program-output (concat program-output o)))
-            :sentinel
-            (lambda (p e)
-              ;; (message "Process: %s had the event '%s' (process-status:%s)" p e (process-status p))
-              (when (memq (process-status p) '(exit signal))
-                ;; Set failure flag if status or output is unexpected.
-                ;; Record test as passing if test passed.
-                (if (or
-                     (run-test--process-status-unexpected-p
-                      (plist-get test :name) (process-status p) e)
-                     (run-test--output-unexpected-p
-                      (plist-get test :name) (plist-get test :output) program-output)
-                     (run-test--status-unexpected-p
-                      (plist-get test :name) (plist-get test :status) (process-exit-status p)))
-                    (setf test (plist-put test :failed t))
-                  (run-test--mark-passed (plist-get test :name)))
+  ;; parallel.
+  (let ((processes (mapcar
+                    #'run-test--glint-dispatch
+                    (directory-files "corpus/glint/" 'absolute "\\.org\\'"))))
+    (while (cl-some #'process-live-p processes)
+      (accept-process-output nil 0 100)))
 
-                ;; Mark test as completed
-                (run-test--mark-completed (plist-get test :name)))))
-
-           (run-test--wait-for-test-completion test)
-           (run-test--print-test-result test)
-
-           ;; TODO: GMeta files
-
-           ;; Once the program has exited, we no longer need it's executable...
-           ;; (message "Test %s: Deleting executable file %s" (plist-get test :name) output-file)
-           (delete-file output-file)
-
-           ;; Delete intermediate assembly files
-           (mapc
-            (lambda (source-path)
-              (delete-file (file-name-with-extension source-path ".s")))
-            source-files)
-
-           ;; Delete source files
-           (mapc #'delete-file source-files)))))
-   (directory-files "corpus/glint/" 'absolute "\\.org\\'"))
+  ;; TODO: We have to somehow wait for all the emacs above to be done...
 
   ;; Hacky fix: I'm not exactly sure where these are coming from, but I can't
   ;; seem to get all of the executables to delete...
   (mapc #'delete-file
-        (directory-files "." 'absolute "\\glinttest.*\\'"))
+        (directory-files "." 'absolute "glinttest.*\\'"))
 
   ;; Once tests are over, we should probably clean up any .gmeta files that
   ;; we may have created over the course of compiling the tests.
   (mapc #'delete-file
-        (directory-files "." 'absolute "\\.gmeta\\'"))
+        (directory-files "." 'absolute "\\.gmeta\\'")))
 
-  ;; Print rundown of Glint tests (what happened)
-  (message "Ran %s Glint Tests: %s Passed"
-           (length run-test--completed-list)
-           (length run-test--passed-list)))
+(defun run-test--c-orgtest (org-filepath)
+  ""
+  (let ((test (run-test--parse-test-from-org org-filepath)))
+    (if (not test)
+        (message
+         "Error: Failed to parse test from org file %s"
+         org-filepath)
+      (let
+          ((source-files
+            (run-test--c-sources-to-files (plist-get test :source)))
+           (output-file
+            (make-temp-file (expand-file-name "ctest")))
+           (program-output ""))
+        ;; Run LCC
+        (make-process
+         :name "lcc"
+         :buffer nil
+         :command
+         `(,lcc-path
+           ,@source-files
+           "-x" "c"
+           "-o" ,output-file
+           "--run")
+         :filter
+         (lambda (p o) (setf program-output (concat program-output o)))
+         :sentinel
+         (lambda (p e)
+           ;; (message "Process: %s had the event '%s' (process-status:%s)" p e (process-status p))
+           (when (memq (process-status p) '(exit signal))
+             ;; Set failure flag if status or output is unexpected.
+             ;; Record test as passing if test passed.
+             (when (or
+                  (run-test--process-status-unexpected-p
+                   (plist-get test :name) (process-status p) e)
+                  (run-test--output-unexpected-p
+                   (plist-get test :name) (plist-get test :output) program-output)
+                  (run-test--status-unexpected-p
+                   (plist-get test :name) (plist-get test :status) (process-exit-status p)))
+                 (setf test (plist-put test :failed t)))
+
+             ;; Mark test as completed
+             (run-test--mark-completed (plist-get test :name)))))
+
+        (run-test--wait-for-test-completion test)
+
+        ;; Once completed, record test and it's pass/fail result in the test
+        ;; database.
+        (run-test--record-test-result
+         (plist-get test :name)
+         (plist-get test :path)
+         (not (plist-get test :failed)))
+
+        (run-test--print-test-result test)
+
+        ;; Once the program has exited, we no longer need it's executable...
+        ;; (message "Test %s: Deleting executable file %s" (plist-get test :name) output-file)
+        (delete-file output-file)
+
+        ;; Delete intermediate assembly files
+        (mapc
+         (lambda (source-path)
+           (delete-file (file-name-with-extension source-path ".s")))
+         source-files)
+
+        ;; Delete source files
+        (mapc #'delete-file source-files)))))
 
 (defun run-test--c-tests ()
   "Run each of the tests in the C language corpus"
@@ -396,94 +525,29 @@ strings were stored to."
   ;; we could dispatch each test as soon as it's parsed, running them in
   ;; parallel. We may even be able to parse tests in parallel.
   (mapc
-   (lambda (org-filepath)
-     (let ((test (run-test--parse-test-from-org org-filepath)))
-       (if (not test)
-           (message
-            "Error: Failed to parse test from org file %s"
-            org-filepath)
-         (let
-             ((source-files
-               (run-test--sources-to-files (plist-get test :source)))
-              (output-file
-               (make-temp-file (expand-file-name "glinttest")))
-              (program-output ""))
-           ;; Run LCC
-           (make-process
-            :name "lcc"
-            :buffer nil
-            :command
-            `(,lcc-path
-              ,@source-files
-              "-x" "c"
-              "-o" ,output-file
-              "--run")
-            :filter
-            (lambda (p o) (setf program-output (concat program-output o)))
-            :sentinel
-            (lambda (p e)
-              ;; (message "Process: %s had the event '%s' (process-status:%s)" p e (process-status p))
-              (when (memq (process-status p) '(exit signal))
-                ;; Set failure flag if status or output is unexpected.
-                ;; Record test as passing if test passed.
-                (if (or
-                     (run-test--process-status-unexpected-p
-                      (plist-get test :name) (process-status p) e)
-                     (run-test--output-unexpected-p
-                      (plist-get test :name) (plist-get test :output) program-output)
-                     (run-test--status-unexpected-p
-                      (plist-get test :name) (plist-get test :status) (process-exit-status p)))
-                    (setf test (plist-put test :failed t))
-                  (run-test--mark-passed (plist-get test :name)))
-
-                ;; Mark test as completed
-                (run-test--mark-completed (plist-get test :name)))))
-
-           (run-test--wait-for-test-completion test)
-           (run-test--print-test-result test)
-
-           ;; TODO: GMeta files
-
-           ;; Once the program has exited, we no longer need it's executable...
-           ;; (message "Test %s: Deleting executable file %s" (plist-get test :name) output-file)
-           (delete-file output-file)
-
-           ;; Delete intermediate assembly files
-           (mapc
-            (lambda (source-path)
-              (delete-file (file-name-with-extension source-path ".s")))
-            source-files)
-
-           ;; Delete source files
-           (mapc #'delete-file source-files)))))
+   #'run-test--c-orgtest
    (directory-files "corpus/c/" 'absolute "\\.org\\'"))
 
-  ;; Hacky fix: I'm not exactly sure where these are coming from, but I can't
-  ;; seem to get all of the executables to delete...
   (mapc #'delete-file
-        (directory-files "." 'absolute "\\glinttest.*\\'"))
-
-  ;; Once tests are over, we should probably clean up any .gmeta files that
-  ;; we may have created over the course of compiling the tests.
-  (mapc #'delete-file
-        (directory-files "." 'absolute "\\.gmeta\\'"))
-
-  ;; Print rundown of Glint tests (what happened)
-  (message "Ran %s Glint Tests: %s Passed"
-           (length run-test--completed-list)
-           (length run-test--passed-list)))
+        (directory-files "." 'absolute "ctest.*\\'")))
 
 ;; TODO: locations property to record relevant test source file
 (defun run-test--sarif-results ()
   "Generate a vector of SARIF Result objects"
-  (apply #'vector
-         (mapcar (lambda (test-name)
-		           `((ruleId . "RunTest")
-		             ,(if (member test-name run-test--passed-list)
-		                  '(kind . "pass")
-		                '(level . "error"))
-		             (message . ((text . ,test-name)))))
-	             run-test--completed-list)))
+  (let*
+      ((db (sqlite-open run-test--test-database-path))
+       (results (sqlite-select db "SELECT * FROM tests;")))
+    (sqlite-close db)
+    (apply #'vector
+           (mapcar (lambda (result)
+                     (let
+                         ((path (nth 0 result))
+                          (name (nth 1 result))
+                          (passed (nth 2 result)))
+		               `((ruleId . "RunTest")
+		                 ,(if (> passed 0) '(kind . "pass") '(level . "error"))
+		                 (message . ((text . ,name))))))
+	               results))))
 
 (defun run-test--sarif ()
   "Emit results in SARIF"
@@ -501,14 +565,17 @@ strings were stored to."
 (defun run-test--sarif-file ()
   "Emit SARIF into a file"
   (with-current-buffer (find-file-noselect "runtest.sarif")
+    (erase-buffer)
     (insert (run-test--sarif))
     (save-buffer)))
 
 (defun run-test--main ()
   ""
   ;; Initialize state
-  (setf run-test--completed-list ())
-  (setf run-test--passed-list ())
+  (let ((db (sqlite-open run-test--test-database-path)))
+    (sqlite-execute db "DROP TABLE IF EXISTS tests;")
+    (sqlite-execute db "CREATE TABLE tests (path TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, passed INTEGER NOT NULL);")
+    (sqlite-close db))
 
   ;; Turn off file backups (becomes a mess with all of the I/O that tests
   ;; require)
@@ -517,14 +584,19 @@ strings were stored to."
     (run-test--ir-tests)
     (run-test--glint-tests)
     (run-test--c-tests)
+
     ;; Emit Results in SARIF
     (run-test--sarif-file)
-    ;; Print test overview (what happened)
-    (message "Ran %s Total Tests: %s Passed"
-             (length run-test--completed-list)
-             (length run-test--passed-list))))
 
-(run-test--main)
+    ;; Print test overview (what happened)
+    (let ((db (sqlite-open run-test--test-database-path)))
+      (let ((results (sqlite-select db "SELECT * FROM tests;"))
+            (passing-results (sqlite-select db "SELECT * FROM tests WHERE passed > 0;")))
+        (message "Ran %s Total Tests: %s Passed"
+             (length results)
+             (length passing-results))
+        (sqlite-close db)))
+    ))
 
 (provide 'runtest)
 

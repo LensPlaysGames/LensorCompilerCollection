@@ -64,6 +64,7 @@ add_custom_target(
   --chdir "${CMAKE_CURRENT_LIST_DIR}/runtest/"
   --eval "(setf lcc-path \"$<TARGET_FILE:lcc>\")"
   --load ./runtest.el
+  -f run-test--main
   DEPENDS
   lcc
   BYPRODUCTS
