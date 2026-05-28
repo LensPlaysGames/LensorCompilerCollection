@@ -493,10 +493,19 @@ void Parser::NextToken() {
 
                 // Detect simple macros.
                 if (not preprocessing and _simple_defines.contains(tok.text)) {
-                    // TODO: We need a way to "queue" tokens to come up next
+#ifdef __cpp_lib_containers_ranges
                     _next_tokens.append_range(
                         _simple_defines.at(tok.text)
                     );
+#else
+                    const auto& replacement_tokens = _simple_defines.at(tok.text);
+                    _next_tokens.insert(
+                        _next_tokens.end(),
+                        replacement_tokens.cbegin(),
+                        replacement_tokens.cend()
+
+                    );
+#endif
                     NextToken();
                 }
 
