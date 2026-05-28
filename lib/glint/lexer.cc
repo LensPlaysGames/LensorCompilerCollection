@@ -144,6 +144,7 @@ void lcc::glint::Lexer::NextToken() {
     /// Skip whitespace.
     while (IsSpace(lastc)) NextChar();
     tok.location.pos = CurrentOffset();
+    tok.location.len = 1;
 
     auto start_location = tok.location;
 
@@ -181,7 +182,7 @@ void lcc::glint::Lexer::NextToken() {
                     case '`':
                         Error(
                             ErrorId::InvalidByteLiteral,
-                            "Expected character following escape character '{}'. For byte literal '{}', use two in a row (i.e. '`{}{}`')",
+                            "Expected character following escape character '{}'. For byte literal '{}' (backslash), use two in a row (i.e. '`{}{}`')",
                             '\\',
                             '\\',
                             '\\',
@@ -200,6 +201,22 @@ void lcc::glint::Lexer::NextToken() {
                         tok.integer_value = '\0';
                         break;
                 }
+            } else if (lastc == '`') {
+                NextChar();
+                tok.location.len = (u16) Location::length_from_two_offsets_exclusive(
+                    start_location.pos,
+                    CurrentOffset()
+                );
+                auto e = Error(
+                    {start_location, tok.location},
+                    ErrorId::InvalidByteLiteral,
+                    "Empty byte literal; expected character value"
+                );
+                auto insert_location = start_location;
+                // Skip opening grave
+                ++insert_location.pos;
+                e.fix_by_inserting_at(insert_location, "x");
+                return;
             } else tok.integer_value = lastc;
 
             // Yeet character used for byte literal value.
@@ -207,12 +224,43 @@ void lcc::glint::Lexer::NextToken() {
 
             // Yeet closing grave.
             if (not (lastc == '`')) {
-                Error(
+                tok.location.len = (u16) Location::length_from_two_offsets_inclusive(
+                    start_location.pos,
+                    CurrentOffset()
+                );
+                auto location = tok.location;
+                if (location.len > 1) {
+                    location.pos += location.len - 1;
+                    location.len = 1;
+                }
+                auto e = Error(
+                    location,
                     ErrorId::InvalidByteLiteral,
                     "Expected '`' character to close byte literal, but got '{}', U+{:04x} instead",
                     (char) lastc,
                     lastc
                 );
+                // If it's an unterminated byte literal, go to EOF.
+                // If it's a byte literal with a few too many characters between opening/
+                // closing grave, we can handle that.
+                while (lastc and lastc != '`' and lastc != '\n') NextChar();
+                if (lastc == '`') {
+                    tok.location.len = (u16) Location::length_from_two_offsets_inclusive(
+                        start_location.pos,
+                        CurrentOffset()
+                    );
+                    e.attach(Note(
+                        ErrorId::InvalidByteLiteral,
+                        "It appears there is too many characters between these byte literal delimiters"
+                    ));
+                    auto replace_location = start_location;
+                    // Skip opening grave.
+                    ++replace_location.pos;
+                    replace_location.len = (u16) Location::length_from_two_offsets_exclusive(replace_location.pos, CurrentOffset());
+                    e.fix_by_replacing_with(replace_location, "x");
+                    NextChar();
+                }
+                return;
             }
 
             NextChar();
