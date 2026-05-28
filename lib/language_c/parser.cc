@@ -832,7 +832,7 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
         } break;
 
         case TokenKind::Integer: {
-            lhs = new IntegerLiteral(tok.integer_value, tok.location);
+            lhs = new IntegerLiteral(size_t(tok.integer_value), tok.location);
             NextToken();
         } break;
 
