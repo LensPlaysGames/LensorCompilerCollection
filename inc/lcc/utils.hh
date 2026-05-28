@@ -64,7 +64,8 @@ struct static_string {
 
     consteval static_string() {}
 
-    consteval static_string(const char (&raw)[sz]) : elem_count{sz} {
+    consteval static_string(const char (&raw)[sz])
+        : elem_count{sz} {
         std::copy_n(raw, sz, chars);
     }
 
@@ -103,8 +104,8 @@ public:
 
     /// Create a new buffer that can hold N elements.
     explicit Buffer(usz size)
-        : buffer{std::make_unique<T[]>(size)},
-          element_count{size} {}
+        : buffer{std::make_unique<T[]>(size)}
+        , element_count{size} {}
 
     /// Create a new buffer that can hold N elements and initialize it with a value.
     explicit Buffer(usz size, T val)
@@ -115,15 +116,16 @@ public:
     /// Create a new buffer from an iterator range.
     template <typename Iter>
     explicit Buffer(Iter begin, Iter end)
-        : buffer{std::make_unique<T[]>(std::distance(begin, end))},
-          element_count{std::distance(begin, end)} {
+        : buffer{std::make_unique<T[]>(std::distance(begin, end))}
+        , element_count{std::distance(begin, end)} {
         std::copy(begin, end, buffer.get());
     }
 
     /// Create a new buffer from a range.
     template <typename Range>
     requires (not std::is_same_v<std::remove_cvref_t<Range>, Buffer<T>>)
-    explicit Buffer(Range&& range) : Buffer{std::begin(range), std::end(range)} {}
+    explicit Buffer(Range&& range)
+        : Buffer{std::begin(range), std::end(range)} {}
 
     /// Get an iterator to the start of the buffer.
     auto begin() const -> const_iterator { return buffer.get(); }
@@ -174,26 +176,6 @@ private:
         LCC_ASSERT(idx < size(), "Index out of bounds");
     }
 };
-
-/// Compile time fmt::format.
-// Emscripten doesn't like this for some reason so we don't make it
-// consteval for emscripten
-template <detail::static_string format, auto... Args>
-#ifndef __EMSCRIPTEN__
-consteval
-#endif
-    auto
-    ConstexprFormat() -> std::string_view {
-    static constexpr usz size = fmt::formatted_size(FMT_COMPILE(format.view()), Args...);
-    static constexpr std::array<char, size> data = [] {
-        std::array<char, size> d{};
-        fmt::format_to(d.begin(), FMT_COMPILE(format.view()), Args...);
-        return d;
-    }();
-
-    /// Exclude the null terminator.
-    return {data.data(), size - 1};
-}
 
 } // namespace lcc
 
@@ -267,7 +249,8 @@ enum struct Colour {
 /// \endcode
 struct Colours {
     bool use_colours{};
-    constexpr Colours(bool should_use_colours) : use_colours{should_use_colours} {}
+    constexpr Colours(bool should_use_colours)
+        : use_colours{should_use_colours} {}
     constexpr auto operator()(Colour c) const -> std::string_view {
         if (not use_colours) return "";
         switch (c) {
@@ -413,10 +396,8 @@ struct fmt::formatter<T> {
     }
 };
 
-#ifdef __EMSCRIPTEN__
-#    ifndef __cpp_lib_ranges_enumerate
-// #        warning "LCC providing implementation of std::ranges::views::enumerate for Emscripten toolchain"
-
+#ifndef __cpp_lib_ranges_enumerate
+// #    warning "LCC providing implementation of std::ranges::views::enumerate()"
 namespace std::ranges::views {
 template <typename T>
 auto enumerate(T&& v) {
@@ -424,8 +405,6 @@ auto enumerate(T&& v) {
 };
 }
 
-#    endif // __cpp_lib_ranges_enumerate
-
-#endif // __EMSCRIPTEN__
+#endif // __cpp_lib_ranges_enumerate
 
 #endif // LCC_UTILS_HH

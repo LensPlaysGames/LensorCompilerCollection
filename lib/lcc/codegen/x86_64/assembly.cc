@@ -669,7 +669,10 @@ void emit_gnu_att_assembly(
                     if (i == 0) out += ' ';
                     else out += ", ";
                     // Update 1-bit operations (boolean) to the minimum addressable on x86_64: a byte.
-                    if (std::holds_alternative<MOperandRegister>(operand) and std::get<MOperandRegister>(operand).size == 1) {
+                    if (
+                        std::holds_alternative<MOperandRegister>(operand)
+                        and std::get<MOperandRegister>(operand).size == 1
+                    ) {
                         auto tmp = std::get<MOperandRegister>(operand);
                         tmp.size = 8;
                         operand = tmp;

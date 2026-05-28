@@ -87,7 +87,7 @@ This involves editing the CMakeLists.txt to include an =add_library()= with your
 #+begin_src cmake
   # Your language library
   add_library(
-    languagec STATIC
+    language STATIC
     inc/language/driver.hh
     lib/language/driver.cc
   )

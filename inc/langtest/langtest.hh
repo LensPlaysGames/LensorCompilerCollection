@@ -154,7 +154,8 @@ struct Test {
                     fmt::print("Expected no failures, but sema failed.\n");
                     return false;
                 }
-                // No failure point means matching is performed, and expected to succeed.
+                // No failure point means matching is performed, and expected to
+                // succeed.
                 if (not matched_ast) {
                     fmt::print("Expected AST to match, but AST did not match.\n");
                     return false;
@@ -186,13 +187,20 @@ class TestContext {
 
 public:
     [[nodiscard]]
-    auto count() const -> size_t { return _completed_tests.size(); }
+    auto count() const -> size_t {
+        return _completed_tests.size();
+    }
     [[nodiscard]]
-    auto count_failed() const -> size_t { return _completed_tests.size() - _passing_tests.size(); }
+    auto count_failed() const -> size_t {
+        return _completed_tests.size() - _passing_tests.size();
+    }
     [[nodiscard]]
-    auto count_passed() const -> size_t { return _passing_tests.size(); }
+    auto count_passed() const -> size_t {
+        return _passing_tests.size();
+    }
 
-    // The names of all tests recorded as completed AND passing within this context.
+    // The names of all tests recorded as completed AND passing within this
+    // context.
     [[nodiscard]]
     auto passing_tests() const -> const std::vector<std::string>& {
         return _passing_tests;
@@ -222,12 +230,14 @@ public:
 template <typename T>
 concept langtest_node_has_name = requires (T node) {
     node.langtest_name();
-    requires std::convertible_to<decltype(node.langtest_name()), std::string_view>;
+    requires std::
+        convertible_to<decltype(node.langtest_name()), std::string_view>;
 };
 template <typename T>
 concept langtest_node_has_children = requires (T node) {
     node.langtest_children();
-    requires std::convertible_to<decltype(node.langtest_children()), std::vector<T*>>;
+    requires std::
+        convertible_to<decltype(node.langtest_children()), std::vector<T*>>;
 };
 template <typename T>
 concept langtest_node_requirements
@@ -311,7 +321,11 @@ bool perform_ir_match_block(
         return false;
     }
 
-    for (size_t inst_i = 0; inst_i < expected_block->instructions().size(); ++inst_i) {
+    for (
+        size_t inst_i = 0;
+        inst_i < expected_block->instructions().size();
+        ++inst_i
+    ) {
         auto* expected_inst = expected_block->instructions().at(inst_i);
         auto* got_inst = got_block->instructions().at(inst_i);
         expected_to_got[expected_inst] = got_inst;
@@ -391,7 +405,11 @@ bool perform_ir_match_block(
     return true;
 }
 
-bool perform_ir_match_function(lcc::Module& got, lcc::Module& expected, lcc::Function* expected_function) {
+bool perform_ir_match_function(
+    lcc::Module& got,
+    lcc::Module& expected,
+    lcc::Function* expected_function
+) {
     LCC_ASSERT(
         expected_function,
         "Cannot perform IR match on NULL expected IR function"
@@ -448,7 +466,11 @@ bool perform_ir_match_function(lcc::Module& got, lcc::Module& expected, lcc::Fun
     // instructions.
     std::unordered_map<lcc::Inst*, lcc::Inst*> expected_to_got{};
 
-    for (size_t block_i = 0; block_i < expected_function->blocks().size(); ++block_i) {
+    for (
+        size_t block_i = 0;
+        block_i < expected_function->blocks().size();
+        ++block_i
+    ) {
         auto* expected_block = expected_function->blocks().at(block_i);
         auto* got_block = got_func->blocks().at(block_i);
         if (
@@ -485,11 +507,11 @@ bool perform_ir_match(lcc::Module& got, lcc::Module& expected) {
     return functions_match;
 }
 
-// @return true either if the test has no IR matcher, or if the test does have an IR matcher and it matches.
+// @return true either if the test has no IR matcher, or if the test does
+// have an IR matcher and it matches.
 [[nodiscard]]
 bool perform_ir_match(lcc::Module& got, langtest::Test& test) {
-    if (test.ir.empty())
-        return true;
+    if (test.ir.empty()) return true;
 
     LCC_ASSERT(got.context(), "NULL context...");
 
@@ -579,7 +601,10 @@ auto parse_test(
 ) -> bool {
     auto ToBeginningOfNextTest = [&]() {
         bool bol{true};
-        while (i < fsize and not (bol and contents[i] == '=')) {
+        while (
+            i < fsize
+            and not (bol and contents[i] == '=')
+        ) {
             bol = contents[i] == '\n';
             ++i;
         }
@@ -587,16 +612,14 @@ auto parse_test(
 
     auto ToNewline = [&]() {
         // Eat everything until '\n'
-        while (i < fsize and contents[i] != '\n')
-            ++i;
+        while (i < fsize and contents[i] != '\n') ++i;
     };
 
     // Move 'i' to the offset of the beginning of the next non-empty line
     auto ToBeginningOfNextLine = [&]() {
         ToNewline();
         // Eat all consecutive '\n'
-        while (i < fsize and contents[i] == '\n')
-            ++i;
+        while (i < fsize and contents[i] == '\n') ++i;
     };
 
     auto ToBeginningOfNextTestSegment = [&]() {
@@ -661,8 +684,9 @@ auto parse_test(
             ) {
                 test.warning_point = Test::WarningPoint::Syntax;
             } else if (
-                specifier == "fail_parse"
-                or specifier == "error_parse" or specifier == "parse_error"
+                specifier == "fail_parse" or specifier == "error_parse"
+                or specifier == "parse_error" or specifier == "fail_syntax"
+                or specifier == "syntax_error"
             ) {
                 test.failure_point = Test::FailurePoint::Syntax;
             } else if (
@@ -704,7 +728,8 @@ auto parse_test(
 
         // Beginning of next test or end of input...
         if (i >= fsize or contents[i] == '=') {
-            // Error if the test is not expected to fail (nothing to match if it is specified to fail)
+            // Error if the test is not expected to fail (nothing to match if it
+            // is specified to fail)
             if (test.failure_point == Test::FailurePoint::None) {
                 fmt::print(
                     "ERROR test has no matcher declared but it is not specified to fail... {}\n",
@@ -739,7 +764,8 @@ auto parse_test(
     // LCC IR.
     LCC_ASSERT(
         contents[i] == '-',
-        "LangTest parser must leave parsing index at EOF, start of next test ('='), or start of next test segment ('-'). Instead, it was left at '{}'",
+        "LangTest parser must leave parsing index at EOF, start of next test ('='), "
+        "or start of next test segment ('-'). Instead, it was left at '{}'",
         contents[i]
     );
 
@@ -761,7 +787,8 @@ auto parse_test(
             size_t lcc_ir_end = i;
             // keep end in-bounds and strip trailing whitespace.
             if (lcc_ir_end >= fsize) lcc_ir_end = fsize - 1;
-            while (lcc_ir_end and isspace(contents[lcc_ir_end - 1])) --lcc_ir_end;
+            while (lcc_ir_end and isspace(contents[lcc_ir_end - 1]))
+                --lcc_ir_end;
 
             test.ir = {
                 contents.begin() + lcc::isz(lcc_ir_begin),
@@ -779,10 +806,11 @@ concept langtest_test_has_run = requires (TTest test) {
     test.run();
     requires std::convertible_to<decltype(test.run()), bool>;
 };
+
 template <typename TTest>
-concept langtest_test_derived_from_test = requires (TTest test) {
-    requires std::derived_from<TTest, Test>;
-};
+concept langtest_test_derived_from_test
+    = requires (TTest test) { requires std::derived_from<TTest, Test>; };
+
 template <typename TTest>
 concept langtest_test_requirements
     = langtest_test_has_run<TTest> and langtest_test_derived_from_test<TTest>;

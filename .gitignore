@@ -1,15 +1,18 @@
 # Build Artifacts
 *.S
+*.s
 *.o
+*.obj
 *.exe
 *.ll
 *.out
+*.sarif
 
 # CCache
 .cache
 
 # CMake
-**/bld
+**/bld*
 **/bldweb*
 **/bld-*
 **/build

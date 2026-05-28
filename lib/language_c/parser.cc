@@ -9,6 +9,8 @@
 #include <fmt/format.h>
 #include <fmt/std.h>
 
+#include <ranges>
+
 namespace lcc::language_c {
 
 std::string_view ToString(TokenKind k) {
@@ -37,6 +39,59 @@ std::string_view ToString(TokenKind k) {
         case TokenKind::Count: break;
     }
     Diag::ICE("unreachable");
+}
+
+Result<std::string> ToSource(Token& t) {
+    switch (t.kind) {
+        case TokenKind::Eof:
+        case TokenKind::Count:
+        case TokenKind::Invalid:
+            return Diag::Error("c/token-to-source", "invalid token");
+
+        case TokenKind::Identifier:
+            return t.text;
+
+        case TokenKind::Integer:
+            return fmt::format("{}", t.integer_value);
+
+        case TokenKind::Fractional:
+            return fmt::format("{}", t.fractional_value);
+
+        case TokenKind::KwVoid:
+        case TokenKind::KwInt:
+        case TokenKind::KwReturn:
+        case TokenKind::OpPlus:
+        case TokenKind::OpMinus:
+        case TokenKind::OpAsterisk:
+        case TokenKind::OpSlash:
+        case TokenKind::OpPercent:
+        case TokenKind::OpComma:
+        case TokenKind::LeftParenthesis:
+        case TokenKind::RightParenthesis:
+        case TokenKind::LeftSquareBracket:
+        case TokenKind::RightSquareBracket:
+        case TokenKind::LeftCurlyBrace:
+        case TokenKind::RightCurlyBrace:
+        case TokenKind::Semicolon:
+            return std::string{ToString(t.kind)};
+    }
+    Diag::ICE("unreachable");
+}
+
+Result<void> Parser::preprocessor_define(std::string_view name, std::vector<Token> contents) {
+    if (_simple_defines.contains(name))
+        return Error("c/preprocessor", "Redefinition of `{}`", name);
+    _simple_defines.emplace(name, contents);
+    return {};
+}
+void Parser::preprocessor_undefine(std::string_view name) {
+    // FIXME: Remove this shit once libc++ actually supports any semblance of
+    // the modern language.
+#ifdef __cpp_lib_associative_heterogeneous_erasure
+    _simple_defines.erase(name);
+#else
+    _simple_defines.erase(std::string{name});
+#endif
 }
 
 StringMap<TokenKind> keywords{
@@ -212,6 +267,28 @@ void Parser::NextNumber() {
     }
 }
 
+void Parser::NextIdentifier() {
+    tok.kind = TokenKind::Identifier;
+    tok.text.clear();
+
+    // Note: Istg if anyone gets the genius idea of extracting a substring
+    // instead of appending character by character, DON’T. There is a REASON
+    // why NextChar() exists. Character != byte in the source file.
+    tok.location.pos = CurrentOffset();
+    auto start_position = tok.location.pos;
+    do {
+        if (lastc > 0xff)
+            Diag::ICE("Handle unicode codepoint in identifier");
+        tok.text += char(lastc);
+        NextChar();
+    } while (IsIdentifierContinueCharacter(lastc));
+
+    tok.location.len = (u16) Location::length_from_two_offsets_exclusive(
+        start_position,
+        CurrentOffset()
+    );
+}
+
 // Sometimes a single codepoint turns into a token kind with no token data
 // required other than the kind.
 // This is a quick-and-easy way to implement those sort of tokens.
@@ -231,8 +308,17 @@ std::unordered_map<uint32_t, TokenKind> easy_tokens{
     {'{', TokenKind::LeftCurlyBrace},
     {'}', TokenKind::RightCurlyBrace},
 };
+// TODO: Fill with OpPlus -> OpPlusEq mappings
+std::unordered_map<TokenKind, TokenKind> from_trailing_equal{};
 
 void Parser::NextToken() {
+    // If the preprocessor asks for a token, don't replace it.
+    if (not _next_tokens.empty()) {
+        tok = _next_tokens.front();
+        _next_tokens.pop_front();
+        return;
+    }
+
     // Return EOF if we’re at EOF.
     if (not lastc) {
         tok.kind = TokenKind::Eof;
@@ -244,8 +330,13 @@ void Parser::NextToken() {
     tok.kind = TokenKind::Invalid;
     tok.artificial = false;
 
-    // Skip whitespace.
-    while (IsSpace(lastc)) NextChar();
+    // Skip different kinds of whitespace depending on if we are preprocessing
+    // or not.
+    // TODO: Handle escaped newlines
+    if (preprocessing)
+        while (preprocessor_whitespace.contains((char) lastc)) NextChar();
+    else
+        while (IsSpace(lastc)) NextChar();
 
     // Record start of token.
     tok.location.pos = CurrentOffset();
@@ -254,11 +345,6 @@ void Parser::NextToken() {
     // Determine token starting at current offset.
     switch (lastc) {
         case 0:
-        case '+':
-        case '-':
-        case '*':
-        case '/':
-        case '%':
         case ',':
         case ';':
         case '(':
@@ -270,6 +356,124 @@ void Parser::NextToken() {
             tok.kind = easy_tokens.at(lastc);
             NextChar();
             break;
+
+        case '+':
+        case '-':
+        case '*':
+        case '/':
+        case '%':
+            tok.kind = easy_tokens.at(lastc);
+            NextChar();
+
+            // Line comment
+            if (tok.kind == TokenKind::OpSlash and lastc == '/') {
+                NextChar();
+
+                while (lastc and lastc != '\n') NextChar();
+
+                // The actual token beyond the comment.
+                NextToken();
+                return;
+            }
+
+            // Block comment
+            if (tok.kind == TokenKind::OpSlash and lastc == '*') {
+                NextChar();
+
+                while (lastc) {
+                    NextChar();
+                    if (lastc == '*') {
+                        NextChar();
+                        if (lastc == '/') {
+                            NextChar();
+                            break;
+                        }
+                    }
+                }
+
+                // The actual token beyond the comment.
+                NextToken();
+                return;
+            }
+
+            if (lastc == '=')
+                tok.kind = from_trailing_equal.at(tok.kind);
+            break;
+
+        // The only way to get here is if the preprocessor calls NextToken but
+        // there isn't another one in the line, and the newline isn't escaped.
+        case '\n':
+            tok.kind = TokenKind::Invalid;
+            break;
+
+        case '#': {
+            NextChar();
+
+            if (lastc == '#')
+                Diag::ICE("TODO: pp Concatenation");
+
+            else if (IsIdentifierStartCharacter(lastc)) {
+                NextIdentifier();
+
+                preprocessing = true;
+
+                if (tok.text == "define") {
+                    NextToken();
+                    if (tok.kind != TokenKind::Identifier) {
+                        Error("c/preprocessor", "Macro name missing");
+                        tok.kind = TokenKind::Eof;
+                        return;
+                    }
+
+                    std::string name = tok.text;
+                    NextToken();
+
+                    std::vector<Token> contents{};
+                    while (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid)) {
+                        contents.emplace_back(tok);
+                        NextToken();
+                    }
+
+                    (void) preprocessor_define(name, contents);
+                } else if (tok.text == "undef") {
+                    NextToken();
+                    if (tok.kind != TokenKind::Identifier) {
+                        Error("c/preprocessor", "Macro name missing!");
+                        tok.kind = TokenKind::Eof;
+                        return;
+                    }
+
+                    std::string name = tok.text;
+
+                    NextToken();
+                    while (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid)) {
+                        Warning("c/preprocessor", "Junk following macro name of #undef directive");
+                        NextToken();
+                    }
+
+                    preprocessor_undefine(name);
+                } else {
+                    Error(
+                        "c/preprocessor",
+                        "Unrecognized preprocessor statement.\nIf you believe this should be a conditionally supported directive, let the maintainers know."
+                    );
+                    tok.kind = TokenKind::Eof;
+                    return;
+                }
+
+                if (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid))
+                    Diag::ICE("Preprocessor lexing must not have lexed regular token");
+
+                preprocessing = false;
+
+                // This fetches the *actual* token, not preprocessor stuff.
+                NextToken();
+
+                break;
+            } else Diag::ICE("TODO: pp Stringization");
+
+            Diag::ICE("unreachable");
+        }
 
         default: {
             if (IsDecimalDigit(lastc)) {
@@ -285,23 +489,30 @@ void Parser::NextToken() {
             }
 
             if (IsIdentifierStartCharacter(lastc)) {
-                tok.kind = TokenKind::Identifier;
-                tok.text.clear();
+                NextIdentifier();
 
-                // Note: Istg if anyone gets the genius idea of extracting a substring
-                // instead of appending character by character, DON’T. There is a REASON
-                // why NextChar() exists. Character != byte in the source file.
-                do {
-                    if (lastc > 0xff)
-                        Diag::ICE("Handle unicode codepoint in identifier");
-                    tok.text += char(lastc);
-                    NextChar();
-                } while (IsIdentifierContinueCharacter(lastc));
+                // Detect simple macros.
+                if (not preprocessing and _simple_defines.contains(tok.text)) {
+#ifdef __cpp_lib_containers_ranges
+                    _next_tokens.append_range(
+                        _simple_defines.at(tok.text)
+                    );
+#else
+                    const auto& replacement_tokens = _simple_defines.at(tok.text);
+                    _next_tokens.insert(
+                        _next_tokens.end(),
+                        replacement_tokens.cbegin(),
+                        replacement_tokens.cend()
+
+                    );
+#endif
+                    NextToken();
+                }
 
                 // Detect keywords.
-                if (keywords.contains(tok.text)) {
+                else if (keywords.contains(tok.text))
                     tok.kind = keywords.at(tok.text);
-                }
+
                 break;
             }
         } break;
@@ -315,7 +526,47 @@ void Parser::NextToken() {
         tok.location.len += 1;
 }
 
-Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
+// @return zero for non operators, otherwise the precedence value.
+constexpr size_t precedence(TokenKind kind) {
+    switch (kind) {
+        case TokenKind::OpComma:
+            return 15;
+
+        case TokenKind::OpPlus:
+        case TokenKind::OpMinus:
+            return 4;
+
+        case TokenKind::OpAsterisk:
+        case TokenKind::OpSlash:
+        case TokenKind::OpPercent:
+            return 3;
+
+        case TokenKind::LeftSquareBracket:
+            return 1;
+
+        case TokenKind::Invalid:
+        case TokenKind::Identifier:
+        case TokenKind::Integer:
+        case TokenKind::Fractional:
+        case TokenKind::KwVoid:
+        case TokenKind::KwInt:
+        case TokenKind::KwReturn:
+        case TokenKind::LeftParenthesis:
+        case TokenKind::RightParenthesis:
+        case TokenKind::RightSquareBracket:
+        case TokenKind::LeftCurlyBrace:
+        case TokenKind::RightCurlyBrace:
+        case TokenKind::Semicolon:
+        case TokenKind::Eof:
+        case TokenKind::Count:
+            return 0;
+    }
+    Diag::ICE("unreachable");
+}
+constexpr size_t reset_precedence{0};
+
+Result<std::vector<Node*>>
+Parser::ParseDeclarators(Type* type_specifier) {
     std::vector<Node*> parsed_declarations{};
     // We have just parsed a type specifier (like "int").
     // We are now at the beginning of the list of declarators.
@@ -337,7 +588,8 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
             tok.kind != TokenKind::Invalid and tok.kind != TokenKind::Count
             and tok.kind != TokenKind::Eof
             and tok.kind != TokenKind::OpComma and tok.kind != TokenKind::Semicolon
-            and tok.kind != TokenKind::LeftParenthesis and tok.kind != TokenKind::LeftSquareBracket) {
+            and tok.kind != TokenKind::LeftParenthesis and tok.kind != TokenKind::LeftSquareBracket
+        ) {
             switch (tok.kind) {
                 default:
                     return Error("c/expected", "Invalid start of declarator");
@@ -370,7 +622,8 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
                 while (
                     tok.kind != TokenKind::RightParenthesis
                     and tok.kind != TokenKind::Eof
-                    and tok.kind != TokenKind::Invalid) {
+                    and tok.kind != TokenKind::Invalid
+                ) {
                     Diag::ICE("Parse parameters (at `{}`)...", tok.kind);
                 }
                 if (tok.kind != TokenKind::RightParenthesis) {
@@ -395,7 +648,9 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
                 auto opening_location = tok.location;
                 NextToken();
 
-                auto dimension = ParseExpression();
+                auto dimension = ParseExpression(
+                    precedence(TokenKind::LeftSquareBracket)
+                );
                 if (not dimension) return dimension.diag();
 
                 if (tok.kind != TokenKind::RightSquareBracket) {
@@ -425,7 +680,7 @@ Result<std::vector<Node*>> Parser::ParseDeclarators(Type* type_specifier) {
         if (definition_possible and current_declarator_type->kind() == TypeKind::Function) {
             // Look for function definition
             if (tok.kind == TokenKind::LeftCurlyBrace) {
-                auto body = ParseExpression();
+                auto body = ParseExpression(reset_precedence);
                 if (not body) return body.diag();
                 initialiser = *body;
             }
@@ -481,8 +736,9 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
     while (
         tok.kind != TokenKind::Eof
         and tok.kind != TokenKind::Invalid
-        and tok.kind != until) {
-        auto maybe_expression = ParseExpression();
+        and tok.kind != until
+    ) {
+        auto maybe_expression = ParseExpression(reset_precedence);
         if (not maybe_expression) return maybe_expression.diag();
         constituents.emplace_back(*maybe_expression);
         if (tok.kind == TokenKind::Semicolon)
@@ -506,7 +762,7 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
     return constituents;
 }
 
-auto Parser::ParseExpression() -> Result<Node*> {
+auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
     Location start_location = tok.location;
     Result<Node*> lhs = Result<Node*>::Null(); /** (!) **/
     switch (tok.kind) {
@@ -526,7 +782,7 @@ auto Parser::ParseExpression() -> Result<Node*> {
         case TokenKind::KwReturn: {
             NextToken();
             if (tok.kind != TokenKind::Semicolon and tok.kind != TokenKind::Eof) {
-                auto expression = ParseExpression();
+                auto expression = ParseExpression(reset_precedence);
                 if (not expression) return expression.diag();
                 lhs = new Return(
                     *expression,
@@ -576,11 +832,13 @@ auto Parser::ParseExpression() -> Result<Node*> {
         } break;
 
         case TokenKind::Integer: {
-            lhs = new IntegerLiteral(tok.integer_value, tok.location);
+            lhs = new IntegerLiteral(size_t(tok.integer_value), tok.location);
             NextToken();
         } break;
 
         case TokenKind::Identifier:
+            Diag::ICE("identifier is unhandled (got `{}`)...", tok.text);
+
         case TokenKind::Fractional:
         case TokenKind::OpAsterisk:
         case TokenKind::LeftParenthesis:
@@ -594,45 +852,53 @@ auto Parser::ParseExpression() -> Result<Node*> {
 
     // Once we've parsed an expression, we should check if that expression is
     // the lhs of a binary expression.
-    switch (tok.kind) {
-        case TokenKind::OpPlus:
-        case TokenKind::OpMinus:
-        case TokenKind::OpAsterisk:
-        case TokenKind::OpSlash:
-        case TokenKind::OpPercent:
-        case TokenKind::LeftSquareBracket: {
-            const auto operator_ = tok.kind;
-            NextToken();
-            auto rhs = ParseExpression();
-            if (not rhs) return rhs.diag();
-            lhs = new BinaryOperation(
-                operator_,
-                *lhs,
-                *rhs,
-                {lhs->location(), rhs->location()}
-            );
-        } break;
+    // NOTE: non-zero precedence = an operator
+    while (precedence(tok.kind)) {
+        if (
+            current_precedence
+            and precedence(tok.kind) > current_precedence
+        ) return lhs;
 
-        case TokenKind::LeftParenthesis:
-            Diag::ICE("Unhandled binary operator");
+        switch (tok.kind) {
+            case TokenKind::OpPlus:
+            case TokenKind::OpMinus:
+            case TokenKind::OpAsterisk:
+            case TokenKind::OpSlash:
+            case TokenKind::OpPercent:
+            case TokenKind::LeftSquareBracket: {
+                const auto operator_ = tok.kind;
+                NextToken();
+                auto rhs = ParseExpression(precedence(operator_));
+                if (not rhs) return rhs.diag();
+                lhs = new BinaryOperation(
+                    operator_,
+                    *lhs,
+                    *rhs,
+                    {lhs->location(), rhs->location()}
+                );
+            } break;
 
-        // These are NOT binary operators
-        case TokenKind::OpComma:
-        case TokenKind::Invalid:
-        case TokenKind::Identifier:
-        case TokenKind::Integer:
-        case TokenKind::Fractional:
-        case TokenKind::KwVoid:
-        case TokenKind::KwInt:
-        case TokenKind::KwReturn:
-        case TokenKind::RightParenthesis:
-        case TokenKind::RightSquareBracket:
-        case TokenKind::LeftCurlyBrace:
-        case TokenKind::RightCurlyBrace:
-        case TokenKind::Semicolon:
-        case TokenKind::Eof:
-        case TokenKind::Count:
-            break;
+            case TokenKind::LeftParenthesis:
+                Diag::ICE("Unhandled binary operator");
+
+            // These are NOT binary operators
+            case TokenKind::OpComma:
+            case TokenKind::Invalid:
+            case TokenKind::Identifier:
+            case TokenKind::Integer:
+            case TokenKind::Fractional:
+            case TokenKind::KwVoid:
+            case TokenKind::KwInt:
+            case TokenKind::KwReturn:
+            case TokenKind::RightParenthesis:
+            case TokenKind::RightSquareBracket:
+            case TokenKind::LeftCurlyBrace:
+            case TokenKind::RightCurlyBrace:
+            case TokenKind::Semicolon:
+            case TokenKind::Eof:
+            case TokenKind::Count:
+                break;
+        }
     }
 
     return lhs;
@@ -650,6 +916,21 @@ auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {
             for (auto [n, d] : s->declarations) {
                 fmt::print("- {} <- {} ({})\n", *d->type(), d->name(), fmt::ptr(d));
             }
+        }
+        for (auto [name, contents] : _simple_defines) {
+            fmt::print(
+                "-D{}=\"{}\"\n",
+                name,
+                fmt::join(
+                    std::ranges::views::transform(contents, [](auto token) {
+                        auto token_source = ToSource(token);
+                        if (not token_source)
+                            Diag::ICE("Invalid token recorded in preprocessor definition");
+                        return fmt::format("{}", *token_source);
+                    }),
+                    " "
+                )
+            );
         }
     }
 

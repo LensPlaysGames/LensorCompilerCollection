@@ -15,6 +15,12 @@ class Sema {
     Declaration* defining{};
     Node* _root{};
 
+    std::unordered_map<Node*, Type*> _type_cache{};
+
+    [[nodiscard]]
+    Type* type_of(Node* n);
+    void update_type(Node*, Type*);
+
     Result<void> analyse_declaration(Declaration*);
     Result<void> analyse_binary(BinaryOperation*);
     Result<void> analyse_return(Return*);
@@ -35,7 +41,9 @@ class Sema {
     }
 
 public:
-    Sema(lcc::Context* context_, Node* root) : context(context_), _root(root) {}
+    Sema(lcc::Context* context_, Node* root)
+        : context(context_)
+        , _root(root) {}
 
     auto root() { return _root; }
 

@@ -1,0 +1,27 @@
+================
+Line comment
+================
+
+// 69;
+42;
+// \n
+// */ foo **// bar
+
+---
+
+(block (integer_literal))
+
+================
+Block comment
+================
+
+// 69;
+42;
+/* \n
+// /* foo *_// bar
+* geez  * /
+*/
+
+---
+
+(block (integer_literal))

@@ -6,6 +6,78 @@
 
 namespace lcc::language_c {
 
+void Sema::update_type(Node* n, Type* t) {
+    _type_cache[n] = t;
+}
+
+Type* Sema::type_of(Node* n) {
+    if (not n) Diag::ICE("nullptr argument");
+
+    // Only get the type of a node once.
+    if (_type_cache.contains(n))
+        return _type_cache.at(n);
+
+    Type* out{nullptr};
+    switch (n->kind()) {
+        case NodeKind::BinaryOperation: {
+            auto* b = (BinaryOperation*) n;
+            switch (b->binary_operator()) {
+                case TokenKind::OpPlus:
+                case TokenKind::OpMinus:
+                case TokenKind::OpAsterisk:
+                case TokenKind::OpSlash:
+                case TokenKind::OpPercent: {
+                    // FIXME: Type promotion, or something.
+                    out = type_of(b->lhs());
+                    break;
+                }
+
+                case TokenKind::LeftSquareBracket:
+                    Diag::ICE("sema::type_of subscript");
+
+                case TokenKind::Invalid:
+                case TokenKind::Identifier:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
+                case TokenKind::OpComma:
+                case TokenKind::KwVoid:
+                case TokenKind::KwInt:
+                case TokenKind::KwReturn:
+                case TokenKind::LeftParenthesis:
+                case TokenKind::RightParenthesis:
+                case TokenKind::RightSquareBracket:
+                case TokenKind::LeftCurlyBrace:
+                case TokenKind::RightCurlyBrace:
+                case TokenKind::Semicolon:
+                case TokenKind::Eof:
+                case TokenKind::Count:
+                    Diag::ICE("Not a binary operator");
+            }
+        } break;
+
+        case NodeKind::Declaration:
+            out = ((Declaration*) n)->type();
+            break;
+
+        case NodeKind::IntegerLiteral:
+            out = new IntType(n->location());
+            break;
+
+        case NodeKind::Invalid:
+        case NodeKind::Group:
+        case NodeKind::Block:
+        case NodeKind::Return:
+        case NodeKind::Count:
+            out = new VoidType(n->location());
+            break;
+    }
+
+    if (not out)
+        Diag::ICE("no node is allowed a null type");
+
+    return out;
+}
+
 Result<void> Sema::analyse_declaration(Declaration* d) {
     if (d->initialising_expression()) {
         defining = d;
@@ -39,8 +111,30 @@ Result<void> Sema::analyse_binary(BinaryOperation* b) {
         case TokenKind::OpMinus:
         case TokenKind::OpAsterisk:
         case TokenKind::OpSlash:
-        case TokenKind::OpPercent:
-        case TokenKind::LeftParenthesis:
+        case TokenKind::OpPercent: {
+            // FIXME: This is not accurate
+            if (type_of(b->lhs())->kind() != TypeKind::Int) {
+                return Error(
+                    b->lhs()->location(),
+                    "c/type-mismatch",
+                    "Only integral types are allowed in arithmetic for now, sorry"
+                );
+            }
+
+            if (
+                type_of(b->lhs())->kind() != type_of(b->rhs())->kind()
+            ) {
+                return Error(
+                    b->lhs()->location(),
+                    "c/type-mismatch",
+                    "Arithmetic must be performed on like types ({} and {} are different)",
+                    *type_of(b->lhs()),
+                    *type_of(b->rhs())
+                );
+            }
+
+        } break;
+
         case TokenKind::LeftSquareBracket:
             Diag::ICE("Unhandled binary operator `{}` (sema)", b->binary_operator());
 
@@ -52,6 +146,7 @@ Result<void> Sema::analyse_binary(BinaryOperation* b) {
         case TokenKind::KwInt:
         case TokenKind::KwReturn:
         case TokenKind::OpComma:
+        case TokenKind::LeftParenthesis:
         case TokenKind::RightParenthesis:
         case TokenKind::RightSquareBracket:
         case TokenKind::LeftCurlyBrace:

@@ -72,10 +72,7 @@ void :[byte size];
 ================
 Sum, Two Members
 ================
-void sum {
-    x: int
-    y:int
-};
+void sum {x: int y:int};
 0;
 ---
 (block
@@ -86,10 +83,7 @@ void sum {
 ================
 Sum, Two Comma-separated Members
 ================
-void sum {
-    x: int,
-    y:int
-};
+void sum {x: int, y:int};
 0;
 ---
 (block
@@ -100,10 +94,7 @@ void sum {
 ================
 Sum, Two Comma-separated Members w/ Trailing
 ================
-void sum {
-    x: int,
-    y:int,
-};
+void sum {x: int, y:int,};
 0;
 ---
 (block
@@ -114,10 +105,7 @@ void sum {
 ================
 Sum, Two Semicolon-separated Members
 ================
-void sum {
-    x: int;
-    y:int;
-};
+void sum {x: int; y:int;};
 0;
 ---
 (block
@@ -150,10 +138,7 @@ void struct { x: int };
 ================
 Struct, Two Members
 ================
-void struct {
-    x: int
-    y:int
-};
+void struct {x: int y:int};
 0;
 ---
 (block
@@ -164,10 +149,7 @@ void struct {
 ================
 Struct, Two Comma-separated Members
 ================
-void struct {
-    x: int,
-    y:int
-};
+void struct {x: int, y:int};
 0;
 ---
 (block
@@ -178,10 +160,7 @@ void struct {
 ================
 Struct, Two Comma-separated Members w/ Trailing
 ================
-void struct {
-    x: int,
-    y:int,
-};
+void struct {x: int, y:int,};
 0;
 ---
 (block
@@ -192,10 +171,7 @@ void struct {
 ================
 Struct, Two Semicolon-separated Members
 ================
-void struct {
-    x: int;
-    y:int;
-};
+void struct {x: int; y:int;};
 0;
 ---
 (block
@@ -228,10 +204,7 @@ void union { x: int };
 ================
 Union, Two Members
 ================
-void union {
-    x: int
-    y:int
-};
+void union {x: int y:int};
 0;
 ---
 (block
@@ -242,10 +215,7 @@ void union {
 ================
 Union, Two Comma-separated Members
 ================
-void union {
-    x: int,
-    y:int
-};
+void union {x: int, y:int};
 0;
 ---
 (block
@@ -256,10 +226,7 @@ void union {
 ================
 Union, Two Comma-separated Members w/ Trailing
 ================
-void union {
-    x: int,
-    y:int,
-};
+void union {x: int, y:int,};
 0;
 ---
 (block
@@ -270,10 +237,7 @@ void union {
 ================
 Union, Two Semicolon-separated Members
 ================
-void union {
-    x: int;
-    y:int;
-};
+void union {x: int; y:int;};
 0;
 ---
 (block
@@ -295,9 +259,7 @@ void :enum {};
 ================
 Enum, Single Member
 ================
-void :enum {
-  x
-};
+void :enum {x};
 0;
 ---
 (block
@@ -308,9 +270,7 @@ void :enum {
 ================
 Enum, Single Member, Comma
 ================
-void :enum {
-  x,
-};
+void :enum {x,};
 0;
 ---
 (block
@@ -321,9 +281,7 @@ void :enum {
 ================
 Enum, Single Member, Semicolon
 ================
-void :enum {
-  x;
-};
+void :enum { x; };
 0;
 ---
 (block
@@ -334,9 +292,7 @@ void :enum {
 ================
 Enum, Single Member, Initialised
 ================
-void :enum {
-  x :: 0
-};
+void :enum {x :: 0};
 0;
 ---
 (block
@@ -347,9 +303,7 @@ void :enum {
 ================
 Enum, Single Member, Initialised, Comma
 ================
-void :enum {
-  x :: 0,
-};
+void :enum {x :: 0,};
 0;
 ---
 (block
@@ -360,9 +314,7 @@ void :enum {
 ================
 Enum, Single Member, Initialised, Semicolon
 ================
-void :enum {
-  x :: 0;
-};
+void :enum {x :: 0;};
 0;
 ---
 (block
@@ -373,10 +325,7 @@ void :enum {
 ================
 Enum, Multiple Member
 ================
-void :enum {
-  x
-  y
-};
+void :enum {x y};
 0;
 ---
 (block
@@ -387,10 +336,7 @@ void :enum {
 ================
 Enum, Multiple Member, Commas
 ================
-void :enum {
-  x,
-  y,
-};
+void :enum {x, y,};
 0;
 ---
 (block
@@ -401,10 +347,7 @@ void :enum {
 ================
 Enum, Multiple Member, Comma-separated
 ================
-void :enum {
-  x,
-  y
-};
+void :enum {x, y};
 0;
 ---
 (block
@@ -415,10 +358,7 @@ void :enum {
 ================
 Enum, Multiple Member, Semicolons
 ================
-void :enum {
-  x;
-  y;
-};
+void :enum { x; y; };
 0;
 ---
 (block
@@ -429,10 +369,7 @@ void :enum {
 ================
 Enum, Multiple Member, Semicolon-separated
 ================
-void :enum {
-  x;
-  y
-};
+void :enum { x; y };
 0;
 ---
 (block
@@ -443,10 +380,7 @@ void :enum {
 ================
 Enum, Two Member, Both Initialised, Commas
 ================
-void :enum {
-  x :: 0,
-  y :: 0,
-};
+void :enum { x :: 0, y :: 0, };
 0;
 ---
 (block
@@ -457,10 +391,7 @@ void :enum {
 ================
 Enum, Two Member, Both Initialised, Comma-separated
 ================
-void :enum {
-  x :: 0,
-  y :: 0
-};
+void :enum { x :: 0, y :: 0 };
 0;
 ---
 (block
@@ -471,10 +402,7 @@ void :enum {
 ================
 Enum, Two Member, Both Initialised, Semicolons
 ================
-void :enum {
-  x :: 0;
-  y :: 0;
-};
+void :enum { x :: 0; y :: 0; };
 0;
 ---
 (block
@@ -485,10 +413,7 @@ void :enum {
 ================
 Enum, Two Member, Both Initialised, Semicolon-separated
 ================
-void :enum {
-  x :: 0;
-  y :: 0
-};
+void :enum {x :: 0; y :: 0};
 0;
 ---
 (block

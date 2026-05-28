@@ -5,7 +5,6 @@
 #include <lcc/utils.hh>
 
 #include <string>
-#include <string_view>
 
 namespace lcc::x86_64 {
 
@@ -120,46 +119,46 @@ auto opcode_to_string(usz opcode) -> std::string;
 
 namespace regs {
 template <char r>
-constexpr auto LegacyGPR(usz size) -> std::string_view {
+static constexpr auto LegacyGPR(usz size) -> std::string {
     switch (size) {
         default: LCC_ASSERT(false, "Invalid size: {}", size);
-        case 64: return ConstexprFormat<"r{}x", r>();
-        case 32: return ConstexprFormat<"e{}x", r>();
-        case 16: return ConstexprFormat<"{}x", r>();
-        case 8: return ConstexprFormat<"{}l", r>();
+        case 64: return fmt::format("r{}x", r);
+        case 32: return fmt::format("e{}x", r);
+        case 16: return fmt::format("{}x", r);
+        case 8: return fmt::format("{}l", r);
     }
 }
 
 template <int r>
-constexpr auto ExtendedGPR(usz size) -> std::string_view {
+static constexpr auto ExtendedGPR(usz size) -> std::string {
     switch (size) {
         default: LCC_ASSERT(false, "Invalid size: {}", size);
-        case 64: return ConstexprFormat<"r{}", r>();
-        case 32: return ConstexprFormat<"r{}d", r>();
-        case 16: return ConstexprFormat<"r{}w", r>();
-        case 8: return ConstexprFormat<"r{}b", r>();
+        case 64: return fmt::format("r{}", r);
+        case 32: return fmt::format("r{}d", r);
+        case 16: return fmt::format("r{}w", r);
+        case 8: return fmt::format("r{}b", r);
     }
 }
 
 template <detail::static_string s>
-constexpr auto Special(usz size) -> std::string_view {
+static constexpr auto Special(usz size) -> std::string {
     switch (size) {
         default: LCC_ASSERT(false, "Invalid size: {}", size);
-        case 64: return ConstexprFormat<"r{}{}", s[0], s[1]>();
-        case 32: return ConstexprFormat<"e{}{}", s[0], s[1]>();
-        case 16: return ConstexprFormat<"{}{}", s[0], s[1]>();
-        case 8: return ConstexprFormat<"{}{}l", s[0], s[1]>();
+        case 64: return fmt::format("r{}{}", s[0], s[1]);
+        case 32: return fmt::format("e{}{}", s[0], s[1]);
+        case 16: return fmt::format("{}{}", s[0], s[1]);
+        case 8: return fmt::format("{}{}l", s[0], s[1]);
     }
 }
 
 template <int x>
-constexpr auto SSEScalar() -> std::string_view {
-    return ConstexprFormat<"xmm{}", x>();
+static constexpr auto SSEScalar() -> std::string {
+    return fmt::format("xmm{}", x);
 }
 
 } // namespace regs
 
-constexpr auto ToString(Opcode op) -> std::string_view {
+static constexpr auto ToString(Opcode op) -> std::string {
     switch (op) {
         case Opcode::Poison: return "x86_64.poison"; // FIXME: Crash here?
         case Opcode::Return: return "ret";
@@ -213,7 +212,7 @@ constexpr auto ToString(Opcode op) -> std::string_view {
     LCC_UNREACHABLE();
 }
 
-constexpr auto ToString(RegisterId id, usz size) -> std::string_view {
+static constexpr auto ToString(RegisterId id, usz size) -> std::string {
     using namespace regs;
     if (not size) size = 64;
     switch (id) {
@@ -256,7 +255,7 @@ constexpr auto ToString(RegisterId id, usz size) -> std::string_view {
     LCC_UNREACHABLE();
 }
 
-constexpr auto ToString(RegisterId id) -> std::string_view {
+static constexpr auto ToString(RegisterId id) -> std::string {
     return ToString(id, 64);
 }
 

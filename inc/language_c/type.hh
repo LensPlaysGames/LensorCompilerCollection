@@ -29,7 +29,9 @@ class Type {
     Location _location{};
 
 public:
-    Type(TypeKind kind, Location location) : _kind(kind), _location(location) {}
+    Type(TypeKind kind, Location location)
+        : _kind(kind)
+        , _location(location) {}
 
     auto kind() const { return _kind; }
     auto location() { return _location; }
@@ -37,11 +39,13 @@ public:
 
 class IntType : public Type {
 public:
-    IntType(Location location) : Type(TypeKind::Int, location) {}
+    IntType(Location location)
+        : Type(TypeKind::Int, location) {}
 };
 class VoidType : public Type {
 public:
-    VoidType(Location location) : Type(TypeKind::Void, location) {}
+    VoidType(Location location)
+        : Type(TypeKind::Void, location) {}
 };
 
 class PointerType : public Type {
@@ -49,7 +53,10 @@ class PointerType : public Type {
 
 public:
     PointerType(Type* element_type, Location location)
-        : Type(TypeKind::Pointer, location), _element_type(element_type) {}
+        : Type(TypeKind::Pointer, location)
+        , _element_type(element_type) {}
+
+    auto element_type() const { return _element_type; };
 };
 
 class ArrayType : public Type {
@@ -59,11 +66,12 @@ private:
 
 public:
     ArrayType(Type* element_type, Node* dimension, Location location)
-        : Type(TypeKind::Array, location),
-          _element_type(element_type),
-          _dimension(dimension) {}
+        : Type(TypeKind::Array, location)
+        , _element_type(element_type)
+        , _dimension(dimension) {}
 
     auto element_type() const { return _element_type; };
+    auto dimension() const { return _dimension; };
 };
 
 class FunctionType : public Type {
@@ -79,9 +87,9 @@ private:
 
 public:
     FunctionType(Type* return_type, decltype(_parameters) parameters, Location location)
-        : Type(TypeKind::Function, location),
-          _return_type(return_type),
-          _parameters(parameters) {}
+        : Type(TypeKind::Function, location)
+        , _return_type(return_type)
+        , _parameters(parameters) {}
 
     auto return_type() const { return _return_type; };
     auto parameters() const { return _parameters; };

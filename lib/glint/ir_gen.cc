@@ -508,6 +508,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     insert(eq);
                 } break;
                 case TokenKind::Minus: {
+                    // TODO/URGENT
+                    // TODO/FIXME: This should be handled in sema, probably via a sema template or similar.
                     if (unary_expr->operand()->type()->is_dynamic_array()) {
                         auto* struct_t = as<DynamicArrayType>(unary_expr->operand()->type())->struct_type();
                         auto* data_ptr = new (*module) GetMemberPtrInst(
@@ -1771,6 +1773,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 insert(new (*module) BranchInst(exit, expr->location()));
 
                 update_block(otherwise);
+
+                // TODO/FIXME: This should be handled in sema, probably via a sema template or similar.
                 { // Code generation for bad sum type access
 
                     // TODO:
@@ -1899,15 +1903,9 @@ auto IRGen::Generate(Context* context, glint::Module& mod) -> lcc::Module* {
     for (auto* f : mod.functions())
         ir_gen.create_function(f);
 
-    // BUILT-INS
-    // For example, you could read files and parse LCC IR built-ins if you
-    // wanted to do that. Or write it in strings, but I don't think that'd be
-    // very nice as compared to building it in memory.
-    // TODO: Add builtins here like malloc, free, exit, whatever else we
-    // insert a ton of up there. Also need to abstract the dynamic array
-    // initialisation stuff into a builtin probably oh and definitely the
-    // "grow" functionality and stuff like that.
-
+    // TODO: Ideally, IRGen wouldn't "insert" anything that isn't already
+    // there. For now, though, we handle some stuff in IRGen that should be
+    // handled in Sema, so we need these couple functions.
     LCC_ASSERT(
         not mod.function("malloc").empty(),
         "malloc does not exist, shouldn't Glint sema have created it?"
@@ -1916,7 +1914,6 @@ auto IRGen::Generate(Context* context, glint::Module& mod) -> lcc::Module* {
         not mod.function("free").empty(),
         "free does not exist, shouldn't Glint sema have created it?"
     );
-
     LCC_ASSERT(
         not mod.function("exit").empty(),
         "exit does not exist, shouldn't Glint sema have created it?"

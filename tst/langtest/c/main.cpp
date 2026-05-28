@@ -98,7 +98,12 @@ struct CLanguageTest : langtest::Test {
 
         auto parse_info = parse(context);
         bool failed_parse = context.has_error();
-        bool warned_parse = warning_reported(context);
+        bool warned_parse = lcc::rgs::any_of(
+            parse_info.diagnostics,
+            [](const lcc::Context::DiagnosticReport d) {
+                return d.kind == lcc::Diag::Kind::Warning;
+            }
+        );
 
         bool do_checking = should_check() and not failed_parse;
 
@@ -335,7 +340,7 @@ void emit_sarif_file(
 
     for (auto& test_name : results.completed_tests()) {
         JSONObject result{};
-        result.add_property("ruleId", "LangTest");
+        result.add_property("ruleId", "LangTest.C");
         // Record pass vs fail.
         if (results.test_passes(test_name)) {
             result.add_property("kind", "pass");

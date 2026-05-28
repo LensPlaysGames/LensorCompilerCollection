@@ -1180,7 +1180,11 @@ lcc::glint::Lexer::MacroExpansion::MacroExpansion(
     Macro& macro,
     StringMap<Token> args,
     Location l
-) : m(&macro), it(macro.expansion.begin()), bound_arguments(std::move(args)), location(l) {
+)
+    : m(&macro)
+    , it(macro.expansion.begin())
+    , bound_arguments(std::move(args))
+    , location(l) {
     for (usz i = 0; i < macro.definitions.size(); i++)
         gensyms.push_back(fmt::format("__L{}", lexer.gensym_counter++));
 }

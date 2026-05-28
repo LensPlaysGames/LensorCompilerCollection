@@ -948,8 +948,6 @@ void lcc::glint::Sema::AnalyseModule() {
     // iterator invalidation here.
     for (usz function_index = 0; function_index < mod.functions().size(); ++function_index)
         AnalyseFunctionBody(mod.functions().at(function_index));
-
-    // TODO: Remove unused, _external_ functions.
 }
 
 void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {

@@ -1,0 +1,49 @@
+================
+#define
+:syntax_error
+:desc missing macro name
+================
+
+#define
+
+================
+#define foo
+:syntax
+:desc macro definition, no replacement
+================
+
+#define foo
+
+---
+
+(block)
+
+================
+#undef
+:syntax_error
+:desc missing macro name
+================
+
+#undef
+
+================
+#undef
+:syntax
+================
+
+#undef foo
+
+---
+
+(block)
+
+================
+#undef, extra tokens
+:syntax_warn
+================
+
+#undef foo bar
+
+---
+
+(block)

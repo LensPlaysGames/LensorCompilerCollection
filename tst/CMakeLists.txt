@@ -16,17 +16,6 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-fcolor-diagnostics)
 endif()
 
-# Use mold as the default linker, if it exists.
-if (
-    CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
-    OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
-  )
-    find_program(MOLD_LINKER "mold")
-    if (MOLD_LINKER)
-        add_link_options(-fuse-ld=mold)
-    endif()
-endif()
-
 cmake_minimum_required(VERSION 3.24)
 project(lcctest)
 
@@ -37,6 +26,22 @@ project(lcctest)
 # We don't want to build an LCC for no reason, unless it is used by a
 # testing facility. We don't need the LCC binary, basically.
 add_subdirectory("./../" "lcc" EXCLUDE_FROM_ALL)
+
+if (USE_LTO)
+  # Do link time optimisation
+  # NOTE: We must ensure the linker matches the compiler toolchain for LTO
+  # to work properly.
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-flto)
+    add_link_options(-flto -fuse-ld=bfd)
+  elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-flto)
+    add_link_options(-flto -fuse-ld=lld)
+  elseif (MSVC)
+    add_compile_options(/GL)
+    add_link_options(/LTCG)
+  endif()
+endif()
 
 add_subdirectory("./vew/" "vew" EXCLUDE_FROM_ALL)
 
