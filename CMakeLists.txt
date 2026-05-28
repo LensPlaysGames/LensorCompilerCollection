@@ -75,6 +75,12 @@ if (USE_LTO)
     add_compile_options(/GL)
     add_link_options(/LTCG)
   endif()
+else()
+  # If we aren't doing LTO, we might as well try to use a faster linker.
+  find_program(MOLD_LINKER "mold")
+  if (MOLD_LINKER)
+    set(CMAKE_EXE_LINKER ${MOLD_LINKER})
+  endif()
 endif()
 
 # Output HTML as well as JS if compiling with emscripten (for wasm)
@@ -534,7 +540,7 @@ endif()
 if (BUILD_TESTING)
   message(
     FATAL_ERROR
-    "CTest Testing has not yet been re-implemented
+    "CTest Testing has not been implemented
     see ${CMAKE_CURRENT_LIST_DIR}/tst/README.org"
   )
 endif()
