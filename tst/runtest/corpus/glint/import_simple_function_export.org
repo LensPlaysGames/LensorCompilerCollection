@@ -2,14 +2,14 @@
 
 #+NAME: source
 #+begin_src glint
-  import foo;
+  import foo_simplefunction;
 
   bar;
 #+end_src
 
 #+NAME: source
 #+begin_src glint
-  module foo;
+  module foo_simplefunction;
 
   export bar : int() = 69;
 #+end_src
