@@ -21,6 +21,7 @@ Block, Single Expression
 ================
 Block, Multiple Expression, Soft Separator
 :syntax
+:parse_warn
 ================
 {0,0};
 
@@ -31,6 +32,7 @@ Block, Multiple Expression, Soft Separator
 ================
 Block, Multiple Expression, Soft Separators
 :syntax
+:parse_warn
 ================
 {0,0,};
 

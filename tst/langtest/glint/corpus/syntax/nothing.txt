@@ -60,6 +60,7 @@ whitespace, horizontal tab
 ================
 empty parenthetical expression
 :syntax
+:warn_parse
 ================
 ()
 ---

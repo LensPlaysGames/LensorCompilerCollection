@@ -3,7 +3,7 @@ Decimal
 :syntax
 ================
 
-0
+0;
 
 ---
 
@@ -15,7 +15,7 @@ Decimal, Leading Zero
 :fail_parse
 ================
 
-069
+069;
 
 ---
 
@@ -26,7 +26,7 @@ Binary
 :syntax
 ================
 
-0b0
+0b0;
 
 ---
 
@@ -37,7 +37,7 @@ Binary, Leading Zero
 :syntax
 ================
 
-0b0001
+0b0001;
 
 ---
 
@@ -48,7 +48,7 @@ Octal
 :syntax
 ================
 
-0o0
+0o0;
 
 ---
 
@@ -59,7 +59,7 @@ Octal, Leading Zero
 :syntax
 ================
 
-0o007
+0o007;
 
 ---
 
@@ -70,7 +70,7 @@ Hexadecimal
 :syntax
 ================
 
-0x0
+0x0;
 
 ---
 
@@ -81,7 +81,7 @@ Hexadecimal, Leading Zero
 :syntax
 ================
 
-0x0d
+0x0d;
 
 ---
 
@@ -93,7 +93,7 @@ Invalid Digit, Binary
 :fail_parse
 ================
 
-0b20
+0b20;
 
 ---
 ()
@@ -104,7 +104,7 @@ Invalid Digit, Octal
 :fail_parse
 ================
 
-0o90
+0o90;
 
 ---
 ()
@@ -115,7 +115,7 @@ Invalid Digit, Hexadecimal
 :fail_parse
 ================
 
-0xz0
+0xz0;
 
 ---
 ()
