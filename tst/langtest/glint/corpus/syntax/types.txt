@@ -157,7 +157,7 @@ int.ptr;
 :syntax
 ================
 
-int.pptr
+int.pptr;
 
 ---
 

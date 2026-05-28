@@ -57,7 +57,7 @@ Macro w/ Defines
 
 macro foo defines x emits x endmacro
 
-foo
+foo;
 
 ---
 
