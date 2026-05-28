@@ -4,12 +4,12 @@ Basically, tests that Glint sema is able to find and resolve the module's metada
 
 #+NAME: source
 #+begin_src glint
-import foo;
+import foo_empty;
 #+end_src
 
 #+NAME: source
 #+begin_src glint
-module foo;
+module foo_empty;
 #+end_src
 
 #+NAME: status

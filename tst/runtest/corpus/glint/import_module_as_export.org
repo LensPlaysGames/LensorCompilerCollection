@@ -3,19 +3,19 @@
 #+NAME: source
 #+begin_src glint
   ;; program P;
-  import B;
+  import B_asexport;
   foo.x;
 #+end_src
 
 #+NAME: source
 #+begin_src glint
-  module B;
-  export import A as foo;
+  module B_asexport;
+  export import A_asexport as foo;
 #+end_src
 
 #+NAME: source
 #+begin_src glint
-  module A;
+  module A_asexport;
   export x :: 69;
 #+end_src
 

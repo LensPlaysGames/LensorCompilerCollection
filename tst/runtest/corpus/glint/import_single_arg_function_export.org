@@ -2,14 +2,14 @@
 
 #+NAME: source
 #+begin_src glint
-  import foo;
+  import foo_singlearg;
 
   bar 27;
 #+end_src
 
 #+NAME: source
 #+begin_src glint
-  module foo;
+  module foo_singlearg;
 
   export bar : int(x : int) = x + 42;
 #+end_src
