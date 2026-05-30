@@ -831,6 +831,25 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             lhs = new Block(*constituents, location);
         } break;
 
+        case TokenKind::LeftParenthesis: {
+            // Eat "("
+            NextToken();
+
+            lhs = ParseExpression(reset_precedence);
+
+            if (tok.kind != TokenKind::RightParenthesis) {
+                auto e = Error(
+                    "c/expected",
+                    "Expected right parenthesis to close parenthesized expression"
+                );
+                e.fix_by_inserting_at(tok.location, "}");
+                return e;
+            }
+
+            // Eat ")"
+            NextToken();
+        } break;
+
         case TokenKind::Integer: {
             lhs = new IntegerLiteral(size_t(tok.integer_value), tok.location);
             NextToken();
@@ -841,7 +860,6 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
 
         case TokenKind::Fractional:
         case TokenKind::OpAsterisk:
-        case TokenKind::LeftParenthesis:
         case TokenKind::LeftSquareBracket:
         case TokenKind::OpPlus:
         case TokenKind::OpMinus:
