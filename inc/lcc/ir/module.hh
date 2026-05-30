@@ -66,7 +66,9 @@ public:
     explicit Module(
         Context* ctx,
         std::string name = "<Peanut Butter Banana Pants Module (Unnamed)>"
-    ) : _ctx(ctx), _name(std::move(name)) {}
+    )
+        : _ctx(ctx)
+        , _name(std::move(name)) {}
 
     /// Get the context that owns the module.
     [[nodiscard]]

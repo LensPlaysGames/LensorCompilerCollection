@@ -81,13 +81,13 @@ public:
 
     // Move constructor
     Diag(Diag&& other) noexcept
-        : kind(other.kind),
-          context(other.context),
-          where(other.where),
-          id(std::move(other.id)),
-          message(std::move(other.message)),
-          attached(std::move(other.attached)),
-          fixes(std::move(other.fixes)) {
+        : kind(other.kind)
+        , context(other.context)
+        , where(other.where)
+        , id(std::move(other.id))
+        , message(std::move(other.message))
+        , attached(std::move(other.attached))
+        , fixes(std::move(other.fixes)) {
         other.kind = Kind::None;
     }
 
@@ -105,7 +105,8 @@ public:
     }
 
     /// Create an empty diagnostic.
-    explicit Diag() : kind(Kind::None) {};
+    explicit Diag()
+        : kind(Kind::None) {};
 
     /// Disallow copying.
     Diag(const Diag&) = delete;
@@ -124,13 +125,10 @@ public:
     );
 
     /// Issue a diagnostic with no location.
-    Diag(
-        Kind kind_,
-        std::string&& id_,
-        std::string&& message_
-    ) : kind(kind_),
-        id(std::move(id_)),
-        message(std::move(message_)) {}
+    Diag(Kind kind_, std::string&& id_, std::string&& message_)
+        : kind(kind_)
+        , id(std::move(id_))
+        , message(std::move(message_)) {}
 
     /// Issue a diagnostic with a format string and arguments.
     template <typename... Args>
@@ -141,7 +139,8 @@ public:
         std::string id_,
         fmt::format_string<Args...> fmt,
         Args&&... args
-    ) : Diag{context_, kind_, where_, id_, fmt::format(fmt, std::forward<Args>(args)...)} {}
+    )
+        : Diag{context_, kind_, where_, id_, fmt::format(fmt, std::forward<Args>(args)...)} {}
 
     /// Issue a diagnostic with a format string and arguments, but no location.
     template <typename... Args>
