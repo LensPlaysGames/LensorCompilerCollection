@@ -91,8 +91,8 @@ auto PrintMInstImpl(const MInst& inst, auto&& inst_opcode) -> std::string {
              or MInst::is_terminator(MInst::Kind(inst.opcode()));
 
     const auto PrintMInstClobbers = [](const MInst& i) {
-        bool has_clobbers = i.operand_clobbers().empty()
-                        and i.register_clobbers().empty();
+        bool has_clobbers = i.operand_clobbers().size()
+                         or i.register_clobbers().size();
 
         // FIXME: possibly confusing parameter naming to avoid shadowing
         const auto PrintMInstRegisterClobbers = [](const MInst& ii) {
