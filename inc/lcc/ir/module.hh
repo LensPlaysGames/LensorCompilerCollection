@@ -66,7 +66,9 @@ public:
     explicit Module(
         Context* ctx,
         std::string name = "<Peanut Butter Banana Pants Module (Unnamed)>"
-    ) : _ctx(ctx), _name(std::move(name)) {}
+    )
+        : _ctx(ctx)
+        , _name(std::move(name)) {}
 
     /// Get the context that owns the module.
     [[nodiscard]]
@@ -130,6 +132,9 @@ public:
     auto next_vreg() -> usz {
         return _virtual_register++;
     }
+
+    [[nodiscard]]
+    auto next_vreg_ref() -> usz& { return _virtual_register; }
 
     [[nodiscard]]
     auto global_by_name(std::string_view global_name) -> Result<GlobalVariable*> {

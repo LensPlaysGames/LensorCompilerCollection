@@ -59,7 +59,8 @@ whitespace, horizontal tab
 
 ================
 empty parenthetical expression
-:syntax
+:syntax_error
+:warn_parse
 ================
 ()
 ---
@@ -114,6 +115,7 @@ soft and hard separators
 ================
 mix of empty parenthetical expressions and soft separators
 :syntax
+:syntax_error
 ================
 ,(,(,,(),,),,,,,,),,,
 ---
@@ -123,6 +125,8 @@ mix of empty parenthetical expressions and soft separators
 ================
 mix of empty parenthetical expressions and hard separators
 :syntax
+:syntax_error
+:syntax_warn
 ================
 ;(;(;;();;(;;););;;;);;
 ---

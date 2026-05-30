@@ -348,6 +348,7 @@ void lcc::parser::Parser::NextNumber() {
                     "Expected at least one {} digit",
                     name
                 );
+                return;
             }
 
             /// Actually parse the number.
@@ -435,7 +436,7 @@ void lcc::parser::Parser::NextNumber() {
         }
 
         /// If the next character is a space or delimiter, then this is a literal 0.
-        if (IsSpace(lastc)) return;
+        if (IsSpace(lastc) or lastc == ',') return;
 
         /// Anything else is an error.
         Error(ErrorId::InvalidLiteral, "Invalid integer literal");

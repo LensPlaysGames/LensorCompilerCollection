@@ -23,6 +23,7 @@ foo 69;
 ================
 Multiple Separated Expressions Doesn't Become Call
 :syntax
+:parse_warn
 ================
 
 foo, 69;
@@ -34,6 +35,7 @@ foo, 69;
 ================
 Multiple Separated Expressions Doesn't Become Call, Even Within Parentheses
 :syntax
+:parse_warn
 ================
 
 (foo, 69);

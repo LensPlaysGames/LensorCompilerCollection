@@ -797,7 +797,7 @@ void Module::emit(std::filesystem::path output_file_path) {
             // Register Allocation
             auto desc = cconv::machine_description(context());
             for (auto& mfunc : machine_ir) {
-                if (not allocate_registers(desc, mfunc)) {
+                if (not allocate_registers(desc, mfunc, _virtual_register)) {
                     std::string name{};
                     if (mfunc.names().size())
                         name = mfunc.names().at(0).name;

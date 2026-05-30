@@ -329,6 +329,7 @@ Byte Literal, out-of-range
 ================
 Byte Literal, Missing closing `
 :fail_parse
+:parse_warn
 ================
 `°;
 
@@ -389,9 +390,7 @@ Fractional Literal, 123456789.123456789
 ================
 Fractional Literal, 1.a
 :fail_parse
+:parse_warn
 ================
-1.a
+1.a;
 ---
-
-(block (fractional_literal))
-

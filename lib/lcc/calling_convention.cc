@@ -24,18 +24,10 @@ auto machine_description(Context* context) -> MachineDescription {
         std::vector<usz> scalar_registers{};
         std::vector<usz> volatile_registers{};
         if (context->target()->is_cconv_ms()) {
-            desc.return_registers.emplace_back(
-                MachineDescription::RegistersPerCategory{
-                    +Register::Category::DEFAULT,
-                    {+x86_64::RegisterId::RAX}
-                }
-            );
-            desc.return_registers.emplace_back(
-                MachineDescription::RegistersPerCategory{
-                    +Register::Category::FLOAT,
-                    {+x86_64::RegisterId::XMM0}
-                }
-            );
+            desc.return_registers[+Register::Category::DEFAULT]
+                = {+x86_64::RegisterId::RAX};
+            desc.return_registers[+Register::Category::FLOAT]
+                = {+x86_64::RegisterId::XMM0};
             // Just the volatile registers
             rgs::transform(
                 cconv::msx64::volatile_regs,
@@ -61,18 +53,10 @@ auto machine_description(Context* context) -> MachineDescription {
                 [](auto r) { return lcc::operator+(r); }
             );
         } else if (context->target()->is_cconv_sysv()) {
-            desc.return_registers.emplace_back(
-                MachineDescription::RegistersPerCategory{
-                    +Register::Category::DEFAULT,
-                    {+x86_64::RegisterId::RAX, +x86_64::RegisterId::RDX}
-                }
-            );
-            desc.return_registers.emplace_back(
-                MachineDescription::RegistersPerCategory{
-                    +Register::Category::FLOAT,
-                    {+x86_64::RegisterId::XMM0}
-                }
-            );
+            desc.return_registers[+Register::Category::DEFAULT]
+                = {+x86_64::RegisterId::RAX, +x86_64::RegisterId::RDX};
+            desc.return_registers[+Register::Category::FLOAT]
+                = {+x86_64::RegisterId::XMM0};
             // Just the volatile registers
             rgs::transform(
                 cconv::sysv::volatile_regs,
@@ -96,14 +80,10 @@ auto machine_description(Context* context) -> MachineDescription {
             jeep_registers.size(),
             "Must populate general purpose register list"
         );
-        desc.registers.emplace_back(
-            +Register::Category::DEFAULT,
-            std::move(jeep_registers)
-        );
-        desc.registers.emplace_back(
-            +Register::Category::FLOAT,
-            std::move(scalar_registers)
-        );
+        desc.registers[+Register::Category::DEFAULT]
+            = std::move(jeep_registers);
+        desc.registers[+Register::Category::FLOAT]
+            = std::move(scalar_registers);
 
         desc.volatile_registers = std::move(volatile_registers);
         desc.preserve_volatile_opcodes.emplace_back(

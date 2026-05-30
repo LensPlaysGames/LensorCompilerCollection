@@ -25,16 +25,16 @@ void JSONObject::add_property(std::string key, JSONItem value) {
     properties.emplace_back(key, value);
 }
 void JSONArray::add_element(int value) {
-    elements.emplace_back(JSONItem{value});
+    elements.emplace_back(value);
 }
 void JSONArray::add_element(std::string value) {
-    elements.emplace_back(JSONItem{value});
+    elements.emplace_back(value);
 }
 void JSONArray::add_element(JSONArray value) {
-    elements.emplace_back(JSONItem{value});
+    elements.emplace_back(value);
 }
 void JSONArray::add_element(JSONObject value) {
-    elements.emplace_back(JSONItem{value});
+    elements.emplace_back(value);
 }
 void JSONArray::add_element(JSONItem value) {
     elements.emplace_back(value);

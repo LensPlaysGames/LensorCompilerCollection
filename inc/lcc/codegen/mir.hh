@@ -170,12 +170,12 @@ private:
 
 public:
     MInst(Kind kind, Register reg)
-        : _register(reg),
-          _opcode(static_cast<usz>(kind)) {};
+        : _register(reg)
+        , _opcode(static_cast<usz>(kind)) {};
 
     MInst(usz opcode, Register reg)
-        : _register(reg),
-          _opcode(opcode) {};
+        : _register(reg)
+        , _opcode(opcode) {};
 
     [[nodiscard]]
     usz reg() const { return _register.value; }
@@ -252,7 +252,7 @@ public:
         return _operand_clobbers;
     }
     [[nodiscard]]
-    std::vector<usz> operand_clobbers() const {
+    const std::vector<usz>& operand_clobbers() const {
         return _operand_clobbers;
     }
     void add_operand_clobber(usz operand_index) {
@@ -264,7 +264,7 @@ public:
         return _register_clobbers;
     }
     [[nodiscard]]
-    std::vector<usz> register_clobbers() const {
+    const std::vector<usz>& register_clobbers() const {
         return _register_clobbers;
     }
     void add_register_clobber(usz register_id) {
@@ -274,12 +274,10 @@ public:
     [[nodiscard]]
     static bool is_terminator(Kind k) {
         // TODO: noreturn calls?
-        // clang-format off
         return k == Kind::Return
             or k == Kind::Branch
             or k == Kind::CondBranch
             or k == Kind::Unreachable;
-        // clang-format on
     }
 };
 
@@ -296,7 +294,8 @@ class MBlock {
     Location _location;
 
 public:
-    MBlock(std::string name) : _name(name) {};
+    MBlock(std::string name)
+        : _name(name) {};
 
     [[nodiscard]]
     auto instructions() -> std::vector<MInst>& {
@@ -380,19 +379,20 @@ class MFunction {
     // TODO: This is awful; we need to reduce interop between IR and MIR as
     // much as possible, and this just directly violates that.
     // high priority
+    // high priority
+    // TODO: high priority
+    // FIXME: high priority
     std::vector<AllocaInst*> _locals{};
 
     std::set<u8> _registers_used{};
 
-    Location _location;
+    Location _location{};
 
-    CallConv cc;
+    CallConv _cc{};
 
 public:
-    // For target-specific stuff...
-    usz sysv_integer_parameters_seen{};
-
-    MFunction(CallConv call_conv) : cc(call_conv) {}
+    MFunction(CallConv call_conv)
+        : _cc(call_conv) {}
 
     auto names() -> std::vector<IRName>& {
         return _names;
@@ -411,7 +411,7 @@ public:
     }
 
     auto calling_convention() const -> CallConv {
-        return cc;
+        return _cc;
     }
 
     [[nodiscard]]

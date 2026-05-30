@@ -83,6 +83,13 @@ else()
   endif()
 endif()
 
+if (PROFILING)
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-pg)
+    add_link_options(-pg)
+  endif()
+endif()
+
 # Output HTML as well as JS if compiling with emscripten (for wasm)
 if (EMSCRIPTEN)
   # Disable "native" optimisation.

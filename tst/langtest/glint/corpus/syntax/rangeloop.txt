@@ -1,6 +1,7 @@
 ================
 Range-based Loop
 :syntax
+:warn_parse
 ================
 
 ;; for <identifier> in <container-expression> <body-expression>

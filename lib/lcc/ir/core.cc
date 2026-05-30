@@ -35,10 +35,11 @@ Function::Function(
     Linkage linkage,
     CallConv calling_convention,
     Location location
-) : UseTrackingValue(Kind::Function, ty),
-    _location(location),
-    mod(module),
-    cc(calling_convention) {
+)
+    : UseTrackingValue(Kind::Function, ty)
+    , _location(location)
+    , mod(module)
+    , cc(calling_convention) {
     LCC_ASSERT(mod and ty);
     add_name(std::move(mangled_name), linkage);
 
@@ -57,9 +58,10 @@ GlobalVariable::GlobalVariable(
     std::string name,
     Linkage linkage,
     Value* init
-) : UseTrackingValue(Value::Kind::GlobalVariable, Type::PtrTy),
-    _init(init),
-    _allocated_type(t) {
+)
+    : UseTrackingValue(Value::Kind::GlobalVariable, Type::PtrTy)
+    , _init(init)
+    , _allocated_type(t) {
     LCC_ASSERT(mod and t);
     _names.push_back({std::move(name), linkage});
     mod->add_var(this);
@@ -1251,6 +1253,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     /// of a store is always of type \c ptr), so there is no reason
     /// to include it in the printout. The type is omitted if \c false
     /// is passed for \c include_type.
+    [[nodiscard]]
     auto Val(Value* v, bool include_type = true) -> std::string {
         LCC_ASSERT(v);
 

@@ -1177,7 +1177,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             // expression).
             // "(" ")" => ()
             // TODO: Should we return the empty expression if we get an empty
-            // parenthetical expression? We currently have no way to do that.
+            // parenthetical expression?
             if (Consume(Tk::RParen)) {
                 return Error(
                     ErrorId::Miscellaneous,
@@ -1187,6 +1187,9 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
 
             auto exprs = ParseExpressionsUntil(Tk::RParen);
             if (not exprs) return exprs.diag();
+
+            if (not Consume(Tk::RParen))
+                return Error(ErrorId::Expected, "Expected )");
 
             if (exprs->empty()) {
                 // non-empty empty ()
@@ -1209,9 +1212,6 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                     {start_location, tok.location}
                 );
             }
-
-            if (not Consume(Tk::RParen))
-                return Error(ErrorId::Expected, "Expected )");
 
             lhs->location() = {lhs->location(), tok.location};
         } break;
