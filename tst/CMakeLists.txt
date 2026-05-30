@@ -1,3 +1,13 @@
+# User Options
+set(
+  VERIFY_COMPILERS ON
+  CACHE BOOL
+  "Whether or not to build full GCC and full LLVM builds.
+  This helps verify that LCC code is standards-compliant and portable."
+)
+
+# Global Configuration
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # Export compilation database in JSON format.
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
@@ -11,9 +21,9 @@ endif()
 
 # Turn on diagnostics colours.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    add_compile_options(-fdiagnostics-color=always)
+  add_compile_options(-fdiagnostics-color=always)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    add_compile_options(-fcolor-diagnostics)
+  add_compile_options(-fcolor-diagnostics)
 endif()
 
 cmake_minimum_required(VERSION 3.24)
@@ -166,6 +176,7 @@ add_custom_target(
   vew
   WORKING_DIRECTORY
   ${CMAKE_CURRENT_LIST_DIR}
+  VERBATIM
   USES_TERMINAL
 )
 
@@ -186,6 +197,7 @@ add_custom_target(
   test
   WORKING_DIRECTORY
   ${CMAKE_CURRENT_LIST_DIR}
+  VERBATIM
   USES_TERMINAL
 )
 
@@ -200,3 +212,42 @@ add_custom_target(
   DEPENDS
   test_and_view_command
 )
+
+if (VERIFY_COMPILERS)
+  set(
+    COMMON_DEFINES
+    -DUSE_LTO=OFF
+  )
+  add_custom_target(
+    gnu_build
+    COMMAND
+    ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B fullgnu -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc ${COMMON_DEFINES}
+    COMMAND
+    ${CMAKE_COMMAND} --build fullgnu --target lcc
+    VERBATIM
+  )
+  add_custom_target(
+    llvm_build
+    COMMAND
+    ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B fullllvm -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libc++" ${COMMON_DEFINES}
+    COMMAND
+    ${CMAKE_COMMAND} --build fullllvm --target lcc
+    VERBATIM
+  )
+  add_custom_target(
+    llvmgnu_build
+    COMMAND
+    ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B llvmgnu -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libstdc++"  ${COMMON_DEFINES}
+    COMMAND
+    ${CMAKE_COMMAND} --build llvmgnu --target lcc
+    VERBATIM
+  )
+  add_custom_target(
+    verify_compilers
+    DEPENDS
+    gnu_build
+    llvm_build
+    llvmgnu_build
+  )
+  add_dependencies(test verify_compilers)
+endif()
