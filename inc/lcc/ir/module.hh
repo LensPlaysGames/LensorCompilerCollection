@@ -132,6 +132,9 @@ public:
     }
 
     [[nodiscard]]
+    auto next_vreg_ref() -> usz& { return _virtual_register; }
+
+    [[nodiscard]]
     auto global_by_name(std::string_view global_name) -> Result<GlobalVariable*> {
         for (auto* v : vars()) {
             for (auto n : v->names()) {

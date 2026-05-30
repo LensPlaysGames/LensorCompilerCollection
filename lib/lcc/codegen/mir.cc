@@ -111,7 +111,7 @@ auto PrintMInstImpl(const MInst& inst, auto&& inst_opcode) -> std::string {
             return fmt::join(
                 vws::transform(
                     ii.operand_clobbers(),
-                    [&](usz operand_index) {
+                    [&](auto operand_index) {
                         return fmt::format("op.{}", operand_index);
                     }
                 ),
@@ -121,13 +121,13 @@ auto PrintMInstImpl(const MInst& inst, auto&& inst_opcode) -> std::string {
 
         return fmt::format(
             "{}{}{}{}{}",
-            (not has_clobbers) ? "" : " {CLOBBERS: ",
+            ((not has_clobbers) ? "" : " {CLOBBERS: "),
             PrintMInstOperandClobbers(i),
             // If there are register clobbers *and* operand clobbers, we have to
             // separate them somehow.
-            i.operand_clobbers().empty() or i.register_clobbers().empty() ? "" : ", ",
+            ((i.operand_clobbers().empty() or i.register_clobbers().empty()) ? "" : ", "),
             PrintMInstRegisterClobbers(i),
-            (not has_clobbers) ? "" : "}"
+            ((not has_clobbers) ? "" : "}")
         );
     };
 

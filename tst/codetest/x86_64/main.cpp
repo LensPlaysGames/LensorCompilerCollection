@@ -317,7 +317,7 @@ bool run_test(
     {
         lcc::MachineDescription desc = lcc::cconv::machine_description(&ctx);
         for (auto& mfunc : machine_ir) {
-            if (not allocate_registers(desc, mfunc))
+            if (not allocate_registers(desc, mfunc, mod->next_vreg_ref()))
                 return false;
         }
     }
