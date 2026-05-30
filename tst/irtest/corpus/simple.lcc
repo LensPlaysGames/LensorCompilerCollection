@@ -36,6 +36,21 @@ func (internal): ccc f32():
 
 ---
 
-func (internal): ccc i32():
+func (internal): ccc f32():
   bb0:
     return f32 0.1
+
+================
+Integer Literal, Zero
+:desc We had issues wrt delimiters following just zero erroring
+================
+
+main (exported): ccc i32():
+  bb0:
+    %0 = add i32 0, 0
+
+---
+
+main (exported): ccc i32():
+  bb0:
+    %0 = add i32 0, 0
