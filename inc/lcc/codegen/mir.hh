@@ -252,7 +252,7 @@ public:
         return _operand_clobbers;
     }
     [[nodiscard]]
-    std::vector<usz> operand_clobbers() const {
+    const std::vector<usz>& operand_clobbers() const {
         return _operand_clobbers;
     }
     void add_operand_clobber(usz operand_index) {
@@ -264,7 +264,7 @@ public:
         return _register_clobbers;
     }
     [[nodiscard]]
-    std::vector<usz> register_clobbers() const {
+    const std::vector<usz>& register_clobbers() const {
         return _register_clobbers;
     }
     void add_register_clobber(usz register_id) {
