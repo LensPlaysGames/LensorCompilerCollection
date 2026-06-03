@@ -62,7 +62,8 @@ public:
 
 protected:
     /// Construct a type.
-    explicit constexpr Type(Kind kind_) : kind(kind_) {}
+    explicit constexpr Type(Kind kind_)
+        : kind(kind_) {}
 
 public:
     virtual ~Type() = default;
@@ -110,7 +111,10 @@ class ArrayType : public Type {
     Type* _element_type;
 
 private:
-    ArrayType(usz length, Type* element_type) : Type(Kind::Array), _length(length), _element_type(element_type) {}
+    ArrayType(usz length, Type* element_type)
+        : Type(Kind::Array)
+        , _length(length)
+        , _element_type(element_type) {}
 
 public:
     static auto Get(Context* ctx, usz length, Type* element_type) -> ArrayType*;
@@ -186,7 +190,9 @@ class IntegerType : public Type {
     usz _width;
 
 private:
-    constexpr IntegerType(usz width) : Type(Kind::Integer), _width(width) {}
+    constexpr IntegerType(usz width)
+        : Type(Kind::Integer)
+        , _width(width) {}
 
 public:
     static auto Get(Context* ctx, usz width) -> IntegerType*;
@@ -206,7 +212,9 @@ class FractionalType : public Type {
     usz _width;
 
 private:
-    constexpr FractionalType(usz width) : Type(Kind::Fractional), _width(width) {}
+    constexpr FractionalType(usz width)
+        : Type(Kind::Fractional)
+        , _width(width) {}
 
 public:
     static auto Get(Context* ctx, usz width) -> FractionalType*;
@@ -229,13 +237,13 @@ class StructType : public Type {
 
 private:
     StructType(std::vector<Type*> members, std::string name)
-        : Type(Kind::Struct),
-          _members(std::move(members)),
-          _id(std::move(name)) {}
+        : Type(Kind::Struct)
+        , _members(std::move(members))
+        , _id(std::move(name)) {}
     StructType(std::vector<Type*> members, long int index)
-        : Type(Kind::Struct),
-          _members(std::move(members)),
-          _id(index) {}
+        : Type(Kind::Struct)
+        , _members(std::move(members))
+        , _id(index) {}
 
 public:
     static constexpr usz AlignNotSet = (usz) -1;
