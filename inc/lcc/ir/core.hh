@@ -388,9 +388,7 @@ public:
 
     /// Check if this is a terminator instruction.
     [[nodiscard]]
-    auto is_terminator() const -> bool {
-        return kind() >= Value::Kind::Branch and kind() <= Value::Kind::Unreachable;
-    }
+    auto is_terminator() const -> bool;
 
     /// Get the source location of this instruction.
     [[nodiscard]]

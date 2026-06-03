@@ -137,17 +137,25 @@ class FunctionType : public Type {
     std::vector<Type*> param_types;
 
     bool _variadic{false};
+    bool _noreturn{false};
 
 private:
-    FunctionType(Type* ret, std::vector<Type*> params, bool variadic = false)
-        : Type(Kind::Function),
-          return_type(ret),
-          param_types(std::move(params)),
-          _variadic(variadic) {}
+    FunctionType(Type* ret, std::vector<Type*> params, bool variadic = false, bool noreturn = false)
+        : Type(Kind::Function)
+        , return_type(ret)
+        , param_types(std::move(params))
+        , _variadic(variadic)
+        , _noreturn(noreturn) {}
 
 public:
     /// Get or create a function type.
-    static auto Get(Context* ctx, Type* ret, std::vector<Type*> params, bool is_variadic = false) -> FunctionType*;
+    static auto Get(
+        Context* ctx,
+        Type* ret,
+        std::vector<Type*> params,
+        bool is_variadic = false,
+        bool is_noreturn = false
+    ) -> FunctionType*;
 
     /// Get the return type of this function.
     Type* ret() const { return return_type; }
@@ -163,6 +171,9 @@ public:
 
     /// True if this function type is (C-style) variadic, false otherwise.
     bool variadic() const { return _variadic; }
+
+    /// True if this function type does not return, false otherwise.
+    bool noreturn() const { return _noreturn; }
 
     /// RTTI.
     static bool classof(const Type* t) { return t->kind == Kind::Function; }

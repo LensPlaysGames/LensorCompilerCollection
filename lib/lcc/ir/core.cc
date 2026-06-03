@@ -241,18 +241,35 @@ auto Type::string(bool use_colour) const -> std::string {
 }
 
 /// Get or create a function type.
-FunctionType* FunctionType::Get(Context* ctx, Type* ret, std::vector<Type*> params, bool is_variadic) {
+FunctionType* FunctionType::Get(
+    Context* ctx,
+    Type* ret,
+    std::vector<Type*> params,
+    bool is_variadic,
+    bool is_noreturn
+) {
     LCC_ASSERT(ctx and ret);
 
     // Look in ctx type cache.
-    const auto& found = rgs::find_if(ctx->function_types, [&](const Type* t) {
-        const FunctionType* f = as<FunctionType>(t);
-        return f->ret() == ret && rgs::equal(f->params(), params) && f->variadic() == is_variadic;
-    });
+    const auto& found = rgs::find_if(
+        ctx->function_types,
+        [&](const Type* t) {
+            const FunctionType* f = as<FunctionType>(t);
+            return f->ret() == ret
+               and rgs::equal(f->params(), params)
+               and f->variadic() == is_variadic
+               and f->noreturn() == is_noreturn;
+        }
+    );
     if (found != ctx->function_types.end())
         return as<FunctionType>(*found);
 
-    FunctionType* out = new (ctx) FunctionType(ret, params, is_variadic);
+    FunctionType* out = new (ctx) FunctionType(
+        ret,
+        params,
+        is_variadic,
+        is_noreturn
+    );
     ctx->function_types.push_back(out);
     return out;
 }
@@ -367,7 +384,7 @@ void Block::insert_after(Inst* to_insert, Inst* after) {
 Inst* Block::insert(Inst* i, bool force) {
     LCC_ASSERT(i);
     if (not force and closed())
-        Diag::ICE("Insertion into block that has already been closed.");
+        Diag::ICE("Insertion into block that has already been closed: {}", name());
 
     inst_list.push_back(i);
     i->parent = this;
@@ -1570,6 +1587,13 @@ auto Value::string() const -> std::string {
 
 void Value::print() const {
     fmt::print("{}", string());
+}
+
+auto Inst::is_terminator() const -> bool {
+    if (auto call = lcc::cast<CallInst>(this))
+        return call->callee_type->noreturn();
+
+    return kind() >= Value::Kind::Branch and kind() <= Value::Kind::Unreachable;
 }
 
 } // namespace lcc

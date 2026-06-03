@@ -1190,9 +1190,7 @@ public:
 
 class FuncType : public Type {
 public:
-    /// This should allow us to easily support attributes that
-    /// take arguments once we need those.
-    using Attributes = std::unordered_map<FuncAttr, bool>;
+    using Attributes = std::vector<FuncAttr>;
 
     struct Param {
         std::string name;
@@ -1227,8 +1225,12 @@ public:
     /// Query whether this function has an attribute.
     [[nodiscard]]
     auto has_attr(FuncAttr attr) const -> bool {
-        return _attributes.contains(attr);
+        return rgs::contains(_attributes, attr);
     }
+    /// Set an attribute on this function.
+    void set_attr(FuncAttr attr) { _attributes.emplace_back(attr); }
+    /// Remove an attribute from this function.
+    void remove_attr(FuncAttr attr) { std::erase(_attributes, attr); }
 
     /// Get the parameters of this function.
     [[nodiscard]]
@@ -1236,17 +1238,11 @@ public:
     [[nodiscard]]
     auto params() const -> const std::vector<Param>& { return _params; }
 
-    /// Remove an attribute from this function.
-    void remove_attr(FuncAttr attr) { _attributes.erase(attr); }
-
     /// Get the return type of this function.
     [[nodiscard]]
     auto return_type() -> Type*& { return _return_type; }
     [[nodiscard]]
     auto return_type() const { return _return_type; }
-
-    /// Set an attribute on this function.
-    void set_attr(FuncAttr attr) { _attributes[attr] = true; }
 
     [[nodiscard]]
     bool has_auto();

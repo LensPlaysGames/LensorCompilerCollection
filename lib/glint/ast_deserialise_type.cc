@@ -1602,7 +1602,7 @@ auto lcc::glint::Module::deserialise(
             new (*this) FuncType(
                 {},
                 Type::Void,
-                {{FuncAttr::NoMangle, true}},
+                {FuncAttr::NoMangle},
                 {}
             ),
             nullptr,

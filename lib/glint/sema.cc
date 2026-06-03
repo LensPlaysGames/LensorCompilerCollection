@@ -550,6 +550,10 @@ void lcc::glint::Sema::DeclareImportedGlobalFunction(
     bool no_return
 ) {
     LCC_ASSERT(return_ty);
+
+    FuncType::Attributes attrs{FuncAttr::NoMangle};
+    if (no_return) attrs.emplace_back(FuncAttr::NoReturn);
+
     (void) mod.global_scope()->declare(
         context,
         std::move(name),
@@ -558,7 +562,7 @@ void lcc::glint::Sema::DeclareImportedGlobalFunction(
             new (mod) FuncType(
                 param_ty,
                 return_ty,
-                {{FuncAttr::NoMangle, true}, {FuncAttr::NoReturn, no_return}},
+                std::move(attrs),
                 {}
             ),
             nullptr,

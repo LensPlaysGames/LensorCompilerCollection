@@ -82,7 +82,9 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             return lcc::FunctionType::Get(
                 ctx,
                 Convert(ctx, t_function->return_type()),
-                std::move(param_types)
+                std::move(param_types),
+                false,
+                t_function->has_attr(FuncAttr::NoReturn)
             );
         }
 
@@ -1795,8 +1797,6 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     );
                     insert(exit_call);
                 }
-
-                insert(new (*module) BranchInst(exit, expr->location()));
 
                 update_block(exit);
 
