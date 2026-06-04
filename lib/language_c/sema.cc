@@ -35,6 +35,38 @@ Type* Sema::type_of(const Node* n) {
                 case TokenKind::LeftSquareBracket:
                     Diag::ICE("sema::type_of subscript");
 
+                case TokenKind::OpEqual:
+                case TokenKind::OpLessThan:
+                case TokenKind::OpGreaterThan:
+                case TokenKind::OpDoublePipe:
+                case TokenKind::OpDoubleAmpersand:
+                case TokenKind::OpExclamation:
+                case TokenKind::OpDot:
+                case TokenKind::OpArrow:
+                case TokenKind::OpPlusPlus:
+                case TokenKind::OpMinusMinus:
+                case TokenKind::OpCaret:
+                case TokenKind::OpPipe:
+                case TokenKind::OpAmpersand:
+                case TokenKind::OpTilde:
+                case TokenKind::OpShiftLeft:
+                case TokenKind::OpShiftRight:
+                case TokenKind::OpDoubleEqual:
+                case TokenKind::OpLessThanEqual:
+                case TokenKind::OpGreaterThanEqual:
+                case TokenKind::OpExclamationEqual:
+                case TokenKind::OpPlusEqual:
+                case TokenKind::OpMinusEqual:
+                case TokenKind::OpAsteriskEqual:
+                case TokenKind::OpSlashEqual:
+                case TokenKind::OpPercentEqual:
+                case TokenKind::OpCaretEqual:
+                case TokenKind::OpPipeEqual:
+                case TokenKind::OpAmpersandEqual:
+                case TokenKind::OpShiftLeftEqual:
+                case TokenKind::OpShiftRightEqual:
+                    Diag::ICE("Handle {} typeof", b->binary_operator());
+
                 case TokenKind::Invalid:
                 case TokenKind::Identifier:
                 case TokenKind::Integer:
@@ -43,6 +75,8 @@ Type* Sema::type_of(const Node* n) {
                 case TokenKind::KwVoid:
                 case TokenKind::KwInt:
                 case TokenKind::KwReturn:
+                case TokenKind::KwSizeof:
+                case TokenKind::KwAlignof:
                 case TokenKind::LeftParenthesis:
                 case TokenKind::RightParenthesis:
                 case TokenKind::RightSquareBracket:
@@ -116,7 +150,12 @@ Result<void> Sema::analyse_binary(BinaryOperation*& b) {
         case TokenKind::OpMinus:
         case TokenKind::OpAsterisk:
         case TokenKind::OpSlash:
-        case TokenKind::OpPercent: {
+        case TokenKind::OpPercent:
+        case TokenKind::OpCaret:
+        case TokenKind::OpPipe:
+        case TokenKind::OpAmpersand:
+        case TokenKind::OpShiftLeft:
+        case TokenKind::OpShiftRight: {
             // FIXME: This is not accurate
             if (type_of(b->lhs())->kind() != TypeKind::Int) {
                 return Error(
@@ -140,8 +179,54 @@ Result<void> Sema::analyse_binary(BinaryOperation*& b) {
 
         } break;
 
+        case TokenKind::OpLessThan:
+        case TokenKind::OpGreaterThan:
+        case TokenKind::OpDoublePipe:
+        case TokenKind::OpDoubleAmpersand:
+        case TokenKind::OpDoubleEqual:
+            Diag::ICE("Handle binary logical operator `{}` (sema)", b->binary_operator());
+
+        case TokenKind::OpEqual:
+            // TODO: Error if lhs isn't lvalue
+            // TODO: Error if type of rhs isn't convertible to type of lhs
+
+        case TokenKind::OpDot:
+            // TODO: Error if lhs isn't a structure
+
+        case TokenKind::OpArrow:
+            // TODO: Error if lhs isn't a structure
+
         case TokenKind::LeftSquareBracket:
             Diag::ICE("Unhandled binary operator `{}` (sema)", b->binary_operator());
+
+        case TokenKind::OpLessThanEqual:
+        case TokenKind::OpGreaterThanEqual:
+        case TokenKind::OpExclamationEqual:
+        case TokenKind::OpPlusEqual:
+        case TokenKind::OpMinusEqual:
+        case TokenKind::OpAsteriskEqual:
+        case TokenKind::OpSlashEqual:
+        case TokenKind::OpPercentEqual:
+        case TokenKind::OpCaretEqual:
+        case TokenKind::OpPipeEqual:
+        case TokenKind::OpAmpersandEqual:
+        case TokenKind::OpShiftLeftEqual:
+        case TokenKind::OpShiftRightEqual: {
+            b = new BinaryOperation(
+                TokenKind::Assign,
+                b->lhs(),
+                new BinaryOperation(
+                    b->binary_operator(),
+                    b->lhs(),
+                    b->rhs(),
+                    b->location()
+                ),
+                b->location()
+            );
+            // NOTE: We don't technically *have to* recurse here.
+            // I just don't want to muddy the control flow for this one case.
+            return analyse_binary(b);
+        }
 
         case TokenKind::Invalid:
         case TokenKind::Identifier:
@@ -150,7 +235,13 @@ Result<void> Sema::analyse_binary(BinaryOperation*& b) {
         case TokenKind::KwVoid:
         case TokenKind::KwInt:
         case TokenKind::KwReturn:
+        case TokenKind::KwSizeof:
+        case TokenKind::KwAlignof:
+        case TokenKind::OpPlusPlus:
+        case TokenKind::OpMinusMinus:
         case TokenKind::OpComma:
+        case TokenKind::OpExclamation:
+        case TokenKind::OpTilde:
         case TokenKind::LeftParenthesis:
         case TokenKind::RightParenthesis:
         case TokenKind::RightSquareBracket:

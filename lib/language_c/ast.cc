@@ -198,6 +198,34 @@ auto Node::langtest_name() -> std::string_view {
                 case TokenKind::OpPercent: return "binary_remainder";
                 case TokenKind::LeftSquareBracket: return "binary_subscript";
 
+                case TokenKind::OpEqual: return "binary_assign";
+                case TokenKind::OpLessThan: return "binary_less_than";
+                case TokenKind::OpGreaterThan: return "binary_greater_than";
+                case TokenKind::OpDoublePipe: return "binary_logical_or";
+                case TokenKind::OpDoubleAmpersand: return "binary_logical_and";
+                case TokenKind::OpDot: return "binary_dot";
+                case TokenKind::OpArrow: return "binary_arrow";
+                case TokenKind::OpCaret: return "binary_bit_xor";
+                case TokenKind::OpPipe: return "binary_bit_or";
+                case TokenKind::OpAmpersand: return "binary_bit_and";
+                case TokenKind::OpTilde: return "binary_bit_negation";
+                case TokenKind::OpShiftLeft: return "binary_bitshift_left";
+                case TokenKind::OpShiftRight: return "binary_bitshift_right";
+                case TokenKind::OpEqualEqual: return "binary_equality";
+                case TokenKind::OpLessThanEqual: return "binary__assign";
+                case TokenKind::OpGreaterThanEqual: return "binary__assign";
+                case TokenKind::OpExclamationEqual: return "binary_inequality";
+                case TokenKind::OpPlusEqual: return "binary_add_assign";
+                case TokenKind::OpMinusEqual: return "binary_subtract_assign";
+                case TokenKind::OpAsteriskEqual: return "binary_multiply_assign";
+                case TokenKind::OpSlashEqual: return "binary_divide_assign";
+                case TokenKind::OpPercentEqual: return "binary_remainder_assign";
+                case TokenKind::OpCaretEqual: return "binary_bit_xor_assign";
+                case TokenKind::OpPipeEqual: return "binary_bit_or_assign";
+                case TokenKind::OpAmpersandEqual: return "binary_bit_and_assign";
+                case TokenKind::OpShiftLeftEqual: return "binary_bitshift_left_assign";
+                case TokenKind::OpShiftRightEqual: return "binary_bitshift_right_assign";
+
                 case TokenKind::Invalid:
                 case TokenKind::Identifier:
                 case TokenKind::Integer:
@@ -205,7 +233,12 @@ auto Node::langtest_name() -> std::string_view {
                 case TokenKind::KwVoid:
                 case TokenKind::KwInt:
                 case TokenKind::KwReturn:
+                case TokenKind::KwSizeof:
+                case TokenKind::KwAlignof:
+                case TokenKind::OpPlusPlus:
+                case TokenKind::OpMinusMinus:
                 case TokenKind::OpComma:
+                case TokenKind::OpExclamation:
                 case TokenKind::LeftParenthesis:
                 case TokenKind::RightParenthesis:
                 case TokenKind::RightSquareBracket:

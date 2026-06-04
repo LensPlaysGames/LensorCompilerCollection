@@ -1,167 +1,114 @@
+Some binary operations are allowed to have a trailing `=` immediately
+following, such that they are rewritten into `lhs = lhs operator rhs`.
+
 ================
-Add
+Plus-Assign
 :syntax
 ================
 
-0 + 0;
+0 += 0;
 
 ---
 
 (block
- (binary_add
+ (binary_add_assign
   (integer_literal)
   (integer_literal)))
 
 ================
-Subtract
+Subtract-Assign
 :syntax
 ================
 
-0 - 0;
+0 -= 0;
 
 ---
 
 (block
- (binary_subtract
+ (binary_subtract_assign
   (integer_literal)
   (integer_literal)))
 
 ================
-Multiply
+Multiply-Assign
 :syntax
 ================
 
-0 * 0;
+0 *= 0;
 
 ---
 
 (block
- (binary_multiply
+ (binary_multiply_assign
   (integer_literal)
   (integer_literal)))
 
 ================
-Divide
+Divide-Assign
 :syntax
 ================
 
-0 / 0;
+0 /= 0;
 
 ---
 
 (block
- (binary_divide
+ (binary_divide_assign
   (integer_literal)
   (integer_literal)))
 
 ================
-Remainder
+Remainder-Assign
 :syntax
 ================
 
-0 % 0;
+0 %= 0;
 
 ---
 
 (block
- (binary_remainder
+ (binary_remainder_assign
   (integer_literal)
   (integer_literal)))
 
 ================
-Bit AND
+Bit XOR-Assign
 :syntax
 ================
 
-0 & 0;
+0 ^= 0;
 
 ---
 
 (block
- (binary_bit_and
+ (binary_bit_xor_assign
   (integer_literal)
   (integer_literal)))
 
 ================
-Logical AND
+Bit OR-Assign
 :syntax
 ================
 
-0 && 0;
+0 |= 0;
 
 ---
 
 (block
- (binary_logical_and
+ (binary_bit_or_assign
   (integer_literal)
   (integer_literal)))
 
 ================
-Bit OR
+Bit AND-Assign
 :syntax
 ================
 
-0 | 0;
+0 &= 0;
 
 ---
 
 (block
- (binary_bit_or
-  (integer_literal)
-  (integer_literal)))
-
-================
-Logical OR
-:syntax
-================
-
-0 || 0;
-
----
-
-(block
- (binary_logical_or
-  (integer_literal)
-  (integer_literal)))
-
-================
-Bit XOR
-:syntax
-================
-
-0 ^ 0;
-
----
-
-(block
- (binary_bit_xor
-  (integer_literal)
-  (integer_literal)))
-
-================
-Assign
-:syntax
-================
-
-0 = 0;
-
----
-
-(block
- (binary_assign
-  (integer_literal)
-  (integer_literal)))
-
-================
-Equality
-:syntax
-================
-
-0 == 0;
-
----
-
-(block
- (binary_equality
+ (binary_bit_and_assign
   (integer_literal)
   (integer_literal)))
