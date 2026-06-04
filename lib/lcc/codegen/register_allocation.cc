@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <memory_resource>
 #include <ranges>
 #include <string>
 #include <unordered_map>
@@ -235,14 +236,13 @@ struct RegisterPlusLiveValIndex {
     Register reg;
     usz idx;
 };
-
-std::vector<RegisterPlusLiveValIndex> collect_vreg_operands(
+void collect_vreg_operands(
     AdjacencyMatrix& matrix,
-    const MInst& inst
+    const MInst& inst,
+    auto& into
 ) {
-    std::vector<RegisterPlusLiveValIndex> vreg_operands{};
     if (inst.reg() >= +Module::first_virtual_register) {
-        vreg_operands.push_back(
+        into.push_back(
             {Register{
                  inst.reg(),
                  uint(inst.regsize()),
@@ -256,31 +256,26 @@ std::vector<RegisterPlusLiveValIndex> collect_vreg_operands(
         if (std::holds_alternative<MOperandRegister>(op)) {
             auto reg = std::get<MOperandRegister>(op);
             if (reg.value >= +Module::first_virtual_register)
-                vreg_operands.push_back({reg, matrix.live_index(reg.value)});
+                into.push_back({reg, matrix.live_index(reg.value)});
         }
     }
-    return vreg_operands;
 }
 
-std::vector<usz> collect_clobbered_registers(const MInst& inst) {
-    std::vector<usz> clobbered_regs{};
-
+void collect_clobbered_registers(const MInst& inst, auto& into) {
     // Operand clobbers that happen to be registers.
     for (auto index : inst.operand_clobbers()) {
         auto& op = inst.all_operands().at(index);
         if (std::holds_alternative<MOperandRegister>(op)) {
             auto reg = std::get<MOperandRegister>(op);
-            clobbered_regs.push_back(reg.value);
+            into.emplace_back(reg.value);
         }
     }
 
     // TODO: Should we also take register clobbers into account here?
-
-    return clobbered_regs;
 }
 
 void record_newly_live_values(
-    const std::vector<RegisterPlusLiveValIndex>& vreg_operands,
+    const auto& vreg_operands,
     const MInst& inst,
     std::vector<usz>& live_values
 ) {
@@ -336,13 +331,27 @@ void collect_interferences_from_instruction(
     // invalidate that value.
     matrix_set_clobbers(matrix, live_values, inst);
 
+    // Stack allocating vector. Falls back to heap.
+    std::array<std::byte, sizeof(RegisterPlusLiveValIndex) * 12> vreg_stack_buffer;
+    std::pmr::monotonic_buffer_resource vreg_mem_pool(
+        vreg_stack_buffer.data(),
+        vreg_stack_buffer.size()
+    );
+    std::pmr::vector<RegisterPlusLiveValIndex> vreg_operands(&vreg_mem_pool);
+
     // Collect all register operands from this instruction that are
     // used as operands somewhere in the function (i.e. within the list of
     // registers).
-    auto vreg_operands = collect_vreg_operands(matrix, inst);
+    collect_vreg_operands(matrix, inst, vreg_operands);
 
     // Collect clobbered registers
-    auto clobbered_regs = collect_clobbered_registers(inst);
+    std::array<std::byte, sizeof(usz) * 16> clobber_stack_buffer;
+    std::pmr::monotonic_buffer_resource clobber_mem_pool(
+        clobber_stack_buffer.data(),
+        clobber_stack_buffer.size()
+    );
+    std::pmr::vector<usz> clobbered_regs(&clobber_mem_pool);
+    collect_clobbered_registers(inst, clobbered_regs);
 
     // Make all reg operands interfere with each other; if two different,
     // non-clobbered registers are used as inputs to an instruction, they must
