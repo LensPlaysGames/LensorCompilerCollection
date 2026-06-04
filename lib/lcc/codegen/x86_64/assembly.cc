@@ -424,14 +424,15 @@ void emit_gnu_att_assembly(
                     auto mnemonic = std::string(ToString(Opcode(+x86_64::Opcode::MoveDereferenceRHS)));
                     // Append "sd" to mnemonic if saving scalar
                     // FIXME: is_scalar()
-                    if (r.value >= +x86_64::RegisterId::XMM0)
+                    if (r.value >= +x86_64::RegisterId::XMM0 and r.value <= +x86_64::RegisterId::XMM15)
                         mnemonic += "sd";
                     out += fmt::format(
-                        "    {} {}, -{}(%rbp)  {} SPILL\n",
+                        "    {} {}, -{}(%rbp)  {} SPILL (slot {})\n",
                         mnemonic,
                         ToString(function, r),
                         spill_offsets.at(i.value),
-                        comment_begin
+                        comment_begin,
+                        i.value
                     );
                     continue;
                 }
@@ -450,14 +451,15 @@ void emit_gnu_att_assembly(
                         mnemonic += "sd";
 
                     out += fmt::format(
-                        "    {} -{}(%rbp), {}  {} UNSPILL\n",
+                        "    {} -{}(%rbp), {}  {} UNSPILL (slot {})\n",
                         mnemonic,
                         spill_offsets.at(i.value),
                         ToString(
                             function,
                             MOperandRegister(instruction.reg(), (uint) instruction.regsize())
                         ),
-                        comment_begin
+                        comment_begin,
+                        i.value
                     );
                     continue;
                 }
