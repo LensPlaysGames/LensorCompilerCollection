@@ -608,7 +608,6 @@ auto lcc::glint::Expr::CloneImpl(
     // mapping to our scope fixups.
     const auto fixup_scope
         = [](
-              this auto&& self,
               Module& m,
               decltype(scope_fixups) scope_fixes,
               Scope* scope
