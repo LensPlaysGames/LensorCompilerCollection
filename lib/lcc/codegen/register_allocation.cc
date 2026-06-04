@@ -317,8 +317,6 @@ void record_newly_live_values(
 void collect_interferences_from_instruction(
     AdjacencyMatrix& matrix,
     std::vector<usz>& live_values,
-    std::vector<MBlock*>& visited,
-    std::vector<MBlock*>& doubly_visited,
     MInst& inst
 ) {
     if constexpr (RA_PRINT) {
@@ -416,61 +414,90 @@ void collect_interferences_from_instruction(
         fmt::print("live before: {}\n", fmt::join(live_values, ", "));
 }
 
+bool block_already_visited(MBlock* block, const std::vector<MBlock*>& visited) {
+    return rgs::count(visited, block)
+        >= std::max(
+               isz(block->successors().size()),
+               isz(1)
+        );
+}
+
 void collect_interferences_from_block(
     AdjacencyMatrix& matrix,
     MFunction& function,
     std::vector<usz> live_values,
     std::vector<MBlock*> visited,
-    std::vector<MBlock*> doubly_visited,
     MBlock* block
 ) {
-    // Don't visit the same block thrice.
-    // TODO: In reality, it's not that simple, but this is an approximation we
-    // are currently using and it *is* working.
-    // Preferably, this would better match the actual semantics; I *think*
-    // that would mean limiting the amount of times we visit a block to the
-    // amount of successors it has, but also at least once.
-    // Further TODO: Small diagram and explanation for why we need to visit
-    // blocks multiple times at all; why isn't one pass enough?
-    if (rgs::find(visited, block) != visited.end()) {
-        if (rgs::find(doubly_visited, block) != doubly_visited.end())
+    bool keep_going{false};
+
+    // I -> LOOP IN
+    // H -> LOOP HEADER
+    // B -> LOOP BODY
+    // E -> LOOP OUT
+    //
+    //      v----,
+    // I -> H -> B    O
+    //      `---------^
+    //
+    // O -> H -> (B -> H, I)
+    //
+    // O -> H -> B -> H -> I
+    // O -> H -> I
+
+    do {
+        // Don't visit the same block more than necessary.
+        if (block_already_visited(block, visited))
             return;
-        doubly_visited.push_back(block);
-    } else visited.push_back(block);
+        else visited.emplace_back(block);
 
-    // Basically, walk over the instructions of the block backwards, keeping
-    // track of all virtual registers that have been encountered but not
-    // their defining use, as these are our "live values".
-    for (auto& inst : vws::reverse(block->instructions())) {
-        collect_interferences_from_instruction(
-            matrix,
-            live_values,
-            visited,
-            doubly_visited,
-            inst
-        );
-    }
+        // fmt::print("Have not visited {}\n", block->name());
 
-    // Walk CFG backwards (follow predecessors)
+        // Basically, walk over the instructions of the block backwards, keeping
+        // track of all virtual registers that have been encountered but not
+        // their defining use, as these are our "live values".
+        for (auto& inst : vws::reverse(block->instructions())) {
+            collect_interferences_from_instruction(
+                matrix,
+                live_values,
+                inst
+            );
+        }
 
-    // No predecessors == entry block: done walking.
-    if (block->predecessors().empty())
-        return;
+        // Walk CFG backwards (follow predecessors)
 
-    // Follow all predecessors, resetting live values to what they are now
-    // before each one.
-    for (const auto& parent_name : block->predecessors()) {
-        auto* parent = function.block_by_name(parent_name);
-        auto live_values_copy{live_values};
-        collect_interferences_from_block(
-            matrix,
-            function,
-            std::move(live_values_copy),
-            visited,
-            doubly_visited,
-            parent
-        );
-    }
+        // For all except one predecessor, recurse.
+        // This allows proper copying of live_values, visited, etc, while not
+        // recursing for the last case where we can just update the block and keep
+        // using our current resources.
+        if (block->predecessors().size() > 1) {
+            for (
+                auto parent_name = block->predecessors().cbegin(),
+                     end = std::prev(block->predecessors().cend());
+                parent_name != end;
+                ++parent_name
+            ) {
+                auto* parent = function.block_by_name(*parent_name);
+                // Only recurse into this block if we haven't visited it (enough) already.
+                if (block_already_visited(parent, visited))
+                    continue;
+                collect_interferences_from_block(
+                    matrix,
+                    function,
+                    live_values,
+                    visited,
+                    parent
+                );
+            }
+        }
+
+        // For blocks with one predecessor, do not recurse. Just update block and
+        // keep going.
+        keep_going = block->predecessors().size();
+        if (keep_going)
+            block = function.block_by_name(block->predecessors().back());
+
+    } while (keep_going);
 }
 
 void collect_interferences(
@@ -503,7 +530,6 @@ void collect_interferences(
             function,
             {},
             {},
-            {},
             exit
         );
     }
@@ -528,6 +554,11 @@ void insert_spill_unspill(
     const Register& to_spill,
     usz& next_unique_register
 ) {
+    // fmt::print(
+    //     "Spilling {}\n",
+    //     PrintMOperand(to_spill)
+    // );
+
     // We need to find instruction by virtual register value (find the
     // relevant defining use).
     // Once we have this instruction, we need to insert a "save to stack"
@@ -958,6 +989,7 @@ auto allocate_registers(
     for (auto& block : function.blocks()) {
         for (usz inst_i = 0; inst_i < block.instructions().size(); ++inst_i) {
             Register result_register{};
+            usz current_i = inst_i;
             {
                 auto& inst = block.instructions().at(inst_i);
 
@@ -1001,8 +1033,6 @@ auto allocate_registers(
                 if (r == result_register.value)
                     continue;
 
-                // fmt::print("  spilling...\n");
-
                 // TODO: Is this slot okay? Should it be unique per call site?
                 auto spill_slot = r;
                 auto spilled_reg = r;
@@ -1020,11 +1050,12 @@ auto allocate_registers(
                 // Slot
                 spill.add_operand(MOperandImmediate(spill_slot));
 
-                // Insert spill instruction before index 'inst_i'.
+                // Insert spill instruction before instruction at current index 'inst_i'.
                 block.instructions().insert(
-                    block.instructions().begin() + (isz) inst_i,
+                    block.instructions().begin() + (isz) current_i,
                     spill
                 );
+                ++current_i; // inserting before moves up current instruction
                 ++inst_i;
 
                 // Don't clobber the result register out of existence by unspilling...
@@ -1035,9 +1066,13 @@ auto allocate_registers(
                             usz(MInst::Kind::Copy),
                             result_register
                         );
-                        move.add_operand(MOperandRegister(return_register, result_register.size, result_register.category));
+                        move.add_operand(MOperandRegister(
+                            return_register,
+                            result_register.size,
+                            result_register.category
+                        ));
                         block.instructions().insert(
-                            block.instructions().begin() + (isz) inst_i + 1,
+                            block.instructions().begin() + (isz) current_i + 1,
                             move
                         );
                         ++inst_i;
@@ -1048,7 +1083,10 @@ auto allocate_registers(
                 // reference to the result register as a register operand.
                 auto unspill = MInst(
                     usz(MInst::Kind::Unspill),
-                    {spilled_reg, (uint) spilled_regsize, {}, true}
+                    {spilled_reg,
+                     (uint) spilled_regsize,
+                     {},
+                     true}
                 );
                 unspill.add_use(); // unspill shouldn't be "unused"; it has side effects
                 // Slot
@@ -1056,9 +1094,10 @@ auto allocate_registers(
 
                 // Inserting unspill instruction after index 'inst_i'
                 block.instructions().insert(
-                    block.instructions().begin() + (isz) inst_i + 1,
+                    block.instructions().begin() + (isz) current_i + 1,
                     unspill
                 );
+                // NOTE: inserting after does *not* move up current instruction.
                 ++inst_i;
             }
         }
