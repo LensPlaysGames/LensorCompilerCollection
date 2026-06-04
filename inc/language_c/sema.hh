@@ -15,19 +15,23 @@ class Sema {
     Declaration* defining{};
     Node* _root{};
 
-    std::unordered_map<Node*, Type*> _type_cache{};
+    std::unordered_map<const Node*, Type*> _type_cache{};
 
     [[nodiscard]]
-    Type* type_of(Node* n);
+    Type* type_of(const Node* n);
     void update_type(Node*, Type*);
 
-    Result<void> analyse_declaration(Declaration*);
-    Result<void> analyse_binary(BinaryOperation*);
-    Result<void> analyse_return(Return*);
+    [[nodiscard]]
+    Result<void> analyse_declaration(Declaration*&);
+    [[nodiscard]]
+    Result<void> analyse_binary(BinaryOperation*&);
+    [[nodiscard]]
+    Result<void> analyse_return(Return*&);
     [[nodiscard]]
     Result<void> analyse_name_reference(NameReference*&);
 
-    Result<void> analyse(Node*);
+    [[nodiscard]]
+    Result<void> analyse(Node*&);
 
     template <typename... Args>
     auto Note(Location where, std::string id, fmt::format_string<Args...> fmt, Args... args) -> Diag {
@@ -47,8 +51,10 @@ public:
         : context(context_)
         , _root(root) {}
 
+    [[nodiscard]]
     auto root() { return _root; }
 
+    [[nodiscard]]
     static bool Analyse(lcc::Context*, TranslationUnit&);
 };
 

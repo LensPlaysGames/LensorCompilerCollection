@@ -10,7 +10,7 @@ void Sema::update_type(Node* n, Type* t) {
     _type_cache[n] = t;
 }
 
-Type* Sema::type_of(Node* n) {
+Type* Sema::type_of(const Node* n) {
     if (not n) Diag::ICE("nullptr argument");
 
     // Only get the type of a node once.
@@ -82,10 +82,10 @@ Type* Sema::type_of(Node* n) {
     return out;
 }
 
-Result<void> Sema::analyse_declaration(Declaration* d) {
+Result<void> Sema::analyse_declaration(Declaration*& d) {
     if (d->initialising_expression()) {
         defining = d;
-        auto result = analyse(d->initialising_expression());
+        auto result = analyse(d->_initialising_expression);
         if (not result) return result;
 
         // Function declaration returning void defined with empty block:
@@ -109,7 +109,8 @@ Result<void> Sema::analyse_declaration(Declaration* d) {
 
     return {};
 }
-Result<void> Sema::analyse_binary(BinaryOperation* b) {
+
+Result<void> Sema::analyse_binary(BinaryOperation*& b) {
     switch (b->binary_operator()) {
         case TokenKind::OpPlus:
         case TokenKind::OpMinus:
@@ -163,7 +164,7 @@ Result<void> Sema::analyse_binary(BinaryOperation* b) {
     return {};
 }
 
-Result<void> Sema::analyse_return(Return* r) {
+Result<void> Sema::analyse_return(Return*& r) {
     if (not defining or defining->type()->kind() != TypeKind::Function) {
         return Error(
             r->location(),
@@ -182,7 +183,7 @@ Result<void> Sema::analyse_return(Return* r) {
             );
         }
 
-        return analyse(r->expression());
+        return analyse(r->_expression);
     } else {
         if (((FunctionType*) defining->type())->return_type()->kind() != TypeKind::Void)
             return Error(
@@ -196,11 +197,11 @@ Result<void> Sema::analyse_return(Return* r) {
     return {};
 }
 
-auto Sema::analyse(Node* node) -> Result<void> {
 Result<void> Sema::analyse_name_reference(NameReference*& n) {
     return Error(n->location(), "c/todo", "TODO: Analyse name-reference: {}", n->name());
 }
 
+auto Sema::analyse(Node*& node) -> Result<void> {
     // Don't analyse any node more than once.
     if (analysed.contains(node))
         return {};
@@ -228,13 +229,13 @@ Result<void> Sema::analyse_name_reference(NameReference*& n) {
             return analyse_name_reference(*(NameReference**) &node);
 
         case NodeKind::Declaration:
-            return analyse_declaration((Declaration*) node);
+            return analyse_declaration(*(Declaration**) &node);
 
         case NodeKind::Return:
-            return analyse_return((Return*) node);
+            return analyse_return(*(Return**) &node);
 
         case NodeKind::BinaryOperation:
-            return analyse_binary((BinaryOperation*) node);
+            return analyse_binary(*(BinaryOperation**) &node);
 
         case NodeKind::IntegerLiteral:
             return {};
@@ -254,7 +255,7 @@ bool Sema::Analyse(Context* context, TranslationUnit& tu) {
         Diag::ICE("cannot analyse nullptr");
 
     Sema semantic{context, tu.tree};
-    bool passed = semantic.analyse(semantic.root()).is_value();
+    bool passed = semantic.analyse(semantic._root).is_value();
     if (not passed) return false;
 
     if (semantic.root()->kind() == NodeKind::Block) {
