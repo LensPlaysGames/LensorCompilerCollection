@@ -89,6 +89,10 @@ void IRGen::generate_expression(const Node* n) {
             return;
         }
 
+        case NodeKind::NameReference: {
+            Diag::ICE("Handle name-reference irgen...");
+        }
+
         case NodeKind::Declaration: {
             Diag::ICE("Handle declaration irgen...");
         }

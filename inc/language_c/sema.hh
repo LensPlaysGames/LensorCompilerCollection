@@ -24,6 +24,8 @@ class Sema {
     Result<void> analyse_declaration(Declaration*);
     Result<void> analyse_binary(BinaryOperation*);
     Result<void> analyse_return(Return*);
+    [[nodiscard]]
+    Result<void> analyse_name_reference(NameReference*&);
 
     Result<void> analyse(Node*);
 

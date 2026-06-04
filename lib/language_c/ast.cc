@@ -39,9 +39,9 @@ auto fmt::formatter<lcc::language_c::Node>::format(
             return tag(ctx.out(), depth, "<invalid>");
 
         case lcc::language_c::NodeKind::Group: {
-            const auto* g = (const lcc::language_c::Group*) &n;
+            const auto& g = *(const lcc::language_c::Group*) &n;
 
-            if (g->constituents().empty())
+            if (g.constituents().empty())
                 return tag(ctx.out(), depth, "<group/>");
 
             tag(ctx.out(), depth, "<group>");
@@ -51,7 +51,7 @@ auto fmt::formatter<lcc::language_c::Node>::format(
                 "{}",
                 fmt::join(
                     std::ranges::views::transform(
-                        g->constituents(),
+                        g.constituents(),
                         [&](const lcc::language_c::Node* constituent) {
                             return fmt::format("{:{}}", *constituent, depth);
                         }
@@ -64,9 +64,9 @@ auto fmt::formatter<lcc::language_c::Node>::format(
         }
 
         case lcc::language_c::NodeKind::Block: {
-            const auto* b = (const lcc::language_c::Block*) &n;
+            const auto& b = *(const lcc::language_c::Block*) &n;
 
-            if (b->constituents().empty())
+            if (b.constituents().empty())
                 return tag(ctx.out(), depth, "<block/>");
 
             tag(ctx.out(), depth, "<block>");
@@ -76,7 +76,7 @@ auto fmt::formatter<lcc::language_c::Node>::format(
                 "{}",
                 fmt::join(
                     std::ranges::views::transform(
-                        b->constituents(),
+                        b.constituents(),
                         [&](const lcc::language_c::Node* constituent) {
                             return fmt::format("{:{}}", *constituent, depth);
                         }
@@ -89,16 +89,17 @@ auto fmt::formatter<lcc::language_c::Node>::format(
         }
 
         case lcc::language_c::NodeKind::IntegerLiteral: {
+            const auto& i = (*(lcc::language_c::IntegerLiteral*) &n);
             indent(ctx.out(), depth);
             return fmt::format_to(
                 ctx.out(),
                 "<integer-literal>{}</integer-literal>\n",
-                (*(lcc::language_c::IntegerLiteral*) &n).value()
+                i.value()
             );
         }
 
         case lcc::language_c::NodeKind::Return: {
-            const auto& r = (*(lcc::language_c::Return*) &n);
+            const auto& r = *(lcc::language_c::Return*) &n;
             if (not r.expression())
                 return tag(ctx.out(), depth, "<return/>");
 
@@ -108,22 +109,22 @@ auto fmt::formatter<lcc::language_c::Node>::format(
         }
 
         case lcc::language_c::NodeKind::Declaration: {
-            const auto* d = (const lcc::language_c::Declaration*) &n;
+            const auto& d = *(const lcc::language_c::Declaration*) &n;
             tag(ctx.out(), depth, "<declaration>");
             ++depth;
 
             indent(ctx.out(), depth);
-            fmt::format_to(ctx.out(), "<name>{}</name>\n", d->name());
+            fmt::format_to(ctx.out(), "<name>{}</name>\n", d.name());
 
             indent(ctx.out(), depth);
-            fmt::format_to(ctx.out(), "<type>{}</type>\n", *d->type());
+            fmt::format_to(ctx.out(), "<type>{}</type>\n", *d.type());
 
-            if (d->initialising_expression()) {
+            if (d.initialising_expression()) {
                 tag(ctx.out(), depth, "<initial>");
                 fmt::format_to(
                     ctx.out(),
                     "{:{}}",
-                    *d->initialising_expression(),
+                    *d.initialising_expression(),
                     depth + 1
                 );
                 tag(ctx.out(), depth, "</initial>");
@@ -134,22 +135,32 @@ auto fmt::formatter<lcc::language_c::Node>::format(
         }
 
         case lcc::language_c::NodeKind::BinaryOperation: {
-            const auto* b = (const lcc::language_c::BinaryOperation*) &n;
+            const auto& b = *(const lcc::language_c::BinaryOperation*) &n;
             tag(ctx.out(), depth, "<binary>");
             ++depth;
 
             indent(ctx.out(), depth);
-            fmt::format_to(ctx.out(), "<operator>{}</operator>\n", b->binary_operator());
+            fmt::format_to(ctx.out(), "<operator>{}</operator>\n", b.binary_operator());
 
             tag(ctx.out(), depth, "<lhs>");
-            fmt::format_to(ctx.out(), "{:{}}", *b->lhs(), depth + 1);
+            fmt::format_to(ctx.out(), "{:{}}", *b.lhs(), depth + 1);
             tag(ctx.out(), depth, "</lhs>");
             tag(ctx.out(), depth, "<rhs>");
-            fmt::format_to(ctx.out(), "{:{}}", *b->rhs(), depth + 1);
+            fmt::format_to(ctx.out(), "{:{}}", *b.rhs(), depth + 1);
             tag(ctx.out(), depth, "</rhs>");
 
             --depth;
             return tag(ctx.out(), depth, "</binary>");
+        }
+
+        case lcc::language_c::NodeKind::NameReference: {
+            const auto& name_ref = *(const lcc::language_c::NameReference*) &n;
+            indent(ctx.out(), depth);
+            return fmt::format_to(
+                ctx.out(),
+                "<integer-literal>{}</integer-literal>\n",
+                name_ref.name()
+            );
         }
 
         case lcc::language_c::NodeKind::Count:
@@ -173,6 +184,7 @@ auto Node::langtest_name() -> std::string_view {
         case NodeKind::Invalid: return "invalid";
         case NodeKind::Group: return "group";
         case NodeKind::Block: return "block";
+        case NodeKind::NameReference: return "name";
         case NodeKind::Declaration: return "declaration";
         case NodeKind::IntegerLiteral: return "integer_literal";
         case NodeKind::Return: return "return";
@@ -212,6 +224,7 @@ auto Node::langtest_name() -> std::string_view {
 auto Node::langtest_children() -> std::vector<Node*> {
     switch (kind()) {
         case NodeKind::IntegerLiteral:
+        case NodeKind::NameReference:
             return {};
 
         case NodeKind::Group: return ((Group*) this)->constituents();

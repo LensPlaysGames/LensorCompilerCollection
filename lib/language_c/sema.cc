@@ -59,6 +59,10 @@ Type* Sema::type_of(Node* n) {
             out = ((Declaration*) n)->type();
             break;
 
+        case NodeKind::NameReference: {
+            Diag::ICE("Handle name-reference typeof...");
+        }
+
         case NodeKind::IntegerLiteral:
             out = new IntType(n->location());
             break;
@@ -193,6 +197,10 @@ Result<void> Sema::analyse_return(Return* r) {
 }
 
 auto Sema::analyse(Node* node) -> Result<void> {
+Result<void> Sema::analyse_name_reference(NameReference*& n) {
+    return Error(n->location(), "c/todo", "TODO: Analyse name-reference: {}", n->name());
+}
+
     // Don't analyse any node more than once.
     if (analysed.contains(node))
         return {};
@@ -215,6 +223,9 @@ auto Sema::analyse(Node* node) -> Result<void> {
             }
             return {};
         }
+
+        case NodeKind::NameReference:
+            return analyse_name_reference(*(NameReference**) &node);
 
         case NodeKind::Declaration:
             return analyse_declaration((Declaration*) node);

@@ -25,6 +25,7 @@ enum class NodeKind {
     Invalid,
     Group,
     Block,
+    NameReference,
     Declaration,
     IntegerLiteral,
     Return,
@@ -76,6 +77,20 @@ public:
         : Node(NodeKind::Block, location), _constituents(std::move(constituents)) {}
 
     auto constituents() const { return _constituents; }
+};
+
+struct NameReference : public Node {
+    std::string _name;
+    Scope* _within_scope;
+
+public:
+    NameReference(std::string name, Scope* within_scope, Location location)
+        : Node(NodeKind::NameReference, location)
+        , _name(std::move(name))
+        , _within_scope(within_scope) {}
+
+    auto name() const { return _name; }
+    auto within_scope() const { return _within_scope; }
 };
 
 struct IntegerLiteral : public Node {
