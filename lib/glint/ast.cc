@@ -29,19 +29,21 @@ lcc::glint::StringLiteral::StringLiteral(
     Module& mod,
     std::string_view value,
     Location location
-) : TypedExpr{
-        Kind::StringLiteral,
-        location,
-        new (mod) ReferenceType(
-            new (mod) ArrayType(
-                BuiltinType::Byte(mod),
-                new (mod) IntegerLiteral(value.size() + 1, location),
-                location
-            ),
-            location
-        ),
-    },
-    _index{mod.intern(value)}, _module(&mod) {}
+)
+    : TypedExpr{
+          Kind::StringLiteral,
+          location,
+          new (mod) ReferenceType(
+              new (mod) ArrayType(
+                  BuiltinType::Byte(mod),
+                  new (mod) IntegerLiteral(value.size() + 1, location),
+                  location
+              ),
+              location
+          ),
+      }
+    , _index{mod.intern(value)}
+    , _module(&mod) {}
 
 auto lcc::glint::Scope::declare(
     Context* ctx,
