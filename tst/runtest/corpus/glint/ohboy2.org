@@ -1,0 +1,28 @@
+* That's *not* a lot of code!
+
+For some reason, this prints nothing right now.
+
+#+NAME: source
+#+begin_src glint
+  foo : [byte];
+  foo += `E`;
+  foo += `E`;
+  foo += `E`;
+  foo += `E`;
+  foo += `E`;
+  foo += `E`;
+  foo += `E`;
+  foo += `E`;
+  foo += `E`;
+  print foo, `\n`;
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+EEEEEEEEE
+#+end_example
