@@ -237,7 +237,7 @@ if (VERIFY_COMPILERS)
   add_custom_target(
     llvmgnu_build
     COMMAND
-    ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B llvmgnu -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libstdc++"  ${COMMON_DEFINES}
+    ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B llvmgnu -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libstdc++" ${COMMON_DEFINES}
     COMMAND
     ${CMAKE_COMMAND} --build llvmgnu --target lcc
     VERBATIM
