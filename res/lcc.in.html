@@ -11,7 +11,7 @@
     to create, edit, and delete files.
     That way you could write multiple file projects in the browser, build a
     better (and real) understanding of modules, imports, and exports.
- -->
+  -->
 <!doctype html>
 <html lang="en-us">
   <head>
@@ -28,7 +28,7 @@
     <meta
       name="keywords"
       content="compiler, programming, development, cpp, c, glint, lcc"
-    />
+      />
     <meta name="referrer" content="strict-origin" />
     <meta itemprop="name" content="Lensor Compiler Collection" />
     <meta itemprop="description" content="Interactive Playground for the Lensor Compiler Collection" />
@@ -72,7 +72,7 @@
           /* Default (dark) theme colors */
           --bg-color: rgb(14, 16, 17);
           --text-color: #ffffff;
-           /* Informs browser the site supports both modes */
+          /* Informs browser the site supports both modes */
           color-scheme: dark light;
       }
       body {
@@ -199,6 +199,19 @@
                 <option value="LCCSSA">LCC IR (SSA Form)</option>
               </select>
             </label>
+            <label style="display: flex; margin-right: 1rem;">
+              Language
+              <select
+                style="width: 100%; margin-left: .25rem;"
+                id="language" name="language" aria-label="Language"
+                autocomplete="nothanks" required
+                >
+                <option selected value="">None</option>
+                <option value="GLINT">Glint</option>
+                <option value="C">C</option>
+                <option value="IR">LCC IR</option>
+              </select>
+            </label>
             <label style="display: flex;">
               Optimisation
               <select
@@ -225,14 +238,11 @@
             Strip . Lines
           </label>
           <hr style="margin-bottom: 0;"/>
-
-          <!-- TODO: Compiler Flag/Option Inputs -->
-          <!-- Dropdown for input language: glint, ir -->
         </div>
 
         <div display="flex" style="width: 100%; margin: auto;">
-            <label for="input" style="font-family: monospace;">foo.g</label>
-            <textarea class="emscripten" id="input" rows="8" spellcheck="false">69;</textarea>
+          <label for="input" style="font-family: monospace;">foo.g</label>
+          <textarea class="emscripten" id="input" rows="8" spellcheck="false">69;</textarea>
           <div>
             <label for="output" id="command-line" style="font-family: monospace;">lcc foo.g</label>
             <textarea class="emscripten" id="output" rows="16" spellcheck="false" readonly></textarea>
@@ -295,6 +305,8 @@
       var shouldPrintOutput = true;
       // "-f {}"
       var shouldUseFormat = undefined;
+      // "-x {}"
+      var shouldUseLanguage = undefined;
       // "-O {}"
       var shouldOptimise = undefined;
 
@@ -431,6 +443,21 @@
           doBuild();
       });
 
+      // Language dropdown
+      function lccLanguageFromSelection(selection) {
+          switch (selection) {
+          default: window.Error("Unexpected format selection");
+          case "":
+          case "GLINT": return "glint";
+          case "C": return "c";
+          case "IR": return "ir";
+          }
+      };
+      document.getElementById('language').addEventListener('change', function(event) {
+          shouldUseLanguage = event.target.value;
+          doBuild();
+      });
+
       document.getElementById('optimisation').addEventListener('change', function(event) {
           shouldOptimise = event.target.value;
           doBuild();
@@ -467,6 +494,10 @@
           if (shouldUseFormat) {
               lccArguments.push("-f");
               lccArguments.push(lccFormatFromSelection(shouldUseFormat))
+          }
+          if (shouldUseLanguage) {
+              lccArguments.push("-x");
+              lccArguments.push(lccLanguageFromSelection(shouldUseLanguage))
           }
           if (shouldOptimise) {
               lccArguments.push("-O");
