@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <concepts>
 #include <functional>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -219,7 +220,7 @@ class UseTrackingValue : public Value {
     friend Inst;
 
     /// Users of this value.
-    std::vector<Inst*> user_list;
+    std::vector<Inst*> user_list{};
 
 protected:
     explicit UseTrackingValue(Kind k, Type* t = Type::UnknownTy)
@@ -240,9 +241,9 @@ struct IRName {
 };
 
 class GlobalVariable : public UseTrackingValue {
-    std::vector<IRName> _names;
-    Value* _init;
-    Type* _allocated_type;
+    std::vector<IRName> _names{};
+    Value* _init{};
+    Type* _allocated_type{};
 
 public:
     explicit GlobalVariable(
@@ -300,7 +301,7 @@ protected:
         auto* of = as<UseTrackingValue>(of_value);
         auto it = rgs::find(of->user_list, by);
         if (it != of->user_list.end()) return;
-        of->user_list.emplace_back(by);
+        of->user_list.push_back(by);
     }
 
     /// Iterate the children of an instruction. This is only
@@ -316,9 +317,11 @@ protected:
     [[nodiscard]]
     auto Children() -> Generator<Value**>;
 
-    /// Erase this instruction without checking if it
-    /// is still used by anything.
+    /// Prepare for actual erasure/deletion by removing all tracked uses of
+    /// this instruction. Does NOT remove from block, delete memory, etc.
     void EraseImpl();
+    /// Actually remove this instruction from the parent block.
+    void PerformErasure();
 
     /// Remove a use by an instruction.
     static void RemoveUse(Value* of_value, Inst* by) {
@@ -358,7 +361,7 @@ protected:
     }
 
 public:
-    ~Inst() override = default;
+    virtual ~Inst() override = default;
 
     /// Get the parent block.
     [[nodiscard]]
@@ -377,17 +380,20 @@ public:
                 co_yield c;
     }
 
-    /// Erase this instruction from its parent block.
+    /// Remove this instruction from its parent block.
     void erase();
 
     /// Erase this instruction and all instructions that use this
     /// instruction. Be careful when using this.
+    /// Basically, if you have identified that a particular value is completely
+    /// removable from the program (including all of it's children and all of
+    /// it's users), call this.
     void erase_cascade();
 
-    void insert_before(Inst* to_insert);
+    void insert_before(std::unique_ptr<Inst> to_insert);
 
     /// Iterate over all instructions before (and not including) this one.
-    auto instructions_before_this() -> std::span<Inst*>;
+    auto instructions_before_this() -> std::vector<Inst*>;
 
     /// Check if this is a terminator instruction.
     [[nodiscard]]
@@ -455,8 +461,8 @@ static_assert(
 
 /// A basic block.
 class Block : public UseTrackingValue {
-    using Iterator = utils::VectorIterator<Inst*>;
-    using ConstIterator = utils::VectorConstIterator<Inst*>;
+    using Iterator = utils::VectorIterator<std::unique_ptr<Inst>>;
+    using ConstIterator = utils::VectorConstIterator<std::unique_ptr<Inst>>;
 
     /// Associated machine instruction block.
     MBlock* mblock{};
@@ -465,7 +471,7 @@ class Block : public UseTrackingValue {
     Function* parent{};
 
     /// The instructions in this block.
-    std::vector<Inst*> inst_list;
+    std::vector<std::unique_ptr<Inst>> inst_list;
 
     /// The name of this block.
     std::string block_name;
@@ -523,14 +529,14 @@ public:
     /// \param i The instruction to insert.
     /// \param force If true, don’t error if the block has a terminator.
     /// \return The inserted instruction.
-    auto insert(Inst* i, bool force = false) -> Inst*;
+    auto insert(std::unique_ptr<Inst> i, bool force = false) -> Inst*;
 
-    void insert_before(Inst* to_insert, Inst* before);
-    void insert_after(Inst* to_insert, Inst* after);
+    void insert_before(std::unique_ptr<Inst> to_insert, Inst* before);
+    void insert_after(std::unique_ptr<Inst> to_insert, Inst* after);
 
     /// Get the instructions in this block.
     [[nodiscard]]
-    auto instructions() -> std::vector<Inst*>& { return inst_list; }
+    auto instructions() -> std::vector<std::unique_ptr<Inst>>& { return inst_list; }
 
     /// Get the associated machine block.
     [[nodiscard]]
@@ -585,7 +591,7 @@ public:
         if (inst_list.empty())
             return nullptr;
 
-        auto* i = inst_list.back();
+        auto* i = inst_list.back().get();
         if (i->is_terminator())
             return i;
 
@@ -606,12 +612,12 @@ private:
     std::vector<IRName> func_names;
 
     /// The blocks in this function.
-    std::vector<Block*> block_list{};
+    std::vector<std::unique_ptr<Block>> block_list{};
 
     /// The parameters of this function. Parameter instructions
     /// are never created manually; instead, they always reference
     /// one of the parameter instructions inserted here.
-    std::vector<Parameter*> param_list{};
+    std::vector<std::unique_ptr<Parameter>> param_list{};
 
     /// The source location of this function.
     Location _location;
@@ -643,14 +649,14 @@ public:
     [[nodiscard]]
     auto begin() const { return block_list.begin(); }
 
-    void append_block(Block* b) {
-        block_list.push_back(b);
+    void append_block(std::unique_ptr<Block> b) {
         b->function(this);
+        block_list.emplace_back(std::move(b));
     }
 
     /// Get the blocks in this function.
     [[nodiscard]]
-    auto blocks() -> std::vector<Block*>& { return block_list; }
+    auto blocks() -> std::vector<std::unique_ptr<Block>>& { return block_list; }
 
     /// Get the calling convention of this function.
     [[nodiscard]]
@@ -667,7 +673,7 @@ public:
     [[nodiscard]]
     auto entry() const -> Block* {
         if (block_list.empty()) return nullptr;
-        return block_list.front();
+        return block_list.front().get();
     }
 
     /// Get the source location of this function.
@@ -719,7 +725,7 @@ public:
     [[nodiscard]]
     auto param(usz i) const -> Parameter* {
         LCC_ASSERT(i < param_list.size(), "Parameter index out of bounds");
-        return param_list[i];
+        return param_list[i].get();
     }
 
     /// Get the number of parameters.
@@ -728,7 +734,7 @@ public:
 
     // NOTE: For lowering
     [[nodiscard]]
-    auto params() -> std::vector<Parameter*>& { return param_list; }
+    auto params() -> std::vector<std::unique_ptr<Parameter>>& { return param_list; }
 
     /// RTTI.
     [[nodiscard]]
@@ -837,7 +843,8 @@ public:
         , arguments(std::move(arguments_))
         , cc(calling_convention) {
         AddUse(callee_value, this);
-        for (auto* a : this->arguments) AddUse(a, this);
+        for (auto* a : this->arguments)
+            AddUse(a, this);
     }
 
     /// Get the arguments.
@@ -895,7 +902,8 @@ public:
         : Inst(Kind::Intrinsic, Type::UnknownTy, location)
         , intrinsic(intrinsic_)
         , operand_list(std::move(operands)) {
-        for (auto* o : operand_list) AddUse(o, this);
+        for (auto* o : operand_list)
+            AddUse(o, this);
     }
 
     /// Get the intrinsic ID.
@@ -995,8 +1003,19 @@ class GetMemberPtrInst : public GEPBaseInst {
         : GEPBaseInst(Kind::GetMemberPtr, structType, nullptr, nullptr, location) {}
 
 public:
-    explicit GetMemberPtrInst(Type* structType, Value* structPointer, Value* memberIndex, Location location = {})
-        : GEPBaseInst(Kind::GetMemberPtr, structType, structPointer, memberIndex, location) {
+    explicit GetMemberPtrInst(
+        Type* structType,
+        Value* structPointer,
+        Value* memberIndex,
+        Location location = {}
+    )
+        : GEPBaseInst(
+              Kind::GetMemberPtr,
+              structType,
+              structPointer,
+              memberIndex,
+              location
+          ) {
         LCC_ASSERT(
             pointer->type() == Type::PtrTy,
             "GetMemberInst may only operate on opaque pointers, which `{}` is not",
@@ -2056,6 +2075,8 @@ public:
         LCC_ASSERT(as<IntegerType>(ty)->bits() <= 64, "Integer constants must be 64 bits or less");
     }
 
+    auto operator new(size_t sz, Module& mod) -> void*;
+
     /// Get the value.
     [[nodiscard]]
     auto value() const -> aint { return _value; }
@@ -2073,6 +2094,8 @@ public:
     explicit FractionalConstant(Type* ty, FixedPointNumber value)
         : Value(Kind::FractionalConstant, ty)
         , _value(value) {}
+
+    auto operator new(size_t sz, Module& mod) -> void*;
 
     /// Get the value.
     [[nodiscard]]
@@ -2096,6 +2119,8 @@ public:
         : Value(Kind::ArrayConstant, ty)
         , _data(std::move(data))
         , _is_string_literal(is_string_literal) {}
+
+    auto operator new(size_t sz, Module& mod) -> void*;
 
     /// Get an iterator to the start of the data.
     [[nodiscard]]

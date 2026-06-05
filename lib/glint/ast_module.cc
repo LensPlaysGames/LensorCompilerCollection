@@ -17,9 +17,10 @@ lcc::glint::Module::Module(
     File* file,
     std::string module_name,
     Module::ModuleStatus is_logical_module
-) : _name{std::move(module_name)},
-    _is_module{is_logical_module},
-    _file{file} //
+)
+    : _name{std::move(module_name)}
+    , _is_module{is_logical_module}
+    , _file{file} //
 {
     FuncType* ty{};
 
@@ -28,9 +29,10 @@ lcc::glint::Module::Module(
         ty = new (*this) FuncType({}, BuiltinType::Void(*this), {}, {});
     } else {
         auto* cint_ty = FFIType::CInt(*this);
-
         auto* cchar_ty = FFIType::CChar(*this);
-        auto* char_ptr = new (*this) PointerType{new (*this) PointerType{cchar_ty}};
+        auto* char_ptr = new (*this) PointerType{
+            new (*this) PointerType{cchar_ty}
+        };
 
         ty = new (*this) FuncType{
             {
@@ -55,7 +57,7 @@ lcc::glint::Module::Module(
         loc = Location{
             0,
             (decltype(Location::len)) file->size(),
-            (decltype(Location::file_id)) file->file_id() //
+            (decltype(Location::file_id)) file->file_id()
         };
     }
     _top_level_function

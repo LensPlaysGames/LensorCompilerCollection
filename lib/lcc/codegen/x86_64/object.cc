@@ -1239,8 +1239,8 @@ auto emit_mcode_gobj(
     // Section& data = out.section(".data");
     // Section& bss = out.section(".bss");
 
-    for (auto* var : module->vars())
-        out.symbols_from_global(var);
+    for (auto& var : module->vars())
+        out.symbols_from_global(var.get());
 
     for (auto& func : mir) {
         for (auto n : func.names()) {

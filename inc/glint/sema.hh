@@ -20,7 +20,8 @@ class Sema {
         TemplateExpr* template_expr{};
 
         SemaTemplate(std::string _name, TemplateExpr* _template_expr)
-            : name(_name), template_expr(_template_expr) {}
+            : name(_name)
+            , template_expr(_template_expr) {}
     };
     std::vector<SemaTemplate> sema_templates{};
 
@@ -53,10 +54,11 @@ class Sema {
     bool _use_colours;
 
     Sema(Context* ctx, Module& module, bool use_colours)
-        : context(ctx),
-          mod(module),
-          curr_func(mod.top_level_function()),
-          _use_colours(use_colours) {}
+        : context(ctx)
+        , mod(module)
+        , curr_func(mod.top_level_function())
+        , _use_colours(use_colours) {}
+
 public:
     /// Perform semantic analysis on the given module.
     ///

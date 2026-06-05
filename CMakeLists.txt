@@ -20,6 +20,29 @@ set(
 )
 
 set(
+  USE_ASAN FALSE
+  CACHE BOOL
+  "Whether or not to utilise address sanitization via -fsanitize=address."
+)
+set(
+  USE_UBSAN FALSE
+  CACHE BOOL
+  "Whether or not to utilise undefined behaviour sanitization via -fsanitize=undefined."
+)
+
+set(
+  PROFILING FALSE
+  CACHE BOOL
+  "Whether or not to generate profiling data for gprof via -pg."
+)
+
+set(
+  COVERAGE FALSE
+  CACHE BOOL
+  "Whether or not to generate coverage data for gcov via --coverage."
+)
+
+set(
   USE_COLOUR TRUE
   CACHE BOOL
   "Whether or not to tell the compiler to use color for emitting
@@ -87,6 +110,13 @@ if (PROFILING)
   if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-pg)
     add_link_options(-pg)
+  endif()
+endif()
+
+if (COVERAGE)
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(--coverage)
+    add_link_options(--coverage)
   endif()
 endif()
 
@@ -258,10 +288,17 @@ else()
 endif()
 
 # Enable AddressSanitizer if requested
-if (ENABLE_ASAN)
+if (USE_ASAN)
   target_compile_options(options INTERFACE -fsanitize=address)
   target_link_options(options INTERFACE -fsanitize=address)
-  target_compile_definitions(options INTERFACE ENABLE_ASAN=1)
+  target_compile_definitions(options INTERFACE -DUSE_ASAN=1)
+endif()
+
+# Enable UndefinedBehaviourSanitizer if requested
+if (USE_UBSAN)
+  target_compile_options(options INTERFACE -fsanitize=undefined)
+  target_link_options(options INTERFACE -fsanitize=undefined)
+  target_compile_definitions(options INTERFACE -DUSE_UBSAN=1)
 endif()
 
 # ============================================================================
@@ -348,7 +385,7 @@ add_library(
   inc/lcc/ir/type.hh
   inc/lcc/lcc-c.h
   inc/lcc/location.hh
-  inc/lcc/opt/opt.hh
+  inc/lcc/opt.hh
   inc/lcc/stringmap.hh
   inc/lcc/syntax/lexer.hh
   inc/lcc/syntax/token.hh
@@ -391,7 +428,7 @@ add_library(
   lib/lcc/ir/parser.cc
   lib/lcc/lcc-c.cc
   lib/lcc/location.cc
-  lib/lcc/opt/opt.cc
+  lib/lcc/opt.cc
   lib/lcc/platform.cc
   lib/lcc/utils.cc
   lib/lcc/utils/fractionals.cc

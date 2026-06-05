@@ -120,7 +120,12 @@ auto Module::mir() -> std::vector<MFunction> {
     // virtual register assignment
     for (auto& function : code()) {
         for (auto& block : function->blocks()) {
-            for (auto& instruction : block->instructions()) {
+            for (
+                auto* instruction : vws::transform(
+                    block->instructions(),
+                    [](const auto& p) { return p.get(); }
+                )
+            ) {
                 assign_virtual_register(instruction);
                 switch (instruction->kind()) {
                     // Non-instructions
@@ -546,7 +551,7 @@ auto Module::mir() -> std::vector<MFunction> {
             auto& f = funcs.at(usz(f_index));
             if (f.blocks().empty()) continue;
 
-            auto param_desc = cconv::msx64::parameter_description(function);
+            auto param_desc = cconv::msx64::parameter_description(function.get());
             auto& params = as<FunctionType>(function->type())->params();
             for (size_t param_i{0}; param_i < params.size(); ++param_i) {
                 auto param_info = param_desc.info.at(param_i);
@@ -575,7 +580,14 @@ auto Module::mir() -> std::vector<MFunction> {
         auto& f = funcs.at(usz(f_index));
         for (auto [block_index, block] : vws::enumerate(function->blocks())) {
             auto& bb = f.blocks().at(usz(block_index));
-            for (auto& instruction : block->instructions()) {
+            for (
+                auto* instruction : vws::transform(
+                    block->instructions(),
+                    [](const auto& p) {
+                        return p.get();
+                    }
+                )
+            ) {
                 auto register_category = Register::Category::UNSPECIFIED;
                 if (is<FractionalType>(instruction->type()))
                     register_category = Register::Category::FLOAT;
@@ -603,7 +615,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         );
                         copy.location(copy_ir->location());
                         copy.add_operand(
-                            MOperandValueReference(function, f, copy_ir->operand())
+                            MOperandValueReference(function.get(), f, copy_ir->operand())
                         );
                         bb.add_instruction(copy);
                     } break;
@@ -631,8 +643,8 @@ auto Module::mir() -> std::vector<MFunction> {
                         );
                         phi.location(phi_ir->location());
                         for (const auto& op : phi_ir->operands()) {
-                            phi.add_operand(MOperandValueReference(function, f, op.block));
-                            phi.add_operand(MOperandValueReference(function, f, op.value));
+                            phi.add_operand(MOperandValueReference(function.get(), f, op.block));
+                            phi.add_operand(MOperandValueReference(function.get(), f, op.value));
                         }
                         bb.add_instruction(phi);
                     } break;
@@ -664,7 +676,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                  Register::Category::FLOAT}
                                             );
                                             copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function, f, arg));
+                                            copy.add_operand(MOperandValueReference(function.get(), f, arg));
                                             bb.add_instruction(copy);
                                         } break;
 
@@ -678,7 +690,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                  register_category}
                                             );
                                             copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function, f, arg));
+                                            copy.add_operand(MOperandValueReference(function.get(), f, arg));
                                             bb.add_instruction(copy);
                                         } break;
 
@@ -714,7 +726,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                         // into that.
 
                                         // Remove the original argument; we will be building it by hand.
-                                        auto arg_mir = MOperandValueReference(function, f, arg);
+                                        auto arg_mir = MOperandValueReference(function.get(), f, arg);
                                         LCC_ASSERT(std::holds_alternative<MOperandRegister>(arg_mir));
                                         auto arg_reg = std::get<MOperandRegister>(arg_mir);
                                         bb.remove_inst_by_reg(arg_reg.value);
@@ -763,7 +775,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                 {+cconv::sysv::arg_regs.at(1), 64}
                                             );
                                             copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function, f, arg_ptr));
+                                            copy.add_operand(MOperandValueReference(function.get(), f, arg_ptr));
                                             bb.add_instruction(copy);
                                         }
                                         { // Size argument
@@ -802,7 +814,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                  Register::Category::FLOAT}
                                             );
                                             copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function, f, arg));
+                                            copy.add_operand(MOperandValueReference(function.get(), f, arg));
                                             bb.add_instruction(copy);
                                         } break;
 
@@ -814,7 +826,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                  uint(arg->type()->bits())}
                                             );
                                             copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function, f, arg));
+                                            copy.add_operand(MOperandValueReference(function.get(), f, arg));
                                             bb.add_instruction(copy);
                                         } break;
                                         case ParamKind::DoubleRegister: {
@@ -837,14 +849,14 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                             if (auto* load_arg = cast<LoadInst>(arg)) {
                                                 if (auto* alloca = cast<AllocaInst>(load_arg->ptr())) {
-                                                    load_a.add_operand(MOperandValueReference(function, f, alloca));
+                                                    load_a.add_operand(MOperandValueReference(function.get(), f, alloca));
 
                                                     auto add_b = MInst(
                                                         MInst::Kind::Add,
                                                         {next_vreg(), x86_64::GeneralPurposeBitwidth}
                                                     );
                                                     add_b.location(call_ir->location());
-                                                    add_b.add_operand(MOperandValueReference(function, f, alloca));
+                                                    add_b.add_operand(MOperandValueReference(function.get(), f, alloca));
                                                     add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
 
                                                     load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
@@ -860,14 +872,14 @@ auto Module::mir() -> std::vector<MFunction> {
                                                     );
                                                 }
                                             } else if (arg->kind() == Value::Kind::Alloca) {
-                                                load_a.add_operand(MOperandValueReference(function, f, arg));
+                                                load_a.add_operand(MOperandValueReference(function.get(), f, arg));
 
                                                 auto add_b = MInst(
                                                     MInst::Kind::Add,
                                                     {next_vreg(), x86_64::GeneralPurposeBitwidth}
                                                 );
                                                 add_b.location(call_ir->location());
-                                                add_b.add_operand(MOperandValueReference(function, f, arg));
+                                                add_b.add_operand(MOperandValueReference(function.get(), f, arg));
                                                 add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
 
                                                 load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
@@ -894,7 +906,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         );
                         call.location(call_ir->location());
                         call.add_operand(
-                            MOperandValueReference(function, f, call_ir->callee())
+                            MOperandValueReference(function.get(), f, call_ir->callee())
                         );
                         bb.add_instruction(call);
 
@@ -950,7 +962,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                         {arg_regs.at(arg_regs_used++), uint(op->type()->bits())}
                                     );
                                     copy.location(intrinsic->location());
-                                    copy.add_operand(MOperandValueReference(function, f, op));
+                                    copy.add_operand(MOperandValueReference(function.get(), f, op));
                                     bb.add_instruction(copy);
                                 }
 
@@ -981,14 +993,14 @@ auto Module::mir() -> std::vector<MFunction> {
                             if (not offset) {
                                 auto copy = MInst(MInst::Kind::Copy, reg);
                                 copy.location(gep_ir->location());
-                                copy.add_operand(MOperandValueReference(function, f, gep_ir->ptr()));
+                                copy.add_operand(MOperandValueReference(function.get(), f, gep_ir->ptr()));
                                 bb.add_instruction(copy);
                                 break;
                             }
 
                             auto add = MInst(MInst::Kind::Add, reg);
                             add.location(gep_ir->location());
-                            add.add_operand(MOperandValueReference(function, f, gep_ir->ptr()));
+                            add.add_operand(MOperandValueReference(function.get(), f, gep_ir->ptr()));
                             add.add_operand(MOperandImmediate(offset, 32));
 
                             usz use_count = gep_ir->users().size();
@@ -1001,11 +1013,11 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto mul = MInst(MInst::Kind::Mul, reg);
                         mul.location(gep_ir->location());
                         mul.add_operand(MOperandImmediate(gep_ir->base_type()->bytes(), 32));
-                        mul.add_operand(MOperandValueReference(function, f, gep_ir->idx()));
+                        mul.add_operand(MOperandValueReference(function.get(), f, gep_ir->idx()));
 
                         auto add = MInst(MInst::Kind::Add, reg);
                         add.location(gep_ir->location());
-                        add.add_operand(MOperandValueReference(function, f, gep_ir->ptr()));
+                        add.add_operand(MOperandValueReference(function.get(), f, gep_ir->ptr()));
                         add.add_operand(reg);
 
                         usz use_count = gep_ir->users().size();
@@ -1033,14 +1045,14 @@ auto Module::mir() -> std::vector<MFunction> {
                         if (not offset) {
                             auto copy = MInst(MInst::Kind::Copy, reg);
                             copy.location(gmp_ir->location());
-                            copy.add_operand(MOperandValueReference(function, f, gmp_ir->ptr()));
+                            copy.add_operand(MOperandValueReference(function.get(), f, gmp_ir->ptr()));
                             bb.add_instruction(copy);
                             break;
                         }
 
                         auto add = MInst(MInst::Kind::Add, reg);
                         add.location(gmp_ir->location());
-                        add.add_operand(MOperandValueReference(function, f, gmp_ir->ptr()));
+                        add.add_operand(MOperandValueReference(function.get(), f, gmp_ir->ptr()));
                         add.add_operand(MOperandImmediate(offset, 32));
 
                         bb.add_instruction(add);
@@ -1055,7 +1067,7 @@ auto Module::mir() -> std::vector<MFunction> {
                             {virts[instruction], 0}
                         );
                         branch.location(branch_ir->location());
-                        auto op = MOperandValueReference(function, f, branch_ir->target());
+                        auto op = MOperandValueReference(function.get(), f, branch_ir->target());
                         branch.add_operand(op);
                         bb.add_instruction(branch);
 
@@ -1076,9 +1088,9 @@ auto Module::mir() -> std::vector<MFunction> {
                             {virts[instruction], 0}
                         );
                         branch.location(branch_ir->location());
-                        branch.add_operand(MOperandValueReference(function, f, branch_ir->cond()));
-                        auto then_op = MOperandValueReference(function, f, branch_ir->then_block());
-                        auto else_op = MOperandValueReference(function, f, branch_ir->else_block());
+                        branch.add_operand(MOperandValueReference(function.get(), f, branch_ir->cond()));
+                        auto then_op = MOperandValueReference(function.get(), f, branch_ir->then_block());
+                        auto else_op = MOperandValueReference(function.get(), f, branch_ir->else_block());
                         branch.add_operand(then_op);
                         branch.add_operand(else_op);
                         bb.add_instruction(branch);
@@ -1134,14 +1146,14 @@ auto Module::mir() -> std::vector<MFunction> {
                             );
                             store_a.location(store_ir->location());
                             store_a.add_operand(reg_a);
-                            store_a.add_operand(MOperandValueReference(function, f, store_ir->ptr()));
+                            store_a.add_operand(MOperandValueReference(function.get(), f, store_ir->ptr()));
 
                             auto add_b = MInst(
                                 MInst::Kind::Add,
                                 {next_vreg(), 64}
                             );
                             add_b.location(store_ir->location());
-                            add_b.add_operand(MOperandValueReference(function, f, store_ir->ptr()));
+                            add_b.add_operand(MOperandValueReference(function.get(), f, store_ir->ptr()));
                             add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
 
                             auto store_b = MInst(
@@ -1165,7 +1177,7 @@ auto Module::mir() -> std::vector<MFunction> {
                             // FIXME: What does f.calling_convention() (C, Glint) have to do
                             // with any of this?
                             if (_ctx->target()->is_arch_x86_64() and _ctx->target()->is_cconv_sysv()) {
-                                auto param_description = cconv::sysv::parameter_description(function);
+                                auto param_description = cconv::sysv::parameter_description(function.get());
                                 auto param_info = param_description.info.at(param->index());
                                 auto arg_regs_used_before_parameter = param_info.arg_regs_used;
 
@@ -1188,14 +1200,14 @@ auto Module::mir() -> std::vector<MFunction> {
                                         );
                                         store_a.location(store_ir->location());
                                         store_a.add_operand(reg_a);
-                                        store_a.add_operand(MOperandValueReference(function, f, alloca));
+                                        store_a.add_operand(MOperandValueReference(function.get(), f, alloca));
 
                                         auto add_b = MInst(
                                             MInst::Kind::Add,
                                             {next_vreg(), x86_64::GeneralPurposeBitwidth}
                                         );
                                         add_b.location(store_ir->location());
-                                        add_b.add_operand(MOperandValueReference(function, f, alloca));
+                                        add_b.add_operand(MOperandValueReference(function.get(), f, alloca));
                                         add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
 
                                         auto store_b = MInst(
@@ -1223,8 +1235,8 @@ auto Module::mir() -> std::vector<MFunction> {
                             {virts[instruction], 0}
                         );
                         store.location(store_ir->location());
-                        store.add_operand(MOperandValueReference(function, f, store_ir->val()));
-                        store.add_operand(MOperandValueReference(function, f, store_ir->ptr()));
+                        store.add_operand(MOperandValueReference(function.get(), f, store_ir->val()));
+                        store.add_operand(MOperandValueReference(function.get(), f, store_ir->ptr()));
                         bb.add_instruction(store);
                     } break;
 
@@ -1237,7 +1249,7 @@ auto Module::mir() -> std::vector<MFunction> {
                              register_category}
                         );
                         load.location(load_ir->location());
-                        load.add_operand(MOperandValueReference(function, f, load_ir->ptr()));
+                        load.add_operand(MOperandValueReference(function.get(), f, load_ir->ptr()));
                         bb.add_instruction(load);
                     } break;
 
@@ -1261,7 +1273,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                     {next_vreg(), x86_64::GeneralPurposeBitwidth}
                                 );
                                 copy_b.location(ret_ir->location());
-                                copy_b.add_operand(MOperandValueReference(function, f, ret_ir->val()));
+                                copy_b.add_operand(MOperandValueReference(function.get(), f, ret_ir->val()));
 
                                 auto add_b = MInst(
                                     MInst::Kind::Add,
@@ -1276,7 +1288,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                     {usz(x86_64::RegisterId::RAX), x86_64::GeneralPurposeBitwidth}
                                 );
                                 load_a.location(ret_ir->location());
-                                load_a.add_operand(MOperandValueReference(function, f, ret_ir->val()));
+                                load_a.add_operand(MOperandValueReference(function.get(), f, ret_ir->val()));
 
                                 auto load_b = MInst(
                                     MInst::Kind::Load,
@@ -1307,7 +1319,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         );
                         ret.location(ret_ir->location());
                         if (ret_ir->has_value())
-                            ret.add_operand(MOperandValueReference(function, f, ret_ir->val()));
+                            ret.add_operand(MOperandValueReference(function.get(), f, ret_ir->val()));
                         bb.add_instruction(ret);
                     } break;
 
@@ -1326,7 +1338,7 @@ auto Module::mir() -> std::vector<MFunction> {
                              register_category}
                         );
                         unary.location(unary_ir->location());
-                        unary.add_operand(MOperandValueReference(function, f, unary_ir->operand()));
+                        unary.add_operand(MOperandValueReference(function.get(), f, unary_ir->operand()));
                         bb.add_instruction(unary);
                     } break;
 
@@ -1363,10 +1375,10 @@ auto Module::mir() -> std::vector<MFunction> {
                         );
                         binary.location(binary_ir->location());
                         binary.add_operand(
-                            MOperandValueReference(function, f, binary_ir->lhs())
+                            MOperandValueReference(function.get(), f, binary_ir->lhs())
                         );
                         binary.add_operand(
-                            MOperandValueReference(function, f, binary_ir->rhs())
+                            MOperandValueReference(function.get(), f, binary_ir->rhs())
                         );
                         bb.add_instruction(binary);
                     } break;

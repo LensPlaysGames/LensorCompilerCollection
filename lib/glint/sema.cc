@@ -385,6 +385,57 @@ void lcc::glint::Sema::Analyse(Context* ctx, Module& m, bool use_colours) {
     return s.AnalyseModule();
 }
 
+namespace lcc::glint {
+[[nodiscard]]
+bool deserialise_from_metadata_blob(
+    Module& mod,
+    Context* context,
+    Module::Ref& import_ref,
+    const std::vector<lcc::u8>& metadata_blob
+) {
+    // Very basic validation pass
+    LCC_ASSERT(
+        not metadata_blob.empty(),
+        "Didn't properly get metadata (it's empty) for module {}",
+        import_ref.name
+    );
+    LCC_ASSERT(
+        metadata_blob.at(0) == ModuleDescription::default_version
+            and metadata_blob.at(1) == ModuleDescription::magic_byte0
+            and metadata_blob.at(2) == ModuleDescription::magic_byte1
+            and metadata_blob.at(3) == ModuleDescription::magic_byte2,
+        "Metadata for module {} has invalid magic bytes",
+        import_ref.name
+    );
+    // Deserialise metadata blob into a newly created shell of a module.
+    auto imported_mod = new Module(
+        nullptr,
+        import_ref.name,
+        Module::IsAModule
+    );
+    // import_ref now "owns" imported_mod.
+    import_ref.module = imported_mod;
+
+    // "Copy" global scope to imported module, since they will access the same
+    // globals in the same program.
+    // NOTE: This makes exported variables declared in the module available *
+    // directly* in the program (this module), without any prefix or accessing
+    // the module via name.
+    //
+    imported_mod->scopes.emplace_back(mod.global_scope());
+
+    // TODO: This better matches Glint's semantics, but, er, it causes crashes.
+    // NOTE: This makes exported variables declared in the module available *
+    // only* via prefixing with the module name, i.e. module-name.var.
+    //
+    // imported_mod->scopes.emplace_back(
+    //     new (*imported_mod) Scope(nullptr)
+    // );
+
+    return imported_mod->deserialise(context, metadata_blob);
+}
+} // namespace lcc::glint
+
 auto lcc::glint::Sema::try_get_metadata_blob_from_object(
     Module::Ref& import_ref,
     const std::string& include_dir,
@@ -435,33 +486,7 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_object(
                 import_ref.name,
                 p
             );
-            // Very basic validation pass
-            LCC_ASSERT(
-                not metadata_blob.empty(),
-                "Didn't properly get metadata (it's empty) for module {} at {}",
-                import_ref.name,
-                p
-            );
-            LCC_ASSERT(
-                metadata_blob.at(0) == ModuleDescription::default_version
-                    and metadata_blob.at(1) == ModuleDescription::magic_byte0
-                    and metadata_blob.at(2) == ModuleDescription::magic_byte1
-                    and metadata_blob.at(3) == ModuleDescription::magic_byte2,
-                "Metadata for module {} at {} has invalid magic bytes",
-                import_ref.name,
-                p
-            );
-            // Deserialise metadata blob into a newly created shell of a module.
-            auto imported_mod = new Module(
-                nullptr,
-                import_ref.name,
-                Module::IsAModule
-            );
-            import_ref.module = imported_mod;
-            // "Copy" global scope to imported module, since they will access the same
-            // globals in the same program.
-            imported_mod->scopes.emplace_back(mod.global_scope());
-            return imported_mod->deserialise(context, metadata_blob);
+            return deserialise_from_metadata_blob(mod, context, import_ref, metadata_blob);
         }
     }
     return false;
@@ -484,35 +509,13 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
         auto gmeta_file = File::Read(path);
 
         std::vector<u8> metadata_blob{};
+#ifdef __cpp_lib_containers_ranges
+        metadata_blob.append_range(gmeta_file);
+#else
         metadata_blob.insert(metadata_blob.end(), gmeta_file.begin(), gmeta_file.end());
+#endif
 
-        LCC_ASSERT(
-            not metadata_blob.empty(),
-            "Found gmeta file for module {} at {}, but the file is empty",
-            import_ref.name,
-            path
-        );
-        LCC_ASSERT(
-            metadata_blob.at(0) == ModuleDescription::default_version
-                and metadata_blob.at(1) == ModuleDescription::magic_byte0
-                and metadata_blob.at(2) == ModuleDescription::magic_byte1
-                and metadata_blob.at(3) == ModuleDescription::magic_byte2,
-            "Metadata for module {} at {} has invalid magic bytes",
-            import_ref.name,
-            path
-        );
-        // Deserialise metadata blob into a newly created shell of a module.
-        auto imported_mod = new Module(
-            nullptr,
-            import_ref.name,
-            Module::IsAModule
-        );
-        // import_ref now "owns" this module...
-        import_ref.module = imported_mod;
-        // "Copy" global scope to imported module, since they will access the same
-        // globals in the same program.
-        imported_mod->scopes.emplace_back(mod.global_scope());
-        return imported_mod->deserialise(context, metadata_blob);
+        return deserialise_from_metadata_blob(mod, context, import_ref, metadata_blob);
     }
 
     return false;
@@ -550,18 +553,7 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_assembly(
             );
             assembly_string.remove_prefix(assembly_string.find_first_not_of(", \t"));
         }
-        // Deserialise metadata blob into a newly created shell of a module.
-        auto imported_mod = new Module(
-            nullptr,
-            import_ref.name,
-            Module::IsAModule
-        );
-        // import_ref now "owns" this module...
-        import_ref.module = imported_mod;
-        // "Copy" global scope to imported module, since they will access the same
-        // globals in the same program.
-        imported_mod->scopes.emplace_back(mod.global_scope());
-        return imported_mod->deserialise(context, metadata_blob);
+        return deserialise_from_metadata_blob(mod, context, import_ref, metadata_blob);
     }
     return false;
 }
@@ -3264,6 +3256,11 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
                 // Relevant dynamic array type
                 auto dyn_t = as<DynamicArrayType>(subscript->lhs()->type());
+
+                // TODO: Check that RHS is an array type (fixed, dynamic, or a view).
+                // If it is, check that it's element type is convertible to our element
+                // type.
+                // If it is, insert entire array.
 
                 // Ensure rhs is convertible to dynamic array element type
                 if (not Convert(&b->rhs(), dyn_t->elem())) {

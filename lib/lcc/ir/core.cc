@@ -45,11 +45,16 @@ Function::Function(
 
     /// Create parameter instructions.
     param_list.reserve(ty->params().size());
-    for (auto [i, param] : vws::enumerate(ty->params()))
-        param_list.push_back(new (*mod) Parameter(param, u32(i)));
+    for (auto [i, param] : vws::enumerate(ty->params())) {
+        param_list.push_back(
+            std::unique_ptr<Parameter>(
+                new (*mod) Parameter(param, u32(i))
+            )
+        );
+    }
 
     /// Add the function to the module.
-    mod->add_function(this);
+    mod->add_function(std::unique_ptr<Function>(this));
 }
 
 GlobalVariable::GlobalVariable(
@@ -64,7 +69,9 @@ GlobalVariable::GlobalVariable(
     , _allocated_type(t) {
     LCC_ASSERT(mod and t);
     _names.push_back({std::move(name), linkage});
-    mod->add_var(this);
+    mod->add_var(
+        std::unique_ptr<GlobalVariable>(std::move(this))
+    );
 }
 
 GlobalVariable* GlobalVariable::CreateStringPtr(Module* mod, std::string name, std::string_view str) {
@@ -367,29 +374,34 @@ StructType* StructType::Get(
     return out;
 }
 
-void Block::insert_before(Inst* to_insert, Inst* before) {
+void Block::insert_before(std::unique_ptr<Inst> to_insert, Inst* before) {
     LCC_ASSERT(to_insert and before);
-    auto before_it = rgs::find(inst_list, before);
-    inst_list.insert(before_it, to_insert);
+    auto before_it = rgs::find_if(inst_list, [&](const auto& i) {
+        return i.get() == before;
+    });
     to_insert->parent = this;
+    inst_list.insert(before_it, std::move(to_insert));
 }
 
-void Block::insert_after(Inst* to_insert, Inst* after) {
+void Block::insert_after(std::unique_ptr<Inst> to_insert, Inst* after) {
     LCC_ASSERT(to_insert and after);
-    auto after_it = rgs::find(inst_list, after);
-    inst_list.insert(after_it + 1, to_insert);
+    auto after_it = rgs::find_if(inst_list, [&](const auto& i) {
+        return i.get() == after;
+    });
     to_insert->parent = this;
+    inst_list.insert(after_it + 1, std::move(to_insert));
 }
 
-Inst* Block::insert(Inst* i, bool force) {
+Inst* Block::insert(std::unique_ptr<Inst> i, bool force) {
     LCC_ASSERT(i);
     if (not force and closed())
         Diag::ICE("Insertion into block that has already been closed: {}", name());
 
-    inst_list.push_back(i);
+    auto inserted = i.get();
     i->parent = this;
+    inst_list.emplace_back(std::move(i));
 
-    return i;
+    return inserted;
 }
 
 bool Block::has_predecessor(Block* block) const {
@@ -417,7 +429,12 @@ usz Block::id() const {
     return usz(
         std::distance(
             parent->blocks().begin(),
-            rgs::find(parent->blocks(), this)
+            rgs::find_if(
+                parent->blocks(),
+                [&](const auto& b) {
+                    return b.get() == this;
+                }
+            )
         )
     );
 }
@@ -432,7 +449,7 @@ auto Inst::Children() -> Generator<Value**> {
         case Kind::Poison:
         case Kind::GlobalVariable:
         case Kind::Parameter:
-            LCC_UNREACHABLE();
+            Diag::ICE("Children() called on {}", ToString(kind()));
 
         case Kind::Alloca:
         case Kind::Branch:
@@ -535,19 +552,19 @@ void Inst::EraseImpl() {
     for (auto* usee : children())
         RemoveUse(usee, this);
 
-    // Erase this instruction from the containing block.
+    // Erase this instruction from the containing block's list of users.
     if (parent) {
         // Sometimes values are poisoned/erased *without* their parent being updated
         // to nullptr. This should be a compiler error, but, for now, we just make
         // sure to not crash here or remove the wrong instruction, if that's the case.
-        auto it = rgs::find(parent->instructions(), this);
+        auto it = rgs::find_if(parent->instructions(), [&](const auto& i) {
+            return i.get() == this;
+        });
         // LCC_ASSERT(
         //     it != parent->instructions().end(),
         //     "Erasing an instruction that has a parent block, but the instruction is not present within the specified parent block..."
         // );
         if (it != parent->instructions().end()) {
-            // Remove the instruction from the instruction list.
-            parent->instructions().erase(it);
             // Remove the instruction from the users list of the block, if necessary.
             // This is required for PHI instructions, for example.
             RemoveUse(parent, this);
@@ -568,25 +585,51 @@ auto Inst::children() const -> Generator<Value*> {
     }
 }
 
+void Inst::PerformErasure() {
+    LCC_ASSERT(users().empty(), "Cannot remove used instruction");
+    if (parent) {
+        std::erase_if(parent->instructions(), [&](const auto& i) {
+            return i.get() == this;
+        });
+    }
+}
+
 void Inst::erase() {
     LCC_ASSERT(users().empty(), "Cannot remove used instruction");
+    // Remove this instruction as a user from it's children
     EraseImpl();
+    // Remove this instruction from it's place in a block, freeing the
+    // underlying memory.
+    PerformErasure();
 }
 
 void Inst::erase_cascade() {
     EraseImpl();
+
     while (not users().empty())
         users().front()->erase_cascade();
+
+    // Remove the instruction from the instruction list.
+    if (parent) {
+        std::erase_if(parent->instructions(), [&](const auto& i) {
+            return i.get() == this;
+        });
+    }
 }
 
-auto Inst::instructions_before_this() -> std::span<Inst*> {
+auto Inst::instructions_before_this() -> std::vector<Inst*> {
     if (not parent) return {};
-    auto it = rgs::find(parent->instructions(), this);
+    std::vector<Inst*> out{};
+    auto it = rgs::find_if(parent->instructions(), [&](const auto& i) {
+        if (i.get() == this) return true;
+        out.emplace_back(i.get());
+        return false;
+    });
     LCC_ASSERT(
         it != parent->instructions().end(),
         "Instruction not found in parent"
     );
-    return {parent->instructions().begin(), it};
+    return out;
 }
 
 void Inst::replace_with(Value* v) {
@@ -643,7 +686,7 @@ void Inst::replace_with(Value* v) {
         inst and parent and not inst->parent
     ) {
         auto* block = cast<Block>(parent);
-        block->insert_before(inst, this);
+        block->insert_before(std::unique_ptr<Inst>(inst), this);
     }
 
     erase();
@@ -652,11 +695,10 @@ void Inst::replace_with(Value* v) {
 auto Block::create_phi(Type* type, Location loc) -> PhiInst* {
     LCC_ASSERT(type);
     auto phi = new (*parent->module()) PhiInst(type, loc);
-    auto it = rgs::find_if(
-        inst_list,
-        [](Inst* i) { return not is<PhiInst>(i); }
-    );
-    inst_list.insert(it, phi);
+    auto it = rgs::find_if(inst_list, [](auto& i) {
+        return not is<PhiInst>(i.get());
+    });
+    inst_list.insert(it, std::unique_ptr<Inst>(phi));
     phi->parent = this;
     return phi;
 }
@@ -677,7 +719,9 @@ void Block::erase() {
         inst_list.back()->erase_cascade();
 
     if (parent) {
-        auto it = rgs::find(parent->blocks(), this);
+        auto it = rgs::find_if(parent->blocks(), [&](const auto& b) {
+            return b.get() == this;
+        });
         parent->blocks().erase(it);
     }
 }
@@ -759,13 +803,13 @@ void Block::merge(lcc::Block* b) {
 
     /// Set the parent for each instruction to this block and move
     /// them all over. Lastly, delete the block.
-    for (auto i : b->inst_list)
+    for (auto& i : b->inst_list)
         i->parent = this;
 
     inst_list.insert(
         inst_list.end(),
-        b->inst_list.begin(),
-        b->inst_list.end()
+        std::make_move_iterator(b->inst_list.begin()),
+        std::make_move_iterator(b->inst_list.end())
     );
     b->inst_list.clear();
 
@@ -809,13 +853,13 @@ auto lcc::Block::successor_count() const -> usz {
     }
 }
 
-void lcc::Inst::insert_before(Inst* to_insert) {
+void lcc::Inst::insert_before(std::unique_ptr<Inst> to_insert) {
     LCC_ASSERT(to_insert);
     LCC_ASSERT(
         block(),
         "Cannot insert before instruction that has no block reference"
     );
-    block()->insert_before(to_insert, this);
+    block()->insert_before(std::move(to_insert), this);
 }
 
 namespace {
@@ -1594,6 +1638,24 @@ auto Inst::is_terminator() const -> bool {
         return call->callee_type->noreturn();
 
     return kind() >= Value::Kind::Branch and kind() <= Value::Kind::Unreachable;
+}
+
+auto allocate_value(size_t sz, Module& mod) -> void* {
+    auto p = ::operator new(sz);
+    mod.values().emplace_back(std::unique_ptr<Value>((Value*) p));
+    return p;
+}
+
+auto IntegerConstant::operator new(size_t sz, Module& mod) -> void* {
+    return allocate_value(sz, mod);
+}
+
+auto FractionalConstant::operator new(size_t sz, Module& mod) -> void* {
+    return allocate_value(sz, mod);
+}
+
+auto ArrayConstant::operator new(size_t sz, Module& mod) -> void* {
+    return allocate_value(sz, mod);
 }
 
 } // namespace lcc

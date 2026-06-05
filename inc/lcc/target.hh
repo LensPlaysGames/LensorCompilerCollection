@@ -3,10 +3,6 @@
 
 #include <lcc/utils.hh>
 
-// FIXME: This is a very stupid way to handle things, imo.
-// We should be able to switch on a target enum, or similar.
-// This nonsense is ridiculous. Whoever wrote it should be ashamed.
-
 namespace lcc {
 class Context;
 
@@ -139,7 +135,7 @@ struct Targets {
 };
 } // namespace detail
 
-constexpr inline const Target* const Target::x86_64_linux = &detail::Targets::x86_64_linux;
+constinit inline const Target* const Target::x86_64_linux = &detail::Targets::x86_64_linux;
 constinit inline const Target* const Target::x86_64_windows = &detail::Targets::x86_64_windows;
 
 } // namespace lcc

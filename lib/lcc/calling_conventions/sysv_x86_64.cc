@@ -65,7 +65,7 @@ auto cconv::sysv::parameter_description(
     rgs::transform(
         function->params(),
         std::back_inserter(parameter_types),
-        [](auto p) { return p->type(); }
+        [](auto& p) { return p->type(); }
     );
     return parameter_description(parameter_types);
 };

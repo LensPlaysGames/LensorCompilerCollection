@@ -1,7 +1,7 @@
 ================
 Single Parameter
 ================
-foo : void(x :int) {};
+foo : void(x :int) used {};
 
 
 ---
@@ -33,7 +33,7 @@ _XGlintfooF1_B6_B3 (internal): glintcc void(i64 %0):
 ================
 Two Parameters
 ================
-foo : void(x,y :int) {};
+foo : void(x,y :int) used {};
 
 
 ---
@@ -67,7 +67,7 @@ _XGlintfooF2_B6_B3_B3 (internal): glintcc void(i64 %0, i64 %1):
 ================
 Three Parameters
 ================
-foo : void(x,y,z :int) {};
+foo : void(x,y,z :int) used {};
 
 
 ---
@@ -103,7 +103,7 @@ _XGlintfooF3_B6_B3_B3_B3 (internal): glintcc void(i64 %0, i64 %1, i64 %2):
 ================
 Four Parameters
 ================
-foo : void(x,y,z,w :int) {};
+foo : void(x,y,z,w :int) used {};
 
 ---
 

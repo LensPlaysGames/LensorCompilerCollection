@@ -6,12 +6,13 @@
 namespace lcc {
 class DomTree {
     static constexpr usz RootId = 0;
+    static constexpr usz InvalidId{-1zu};
 
     /// The function for which this dominator tree was built.
     Function* f;
 
-    /// IDOMs.
-    Buffer<usz> idoms{f->blocks().size(), -1zu};
+    /// Immediate Dominators.
+    Buffer<usz> idoms{f->blocks().size(), InvalidId};
 
     /// Dominance frontier of each node.
     Buffer<std::vector<Block*>> df{f->blocks().size()};
@@ -38,7 +39,7 @@ public:
             co_yield b;
             for (auto c : children[b->id()]) {
                 if (not visited[c]) {
-                    stack.push_back(f->blocks()[c]);
+                    stack.push_back(f->blocks()[c].get());
                     visited[c] = true;
                 }
             }
@@ -76,12 +77,33 @@ public:
     auto parents(Block* of) -> Generator<Block*> {
         for (auto i = of->id(); i != RootId;) {
             i = idoms[i];
-            co_yield f->blocks()[i];
+            // Don't attempt to return parents of an unreachable block
+            if (i != InvalidId)
+                co_yield f->blocks()[i].get();
         }
     }
 
     /// Get the root of the tree.
     auto root() const -> Block* { return f->entry(); }
+
+    // TODO: This is needlessly slow.
+    bool reachable(Block* b) const {
+        LCC_ASSERT(b);
+
+        if (
+            auto term_inst = b->terminator();
+            is<UnreachableInst>(term_inst)
+        ) return false;
+
+        // Root is reachable
+        if (b->id() == RootId) return true;
+
+        auto i = b->id();
+        while (i != RootId and i != InvalidId)
+            i = idoms[i];
+
+        return i == RootId;
+    }
 
     /// Check if a block strictly dominates another.
     auto strictly_dominates(Block* dominator, Block* b) const -> bool {
@@ -89,14 +111,22 @@ public:
         if (dominator == b) return false;
         if (dominator == root()) return true;
 
-        /// Walk up the dominator tree starting at b’s idom until
-        /// we find the dominator or reach the root.
+        // An unreachable node is dominated by anything.
+        if (not reachable(b)) return true;
+
+        // An unreachable node dominates nothing.
+        if (not reachable(dominator)) return false;
+
+        /// Walk up the dominator tree starting at b’s immediate dominator until we
+        /// find the dominator or reach the root.
         usz d = dominator->id();
         usz i = b->id();
+
         do {
             i = idoms[i];
             if (i == d) return true;
-        } while (i != RootId);
+        } while (i != RootId and i != InvalidId);
+
         return false;
     }
 };

@@ -164,7 +164,7 @@ void Module::_x86_64_sysv_lower_overlarge() {
     // - Overlarge LoadInst and StoreInst -> converted to memcpy
     LCC_ASSERT(_ctx->target()->is_cconv_sysv());
 
-    for (auto function : code()) {
+    for (auto& function : code()) {
         FunctionType* function_type = as<FunctionType>(function->type());
 
         // Alter Function Signature, if need be
@@ -187,7 +187,9 @@ void Module::_x86_64_sysv_lower_overlarge() {
             // function type.
             function->params().insert(
                 function->params().begin(),
-                new (*this) Parameter{Type::PtrTy, 0}
+                std::unique_ptr<Parameter>(
+                    new (*this) Parameter{Type::PtrTy, 0}
+                )
             );
             function_type->params().insert(
                 function_type->params().begin(),
@@ -202,11 +204,11 @@ void Module::_x86_64_sysv_lower_overlarge() {
                 function->blocks().size()
                 and function->blocks().at(0)->instructions().size()
             ) {
-                auto start = function->blocks().at(0);
+                auto& start = function->blocks().at(0);
                 auto alloca = new (*this) AllocaInst(Type::PtrTy, {});
-                auto store = new (*this) StoreInst(function->params().at(0), alloca);
-                start->insert_before(alloca, start->instructions().at(0));
-                start->insert_after(store, alloca);
+                auto store = new (*this) StoreInst(function->params().at(0).get(), alloca);
+                start->insert_before(std::unique_ptr<Inst>(alloca), start->instructions().at(0).get());
+                start->insert_after(std::unique_ptr<Inst>(store), alloca);
                 ret_v_large = alloca;
             }
 
@@ -219,9 +221,9 @@ void Module::_x86_64_sysv_lower_overlarge() {
         }
 
         // Convert overlarge ReturnInst, LoadInst, and StoreInst.
-        for (auto* block : function->blocks()) {
+        for (auto& block : function->blocks()) {
             for (size_t inst_i = 0; inst_i < block->instructions().size(); ++inst_i) {
-                auto*& instruction = block->instructions().at(inst_i);
+                auto* instruction = block->instructions().at(inst_i).get();
                 switch (instruction->kind()) {
                     default: break;
 
@@ -264,7 +266,9 @@ void Module::_x86_64_sysv_lower_overlarge() {
                         );
                         ret->replace_with(memcpy_inst);
                         block->insert_after(
-                            new (*this) ReturnInst(dest_ptr),
+                            std::unique_ptr<Inst>(
+                                new (*this) ReturnInst(dest_ptr)
+                            ),
                             memcpy_inst
                         );
                         // IMPORTANT! Skip instruction inserted above in iteration (lest we get
@@ -274,12 +278,12 @@ void Module::_x86_64_sysv_lower_overlarge() {
 
                     case Value::Kind::Load: {
                         auto* load = as<LoadInst>(instruction);
-                        _x86_64_lower_load(load, function);
+                        _x86_64_lower_load(load, function.get());
                     } break;
 
                     case Value::Kind::Store: {
                         auto store = as<StoreInst>(instruction);
-                        _x86_64_lower_store(store, function);
+                        _x86_64_lower_store(store, function.get());
                     } break;
 
                     case Value::Kind::Call: {
@@ -328,9 +332,9 @@ void Module::_x86_64_sysv_lower_parameters() {
     /// So, the idea is, remove the alloca, remove the store, and replace uses
     /// of the alloca (a pointer to the parameter) with the parameter itself
     /// (which, for memory parameters, is a pointer to the parameter).
-    for (auto function : code()) {
+    for (auto& function : code()) {
         FunctionType* function_type = as<FunctionType>(function->type());
-        auto param_desc = cconv::sysv::parameter_description(function);
+        auto param_desc = cconv::sysv::parameter_description(function.get());
         LCC_ASSERT(
             function_type->params().size() == param_desc.info.size(),
             "SysV Parameter Description: parameter count doesn't match signature"
@@ -407,7 +411,7 @@ void Module::_x86_64_sysv_lower_parameters() {
 }
 
 void Module::_x86_64_msx64_lower_overlarge() {
-    for (auto function : code()) {
+    for (auto& function : code()) {
         FunctionType* function_type = as<FunctionType>(function->type());
 
         bool ret_t_is_large
@@ -419,17 +423,22 @@ void Module::_x86_64_msx64_lower_overlarge() {
 
             // Prepend parameter to both function value and function type.
             function_type->params().insert(function_type->params().begin(), Type::PtrTy);
-            function->params().insert(function->params().begin(), new (*this) Parameter{Type::PtrTy, 0});
+            function->params().insert(
+                function->params().begin(),
+                std::unique_ptr<Parameter>(
+                    new (*this) Parameter{Type::PtrTy, 0}
+                )
+            );
             // Update the indices of the rest of the displaced parameters, if any.
             for (usz i = 1; i < function->params().size(); ++i)
                 function->params()[i]->index() = u32(i);
 
             if (function->blocks().size() and function->blocks().at(0)->instructions().size()) {
-                auto start = function->blocks().at(0);
+                auto& start = function->blocks().at(0);
                 auto alloca = new (*this) AllocaInst(Type::PtrTy, {});
-                auto store = new (*this) StoreInst(function->params().at(0), alloca);
-                start->insert_before(alloca, start->instructions().at(0));
-                start->insert_after(store, alloca);
+                auto store = new (*this) StoreInst(function->params().at(0).get(), alloca);
+                start->insert_before(std::unique_ptr<Inst>(alloca), start->instructions().at(0).get());
+                start->insert_after(std::unique_ptr<Inst>(store), alloca);
                 ret_v_large = alloca;
             }
 
@@ -438,9 +447,9 @@ void Module::_x86_64_msx64_lower_overlarge() {
         }
 
         // Convert overlarge ReturnInst, LoadInst, and StoreInst.
-        for (auto* block : function->blocks()) {
+        for (auto& block : function->blocks()) {
             for (size_t inst_i = 0; inst_i < block->instructions().size(); ++inst_i) {
-                auto*& instruction = block->instructions().at(inst_i);
+                auto* instruction = block->instructions().at(inst_i).get();
                 switch (instruction->kind()) {
                     default: break;
 
@@ -483,7 +492,9 @@ void Module::_x86_64_msx64_lower_overlarge() {
                         );
                         ret->replace_with(memcpy_inst);
                         block->insert_after(
-                            new (*this) ReturnInst(dest_ptr),
+                            std::unique_ptr<Inst>(
+                                new (*this) ReturnInst(dest_ptr)
+                            ),
                             memcpy_inst
                         );
                         // IMPORTANT! Skip instruction inserted above in iteration (lest we get
@@ -493,12 +504,12 @@ void Module::_x86_64_msx64_lower_overlarge() {
 
                     case Value::Kind::Load: {
                         auto* load = as<LoadInst>(instruction);
-                        _x86_64_lower_load(load, function);
+                        _x86_64_lower_load(load, function.get());
                     } break;
 
                     case Value::Kind::Store: {
                         auto store = as<StoreInst>(instruction);
-                        _x86_64_lower_store(store, function);
+                        _x86_64_lower_store(store, function.get());
                     } break;
 
                     case Value::Kind::Call: {
@@ -520,9 +531,9 @@ void Module::_x86_64_msx64_lower_overlarge() {
 
 void Module::_x86_64_msx64_lower_parameters() {
     using ParamKind = cconv::msx64::ParameterDescription::Parameter::Kinds;
-    for (auto function : code()) {
+    for (auto& function : code()) {
         FunctionType* function_type = as<FunctionType>(function->type());
-        auto param_desc = cconv::msx64::parameter_description(function);
+        auto param_desc = cconv::msx64::parameter_description(function.get());
         LCC_ASSERT(
             function_type->params().size() == param_desc.info.size(),
             "SysV Parameter Description: parameter count doesn't match signature"
@@ -619,7 +630,7 @@ void Module::_x86_64_msx64_lower_parameters() {
                                 parameter->index()
                             )
                         );
-                        pointer_user->insert_before(load);
+                        pointer_user->insert_before(std::unique_ptr<Inst>(load));
                         replacement = load;
                     } else {
                         // For register parameters and memory parameters, just replace the alloca
@@ -664,10 +675,10 @@ void Module::_x86_64_msx64_lower_parameters() {
 }
 
 void Module::_x86_64_lower_float_constants() {
-    for (auto function : code()) {
-        for (auto block : function->blocks()) {
+    for (auto& function : code()) {
+        for (auto& block : function->blocks()) {
             for (size_t inst_i = 0; inst_i < block->instructions().size(); ++inst_i) {
-                auto instruction = block->instructions().at(inst_i);
+                auto* instruction = block->instructions().at(inst_i).get();
 
                 std::unordered_map<Value*, Value*> child_replacements{};
                 for (auto child : instruction->children_of_kind<FractionalConstant>()) {
@@ -700,7 +711,7 @@ void Module::_x86_64_lower_float_constants() {
                         instruction->location()
                     );
 
-                    instruction->insert_before(load);
+                    instruction->insert_before(std::unique_ptr<Inst>(load));
                     // insert_before will offset all (future) indices by one.
                     ++inst_i;
 

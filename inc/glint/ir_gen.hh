@@ -9,13 +9,14 @@
 
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 namespace lcc::glint {
 
 class IRGen {
     Context* ctx;
-    glint::Module& int_module;
-    lcc::Module* module;
+    glint::Module& glint_module;
+    lcc::Module* ir_module;
 
     lcc::Function* function{nullptr};
     lcc::Block* block{nullptr};
@@ -24,13 +25,15 @@ class IRGen {
     usz total_while = 0;
     usz total_for = 0;
     usz total_if = 0;
-
     usz total_string = 0;
 
-    void update_block(lcc::Block* new_block) {
-        function->append_block(new_block);
-        block = new_block;
+    void update_block(std::unique_ptr<lcc::Block> new_block) {
+        block = new_block.get();
+        function->append_block(std::move(new_block));
         total_block += 1;
+    }
+    void update_block(lcc::Block* new_block) {
+        update_block(std::unique_ptr<Block>(new_block));
     }
 
     std::unordered_map<glint::Expr*, lcc::Value*> generated_ir;
@@ -41,8 +44,10 @@ class IRGen {
     std::unordered_map<glint::Expr*, LoopBlocks> loop_info;
     std::vector<lcc::GlobalVariable*> string_literals;
 
-    IRGen(Context* c, glint::Module& m) : ctx(c), int_module(m) {
-        module = new lcc::Module(ctx);
+    IRGen(Context* c, glint::Module& m)
+        : ctx(c)
+        , glint_module(m) {
+        ir_module = new lcc::Module(ctx);
     }
 
     void insert(lcc::Inst* inst);
@@ -53,10 +58,7 @@ class IRGen {
     void generate_function(glint::FuncDecl*);
 
 public:
-    /// NOTE: I would name this module(), but C++ doesn't have properties.
-    auto mod() -> lcc::Module* {
-        return module;
-    }
+    auto mod() -> lcc::Module* { return ir_module; }
 
     static auto Generate(Context*, glint::Module&) -> lcc::Module*;
 };

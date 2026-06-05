@@ -1,6 +1,7 @@
 #include <lcc/core.hh>
 #include <lcc/ir/domtree.hh>
-#include <lcc/opt/opt.hh>
+#include <lcc/ir/module.hh>
+#include <lcc/opt.hh>
 #include <lcc/utils.hh>
 
 #include <algorithm>
@@ -20,7 +21,8 @@ namespace {
 struct OptimisationPass {
     Module* mod;
 
-    OptimisationPass(Module* module) : mod(module) {}
+    OptimisationPass(Module* module)
+        : mod(module) {}
 
     /// Check if this pass has changed the ir.
     [[nodiscard]]
@@ -51,7 +53,7 @@ protected:
     auto Create(Inst* after, Args&&... args) -> Instruction* {
         LCC_ASSERT(after->block(), "Cannot insert after floating instruction");
         auto* i = new (*mod) Instruction(std::forward<Args>(args)...);
-        after->block()->insert_after(i, after);
+        after->block()->insert_after(std::unique_ptr<Inst>(i), after);
         SetChanged();
         return i;
     }
@@ -330,9 +332,22 @@ public:
                 /// same block, else intervening operations might change
                 /// the semantics of this.
                 auto* b = s->block();
-                if (not s->block() or not l->block()) break;
-                if (s->block() != l->block()) break;
-                if (std::next(rgs::find(b->instructions(), l)) != rgs::find(b->instructions(), s)) break;
+                if (not s->block() or not l->block())
+                    break;
+
+                if (s->block() != l->block())
+                    break;
+
+                auto found_l = rgs::find_if(
+                    b->instructions(),
+                    [&](const auto& ii) { return ii.get() == l; }
+                );
+                auto found_s = rgs::find_if(
+                    b->instructions(),
+                    [&](const auto& ii) { return ii.get() == s; }
+                );
+                if (std::next(found_l) != found_s)
+                    break;
 
                 /// Insert a memcpy.
                 Create<IntrinsicInst>(
@@ -764,8 +779,8 @@ struct SSAConstructionPass : InstructionRewritePass {
 
             /// Search dominators.
             for (auto* b : dom_tree.parents(user->block())) {
-                for (auto* i : vws::reverse(b->instructions())) {
-                    auto* d = DefinedValue(a, i);
+                for (auto& i : vws::reverse(b->instructions())) {
+                    auto* d = DefinedValue(a, i.get());
                     if (d) return d;
                 }
             }
@@ -791,10 +806,10 @@ struct SSAConstructionPass : InstructionRewritePass {
 
         /// Add incoming values for each reaching definition.
         for (auto* b : dom_tree.dfs_preorder()) {
-            for (auto* i : b->instructions()) {
+            for (auto& i : b->instructions()) {
                 /// If this instruction is a store to an optimisable
                 /// alloca, mark it as the new reaching definition.
-                if (auto* s = cast<StoreInst>(i)) {
+                if (auto* s = cast<StoreInst>(i.get())) {
                     auto a = rgs::find(optimisable, s->ptr());
                     if (a != optimisable.end()) defs[*a].push_back(s);
                 }
@@ -811,13 +826,20 @@ struct SSAConstructionPass : InstructionRewritePass {
 
             /// Update PHIs in successors.
             for (auto* s : b->successors()) {
-                for (auto* i : s->instructions()) {
-                    auto* phi = cast<PhiInst>(i);
+                for (auto& i : s->instructions()) {
+                    auto* phi = cast<PhiInst>(i.get());
                     if (not phi) break;
 
                     /// This is one of the PHIs we inserted for a specific variable.
-                    if (auto it = rgs::find(phis, phi, &Entry::first); it != phis.end())
-                        phi->set_incoming(ReachingDef(it->second, b->instructions().back()), b);
+                    if (
+                        auto it = rgs::find(phis, phi, &Entry::first);
+                        it != phis.end()
+                    ) {
+                        phi->set_incoming(
+                            ReachingDef(it->second, b->instructions().back().get()),
+                            b
+                        );
+                    }
                 }
             }
         }
@@ -848,7 +870,7 @@ struct CFGSimplePass : InstructionRewritePass {
     void run_on_function(Function* f) {
         // We start at 1 because the entry block is always reachable.
         for (usz i = 1; i < f->blocks().size(); /** No increment! **/) {
-            auto* b = f->blocks().at(i);
+            auto* b = f->blocks().at(i).get();
 
             // Count how many users of this block are not PHIs.
             usz non_phi_users{0};
@@ -962,7 +984,7 @@ struct DCEPass : InstructionRewritePass {
 struct FunctionDCEPass : ModuleRewritePass {
     void run() {
         for (usz i = 0; i < mod->code().size(); /** No increment! **/) {
-            auto* f = mod->code()[i];
+            auto* f = mod->code()[i].get();
 
             // Check if exported.
             bool exported{false};
@@ -1028,11 +1050,14 @@ struct Optimiser {
 
     Optimiser() = delete;
 
-    Optimiser(Module* m, OptimisationLevel o) : mod(m), opt_level(o) {
+    Optimiser(Module* m, OptimisationLevel o)
+        : mod(m)
+        , opt_level(o) {
         LCC_ASSERT(+opt_level);
     }
 
-    Optimiser(Module* m, int o) : Optimiser(m, level_from_number(o)) {}
+    Optimiser(Module* m, int o)
+        : Optimiser(m, level_from_number(o)) {}
 
     /// Entry point.
     void run() { // clang-format off
@@ -1110,14 +1135,15 @@ private:
     [[nodiscard]]
     auto RunPassOnInstructions() -> bool {
         bool changed = false;
-        for (auto* f : mod->code()) {
+        for (auto& f : mod->code()) {
             Pass p{{mod}};
 
             /// Use indices here to avoid iterator invalidation.
             for (usz bi = 0; bi < f->blocks().size(); bi++) {
-                /// Call enter callback if there is one.
-                if constexpr (requires { &Pass::enter_block; }) p.enter_block(f->blocks()[bi]);
+                if constexpr (requires { &Pass::enter_block; })
+                    p.enter_block(f->blocks()[bi].get());
 
+                // Run on every instruction
                 if constexpr (requires { &Pass::run_on_instruction; }) {
                     for (usz ii = 0; ii < f->blocks()[bi]->instructions().size(); ii++) {
                         auto Done = [&] {
@@ -1133,25 +1159,29 @@ private:
                         /// Run the pass on the instruction.
                         Inst* inst;
                         do {
-                            inst = f->blocks()[bi]->instructions()[ii];
+                            inst = f->blocks()[bi]->instructions()[ii].get();
                             p.run_on_instruction(inst);
-                        } while (not Done() and inst != f->blocks()[bi]->instructions()[ii]);
+                        } while (
+                            not Done()
+                            and inst != f->blocks()[bi]->instructions()[ii].get()
+                        );
                     }
                 }
 
-                /// Call leave() callback if there is one.
-                if constexpr (requires { &Pass::leave_block; }) p.leave_block(f->blocks()[bi]);
+                if constexpr (requires { &Pass::leave_block; })
+                    p.leave_block(f->blocks()[bi]);
 
-                /// Call atfork() callback if there is one and we’re at a fork.
+                /// Call atfork() callback if there is one *and we’re at a fork*.
                 if constexpr (requires { &Pass::atfork; }) {
-                    auto b = f->blocks()[bi];
+                    auto& b = f->blocks()[bi];
                     if (b->terminator() and is<CondBranchInst>(b->terminator()))
                         p.atfork(b);
                 }
             }
 
-            /// Call done() callback if there is one.
-            if constexpr (requires { &Pass::run_on_function; }) p.run_on_function(f);
+            if constexpr (requires { &Pass::run_on_function; })
+                p.run_on_function(f.get());
+
             changed = p.changed() or changed;
         }
         return changed;
