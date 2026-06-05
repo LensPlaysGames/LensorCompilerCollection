@@ -52,12 +52,12 @@ lcc::Type* IRGen::convert(const Type* t) {
     Diag::ICE("unreachable");
 }
 
-void IRGen::insert(lcc::Inst* inst) {
+void IRGen::insert(std::unique_ptr<lcc::Inst> inst) {
     if (not inst or not context)
         Diag::ICE("nullptr argument");
     if (not insert_context.function or not insert_context.block)
         Diag::ICE("Invalid insert context: nullptr encountered");
-    insert_context.block->insert(inst);
+    insert_context.block->insert(std::move(inst));
 }
 
 void IRGen::create_function(const Declaration* d) {
@@ -228,8 +228,10 @@ void IRGen::generate_function(const Declaration* d) {
     insert_context.function = as<lcc::Function>(generated_ir[d]);
     if (d->initialising_expression()) {
         update_block(
-            new (*ir_module) lcc::Block(
-                fmt::format("{}.body", d->name())
+            std::unique_ptr<lcc::Block>(
+                new (*ir_module) lcc::Block(
+                    fmt::format("{}.body", d->name())
+                )
             )
         );
         generate_expression(d->initialising_expression());

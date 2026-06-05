@@ -102,17 +102,19 @@ void print_module_stats(lcc::Module* m) {
     if (not m) return;
     lcc::usz block_count{};
     lcc::usz inst_count{};
-    lcc::usz most_inst_in_block{};
+    lcc::Block* most_inst_in_block{};
     lcc::usz most_block_in_function{};
-    for (auto f : m->code()) {
+    for (auto& f : m->code()) {
         if (f->blocks().size() > most_block_in_function)
             most_block_in_function = f->blocks().size();
 
         block_count += f->blocks().size();
 
-        for (auto b : f->blocks()) {
-            if (b->instructions().size() > most_inst_in_block)
-                most_inst_in_block = b->instructions().size();
+        for (auto& b : f->blocks()) {
+            if (
+                not most_inst_in_block
+                or b->instructions().size() > most_inst_in_block->instructions().size()
+            ) most_inst_in_block = b.get();
 
             inst_count += b->instructions().size();
         }
@@ -125,7 +127,13 @@ void print_module_stats(lcc::Module* m) {
              {"  Block Count:", fmt::format("{}\n", block_count)},
              {"  Instruction Count:", fmt::format("{}\n", inst_count)},
              {"  Most Blocks in Function:", fmt::format("{}\n", most_block_in_function)},
-             {"  Most Instructions in Block:", fmt::format("{}\n", most_inst_in_block)},
+             {"  Most Instructions in Block:",
+              fmt::format(
+                  "{} in {} in {}\n",
+                  most_inst_in_block->instructions().size(),
+                  most_inst_in_block->name(),
+                  most_inst_in_block->function()->names().at(0).name
+              )},
              {"  Global Count:", fmt::format("{}\n", m->vars().size())},
              {"  Extra Section Count:", fmt::format("{}\n", m->extra_sections().size())}}
         }.get()
@@ -381,8 +389,8 @@ void GenerateOutputFile(
         options.language == "ir"
         or (options.language == "default" and path_str.ends_with(".lcc"))
     ) {
-        auto mod = lcc::Module::Parse(&context, file);
-        EmitModule(mod.get(), path_str, output_file_path, options);
+        auto ir = lcc::Module::Parse(&context, file);
+        EmitModule(ir.get(), path_str, output_file_path, options);
         return;
     }
 
@@ -390,8 +398,10 @@ void GenerateOutputFile(
         options.language == "glint"
         or (options.language == "default" and path_str.ends_with(".g"))
     ) {
-        auto* ir = lcc::glint::produce_module(&context, file);
-        EmitModule(ir, path_str, output_file_path, options);
+        auto ir = std::unique_ptr<lcc::Module>(
+            lcc::glint::produce_module(&context, file)
+        );
+        EmitModule(ir.get(), path_str, output_file_path, options);
         return;
     }
 
@@ -399,8 +409,10 @@ void GenerateOutputFile(
         options.language == "c"
         or (options.language == "default" and path_str.ends_with(".c"))
     ) {
-        auto* ir = lcc::language_c::produce_module(&context, file);
-        EmitModule(ir, path_str, output_file_path, options);
+        auto ir = std::unique_ptr<lcc::Module>(
+            lcc::language_c::produce_module(&context, file)
+        );
+        EmitModule(ir.get(), path_str, output_file_path, options);
         return;
     }
 

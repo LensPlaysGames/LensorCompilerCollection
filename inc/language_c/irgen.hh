@@ -9,6 +9,10 @@
 
 #include <language_c/ast.hh>
 
+#include <memory>
+#include <unordered_map>
+#include <utility>
+
 namespace lcc::language_c {
 
 class IRGen {
@@ -23,24 +27,27 @@ class IRGen {
 
     void create_function(const Declaration*);
 
-    void insert(lcc::Inst*);
+    void insert(std::unique_ptr<lcc::Inst>);
+    void insert(lcc::Inst* i) {
+        insert(std::unique_ptr<lcc::Inst>(std::move(i)));
+    }
 
     lcc::Type* convert(const Type*);
 
     void generate_expression(const Node*);
     void generate_function(const Declaration*);
 
-    void update_block(lcc::Block* new_block) {
+    void update_block(std::unique_ptr<lcc::Block> new_block) {
         if (not insert_context.function)
             Diag::ICE("Invalid insert context: nullptr encountered");
-        insert_context.function->append_block(new_block);
-        insert_context.block = new_block;
+        insert_context.block = new_block.get();
+        insert_context.function->append_block(std::move(new_block));
     }
 
 public:
     IRGen(lcc::Context* context_)
-        : context(context_),
-          ir_module(new lcc::Module(context)) {}
+        : context(context_)
+        , ir_module(new lcc::Module(context)) {}
 
     static auto Generate(Context*, TranslationUnit&) -> lcc::Module*;
 };

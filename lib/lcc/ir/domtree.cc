@@ -193,10 +193,10 @@ lcc::DomTree::DomTree(Function* function, bool compute_dominance_frontiers) : f(
     if (not compute_dominance_frontiers) return;
     for (auto [i, a] : vws::enumerate(function->blocks())) {
         for (auto b : a->successors()) {
-            for (Block* x = a; not strictly_dominates(x, b);) {
+            for (Block* x = a.get(); not strictly_dominates(x, b);) {
                 auto xid = x->id();
                 df[xid].push_back(b);
-                x = function->blocks()[idoms[xid]];
+                x = function->blocks()[idoms[xid]].get();
             }
         }
     }

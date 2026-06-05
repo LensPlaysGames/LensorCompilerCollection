@@ -90,8 +90,8 @@ protected:
     void PrintBlock(Block* b) {
         for (usz i = 0; i < block_indent; i++) s += ' ';
         Print("{}bb{}{}:\n", C(P::Block), block_indices[b], C(P::Filler));
-        for (auto inst : b->instructions()) {
-            This()->PrintInst(inst);
+        for (auto& inst : b->instructions()) {
+            This()->PrintInst(inst.get());
             s += '\n';
         }
     }
@@ -110,7 +110,7 @@ protected:
 
         /// Print the body.
         This()->EnterFunctionBody(f);
-        for (auto b : f->blocks()) PrintBlock(b);
+        for (auto& b : f->blocks()) PrintBlock(b.get());
         This()->ExitFunctionBody(f);
     }
 
@@ -121,22 +121,22 @@ protected:
             This()->PrintStructType(struct_type);
         if (not mod->context()->struct_types.empty())
             s += '\n';
-        for (auto var : mod->vars())
-            This()->PrintGlobal(var);
+        for (auto& var : mod->vars())
+            This()->PrintGlobal(var.get());
         if (not mod->vars().empty())
             s += '\n';
-        for (auto f : mod->code())
-            PrintFunction(f);
+        for (auto& f : mod->code())
+            PrintFunction(f.get());
         s += C(P::Reset);
         return std::move(s);
     }
 
     void SetFunctionIndices(Function* f) {
         for (auto [i, b] : vws::enumerate(f->blocks())) {
-            block_indices[b] = i;
-            for (auto inst : b->instructions()) {
-                if (This()->RequiresTemporary(inst))
-                    inst_indices[inst] = tmp++;
+            block_indices[b.get()] = i;
+            for (auto& inst : b->instructions()) {
+                if (This()->RequiresTemporary(inst.get()))
+                    inst_indices[inst.get()] = tmp++;
             }
         }
     }

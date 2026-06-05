@@ -27,10 +27,13 @@ class IRGen {
     usz total_if = 0;
     usz total_string = 0;
 
-    void update_block(lcc::Block* new_block) {
-        function->append_block(new_block);
-        block = new_block;
+    void update_block(std::unique_ptr<lcc::Block> new_block) {
+        block = new_block.get();
+        function->append_block(std::move(new_block));
         total_block += 1;
+    }
+    void update_block(lcc::Block* new_block) {
+        update_block(std::unique_ptr<Block>(new_block));
     }
 
     std::unordered_map<glint::Expr*, lcc::Value*> generated_ir;

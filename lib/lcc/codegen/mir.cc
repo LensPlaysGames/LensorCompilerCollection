@@ -1,5 +1,6 @@
 #include <lcc/codegen/mir.hh>
 #include <lcc/core.hh>
+#include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 
 #include <fmt/format.h>
@@ -222,8 +223,9 @@ auto PrintMFunction(const MFunction& function) -> std::string {
 }
 
 [[nodiscard]]
-auto PrintMIR(std::vector<GlobalVariable*>& vars, std::vector<MFunction>& mcode) -> std::string {
-    const auto PrintGlobal = [&](const GlobalVariable* global) -> std::string {
+auto PrintMIR(const std::vector<std::unique_ptr<GlobalVariable>>& vars, std::vector<MFunction>& mcode) -> std::string {
+    const auto PrintGlobal = [&](const std::unique_ptr<GlobalVariable>& global)
+        -> std::string {
         std::string out{};
         for (auto n : global->names()) {
             if (n.name != global->names().at(0).name)

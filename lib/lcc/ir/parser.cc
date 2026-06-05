@@ -700,7 +700,7 @@ auto lcc::parser::Parser::ParseBlock() -> Result<Block*> {
         NextToken();
         auto i = ParseInstruction();
         if (i.is_diag()) continue;
-        b->insert(*i, true);
+        b->insert(std::unique_ptr<Inst>(*i), true);
         if (not At(Tk::Eof)) (void) ConsumeOrError(Tk::Newline);
     }
 
@@ -954,7 +954,7 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     while (Consume(Tk::Indent)) {
         auto b = ParseBlock();
         if (not b) return b.diag();
-        f->append_block(*b);
+        f->append_block(std::unique_ptr<Block>(*b));
     }
 
     /// Fix up temporaries.

@@ -29,9 +29,11 @@ private:
     Context* _ctx{};
     std::string _name;
 
-    std::vector<Function*> _code;
-    std::vector<GlobalVariable*> _vars;
-    std::vector<Section> _extra_sections;
+    std::vector<std::unique_ptr<Function>> _code{};
+    std::vector<std::unique_ptr<GlobalVariable>> _vars{};
+    std::vector<Section> _extra_sections{};
+    // NOTE: Just here so we don't *totally* leak them...
+    std::vector<std::unique_ptr<Value>> _values{};
 
     usz _virtual_register{first_virtual_register};
 
@@ -98,13 +100,18 @@ public:
     auto as_wat() -> std::string;
 
     [[nodiscard]]
-    auto code() -> std::vector<Function*>& { return _code; }
+    auto code() -> std::vector<std::unique_ptr<Function>>& { return _code; }
     [[nodiscard]]
-    auto code() const -> std::vector<Function*> { return _code; }
+    auto code() const -> const std::vector<std::unique_ptr<Function>>& { return _code; }
     [[nodiscard]]
-    auto vars() -> std::vector<GlobalVariable*>& { return _vars; }
+    auto vars() -> std::vector<std::unique_ptr<GlobalVariable>>& { return _vars; }
     [[nodiscard]]
-    auto vars() const -> std::vector<GlobalVariable*> { return _vars; }
+    auto vars() const -> const std::vector<std::unique_ptr<GlobalVariable>>& { return _vars; }
+
+    [[nodiscard]]
+    auto values() -> std::vector<std::unique_ptr<Value>>& { return _values; }
+    [[nodiscard]]
+    auto values() const -> const std::vector<std::unique_ptr<Value>>& { return _values; }
 
     [[nodiscard]]
     auto extra_sections() -> std::vector<Section>& {
@@ -115,11 +122,15 @@ public:
         return _extra_sections;
     }
 
-    void add_function(Function* func) { _code.push_back(func); }
+    void add_function(std::unique_ptr<Function> func) {
+        _code.emplace_back(std::move(func));
+    }
     // NOTE: You probably don't need to call this manually.
     // Just create a globalvariable using the constructor.
     // NOTE: Does not de-duplicate. Assumes you know what you are doing.
-    void add_var(GlobalVariable* var) { _vars.push_back(var); }
+    void add_var(std::unique_ptr<GlobalVariable> var) {
+        _vars.emplace_back(std::move(var));
+    }
 
     void add_extra_section(const Section& section) {
         _extra_sections.push_back(section);
@@ -138,10 +149,10 @@ public:
 
     [[nodiscard]]
     auto global_by_name(std::string_view global_name) -> Result<GlobalVariable*> {
-        for (auto* v : vars()) {
+        for (auto& v : vars()) {
             for (auto n : v->names()) {
                 if (n.name == global_name)
-                    return v;
+                    return v.get();
             }
         }
         return Diag::Note("not found");
@@ -149,19 +160,21 @@ public:
 
     [[nodiscard]]
     auto function_by_name(std::string_view function_name) -> Result<Function*> {
-        for (auto* f : code()) {
+        for (auto& f : code()) {
             if (f->has_name(function_name)) {
-                return f;
+                return f.get();
             }
         }
         return Diag::Note("not found");
     }
 
     [[nodiscard]]
-    auto function_by_one_of_names(const std::vector<IRName>& function_names) -> Result<Function*> {
-        for (auto* f : code()) {
+    auto function_by_one_of_names(
+        const std::vector<IRName>& function_names
+    ) -> Result<Function*> {
+        for (auto& f : code()) {
             if (f->has_one_of_names(function_names))
-                return f;
+                return f.get();
         }
         return Diag::Note("not found");
     }

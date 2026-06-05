@@ -194,7 +194,7 @@ void emit_gnu_att_assembly(
     // .globl (global) directive for this.
     // Imported globals /could/ be declared with .extern, but GNU as ignores
     // these directives anyway, so we just don't emit them.
-    for (auto* var : module->vars()) {
+    for (auto& var : module->vars()) {
         for (auto n : var->names()) {
             if (IsExportedLinkage(n.linkage)) {
                 out += fmt::format("    .globl {}\n", n.name);
@@ -704,7 +704,7 @@ void emit_gnu_att_assembly(
 
     // Emit initialized global variable definitions in .data
     bool init_vars_present{false};
-    for (auto* var : module->vars()) {
+    for (auto& var : module->vars()) {
         if (not var->init())
             continue;
 
@@ -772,7 +772,7 @@ void emit_gnu_att_assembly(
 
     // Emit uninitialized global variable definitions in .bss
     bool uninit_vars_present{false};
-    for (auto* var : module->vars()) {
+    for (auto& var : module->vars()) {
         if (var->init()) continue;
 
         bool defines{false};

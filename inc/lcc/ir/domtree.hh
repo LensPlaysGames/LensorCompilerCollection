@@ -38,7 +38,7 @@ public:
             co_yield b;
             for (auto c : children[b->id()]) {
                 if (not visited[c]) {
-                    stack.push_back(f->blocks()[c]);
+                    stack.push_back(f->blocks()[c].get());
                     visited[c] = true;
                 }
             }
@@ -76,7 +76,7 @@ public:
     auto parents(Block* of) -> Generator<Block*> {
         for (auto i = of->id(); i != RootId;) {
             i = idoms[i];
-            co_yield f->blocks()[i];
+            co_yield f->blocks()[i].get();
         }
     }
 

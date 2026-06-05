@@ -6,7 +6,10 @@
 #include <lcc/location.hh>
 #include <lcc/utils.hh>
 
+#include <memory>
 #include <set>
+#include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -545,7 +548,7 @@ auto PrintMFunctionImpl(const MFunction& function, auto&& inst_opcode) -> std::s
 [[nodiscard]]
 auto PrintMFunction(const MFunction& function) -> std::string;
 [[nodiscard]]
-auto PrintMIR(std::vector<GlobalVariable*>& vars, std::vector<MFunction>& mcode) -> std::string;
+auto PrintMIR(const std::vector<std::unique_ptr<GlobalVariable>>& vars, std::vector<MFunction>& mcode) -> std::string;
 
 } // namespace lcc
 

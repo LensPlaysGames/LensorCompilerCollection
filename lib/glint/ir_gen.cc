@@ -22,7 +22,7 @@ void IRGen::insert(lcc::Inst* inst) {
     LCC_ASSERT(inst, "Invalid argument");
     LCC_ASSERT(ctx, "Invalid context");
     LCC_ASSERT(function and block, "Invalid insert point");
-    block->insert(inst);
+    block->insert(std::unique_ptr<lcc::Inst>(inst));
 }
 
 lcc::Type* Convert(Context* ctx, Type* in) {

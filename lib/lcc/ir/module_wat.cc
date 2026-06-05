@@ -141,8 +141,8 @@ auto wat_value(Module& m, Value* v) -> std::string {
 
         case Value::Kind::Block: {
             std::string o{};
-            for (auto c : as<Block>(v)->instructions())
-                o += fmt::format("{}\n", wat_value(m, c));
+            for (auto& c : as<Block>(v)->instructions())
+                o += fmt::format("{}\n", wat_value(m, c.get()));
             return fmt::format(
                 "(block {}\n{})",
                 wat_block_name(as<Block>(v)),
@@ -485,10 +485,10 @@ auto wat_function_signature(Module& m, Function* f) -> std::string {
         }
     }
 
-    for (auto p : f->params()) {
+    for (auto& p : f->params()) {
         o += fmt::format(
             " (param {} {})",
-            wat_parameter_name(p),
+            wat_parameter_name(p.get()),
             wat_type(m, p->type())
         );
     }
@@ -509,9 +509,9 @@ auto wat_function(Module& m, Function* f) -> std::string {
         "({}",
         wat_function_signature(m, f)
     );
-    for (auto bb : f->blocks()) {
-        for (auto i : bb->instructions()) {
-            if (auto a = cast<AllocaInst>(i)) {
+    for (auto& bb : f->blocks()) {
+        for (auto& i : bb->instructions()) {
+            if (auto a = cast<AllocaInst>(i.get())) {
                 o += fmt::format(
                     "\n  (local {} {})",
                     wat_local_name(a),
@@ -522,15 +522,15 @@ auto wat_function(Module& m, Function* f) -> std::string {
     }
 
     std::unordered_map<Block*, std::string> block_names{};
-    for (auto bb : f->blocks())
-        block_names.emplace(bb, fmt::format("$bb{}", bb->id()));
+    for (auto& bb : f->blocks())
+        block_names.emplace(bb.get(), fmt::format("$bb{}", bb->id()));
 
-    for (auto bb : f->blocks()) {
-        auto block_wasm_text = fmt::format("(block {})\n", block_names.at(bb));
+    for (auto& bb : f->blocks()) {
+        auto block_wasm_text = fmt::format("(block {})\n", block_names.at(bb.get()));
 
         // block instructions
-        for (auto i : bb->instructions()) {
-            auto i_wat = wat_inst(m, i);
+        for (auto& i : bb->instructions()) {
+            auto i_wat = wat_inst(m, i.get());
             // Some IR instructions are no-ops in webassembly, and we return an empty
             // string for those.
             if (i_wat.size()) {
@@ -561,7 +561,11 @@ auto Module::as_wat() -> std::string {
     std::string out{"(module\n"};
 
     // Imports must come before all non-import definitions.
-    for (auto f : code()) {
+    for (
+        auto* f : vws::transform(code(), [](const auto& p) {
+            return p.get();
+        })
+    ) {
         // Skip unused functions (why import something we don't use?)
         if (f->users().empty()) continue;
 
@@ -584,7 +588,11 @@ auto Module::as_wat() -> std::string {
         );
     }
 
-    for (auto g : vars()) {
+    for (
+        auto* g : vws::transform(vars(), [](const auto& p) {
+            return p.get();
+        })
+    ) {
         // Skip globals that aren't defined by this module.
         bool defines{true};
         for (auto n : g->names()) {
@@ -623,7 +631,7 @@ auto Module::as_wat() -> std::string {
         }
     }
 
-    for (auto f : code()) {
+    for (auto& f : code()) {
         bool imported{false};
         std::string_view imported_name{};
         for (auto n : f->names()) {
@@ -635,7 +643,7 @@ auto Module::as_wat() -> std::string {
         }
         if (imported) continue;
 
-        out += fmt::format("{}\n", wat_function(*this, f));
+        out += fmt::format("{}\n", wat_function(*this, f.get()));
     }
 
     // module closer
