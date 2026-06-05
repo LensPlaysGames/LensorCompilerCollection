@@ -14,7 +14,7 @@
 #ifdef _WIN32
 #    define NOMINMAX
 #    include <io.h>
-#    include <Windows.h>
+#    include <windows.h>
 #    define isatty _isatty
 #endif
 
