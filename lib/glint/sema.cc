@@ -390,25 +390,20 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_object(
     const std::string& include_dir,
     std::vector<std::string>& paths_tried
 ) -> bool {
-    auto path_base0
-        = include_dir
-        + std::filesystem::path::preferred_separator
-        + import_ref.name;
-    auto path_base1
-        = include_dir
-        + std::filesystem::path::preferred_separator
-        + "lib"
-        + import_ref.name;
+    using namespace std::string_literals;
+    auto path_base0 = fs::path(include_dir) / import_ref.name;
+    auto path_base1 = fs::path(include_dir)
+                    / ("lib"s + import_ref.name);
     auto paths = {
-        path_base0 + ".o",
-        path_base0 + ".obj",
-        path_base0 + ".a",
-        path_base1 + ".o",
-        path_base1 + ".obj",
-        path_base1 + ".a",
+        path_base0.replace_extension("o"),
+        path_base0.replace_extension("obj"),
+        path_base0.replace_extension("a"),
+        path_base1.replace_extension("o"),
+        path_base1.replace_extension("obj"),
+        path_base1.replace_extension("a"),
     };
     for (auto p : paths) {
-        paths_tried.push_back(p);
+        paths_tried.push_back(p.string());
         if (std::filesystem::exists(p)) {
             if (context->has_option("verbose"))
                 fmt::print("Found IMPORT {} at {}\n", import_ref.name, p);
@@ -477,11 +472,10 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_gmeta(
     const std::string& include_dir,
     std::vector<std::string>& paths_tried
 ) -> bool {
-    auto path = include_dir
-              + std::filesystem::path::preferred_separator
-              + import_ref.name + std::string(metadata_file_extension);
+    auto path = fs::path(include_dir)
+              / (import_ref.name + std::string(metadata_file_extension));
 
-    paths_tried.push_back(path);
+    paths_tried.push_back(path.string());
     if (std::filesystem::exists(path)) {
         if (context->has_option("verbose"))
             fmt::print("Found IMPORT {} at {}\n", import_ref.name, path);
@@ -529,11 +523,8 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_assembly(
     const std::string& include_dir,
     std::vector<std::string>& paths_tried
 ) -> bool {
-    auto path = include_dir
-              + std::filesystem::path::preferred_separator
-              + import_ref.name + ".s";
-
-    paths_tried.push_back(path);
+    auto path = fs::path(include_dir) / (import_ref.name + ".s");
+    paths_tried.push_back(path.string());
     if (std::filesystem::exists(path)) {
         // TODO: We can kind of cheat and just direct seek to `.section .glint`,
         // then `.byte`, then parse the whole line as comma-separated integer
