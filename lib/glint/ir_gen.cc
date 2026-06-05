@@ -218,8 +218,8 @@ void glint::IRGen::create_function(glint::FuncDecl* f) {
     else
         name = f->mangled_name();
 
-    generated_ir[f] = new (*module) Function(
-        module,
+    generated_ir[f] = new (*ir_module) Function(
+        ir_module,
         std::move(name),
         as<FunctionType>(Convert(ctx, f->type())),
         f->linkage(),
@@ -240,7 +240,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
     // we could just handle early returns specifically and not have this?
     if (block->closed()) {
         update_block(
-            new (*module) lcc::Block(fmt::format("body.{}", total_block))
+            new (*ir_module) lcc::Block(fmt::format("body.{}", total_block))
         );
     }
 
@@ -266,7 +266,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         } break;
 
         case K::IntegerLiteral: {
-            auto* literal = new (*module) lcc::IntegerConstant(
+            auto* literal = new (*ir_module) lcc::IntegerConstant(
                 Convert(ctx, expr->type()),
                 as<IntegerLiteral>(expr)->value()
             );
@@ -274,7 +274,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         } break;
 
         case K::FractionalLiteral: {
-            auto* literal = new (*module) lcc::FractionalConstant(
+            auto* literal = new (*ir_module) lcc::FractionalConstant(
                 Convert(ctx, expr->type()),
                 as<FractionalLiteral>(expr)->value()
             );
@@ -300,7 +300,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             switch (decl->linkage()) {
                 case Linkage::LocalVar: {
-                    auto* alloca = new (*module) AllocaInst(
+                    auto* alloca = new (*ir_module) AllocaInst(
                         Convert(ctx, decl->type()),
                         expr->location()
                     );
@@ -330,16 +330,16 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                                     }
                                     generate_expression(member.value);
 
-                                    auto* member_index = new (*module) IntegerConstant(
+                                    auto* member_index = new (*ir_module) IntegerConstant(
                                         Convert(ctx, Type::UInt),
                                         i
                                     );
-                                    auto* gmp = new (*module) GetMemberPtrInst(
+                                    auto* gmp = new (*ir_module) GetMemberPtrInst(
                                         Convert(ctx, s),
                                         alloca,
                                         member_index
                                     );
-                                    auto* store = new (*module) StoreInst(
+                                    auto* store = new (*ir_module) StoreInst(
                                         generated_ir[member.value],
                                         gmp
                                     );
@@ -358,16 +358,16 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                                     auto member = c->values().at(i);
                                     generate_expression(member.value);
 
-                                    auto* element_index = new (*module) IntegerConstant(
+                                    auto* element_index = new (*ir_module) IntegerConstant(
                                         Convert(ctx, Type::UInt),
                                         i
                                     );
-                                    auto* gep = new (*module) GEPInst(
+                                    auto* gep = new (*ir_module) GEPInst(
                                         Convert(ctx, a->elem()),
                                         alloca,
                                         element_index
                                     );
-                                    auto* store = new (*module) StoreInst(
+                                    auto* store = new (*ir_module) StoreInst(
                                         generated_ir[member.value],
                                         gep
                                     );
@@ -381,7 +381,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         } else {
                             generate_expression(init_expr);
                             // Store generated init_expr into above inserted declaration
-                            auto* local_init = new (*module) StoreInst(
+                            auto* local_init = new (*ir_module) StoreInst(
                                 generated_ir[init_expr],
                                 alloca,
                                 expr->location()
@@ -395,8 +395,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 } break;
 
                 case Linkage::Imported: {
-                    auto* global = new (*module) GlobalVariable(
-                        module,
+                    auto* global = new (*ir_module) GlobalVariable(
+                        ir_module,
                         Convert(ctx, decl->type()),
                         decl->name(),
                         decl->linkage(),
@@ -418,8 +418,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         generate_expression(init_expr);
                         init = generated_ir[init_expr];
                     }
-                    auto* global = new (*module) GlobalVariable(
-                        module,
+                    auto* global = new (*ir_module) GlobalVariable(
+                        ir_module,
                         Convert(ctx, decl->type()),
                         decl->name(),
                         decl->linkage(),
@@ -466,18 +466,18 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     generate_expression(m->object());
 
                     // Get pointer to tag member of underlying struct of sum type.
-                    auto* tag_ptr = new (*module) GetMemberPtrInst(
+                    auto* tag_ptr = new (*ir_module) GetMemberPtrInst(
                         Convert(ctx, struct_type),
                         generated_ir[m->object()],
-                        new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0),
+                        new (*ir_module) IntegerConstant(Convert(ctx, Type::UInt), 0),
                         m->location()
                     );
                     // Load tag from that pointer.
-                    auto* load = new (*module) LoadInst(tag_type, tag_ptr);
+                    auto* load = new (*ir_module) LoadInst(tag_type, tag_ptr);
                     // Compare expected tag from member expression to actual tag loaded from
                     // the sum type.
-                    auto* expected = new (*module) IntegerConstant(tag_type, m->member() + 1);
-                    auto* eq = new (*module) EqInst(load, expected);
+                    auto* expected = new (*ir_module) IntegerConstant(tag_type, m->member() + 1);
+                    auto* eq = new (*ir_module) EqInst(load, expected);
 
                     insert(tag_ptr);
                     insert(load);
@@ -492,15 +492,15 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             switch (unary_expr->op()) {
                 case TokenKind::Exclam: {
-                    auto* zero_imm = new (*module) lcc::IntegerConstant(
+                    auto* zero_imm = new (*ir_module) lcc::IntegerConstant(
                         lcc::IntegerType::Get(ctx, unary_expr->operand()->type()->size(ctx)),
                         0
                     );
-                    auto* zero_imm_bitcast = new (*module) lcc::BitcastInst(
+                    auto* zero_imm_bitcast = new (*ir_module) lcc::BitcastInst(
                         zero_imm,
                         Convert(ctx, unary_expr->operand()->type())
                     );
-                    auto* eq = new (*module) EqInst(
+                    auto* eq = new (*ir_module) EqInst(
                         generated_ir[unary_expr->operand()],
                         zero_imm_bitcast,
                         expr->location()
@@ -514,18 +514,18 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     // TODO/FIXME: This should be handled in sema, probably via a sema template or similar.
                     if (unary_expr->operand()->type()->is_dynamic_array()) {
                         auto* struct_t = as<DynamicArrayType>(unary_expr->operand()->type())->struct_type();
-                        auto* data_ptr = new (*module) GetMemberPtrInst(
+                        auto* data_ptr = new (*ir_module) GetMemberPtrInst(
                             Convert(ctx, struct_t),
                             generated_ir[unary_expr->operand()],
-                            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0)
+                            new (*ir_module) IntegerConstant(Convert(ctx, Type::UInt), 0)
                         );
-                        auto* data_load = new (*module) LoadInst(lcc::Type::PtrTy, data_ptr);
+                        auto* data_load = new (*ir_module) LoadInst(lcc::Type::PtrTy, data_ptr);
                         insert(data_ptr);
                         insert(data_load);
 
-                        auto free_func = module->function_by_name("free");
+                        auto free_func = ir_module->function_by_name("free");
                         LCC_ASSERT(free_func, "Glint IRGen couldn't find `free'");
-                        auto* free_call = new (*module) CallInst(
+                        auto* free_call = new (*ir_module) CallInst(
                             *free_func,
                             as<FunctionType>(free_func->type()),
                             {data_load}
@@ -539,12 +539,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         "Cannot IRGen unary prefix '-' of non-integer type"
                     );
 
-                    auto* neg = new (*module) NegInst(generated_ir[unary_expr->operand()], expr->location());
+                    auto* neg = new (*ir_module) NegInst(generated_ir[unary_expr->operand()], expr->location());
                     generated_ir[expr] = neg;
                     insert(neg);
                 } break;
                 case TokenKind::BitNOT: {
-                    auto* cmpl = new (*module) ComplInst(generated_ir[unary_expr->operand()], expr->location());
+                    auto* cmpl = new (*ir_module) ComplInst(generated_ir[unary_expr->operand()], expr->location());
                     generated_ir[expr] = cmpl;
                     insert(cmpl);
                 } break;
@@ -701,26 +701,26 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     // should turn into
                     //   bar.tag := foo.tag.x;
                     //   (:cint.ptr &bar.data) := 69;
-                    auto* tag_ptr = new (*module) GetMemberPtrInst(
+                    auto* tag_ptr = new (*ir_module) GetMemberPtrInst(
                         Convert(ctx, sum_type->struct_type()),
                         generated_ir[m->object()],
-                        new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0),
+                        new (*ir_module) IntegerConstant(Convert(ctx, Type::UInt), 0),
                         m->location()
                     );
                     // NOTE: See how tag is member index + 1;
-                    auto* tag_val = new (*module) IntegerConstant(Convert(ctx, Type::UInt), m->member() + 1);
-                    auto* store_tag = new (*module) StoreInst(tag_val, tag_ptr, expr->location());
+                    auto* tag_val = new (*ir_module) IntegerConstant(Convert(ctx, Type::UInt), m->member() + 1);
+                    auto* store_tag = new (*ir_module) StoreInst(tag_val, tag_ptr, expr->location());
 
                     insert(tag_ptr);
                     insert(store_tag);
 
-                    auto* data_ptr = new (*module) GetMemberPtrInst(
+                    auto* data_ptr = new (*ir_module) GetMemberPtrInst(
                         Convert(ctx, sum_type->struct_type()),
                         generated_ir[m->object()],
-                        new (*module) IntegerConstant(Convert(ctx, Type::UInt), 1),
+                        new (*ir_module) IntegerConstant(Convert(ctx, Type::UInt), 1),
                         m->location()
                     );
-                    auto* store_data = new (*module) StoreInst(rhs, data_ptr, expr->location());
+                    auto* store_data = new (*ir_module) StoreInst(rhs, data_ptr, expr->location());
 
                     insert(data_ptr);
                     insert(store_data);
@@ -735,7 +735,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 generate_expression(rhs_expr);
                 auto* rhs = generated_ir[rhs_expr];
 
-                auto* store = new (*module) StoreInst(rhs, lhs, expr->location());
+                auto* store = new (*ir_module) StoreInst(rhs, lhs, expr->location());
 
                 // Kind of confusing, but if the AST uses this node, it generally means it
                 // wants the lvalue of the thing being assigned to; that means that we
@@ -760,7 +760,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 if (lhs_type_stripped->is_pointer()) {
                     // Pointer subscript needs scaled by size of pointer base type
                     auto* type_to_scale_by = as<PointerType>(lhs_type_stripped)->element_type();
-                    auto* gep = new (*module) GEPInst(Convert(ctx, type_to_scale_by), lhs, rhs, expr->location());
+                    auto* gep = new (*ir_module) GEPInst(Convert(ctx, type_to_scale_by), lhs, rhs, expr->location());
                     generated_ir[expr] = gep;
                     insert(gep);
                 } else if (lhs_type_stripped->is_array()) {
@@ -769,13 +769,13 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     if (not lhs_expr->is_lvalue()) {
                         // array literal subscript (cry)
                         auto* element_type = as<ArrayType>(lhs_type_stripped)->element_type();
-                        auto* alloca = new (*module) AllocaInst(Convert(ctx, lhs_type_stripped), expr->location());
-                        auto* store = new (*module) StoreInst(lhs, alloca, expr->location());
-                        gep = new (*module) GEPInst(Convert(ctx, element_type), alloca, rhs, expr->location());
+                        auto* alloca = new (*ir_module) AllocaInst(Convert(ctx, lhs_type_stripped), expr->location());
+                        auto* store = new (*ir_module) StoreInst(lhs, alloca, expr->location());
+                        gep = new (*ir_module) GEPInst(Convert(ctx, element_type), alloca, rhs, expr->location());
                         insert(alloca);
                         insert(store);
                     } else {
-                        gep = new (*module) GEPInst(
+                        gep = new (*ir_module) GEPInst(
                             Convert(ctx, as<ArrayType>(lhs_type_stripped)->element_type()),
                             lhs,
                             rhs,
@@ -798,17 +798,17 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             switch (binary_expr->op()) {
                 case TokenKind::Plus: {
                     // Arithmetic Addition
-                    generated_ir[expr] = new (*module) AddInst(lhs, rhs, expr->location());
+                    generated_ir[expr] = new (*ir_module) AddInst(lhs, rhs, expr->location());
                 } break;
 
                 case TokenKind::Minus: {
                     // Arithmetic Subtraction
-                    generated_ir[expr] = new (*module) SubInst(lhs, rhs, expr->location());
+                    generated_ir[expr] = new (*ir_module) SubInst(lhs, rhs, expr->location());
                 } break;
 
                 case TokenKind::Star: {
                     // Arithmetic Multiplication
-                    generated_ir[expr] = new (*module) MulInst(lhs, rhs, expr->location());
+                    generated_ir[expr] = new (*ir_module) MulInst(lhs, rhs, expr->location());
                 } break;
 
                 case TokenKind::Slash: {
@@ -818,8 +818,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         or Type::Equal(Type::Float, binary_expr->lhs()->type())
                         or binary_expr->rhs()->type()->is_signed_int(ctx)
                         or Type::Equal(Type::Float, binary_expr->rhs()->type())
-                    ) generated_ir[expr] = new (*module) SDivInst(lhs, rhs, expr->location());
-                    else generated_ir[expr] = new (*module) UDivInst(lhs, rhs, expr->location());
+                    ) generated_ir[expr] = new (*ir_module) SDivInst(lhs, rhs, expr->location());
+                    else generated_ir[expr] = new (*ir_module) UDivInst(lhs, rhs, expr->location());
                 } break;
 
                 case TokenKind::Percent: {
@@ -828,67 +828,67 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         binary_expr->lhs()->type()->is_signed_int(ctx)
                         or binary_expr->rhs()->type()->is_signed_int(ctx)
                     )
-                        generated_ir[expr] = new (*module) SRemInst(lhs, rhs, expr->location());
-                    else generated_ir[expr] = new (*module) URemInst(lhs, rhs, expr->location());
+                        generated_ir[expr] = new (*ir_module) SRemInst(lhs, rhs, expr->location());
+                    else generated_ir[expr] = new (*ir_module) URemInst(lhs, rhs, expr->location());
                 } break;
 
                 // Comparisons
                 case TokenKind::Eq: {
                     // Equality
-                    generated_ir[expr] = new (*module) EqInst(lhs, rhs, expr->location());
+                    generated_ir[expr] = new (*ir_module) EqInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Ne: {
                     // NOT Equality
-                    generated_ir[expr] = new (*module) NeInst(lhs, rhs, expr->location());
+                    generated_ir[expr] = new (*ir_module) NeInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Lt: {
                     // Less Than
                     if (lhs_expr->type()->is_signed_int(ctx) or rhs_expr->type()->is_signed_int(ctx))
-                        generated_ir[expr] = new (*module) SLtInst(lhs, rhs, expr->location());
-                    else generated_ir[expr] = new (*module) ULtInst(lhs, rhs, expr->location());
+                        generated_ir[expr] = new (*ir_module) SLtInst(lhs, rhs, expr->location());
+                    else generated_ir[expr] = new (*ir_module) ULtInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Gt: {
                     // Greater Than
                     if (lhs_expr->type()->is_signed_int(ctx) or rhs_expr->type()->is_signed_int(ctx))
-                        generated_ir[expr] = new (*module) SGtInst(lhs, rhs, expr->location());
-                    else generated_ir[expr] = new (*module) UGtInst(lhs, rhs, expr->location());
+                        generated_ir[expr] = new (*ir_module) SGtInst(lhs, rhs, expr->location());
+                    else generated_ir[expr] = new (*ir_module) UGtInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Le: {
                     // Less Than or Equal To
                     if (lhs_expr->type()->is_signed_int(ctx) or rhs_expr->type()->is_signed_int(ctx))
-                        generated_ir[expr] = new (*module) SLeInst(lhs, rhs, expr->location());
-                    else generated_ir[expr] = new (*module) ULeInst(lhs, rhs, expr->location());
+                        generated_ir[expr] = new (*ir_module) SLeInst(lhs, rhs, expr->location());
+                    else generated_ir[expr] = new (*ir_module) ULeInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Ge: {
                     // Greater Than or Equal To
                     if (lhs_expr->type()->is_signed_int(ctx) or rhs_expr->type()->is_signed_int(ctx))
-                        generated_ir[expr] = new (*module) SGeInst(lhs, rhs, expr->location());
-                    else generated_ir[expr] = new (*module) UGeInst(lhs, rhs, expr->location());
+                        generated_ir[expr] = new (*ir_module) SGeInst(lhs, rhs, expr->location());
+                    else generated_ir[expr] = new (*ir_module) UGeInst(lhs, rhs, expr->location());
                 } break;
 
                 // Binary bitwise operations
                 case TokenKind::And:
                 case TokenKind::BitAND: {
                     // Bitwise AND
-                    generated_ir[expr] = new (*module) AndInst(lhs, rhs, expr->location());
+                    generated_ir[expr] = new (*ir_module) AndInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Or:
                 case TokenKind::BitOR: {
                     // Bitwise OR
-                    generated_ir[expr] = new (*module) OrInst(lhs, rhs, expr->location());
+                    generated_ir[expr] = new (*ir_module) OrInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::BitXOR: {
                     // Bitwise XOR
-                    generated_ir[expr] = new (*module) XorInst(lhs, rhs, expr->location());
+                    generated_ir[expr] = new (*ir_module) XorInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Shl: {
                     // Bitwise Shift Left
-                    generated_ir[expr] = new (*module) ShlInst(lhs, rhs, expr->location());
+                    generated_ir[expr] = new (*ir_module) ShlInst(lhs, rhs, expr->location());
                 } break;
                 case TokenKind::Shr: {
                     // Bitwise Shift Right
                     // FIXME: SAR or SHL?
-                    generated_ir[expr] = new (*module) SarInst(lhs, rhs, expr->location());
+                    generated_ir[expr] = new (*ir_module) SarInst(lhs, rhs, expr->location());
                 } break;
 
                 // NOT binary operator tokens.
@@ -1021,15 +1021,23 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             }
 
             // FIXED ARRAY TO DYNAMIC ARRAY
-            if (cast->operand()->type()->is_array() and cast->type()->is_dynamic_array()) {
+            if (
+                cast->operand()->type()->is_array()
+                and cast->type()->is_dynamic_array()
+            ) {
                 LCC_TODO("IRGen fixed array to dynamic array cast");
                 // TODO: We have to create a whole temporary and everything. We probably
                 // want to do at least part of this in sema to make our lives easier here.
             }
 
             // FIXED ARRAY TO ARRAY VIEW
-            bool from_array_ref = (cast->operand()->type()->is_pointer() or cast->operand()->type()->is_reference()) and cast->operand()->type()->elem()->is_array();
-            if ((from_array_ref or cast->operand()->type()->is_array()) and cast->type()->is_view()) {
+            bool from_array_ref = (cast->operand()->type()->is_pointer()
+                                   or cast->operand()->type()->is_reference())
+                              and cast->operand()->type()->elem()->is_array();
+            if (
+                (from_array_ref or cast->operand()->type()->is_array())
+                and cast->type()->is_view()
+            ) {
                 // FIXME: This should be caught during sema with an error.
                 LCC_ASSERT(
                     cast->operand()->is_lvalue() or cast->operand()->type()->is_reference(),
@@ -1040,40 +1048,40 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                 // alloca underlying struct of view
                 auto* view_struct = as<ArrayViewType>(cast->type());
-                auto* alloca = new (*module) AllocaInst(Convert(ctx, view_struct));
+                auto* alloca = new (*ir_module) AllocaInst(Convert(ctx, view_struct));
 
                 // copy operand ptr and store that into view ptr member.
                 // TODO: get member by name
-                auto* gmp_ptr = new (*module) GetMemberPtrInst(
+                auto* gmp_ptr = new (*ir_module) GetMemberPtrInst(
                     Convert(ctx, view_struct),
                     alloca,
-                    new (*module) IntegerConstant(
+                    new (*ir_module) IntegerConstant(
                         Convert(ctx, Type::UInt),
                         0
                     )
                 );
                 // TODO: If we were to handle non-lvalue case, this would need to copy the
                 // pointer to the temporary.
-                auto* copy_ptr = new (*module) CopyInst(generated_ir[cast->operand()]);
-                auto* store_ptr = new (*module) StoreInst(
+                auto* copy_ptr = new (*ir_module) CopyInst(generated_ir[cast->operand()]);
+                auto* store_ptr = new (*ir_module) StoreInst(
                     copy_ptr,
                     gmp_ptr
                 );
 
                 // store array dimension into view size member.
                 // TODO: get member by name
-                auto* gmp_size = new (*module) GetMemberPtrInst(
+                auto* gmp_size = new (*ir_module) GetMemberPtrInst(
                     Convert(ctx, view_struct),
                     alloca,
-                    new (*module) IntegerConstant(
+                    new (*ir_module) IntegerConstant(
                         Convert(ctx, Type::UInt),
                         1
                     )
                 );
                 auto* array_type = cast->operand()->type();
                 if (from_array_ref) array_type = array_type->elem();
-                auto* store_size = new (*module) StoreInst(
-                    new (*module) IntegerConstant(
+                auto* store_size = new (*ir_module) StoreInst(
+                    new (*ir_module) IntegerConstant(
                         Convert(ctx, Type::UInt),
                         as<ArrayType>(array_type)->dimension()
                     ),
@@ -1081,7 +1089,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 );
 
                 // load from alloca to get array view value.
-                auto* load = new (*module) LoadInst(Convert(ctx, view_struct), alloca);
+                auto* load = new (*ir_module) LoadInst(
+                    Convert(ctx, view_struct),
+                    alloca
+                );
 
                 insert(alloca);
 
@@ -1130,31 +1141,31 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                 // alloca underlying struct of view
                 auto* view_struct = as<ArrayViewType>(cast->type());
-                auto* alloca = new (*module) AllocaInst(Convert(ctx, view_struct));
+                auto* alloca = new (*ir_module) AllocaInst(Convert(ctx, view_struct));
 
                 // load ptr from ".data" dynamic array and store that into view ptr member.
-                auto* gmp_data_ptr = new (*module) GetMemberPtrInst(
+                auto* gmp_data_ptr = new (*ir_module) GetMemberPtrInst(
                     Convert(ctx, dynarray->struct_type()),
                     generated_ir[cast->operand()],
-                    new (*module) IntegerConstant(
+                    new (*ir_module) IntegerConstant(
                         Convert(ctx, Type::UInt),
                         0
                     )
                 );
-                auto* load_data_ptr = new (*module) LoadInst(
+                auto* load_data_ptr = new (*ir_module) LoadInst(
                     lcc::Type::PtrTy,
                     gmp_data_ptr
                 );
 
-                auto* gmp_ptr = new (*module) GetMemberPtrInst(
+                auto* gmp_ptr = new (*ir_module) GetMemberPtrInst(
                     Convert(ctx, view_struct),
                     alloca,
-                    new (*module) IntegerConstant(
+                    new (*ir_module) IntegerConstant(
                         Convert(ctx, Type::UInt),
                         0
                     )
                 );
-                auto* store_ptr = new (*module) StoreInst(
+                auto* store_ptr = new (*ir_module) StoreInst(
                     load_data_ptr,
                     gmp_ptr
                 );
@@ -1162,15 +1173,15 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 // Store dynamic array size into view size member.
 
                 // load integer from ".size" dynamic array member and store that into view size member.
-                auto* gmp_data_size = new (*module) GetMemberPtrInst(
+                auto* gmp_data_size = new (*ir_module) GetMemberPtrInst(
                     Convert(ctx, dynarray->struct_type()),
                     generated_ir[cast->operand()],
-                    new (*module) IntegerConstant(
+                    new (*ir_module) IntegerConstant(
                         Convert(ctx, Type::UInt),
                         1
                     )
                 );
-                auto* load_data_size = new (*module) LoadInst(
+                auto* load_data_size = new (*ir_module) LoadInst(
                     Convert(ctx, dynarray->struct_type()->members()[1].type),
                     gmp_data_size
                 );
@@ -1178,21 +1189,24 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 // as the size of the view size member we are storing it into.
 
                 // TODO: get member by name
-                auto* gmp_size = new (*module) GetMemberPtrInst(
+                auto* gmp_size = new (*ir_module) GetMemberPtrInst(
                     Convert(ctx, view_struct),
                     alloca,
-                    new (*module) IntegerConstant(
+                    new (*ir_module) IntegerConstant(
                         Convert(ctx, Type::UInt),
                         1
                     )
                 );
-                auto* store_size = new (*module) StoreInst(
+                auto* store_size = new (*ir_module) StoreInst(
                     load_data_size,
                     gmp_size
                 );
 
                 // load from alloca to get array view value.
-                auto* load = new (*module) LoadInst(Convert(ctx, view_struct), alloca);
+                auto* load = new (*ir_module) LoadInst(
+                    Convert(ctx, view_struct),
+                    alloca
+                );
 
                 insert(alloca);
 
@@ -1219,7 +1233,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     Diag::ICE("Cast cannot insert load when operand has not been IRGenned");
                 }
 
-                auto* load = new (*module) LoadInst(
+                auto* load = new (*ir_module) LoadInst(
                     t_to,
                     generated_ir[cast->operand()],
                     expr->location()
@@ -1240,17 +1254,29 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             bool from_signed = cast->operand()->type()->is_signed_int(ctx);
 
             if (from_sz == to_sz) {
-                auto* bitcast = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+                auto* bitcast = new (*ir_module) BitcastInst(
+                    generated_ir[cast->operand()],
+                    Convert(ctx, cast->type()),
+                    expr->location()
+                );
                 generated_ir[expr] = bitcast;
                 insert(bitcast);
             } else if (from_sz < to_sz) {
                 // smaller to larger: sign extend if needed, otherwise zero extend.
                 if (from_signed) {
-                    auto* sign_extend = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+                    auto* sign_extend = new (*ir_module) SExtInst(
+                        generated_ir[cast->operand()],
+                        Convert(ctx, cast->type()),
+                        expr->location()
+                    );
                     generated_ir[expr] = sign_extend;
                     insert(sign_extend);
                 } else {
-                    auto* zero_extend = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+                    auto* zero_extend = new (*ir_module) ZExtInst(
+                        generated_ir[cast->operand()],
+                        Convert(ctx, cast->type()),
+                        expr->location()
+                    );
                     generated_ir[expr] = zero_extend;
                     insert(zero_extend);
                 }
@@ -1258,12 +1284,23 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 // larger to smaller: truncate.
                 // but not for bools. bools need != 0 emitted instead.
                 if (cast->type() == Type::Bool) {
-                    auto* zero_imm = new (*module) IntegerConstant(generated_ir[cast->operand()]->type(), 0);
-                    auto* ne = new (*module) NeInst(generated_ir[cast->operand()], zero_imm, cast->location());
+                    auto* zero_imm = new (*ir_module) IntegerConstant(
+                        generated_ir[cast->operand()]->type(),
+                        0
+                    );
+                    auto* ne = new (*ir_module) NeInst(
+                        generated_ir[cast->operand()],
+                        zero_imm,
+                        cast->location()
+                    );
                     generated_ir[expr] = ne;
                     insert(ne);
                 } else {
-                    auto* truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+                    auto* truncate = new (*ir_module) TruncInst(
+                        generated_ir[cast->operand()],
+                        Convert(ctx, cast->type()),
+                        expr->location()
+                    );
                     generated_ir[expr] = truncate;
                     insert(truncate);
                 }
@@ -1276,9 +1313,15 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             EvalResult result = constant->value();
             if (result.is_null()) {
                 // Zero constant... I dunno
-                generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, constant->type()), 0);
+                generated_ir[expr] = new (*ir_module) IntegerConstant(
+                    Convert(ctx, constant->type()),
+                    0
+                );
             } else if (result.is_int()) {
-                generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, constant->type()), result.as_int());
+                generated_ir[expr] = new (*ir_module) IntegerConstant(
+                    Convert(ctx, constant->type()),
+                    result.as_int()
+                );
             } else if (result.is_string()) {
                 LCC_ASSERT(false, "TODO: IR generation of constant strings");
             }
@@ -1309,7 +1352,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         case K::Return: {
             auto* ret_expr = as<ReturnExpr>(expr);
             if (ret_expr->value()) generate_expression(ret_expr->value());
-            auto* ret = new (*module) ReturnInst(generated_ir[ret_expr->value()], expr->location());
+            auto* ret = new (*ir_module) ReturnInst(
+                generated_ir[ret_expr->value()],
+                expr->location()
+            );
             generated_ir[expr] = ret;
             insert(ret);
         } break;
@@ -1324,7 +1370,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 loop_info.contains(br_expr->target()),
                 "IR generation must record block information of loops (for continue/break)"
             );
-            auto* br = new (*module) BranchInst(
+            auto* br = new (*ir_module) BranchInst(
                 loop_info.at(br_expr->target()).exit,
                 expr->location()
             );
@@ -1342,7 +1388,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 loop_info.contains(con_expr->target()),
                 "IR generation must record block information of loops (for continue/break)"
             );
-            auto* con = new (*module) BranchInst(
+            auto* con = new (*ir_module) BranchInst(
                 loop_info.at(con_expr->target()).entry,
                 expr->location()
             );
@@ -1372,23 +1418,34 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             const auto& while_expr = as<WhileExpr>(expr);
 
-            auto* body = new (*module) lcc::Block(fmt::format("while.body.{}", total_while));
-            auto* conditional = new (*module) lcc::Block(fmt::format("while.conditional.{}", total_while));
-            auto* exit = new (*module) lcc::Block(fmt::format("while.exit.{}", total_while));
+            auto* body = new (*ir_module) lcc::Block(
+                fmt::format("while.body.{}", total_while)
+            );
+            auto* conditional = new (*ir_module) lcc::Block(
+                fmt::format("while.conditional.{}", total_while)
+            );
+            auto* exit = new (*ir_module) lcc::Block(
+                fmt::format("while.exit.{}", total_while)
+            );
             total_while += 1;
 
             loop_info[while_expr] = {conditional, exit};
 
-            insert(new (*module) BranchInst(conditional, expr->location()));
+            insert(new (*ir_module) BranchInst(conditional, expr->location()));
 
             update_block(conditional);
             generate_expression(while_expr->condition());
-            insert(new (*module) CondBranchInst(generated_ir[while_expr->condition()], body, exit, expr->location()));
+            insert(new (*ir_module) CondBranchInst(
+                generated_ir[while_expr->condition()],
+                body,
+                exit,
+                expr->location()
+            ));
 
             update_block(body);
             const auto copy = generated_ir;
             generate_expression(while_expr->body());
-            insert(new (*module) BranchInst(conditional, expr->location()));
+            insert(new (*ir_module) BranchInst(conditional, expr->location()));
 
             // Instructions generated in the while loop must not be used by
             // instructions in the exit block (in case the while loop never runs).
@@ -1402,48 +1459,60 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
         } break;
 
         case K::For: {
-            // +------------------+
-            // | current          |
-            // | emit initialiser |
-            // +------------------+
-            //      |
-            //      |             ,-------------+
-            //      |             |             |
-            // +--------------------+           |
-            // | conditional branch |           |
-            // +--------------------+           |
-            //      |             |             |
-            //      |      +----------------+   |
-            //      |      | body           |   |
-            //      |      +----------------+   |
-            //      |             |             |
-            //      |      +----------------+   |
-            //      |      | iterator       |   |
-            //      |      +----------------+   |
-            //      |             |             |
-            //      |            ...            |
-            //      |             |             |
-            //  +----------+      `-------------+
-            //  | exit     |
-            //  +----------+
+            //     +------------------+                   |
+            //     | current          |                   |
+            //     | emit initialiser |                   |
+            //     +------------------+                   |
+            //          |                                 |
+            //          |             ,-------------+     |
+            //          |             |             |     |
+            //     +--------------------+           |     |
+            //     | conditional branch |           |     |
+            //     +--------------------+           |     |
+            //          |             |             |     |
+            //          |      +----------------+   |     |
+            //          |      | body           |   |     |
+            //          |      +----------------+   |     |
+            //          |             |             |     |
+            //          |      +----------------+   |     |
+            //          |      | iterator       |   |     |
+            //          |      +----------------+   |     |
+            //          |             |             |     |
+            //          |            ...            |     |
+            //          |             |             |     |
+            //      +----------+      `-------------+     |
+            //      | exit     |                          |
+            //      +----------+                          |
             const auto& for_expr = as<ForExpr>(expr);
 
-            auto* conditional = new (*module) lcc::Block(fmt::format("for.conditional.{}", total_for));
-            auto* body = new (*module) lcc::Block(fmt::format("for.body.{}", total_for));
-            auto* iterator = new (*module) lcc::Block(fmt::format("for.iter.{}", total_for));
-            auto* exit = new (*module) lcc::Block(fmt::format("for.exit.{}", total_for));
+            auto* conditional = new (*ir_module) lcc::Block(
+                fmt::format("for.conditional.{}", total_for)
+            );
+            auto* body = new (*ir_module) lcc::Block(
+                fmt::format("for.body.{}", total_for)
+            );
+            auto* iterator = new (*ir_module) lcc::Block(
+                fmt::format("for.iter.{}", total_for)
+            );
+            auto* exit = new (*ir_module) lcc::Block(
+                fmt::format("for.exit.{}", total_for)
+            );
             total_for += 1;
 
             loop_info[for_expr] = {iterator, exit};
 
             generate_expression(for_expr->init());
-            if (not block->closed())
-                insert(new (*module) BranchInst(conditional, expr->location()));
+            if (not block->closed()) {
+                insert(new (*ir_module) BranchInst(
+                    conditional,
+                    expr->location()
+                ));
+            }
 
             update_block(conditional);
             generate_expression(for_expr->condition());
             if (not block->closed()) {
-                insert(new (*module) CondBranchInst(
+                insert(new (*ir_module) CondBranchInst(
                     generated_ir[for_expr->condition()],
                     body,
                     exit,
@@ -1453,13 +1522,21 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
             update_block(body);
             generate_expression(for_expr->body());
-            if (not block->closed())
-                insert(new (*module) BranchInst(iterator, expr->location()));
+            if (not block->closed()) {
+                insert(new (*ir_module) BranchInst(
+                    iterator,
+                    expr->location()
+                ));
+            }
 
             update_block(iterator);
             generate_expression(for_expr->increment());
-            if (not block->closed())
-                insert(new (*module) BranchInst(conditional, expr->location()));
+            if (not block->closed()) {
+                insert(new (*ir_module) BranchInst(
+                    conditional,
+                    expr->location()
+                ));
+            }
 
             update_block(exit);
         } break;
@@ -1468,25 +1545,29 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             const auto& if_expr = as<IfExpr>(expr);
 
             if (not if_expr->otherwise()) {
-                ///         +---------+         |
-                ///         | current |         |
-                ///         +---------+         |
-                ///        //      \\           |
-                ///    +------+     \\          |
-                ///    | then |      |          |
-                ///    +------+     //          |
-                ///           \\   //           |
-                ///          +------+           |
-                ///          | exit |           |
-                ///          +------+           |
-                ///                             |
-                auto* then = new (*module) lcc::Block(fmt::format("if.then.{}", total_if));
+                ///         +---------+      |
+                ///         | current |      |
+                ///         +---------+      |
+                ///        //      \\        |
+                ///    +------+     \\       |
+                ///    | then |      |       |
+                ///    +------+     //       |
+                ///           \\   //        |
+                ///          +------+        |
+                ///          | exit |        |
+                ///          +------+        |
+                ///                          |
+                auto* then = new (*ir_module) lcc::Block(
+                    fmt::format("if.then.{}", total_if)
+                );
                 // TODO: exit block not needed if then is noreturn.
-                auto* exit = new (*module) lcc::Block(fmt::format("if.exit.{}", total_if));
+                auto* exit = new (*ir_module) lcc::Block(
+                    fmt::format("if.exit.{}", total_if)
+                );
                 total_if += 1;
 
                 generate_expression(if_expr->condition());
-                insert(new (*module) CondBranchInst(
+                insert(new (*ir_module) CondBranchInst(
                     generated_ir[if_expr->condition()],
                     then,
                     exit,
@@ -1502,7 +1583,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 // branch out, since the user did explicitly...
                 auto last_then_block = block;
                 if (not last_then_block->closed())
-                    insert(new (*module) BranchInst(exit, expr->location()));
+                    insert(new (*ir_module) BranchInst(exit, expr->location()));
 
                 // If anything outside of the then branch references an AST node that was
                 // used in this then branch, it needs to re-generate the IR for that
@@ -1526,21 +1607,21 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             ///          | exit |           |
             ///          +------+           |
             ///                             |
-            auto* then = new (*module) lcc::Block(fmt::format("if.then.{}", total_if));
-            auto* otherwise = new (*module) lcc::Block(fmt::format("if.else.{}", total_if));
+            auto* then = new (*ir_module) lcc::Block(fmt::format("if.then.{}", total_if));
+            auto* otherwise = new (*ir_module) lcc::Block(fmt::format("if.else.{}", total_if));
             // TODO: exit block not needed when both then and else are noreturn.
-            auto* exit = new (*module) lcc::Block(fmt::format("if.exit.{}", total_if));
+            auto* exit = new (*ir_module) lcc::Block(fmt::format("if.exit.{}", total_if));
             total_if += 1;
 
             generate_expression(if_expr->condition());
-            insert(new (*module) CondBranchInst(
+            insert(new (*ir_module) CondBranchInst(
                 generated_ir[if_expr->condition()],
                 then,
                 otherwise,
                 expr->location()
             ));
 
-            auto* phi = new (*module) PhiInst(
+            auto* phi = new (*ir_module) PhiInst(
                 Convert(ctx, if_expr->type()),
                 expr->location()
             );
@@ -1551,7 +1632,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             auto then_ir = generated_ir[if_expr->then()];
             auto* last_then_block = block;
             if (not last_then_block->closed())
-                insert(new (*module) BranchInst(exit, expr->location()));
+                insert(new (*ir_module) BranchInst(exit, expr->location()));
 
             // Now that we've generated the then expression, we go on to generate the
             // otherwise expression. The weirdness with generated_ir here is due to
@@ -1570,7 +1651,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             generate_expression(if_expr->otherwise());
             auto* last_else_block = block;
             if (not last_else_block->closed())
-                insert(new (*module) BranchInst(exit, expr->location()));
+                insert(new (*ir_module) BranchInst(exit, expr->location()));
 
             update_block(exit);
             // If the type of an if isn't void, it must return a value, so generate
@@ -1612,7 +1693,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 generate_expression(arg);
                 if (auto* alloca = cast<AllocaInst>(generated_ir[arg])) {
                     if (alloca->allocated_type() == function_type->params().at(usz(i))) {
-                        auto* load = new (*module) LoadInst(function_type->params().at(usz(i)), alloca);
+                        auto* load = new (*ir_module) LoadInst(function_type->params().at(usz(i)), alloca);
                         generated_ir[arg] = load;
                         insert(load);
                     }
@@ -1631,7 +1712,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 args.push_back(generated_ir[arg]);
             }
 
-            auto* ir_call = new (*module) CallInst(
+            auto* ir_call = new (*ir_module) CallInst(
                 generated_ir[call->callee()],
                 function_type,
                 std::move(args),
@@ -1714,37 +1795,37 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 );
 
                 // Get pointer to tag member of underlying struct of sum type.
-                auto* tag_ptr = new (*module) GetMemberPtrInst(
+                auto* tag_ptr = new (*ir_module) GetMemberPtrInst(
                     Convert(ctx, struct_type),
                     generated_ir[m->object()],
-                    new (*module) IntegerConstant(
+                    new (*ir_module) IntegerConstant(
                         Convert(ctx, Type::UInt),
                         0
                     ),
                     m->location()
                 );
                 // Load tag from that pointer.
-                auto* load_tag = new (*module) LoadInst(tag_type, tag_ptr);
+                auto* load_tag = new (*ir_module) LoadInst(tag_type, tag_ptr);
                 // Compare expected tag from member expression to actual tag loaded from
                 // the sum type.
-                auto* expected = new (*module) IntegerConstant(
+                auto* expected = new (*ir_module) IntegerConstant(
                     tag_type,
                     member_index + 1
                 );
-                auto* eq = new (*module) EqInst(load_tag, expected);
+                auto* eq = new (*ir_module) EqInst(load_tag, expected);
 
                 // If eq, load from data member of underlying struct.
                 // Otherwise, crash.
 
                 // Create Basic Blocks
                 static usz total_sum_access{0};
-                auto* then = new (*module) lcc::Block(
+                auto* then = new (*ir_module) lcc::Block(
                     fmt::format("sum.access.good.{}", total_sum_access)
                 );
-                auto* otherwise = new (*module) lcc::Block(
+                auto* otherwise = new (*ir_module) lcc::Block(
                     fmt::format("sum.access.bad.{}", total_sum_access)
                 );
-                auto* exit = new (*module) lcc::Block(
+                auto* exit = new (*ir_module) lcc::Block(
                     fmt::format("sum.access.exit.{}", total_sum_access)
                 );
                 total_sum_access += 1;
@@ -1752,7 +1833,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 insert(tag_ptr);
                 insert(load_tag);
                 insert(eq);
-                insert(new (*module) CondBranchInst(
+                insert(new (*ir_module) CondBranchInst(
                     eq,
                     then,
                     otherwise,
@@ -1761,18 +1842,18 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                 // ptr type because member access results in an lvalue. Load happens
                 // during lvalue to rvalue conversion.
-                auto* phi = new (*module) PhiInst(lcc::Type::PtrTy, expr->location());
+                auto* phi = new (*ir_module) PhiInst(lcc::Type::PtrTy, expr->location());
 
                 update_block(then);
-                auto* data_ptr = new (*module) GetMemberPtrInst(
+                auto* data_ptr = new (*ir_module) GetMemberPtrInst(
                     Convert(ctx, struct_type),
                     generated_ir[m->object()],
                     // NOTE: `1` magic number is index of "data" member of sum type's underlying struct.
-                    new (*module) IntegerConstant(Convert(ctx, Type::UInt), 1),
+                    new (*ir_module) IntegerConstant(Convert(ctx, Type::UInt), 1),
                     m->location()
                 );
                 insert(data_ptr);
-                insert(new (*module) BranchInst(exit, expr->location()));
+                insert(new (*ir_module) BranchInst(exit, expr->location()));
 
                 update_block(otherwise);
 
@@ -1785,12 +1866,12 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     // before we crash.
 
                     constexpr u8 rc = 7;
-                    auto exit_func = module->function_by_name("exit");
+                    auto exit_func = ir_module->function_by_name("exit");
                     LCC_ASSERT(exit_func, "Glint IRGen couldn't find `exit'");
-                    auto* exit_call = new (*module) CallInst(
+                    auto* exit_call = new (*ir_module) CallInst(
                         *exit_func,
                         as<FunctionType>(exit_func->type()),
-                        {new (*module) IntegerConstant(
+                        {new (*ir_module) IntegerConstant(
                             Convert(ctx, Type::UInt),
                             rc
                         )}
@@ -1814,11 +1895,11 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             );
             auto* struct_t = Convert(ctx, member_access->struct_type());
             auto* instance_pointer = generated_ir[member_access->object()];
-            auto* index = new (*module) IntegerConstant(
+            auto* index = new (*ir_module) IntegerConstant(
                 lcc::IntegerType::Get(ctx, 64),
                 member_access->member()
             );
-            auto* gmp = new (*module) GetMemberPtrInst(
+            auto* gmp = new (*ir_module) GetMemberPtrInst(
                 struct_t,
                 instance_pointer,
                 index
@@ -1829,7 +1910,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
         case K::EnumeratorDecl: {
             auto* enumerator = as<EnumeratorDecl>(expr);
-            generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, enumerator->type()), enumerator->value());
+            generated_ir[expr] = new (*ir_module) IntegerConstant(Convert(ctx, enumerator->type()), enumerator->value());
         } break;
 
         case K::CompoundLiteral: {
@@ -1866,14 +1947,14 @@ void IRGen::generate_function(glint::FuncDecl* f) {
     if (not IsImportedLinkage(f->linkage())) {
         // Hard to generate code for a function without a body.
         if (auto* expr = f->body()) {
-            block = new (*module) lcc::Block(fmt::format("body.{}", total_block));
+            block = new (*ir_module) lcc::Block(fmt::format("body.{}", total_block));
             update_block(block);
 
             // Bind param instructions.
             for (auto [i, param] : vws::enumerate(f->param_decls())) {
                 auto* inst = function->param(usz(i));
-                auto* alloca = new (*module) AllocaInst(inst->type(), param->location());
-                auto* store = new (*module) StoreInst(inst, alloca);
+                auto* alloca = new (*ir_module) AllocaInst(inst->type(), param->location());
+                auto* store = new (*ir_module) StoreInst(inst, alloca);
                 insert(alloca);
                 insert(store);
                 generated_ir[param] = alloca;
@@ -1890,7 +1971,7 @@ auto IRGen::Generate(Context* context, glint::Module& mod) -> lcc::Module* {
     /// TODO: Move this into a function?
     for (const auto& str : mod.strings) {
         auto* var = GlobalVariable::CreateStringPtr(
-            ir_gen.module,
+            ir_gen.ir_module,
             fmt::format(".str.{}", ir_gen.total_string++),
             str
         );
