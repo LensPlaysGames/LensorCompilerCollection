@@ -43,7 +43,6 @@ private:
     std::unordered_map<Block*, isz> block_indices{};
     std::unordered_map<Inst*, isz> inst_indices{};
 
-
 public:
     /// Entry point.
     [[nodiscard]]
@@ -52,7 +51,8 @@ public:
     }
 
 protected:
-    explicit IRPrinter(bool use_colour) : _use_colour(use_colour) {}
+    explicit IRPrinter(bool use_colour)
+        : _use_colour(use_colour) {}
 
     using P = IRColourPalette;
 

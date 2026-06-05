@@ -1351,7 +1351,8 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
         case K::Return: {
             auto* ret_expr = as<ReturnExpr>(expr);
-            if (ret_expr->value()) generate_expression(ret_expr->value());
+            if (ret_expr->value())
+                generate_expression(ret_expr->value());
             auto* ret = new (*ir_module) ReturnInst(
                 generated_ir[ret_expr->value()],
                 expr->location()

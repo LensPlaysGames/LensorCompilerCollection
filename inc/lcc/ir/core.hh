@@ -838,7 +838,8 @@ public:
         , arguments(std::move(arguments_))
         , cc(calling_convention) {
         AddUse(callee_value, this);
-        for (auto* a : this->arguments) AddUse(a, this);
+        for (auto* a : this->arguments)
+            AddUse(a, this);
     }
 
     /// Get the arguments.
@@ -896,7 +897,8 @@ public:
         : Inst(Kind::Intrinsic, Type::UnknownTy, location)
         , intrinsic(intrinsic_)
         , operand_list(std::move(operands)) {
-        for (auto* o : operand_list) AddUse(o, this);
+        for (auto* o : operand_list)
+            AddUse(o, this);
     }
 
     /// Get the intrinsic ID.

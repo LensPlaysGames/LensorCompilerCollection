@@ -421,11 +421,13 @@ bool deserialise_from_metadata_blob(
     // NOTE: This makes exported variables declared in the module available *
     // directly* in the program (this module), without any prefix or accessing
     // the module via name.
+    //
     imported_mod->scopes.emplace_back(mod.global_scope());
 
     // TODO: This better matches Glint's semantics, but, er, it causes crashes.
     // NOTE: This makes exported variables declared in the module available *
     // only* via prefixing with the module name, i.e. module-name.var.
+    //
     // imported_mod->scopes.emplace_back(
     //     new (*imported_mod) Scope(nullptr)
     // );
@@ -3254,6 +3256,11 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
 
                 // Relevant dynamic array type
                 auto dyn_t = as<DynamicArrayType>(subscript->lhs()->type());
+
+                // TODO: Check that RHS is an array type (fixed, dynamic, or a view).
+                // If it is, check that it's element type is convertible to our element
+                // type.
+                // If it is, insert entire array.
 
                 // Ensure rhs is convertible to dynamic array element type
                 if (not Convert(&b->rhs(), dyn_t->elem())) {

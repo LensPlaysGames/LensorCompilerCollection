@@ -11,7 +11,8 @@ class DisjointSets {
     Buffer<usz> entries;
 
 public:
-    explicit DisjointSets(usz entry_count) : entries(entry_count) {
+    explicit DisjointSets(usz entry_count)
+        : entries(entry_count) {
         rgs::generate(entries, [i = 0] mutable { return i++; });
     }
 
@@ -183,7 +184,8 @@ private:
 } // namespace
 } // namespace lcc
 
-lcc::DomTree::DomTree(Function* function, bool compute_dominance_frontiers) : f(function) {
+lcc::DomTree::DomTree(Function* function, bool compute_dominance_frontiers)
+    : f(function) {
     if (function->blocks().empty()) return;
 
     /// Build dominator tree.
