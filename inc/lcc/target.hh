@@ -135,7 +135,7 @@ struct Targets {
 };
 } // namespace detail
 
-constexpr inline const Target* const Target::x86_64_linux = &detail::Targets::x86_64_linux;
+constinit inline const Target* const Target::x86_64_linux = &detail::Targets::x86_64_linux;
 constinit inline const Target* const Target::x86_64_windows = &detail::Targets::x86_64_windows;
 
 } // namespace lcc
