@@ -9,7 +9,12 @@
 #include <fmt/format.h>
 #include <fmt/std.h>
 
+#include <cstdlib>
 #include <ranges>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
 
 namespace lcc::language_c {
 
@@ -22,12 +27,44 @@ std::string_view ToString(TokenKind k) {
         case TokenKind::KwVoid: return "void";
         case TokenKind::KwInt: return "int";
         case TokenKind::KwReturn: return "return";
+        case TokenKind::KwSizeof: return "sizeof";
+        case TokenKind::KwAlignof: return "_Alignof";
+        case TokenKind::OpEqual: return "=";
+        case TokenKind::OpLessThan: return "<";
+        case TokenKind::OpGreaterThan: return ">";
+        case TokenKind::OpDoublePipe: return "||";
+        case TokenKind::OpDoubleAmpersand: return "&&";
+        case TokenKind::OpExclamation: return "!";
         case TokenKind::OpPlus: return "+";
         case TokenKind::OpMinus: return "-";
         case TokenKind::OpAsterisk: return "*";
         case TokenKind::OpSlash: return "/";
         case TokenKind::OpPercent: return "%";
         case TokenKind::OpComma: return ",";
+        case TokenKind::OpDot: return ".";
+        case TokenKind::OpArrow: return "->";
+        case TokenKind::OpPlusPlus: return "++";
+        case TokenKind::OpMinusMinus: return "--";
+        case TokenKind::OpCaret: return "^";
+        case TokenKind::OpPipe: return "|";
+        case TokenKind::OpAmpersand: return "&";
+        case TokenKind::OpTilde: return "~";
+        case TokenKind::OpShiftLeft: return "<<";
+        case TokenKind::OpShiftRight: return ">>";
+        case TokenKind::OpDoubleEqual: return "==";
+        case TokenKind::OpLessThanEqual: return "<=";
+        case TokenKind::OpGreaterThanEqual: return ">=";
+        case TokenKind::OpExclamationEqual: return "!=";
+        case TokenKind::OpPlusEqual: return "+=";
+        case TokenKind::OpMinusEqual: return "-=";
+        case TokenKind::OpAsteriskEqual: return "*=";
+        case TokenKind::OpSlashEqual: return "/=";
+        case TokenKind::OpPercentEqual: return "%=";
+        case TokenKind::OpCaretEqual: return "^=";
+        case TokenKind::OpPipeEqual: return "|=";
+        case TokenKind::OpAmpersandEqual: return "&=";
+        case TokenKind::OpShiftLeftEqual: return "<<=";
+        case TokenKind::OpShiftRightEqual: return ">>=";
         case TokenKind::LeftParenthesis: return "(";
         case TokenKind::RightParenthesis: return ")";
         case TokenKind::LeftSquareBracket: return "[";
@@ -60,12 +97,44 @@ Result<std::string> ToSource(Token& t) {
         case TokenKind::KwVoid:
         case TokenKind::KwInt:
         case TokenKind::KwReturn:
+        case TokenKind::KwSizeof:
+        case TokenKind::KwAlignof:
+        case TokenKind::OpEqual:
+        case TokenKind::OpLessThan:
+        case TokenKind::OpGreaterThan:
+        case TokenKind::OpDoublePipe:
+        case TokenKind::OpDoubleAmpersand:
+        case TokenKind::OpExclamation:
         case TokenKind::OpPlus:
         case TokenKind::OpMinus:
         case TokenKind::OpAsterisk:
         case TokenKind::OpSlash:
         case TokenKind::OpPercent:
         case TokenKind::OpComma:
+        case TokenKind::OpDot:
+        case TokenKind::OpArrow:
+        case TokenKind::OpPlusPlus:
+        case TokenKind::OpMinusMinus:
+        case TokenKind::OpCaret:
+        case TokenKind::OpPipe:
+        case TokenKind::OpAmpersand:
+        case TokenKind::OpTilde:
+        case TokenKind::OpShiftLeft:
+        case TokenKind::OpShiftRight:
+        case TokenKind::OpDoubleEqual:
+        case TokenKind::OpLessThanEqual:
+        case TokenKind::OpGreaterThanEqual:
+        case TokenKind::OpExclamationEqual:
+        case TokenKind::OpPlusEqual:
+        case TokenKind::OpMinusEqual:
+        case TokenKind::OpAsteriskEqual:
+        case TokenKind::OpSlashEqual:
+        case TokenKind::OpPercentEqual:
+        case TokenKind::OpCaretEqual:
+        case TokenKind::OpPipeEqual:
+        case TokenKind::OpAmpersandEqual:
+        case TokenKind::OpShiftLeftEqual:
+        case TokenKind::OpShiftRightEqual:
         case TokenKind::LeftParenthesis:
         case TokenKind::RightParenthesis:
         case TokenKind::LeftSquareBracket:
@@ -78,13 +147,13 @@ Result<std::string> ToSource(Token& t) {
     Diag::ICE("unreachable");
 }
 
-Result<void> Parser::preprocessor_define(std::string_view name, std::vector<Token> contents) {
+Result<void> Lexer::preprocessor_define(std::string_view name, std::vector<Token> contents) {
     if (_simple_defines.contains(name))
         return Error("c/preprocessor", "Redefinition of `{}`", name);
     _simple_defines.emplace(name, contents);
     return {};
 }
-void Parser::preprocessor_undefine(std::string_view name) {
+void Lexer::preprocessor_undefine(std::string_view name) {
     // FIXME: Remove this shit once libc++ actually supports any semblance of
     // the modern language.
 #ifdef __cpp_lib_associative_heterogeneous_erasure
@@ -98,6 +167,8 @@ StringMap<TokenKind> keywords{
     {"int", TokenKind::KwInt},
     {"return", TokenKind::KwReturn},
     {"void", TokenKind::KwVoid},
+    {"sizeof", TokenKind::KwSizeof},
+    {"_Alignof", TokenKind::KwAlignof},
 };
 
 bool IsSpace(uint32_t c) {
@@ -114,7 +185,7 @@ bool IsIdentifierContinueCharacter(uint32_t c) {
         or (c >= '0' and c <= '9');
 }
 
-void Parser::NextNumber() {
+void Lexer::NextNumber() {
     auto start_location = tok.location;
 
     constexpr auto DigitSeparator = '\'';
@@ -267,7 +338,7 @@ void Parser::NextNumber() {
     }
 }
 
-void Parser::NextIdentifier() {
+void Lexer::NextIdentifier() {
     tok.kind = TokenKind::Identifier;
     tok.text.clear();
 
@@ -294,12 +365,21 @@ void Parser::NextIdentifier() {
 // This is a quick-and-easy way to implement those sort of tokens.
 std::unordered_map<uint32_t, TokenKind> easy_tokens{
     {0, TokenKind::Eof},
+    {'=', TokenKind::OpEqual},
+    {'<', TokenKind::OpLessThan},
+    {'>', TokenKind::OpGreaterThan},
+    {'!', TokenKind::OpExclamation},
     {'+', TokenKind::OpPlus},
     {'-', TokenKind::OpMinus},
     {'*', TokenKind::OpAsterisk},
     {'/', TokenKind::OpSlash},
     {'%', TokenKind::OpPercent},
     {',', TokenKind::OpComma},
+    {'.', TokenKind::OpDot},
+    {'^', TokenKind::OpCaret},
+    {'|', TokenKind::OpPipe},
+    {'&', TokenKind::OpAmpersand},
+    {'~', TokenKind::OpTilde},
     {';', TokenKind::Semicolon},
     {'(', TokenKind::LeftParenthesis},
     {')', TokenKind::RightParenthesis},
@@ -308,12 +388,45 @@ std::unordered_map<uint32_t, TokenKind> easy_tokens{
     {'{', TokenKind::LeftCurlyBrace},
     {'}', TokenKind::RightCurlyBrace},
 };
-// TODO: Fill with OpPlus -> OpPlusEq mappings
-std::unordered_map<TokenKind, TokenKind> from_trailing_equal{};
+std::unordered_map<TokenKind, TokenKind> from_trailing_equal{
+    {TokenKind::OpEqual, TokenKind::OpDoubleEqual},
+    {TokenKind::OpLessThan, TokenKind::OpLessThanEqual},
+    {TokenKind::OpGreaterThan, TokenKind::OpGreaterThanEqual},
+    {TokenKind::OpExclamation, TokenKind::OpExclamationEqual},
+    {TokenKind::OpPlus, TokenKind::OpPlusEqual},
+    {TokenKind::OpMinus, TokenKind::OpMinusEqual},
+    {TokenKind::OpAsterisk, TokenKind::OpAsteriskEqual},
+    {TokenKind::OpSlash, TokenKind::OpSlashEqual},
+    {TokenKind::OpPercent, TokenKind::OpPercentEqual},
+    {TokenKind::OpCaret, TokenKind::OpCaretEqual},
+    {TokenKind::OpPipe, TokenKind::OpPipeEqual},
+    {TokenKind::OpAmpersand, TokenKind::OpAmpersandEqual},
+    {TokenKind::OpShiftLeft, TokenKind::OpShiftLeftEqual},
+    {TokenKind::OpShiftRight, TokenKind::OpShiftRightEqual},
 
-void Parser::NextToken() {
+};
+std::unordered_map<TokenKind, TokenKind> has_trailing{
+    {TokenKind::LeftParenthesis, TokenKind::RightParenthesis},
+    {TokenKind::LeftSquareBracket, TokenKind::RightSquareBracket},
+    {TokenKind::LeftCurlyBrace, TokenKind::RightCurlyBrace}
+};
+
+void Lexer::NextChar() {
+    if (_including.empty()) {
+        syntax::Lexer<Token>::NextChar();
+        return;
+    }
+    auto& in = _including.front();
+    lastc = u32(in.at(_including_offset++));
+    if (_including_offset >= in.size()) {
+        _including.pop_front();
+        _including_offset = 0;
+    }
+}
+
+void Lexer::NextToken() {
     // If the preprocessor asks for a token, don't replace it.
-    if (not _next_tokens.empty()) {
+    if (_next_tokens.size()) {
         tok = _next_tokens.front();
         _next_tokens.pop_front();
         return;
@@ -352,53 +465,78 @@ void Parser::NextToken() {
         case '[':
         case ']':
         case '{':
-        case '}':
+        case '}': {
             tok.kind = easy_tokens.at(lastc);
             NextChar();
-            break;
+        } break;
 
         case '+':
         case '-':
         case '*':
         case '/':
         case '%':
+        case '&':
+        case '^':
+        case '|':
+        case '<':
+        case '>':
+        case '!':
+        case '~':
+        case '=': {
             tok.kind = easy_tokens.at(lastc);
             NextChar();
 
-            // Line comment
-            if (tok.kind == TokenKind::OpSlash and lastc == '/') {
+            if (tok.kind == TokenKind::OpLessThan and lastc == '<') {
+                tok.kind = TokenKind::OpShiftLeft;
                 NextChar();
-
-                while (lastc and lastc != '\n') NextChar();
-
-                // The actual token beyond the comment.
-                NextToken();
-                return;
+            } else if (tok.kind == TokenKind::OpGreaterThan and lastc == '>') {
+                tok.kind = TokenKind::OpShiftRight;
+                NextChar();
+            } else if (tok.kind == TokenKind::OpPipe and lastc == '|') {
+                tok.kind = TokenKind::OpDoublePipe;
+                NextChar();
+            } else if (tok.kind == TokenKind::OpAmpersand and lastc == '&') {
+                tok.kind = TokenKind::OpDoubleAmpersand;
+                NextChar();
             }
 
-            // Block comment
-            if (tok.kind == TokenKind::OpSlash and lastc == '*') {
-                NextChar();
-
-                while (lastc) {
+            else if (tok.kind == TokenKind::OpSlash) {
+                // Line comment
+                if (lastc == '/') {
                     NextChar();
-                    if (lastc == '*') {
+
+                    while (lastc and lastc != '\n') NextChar();
+
+                    // The actual token beyond the comment.
+                    NextToken();
+                    return;
+                }
+                // Block comment
+                if (lastc == '*') {
+                    NextChar();
+
+                    while (lastc) {
                         NextChar();
-                        if (lastc == '/') {
+                        if (lastc == '*') {
                             NextChar();
-                            break;
+                            if (lastc == '/') {
+                                NextChar();
+                                break;
+                            }
                         }
                     }
-                }
 
-                // The actual token beyond the comment.
-                NextToken();
-                return;
+                    // The actual token beyond the comment.
+                    NextToken();
+                    return;
+                }
             }
 
-            if (lastc == '=')
+            if (lastc == '=' and from_trailing_equal.contains(tok.kind)) {
                 tok.kind = from_trailing_equal.at(tok.kind);
-            break;
+                NextChar();
+            }
+        } break;
 
         // The only way to get here is if the preprocessor calls NextToken but
         // there isn't another one in the line, and the newline isn't escaped.
@@ -452,6 +590,58 @@ void Parser::NextToken() {
                     }
 
                     preprocessor_undefine(name);
+                } else if (tok.text == "include") {
+                    NextToken();
+                    std::string path{};
+                    if (tok.kind == TokenKind::OpLessThan) {
+                        auto open_location = tok.location;
+                        while (lastc and lastc != '\n' and lastc != '>') {
+                            path += char(lastc);
+                            NextChar();
+                        }
+                        if (lastc == '>') {
+                            // Yeet '>'
+                            NextToken();
+                            /** (!): Above lexes '>', below yeets it */
+                            NextToken();
+                        } else {
+                            auto e = Error(open_location, "c/preprocessor", "Expected `>` to close this `<`...");
+                            e.fix_by_inserting_at(tok.location, ">");
+                        }
+                    }
+                    // else if (tok.kind == TokenKind::String) {
+                    //     path = tok.text;
+                    // }
+                    else {
+                        Error(
+                            "c/preprocessor",
+                            "Expected `<` or `\"` to begin included path, but got {} instead",
+                            tok.kind
+                        );
+                        // TODO: Synchronize to beginning of next line, or something.
+                        tok.kind = TokenKind::Eof;
+                        return;
+                    }
+
+                    if (not std::filesystem::exists(path)) {
+                        Error(
+                            "c/preprocessor",
+                            "Included file \"{}\" does not exist",
+                            path
+                        );
+                        tok.kind = TokenKind::Eof;
+                        return;
+                    }
+
+                    while (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid)) {
+                        Warning("c/preprocessor", "Junk following path of #include directive `{}`", tok.kind);
+                        NextToken();
+                    }
+
+                    // After this, the next characters we fetch via the lexer API will be from
+                    // the included file. This means we can't do our normal handling of "go
+                    // until EOF or newline", since, er, this file's tokens are in the way.
+                    _including.push_front(File::Read(path));
                 } else {
                     Error(
                         "c/preprocessor",
@@ -460,9 +650,6 @@ void Parser::NextToken() {
                     tok.kind = TokenKind::Eof;
                     return;
                 }
-
-                if (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid))
-                    Diag::ICE("Preprocessor lexing must not have lexed regular token");
 
                 preprocessing = false;
 
@@ -515,6 +702,8 @@ void Parser::NextToken() {
 
                 break;
             }
+
+            Error("c/expected", "Unknown: `{}`", lastc);
         } break;
     }
 
@@ -527,10 +716,117 @@ void Parser::NextToken() {
 }
 
 // @return zero for non operators, otherwise the precedence value.
-constexpr size_t precedence(TokenKind kind) {
+constexpr size_t unary_precedence(TokenKind kind) {
+    switch (kind) {
+        case TokenKind::OpPlus:
+        case TokenKind::OpMinus:
+        case TokenKind::OpPlusPlus:
+        case TokenKind::OpMinusMinus:
+        case TokenKind::OpExclamation:
+        case TokenKind::OpAsterisk:
+        case TokenKind::OpAmpersand:
+        case TokenKind::OpTilde:
+        case TokenKind::KwSizeof:
+        case TokenKind::KwAlignof:
+            return 2;
+
+        case TokenKind::Invalid:
+        case TokenKind::Identifier:
+        case TokenKind::Integer:
+        case TokenKind::Fractional:
+        case TokenKind::KwVoid:
+        case TokenKind::KwInt:
+        case TokenKind::KwReturn:
+        case TokenKind::OpEqual:
+        case TokenKind::OpLessThan:
+        case TokenKind::OpGreaterThan:
+        case TokenKind::OpDoublePipe:
+        case TokenKind::OpDoubleAmpersand:
+        case TokenKind::OpSlash:
+        case TokenKind::OpPercent:
+        case TokenKind::OpComma:
+        case TokenKind::OpCaret:
+        case TokenKind::OpPipe:
+        case TokenKind::OpShiftLeft:
+        case TokenKind::OpShiftRight:
+        case TokenKind::OpDoubleEqual:
+        case TokenKind::OpLessThanEqual:
+        case TokenKind::OpGreaterThanEqual:
+        case TokenKind::OpExclamationEqual:
+        case TokenKind::OpPlusEqual:
+        case TokenKind::OpMinusEqual:
+        case TokenKind::OpAsteriskEqual:
+        case TokenKind::OpSlashEqual:
+        case TokenKind::OpPercentEqual:
+        case TokenKind::OpCaretEqual:
+        case TokenKind::OpPipeEqual:
+        case TokenKind::OpAmpersandEqual:
+        case TokenKind::OpShiftLeftEqual:
+        case TokenKind::OpShiftRightEqual:
+        case TokenKind::LeftParenthesis:
+        case TokenKind::RightParenthesis:
+        case TokenKind::LeftSquareBracket:
+        case TokenKind::RightSquareBracket:
+        case TokenKind::LeftCurlyBrace:
+        case TokenKind::RightCurlyBrace:
+        case TokenKind::Semicolon:
+        case TokenKind::Eof:
+        case TokenKind::Count:
+        case TokenKind::OpDot:
+        case TokenKind::OpArrow:
+            return 0;
+    }
+    Diag::ICE("unreachable");
+}
+
+// @return zero for non operators, otherwise the precedence value.
+constexpr size_t binary_precedence(TokenKind kind) {
     switch (kind) {
         case TokenKind::OpComma:
             return 15;
+
+        // Assignment
+        case TokenKind::OpEqual:
+        case TokenKind::OpPlusEqual:
+        case TokenKind::OpMinusEqual:
+        case TokenKind::OpAsteriskEqual:
+        case TokenKind::OpSlashEqual:
+        case TokenKind::OpPercentEqual:
+        case TokenKind::OpCaretEqual:
+        case TokenKind::OpPipeEqual:
+        case TokenKind::OpAmpersandEqual:
+        case TokenKind::OpShiftLeftEqual:
+        case TokenKind::OpShiftRightEqual:
+            return 14;
+
+        case TokenKind::OpDoublePipe:
+            return 12;
+
+        case TokenKind::OpDoubleAmpersand:
+            return 11;
+
+        case TokenKind::OpPipe:
+            return 10;
+
+        case TokenKind::OpCaret:
+            return 9;
+
+        case TokenKind::OpAmpersand:
+            return 8;
+
+        case TokenKind::OpDoubleEqual:
+        case TokenKind::OpExclamationEqual:
+            return 7;
+
+        case TokenKind::OpLessThan:
+        case TokenKind::OpGreaterThan:
+        case TokenKind::OpLessThanEqual:
+        case TokenKind::OpGreaterThanEqual:
+            return 6;
+
+        case TokenKind::OpShiftLeft:
+        case TokenKind::OpShiftRight:
+            return 5;
 
         case TokenKind::OpPlus:
         case TokenKind::OpMinus:
@@ -542,6 +838,9 @@ constexpr size_t precedence(TokenKind kind) {
             return 3;
 
         case TokenKind::LeftSquareBracket:
+        case TokenKind::OpDot:
+        case TokenKind::OpArrow:
+        case TokenKind::LeftParenthesis:
             return 1;
 
         case TokenKind::Invalid:
@@ -551,13 +850,18 @@ constexpr size_t precedence(TokenKind kind) {
         case TokenKind::KwVoid:
         case TokenKind::KwInt:
         case TokenKind::KwReturn:
-        case TokenKind::LeftParenthesis:
+        case TokenKind::KwSizeof:
+        case TokenKind::KwAlignof:
+        case TokenKind::OpPlusPlus:
+        case TokenKind::OpMinusMinus:
+        case TokenKind::OpTilde:
         case TokenKind::RightParenthesis:
         case TokenKind::RightSquareBracket:
         case TokenKind::LeftCurlyBrace:
         case TokenKind::RightCurlyBrace:
         case TokenKind::Semicolon:
         case TokenKind::Eof:
+        case TokenKind::OpExclamation:
         case TokenKind::Count:
             return 0;
     }
@@ -565,8 +869,8 @@ constexpr size_t precedence(TokenKind kind) {
 }
 constexpr size_t reset_precedence{0};
 
-Result<std::vector<Node*>>
-Parser::ParseDeclarators(Type* type_specifier) {
+auto Parser::ParseDeclarators(Type* type_specifier)
+    -> Result<std::vector<Node*>> {
     std::vector<Node*> parsed_declarations{};
     // We have just parsed a type specifier (like "int").
     // We are now at the beginning of the list of declarators.
@@ -610,8 +914,9 @@ Parser::ParseDeclarators(Type* type_specifier) {
             NextToken();
         }
 
-        if (current_declarator_name.empty())
-            Diag::ICE("empty declarator name");
+        if (current_declarator_name.empty()) {
+            Warning("c/missing-declarations", "Declaration does not declare anything (no name)");
+        }
 
         // Trailing declarator type specifiers (functions, arrays)
         switch (tok.kind) {
@@ -649,7 +954,7 @@ Parser::ParseDeclarators(Type* type_specifier) {
                 NextToken();
 
                 auto dimension = ParseExpression(
-                    precedence(TokenKind::LeftSquareBracket)
+                    binary_precedence(TokenKind::LeftSquareBracket)
                 );
                 if (not dimension) return dimension.diag();
 
@@ -680,6 +985,7 @@ Parser::ParseDeclarators(Type* type_specifier) {
         if (definition_possible and current_declarator_type->kind() == TypeKind::Function) {
             // Look for function definition
             if (tok.kind == TokenKind::LeftCurlyBrace) {
+                /** (!) -- DO NOT EAT CURLY BRACE **/
                 auto body = ParseExpression(reset_precedence);
                 if (not body) return body.diag();
                 initialiser = *body;
@@ -688,6 +994,12 @@ Parser::ParseDeclarators(Type* type_specifier) {
         } else {
             // TODO: Parse initialiser, if present (i.e. "= <expression>");
             // if (tok.kind == TokenKind::Equal)
+            if (tok.kind == TokenKind::OpEqual) {
+                NextToken();
+                auto maybe_initialiser = ParseExpression(reset_precedence);
+                if (not maybe_initialiser) return maybe_initialiser.diag();
+                initialiser = *maybe_initialiser;
+            }
         }
 
         parsed_declarations.push_back(
@@ -765,6 +1077,12 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
 auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
     Location start_location = tok.location;
     Result<Node*> lhs = Result<Node*>::Null(); /** (!) **/
+
+    // Prefix unary operators
+    if (unary_precedence(tok.kind)) {
+        Diag::ICE("Handle unary prefix operator");
+    }
+
     switch (tok.kind) {
         case TokenKind::Invalid:
         case TokenKind::Count:
@@ -777,7 +1095,33 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
         case TokenKind::RightParenthesis:
         case TokenKind::RightSquareBracket:
         case TokenKind::RightCurlyBrace:
-            return Error("unexpected-unqualified-id", "Unexpected `{}`", tok.kind);
+        case TokenKind::OpEqual:
+        case TokenKind::OpLessThan:
+        case TokenKind::OpGreaterThan:
+        case TokenKind::OpDoublePipe:
+        case TokenKind::OpDoubleAmpersand:
+        case TokenKind::OpDot:
+        case TokenKind::OpArrow:
+        case TokenKind::OpShiftLeft:
+        case TokenKind::OpShiftRight:
+        case TokenKind::OpDoubleEqual:
+        case TokenKind::OpLessThanEqual:
+        case TokenKind::OpGreaterThanEqual:
+        case TokenKind::OpExclamationEqual:
+        case TokenKind::OpPlusEqual:
+        case TokenKind::OpMinusEqual:
+        case TokenKind::OpAsteriskEqual:
+        case TokenKind::OpSlashEqual:
+        case TokenKind::OpPercentEqual:
+        case TokenKind::OpCaretEqual:
+        case TokenKind::OpPipeEqual:
+        case TokenKind::OpAmpersandEqual:
+        case TokenKind::OpShiftLeftEqual:
+        case TokenKind::OpShiftRightEqual:
+        case TokenKind::OpCaret:
+        case TokenKind::OpPipe:
+        case TokenKind::OpAmpersand:
+            return Error("expected-qualified-id", "Unexpected `{}`", tok.kind);
 
         case TokenKind::KwReturn: {
             NextToken();
@@ -831,6 +1175,25 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             lhs = new Block(*constituents, location);
         } break;
 
+        case TokenKind::LeftParenthesis: {
+            // Eat "("
+            NextToken();
+
+            lhs = ParseExpression(reset_precedence);
+
+            if (tok.kind != TokenKind::RightParenthesis) {
+                auto e = Error(
+                    "c/expected",
+                    "Expected right parenthesis to close parenthesized expression"
+                );
+                e.fix_by_inserting_at(tok.location, "}");
+                return e;
+            }
+
+            // Eat ")"
+            NextToken();
+        } break;
+
         case TokenKind::Integer: {
             lhs = new IntegerLiteral(size_t(tok.integer_value), tok.location);
             NextToken();
@@ -841,10 +1204,15 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
 
         case TokenKind::Fractional:
         case TokenKind::OpAsterisk:
-        case TokenKind::LeftParenthesis:
         case TokenKind::LeftSquareBracket:
         case TokenKind::OpPlus:
         case TokenKind::OpMinus:
+        case TokenKind::KwSizeof:
+        case TokenKind::KwAlignof:
+        case TokenKind::OpExclamation:
+        case TokenKind::OpPlusPlus:
+        case TokenKind::OpMinusMinus:
+        case TokenKind::OpTilde:
             Diag::ICE("{} is unhandled...", tok.kind);
     }
 
@@ -853,22 +1221,49 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
     // Once we've parsed an expression, we should check if that expression is
     // the lhs of a binary expression.
     // NOTE: non-zero precedence = an operator
-    while (precedence(tok.kind)) {
+    while (binary_precedence(tok.kind)) {
         if (
             current_precedence
-            and precedence(tok.kind) > current_precedence
+            and binary_precedence(tok.kind) > current_precedence
         ) return lhs;
 
         switch (tok.kind) {
+            case TokenKind::OpEqual:
+            case TokenKind::OpLessThan:
+            case TokenKind::OpGreaterThan:
+            case TokenKind::OpDoublePipe:
+            case TokenKind::OpDoubleAmpersand:
             case TokenKind::OpPlus:
             case TokenKind::OpMinus:
             case TokenKind::OpAsterisk:
             case TokenKind::OpSlash:
             case TokenKind::OpPercent:
+            case TokenKind::OpDot:
+            case TokenKind::OpArrow:
+            case TokenKind::OpCaret:
+            case TokenKind::OpPipe:
+            case TokenKind::OpAmpersand:
+            case TokenKind::OpShiftLeft:
+            case TokenKind::OpShiftRight:
+            case TokenKind::OpDoubleEqual:
+            case TokenKind::OpLessThanEqual:
+            case TokenKind::OpGreaterThanEqual:
+            case TokenKind::OpExclamationEqual:
+            case TokenKind::OpPlusEqual:
+            case TokenKind::OpMinusEqual:
+            case TokenKind::OpAsteriskEqual:
+            case TokenKind::OpSlashEqual:
+            case TokenKind::OpPercentEqual:
+            case TokenKind::OpCaretEqual:
+            case TokenKind::OpPipeEqual:
+            case TokenKind::OpAmpersandEqual:
+            case TokenKind::OpShiftLeftEqual:
+            case TokenKind::OpShiftRightEqual:
             case TokenKind::LeftSquareBracket: {
                 const auto operator_ = tok.kind;
+                const auto operator_location = tok.location;
                 NextToken();
-                auto rhs = ParseExpression(precedence(operator_));
+                auto rhs = ParseExpression(binary_precedence(operator_));
                 if (not rhs) return rhs.diag();
                 lhs = new BinaryOperation(
                     operator_,
@@ -876,13 +1271,23 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
                     *rhs,
                     {lhs->location(), rhs->location()}
                 );
+
+                if (has_trailing.contains(operator_)) {
+                    if (tok.kind != has_trailing.at(operator_)) {
+                        auto e = Error("c/expected", "Expected `{}`", has_trailing.at(operator_));
+                        e.attach(Note(operator_location, "c/expected", "To match this `{}`", operator_));
+                        return e;
+                    }
+                }
             } break;
 
-            case TokenKind::LeftParenthesis:
-                Diag::ICE("Unhandled binary operator");
+            case TokenKind::LeftParenthesis: {
+                Diag::ICE("Handle function call parsing...");
+            }
 
             // These are NOT binary operators
             case TokenKind::OpComma:
+            case TokenKind::OpExclamation:
             case TokenKind::Invalid:
             case TokenKind::Identifier:
             case TokenKind::Integer:
@@ -897,7 +1302,12 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             case TokenKind::Semicolon:
             case TokenKind::Eof:
             case TokenKind::Count:
-                break;
+            case TokenKind::KwSizeof:
+            case TokenKind::KwAlignof:
+            case TokenKind::OpPlusPlus:
+            case TokenKind::OpMinusMinus:
+            case TokenKind::OpTilde:
+                Diag::ICE("Invalid binary operator");
         }
     }
 
@@ -917,7 +1327,7 @@ auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {
                 fmt::print("- {} <- {} ({})\n", *d->type(), d->name(), fmt::ptr(d));
             }
         }
-        for (auto [name, contents] : _simple_defines) {
+        for (auto [name, contents] : defines()) {
             fmt::print(
                 "-D{}=\"{}\"\n",
                 name,

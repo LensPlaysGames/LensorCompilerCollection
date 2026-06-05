@@ -112,7 +112,8 @@ private:
 
 protected:
     explicit Value(Kind kind, Type* ty = Type::UnknownTy)
-        : value_kind(kind), value_type(ty) {}
+        : value_kind(kind)
+        , value_type(ty) {}
 
 public:
     virtual ~Value() = default;
@@ -221,7 +222,8 @@ class UseTrackingValue : public Value {
     std::vector<Inst*> user_list;
 
 protected:
-    explicit UseTrackingValue(Kind k, Type* t = Type::UnknownTy) : Value(k, t) {}
+    explicit UseTrackingValue(Kind k, Type* t = Type::UnknownTy)
+        : Value(k, t) {}
 
 public:
     /// Get the users of this value.
@@ -260,7 +262,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::GlobalVariable; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::GlobalVariable; }
 
     [[nodiscard]]
     static auto CreateStringPtr(
@@ -289,7 +291,8 @@ class Inst : public UseTrackingValue {
 
 protected:
     explicit Inst(Kind k, Type* t, Location location = {})
-        : UseTrackingValue(k, t), _location(location) {}
+        : UseTrackingValue(k, t)
+        , _location(location) {}
 
     /// Add a use by an instruction.
     static void AddUse(Value* of_value, Inst* by) {
@@ -388,9 +391,7 @@ public:
 
     /// Check if this is a terminator instruction.
     [[nodiscard]]
-    auto is_terminator() const -> bool {
-        return kind() >= Value::Kind::Branch and kind() <= Value::Kind::Unreachable;
-    }
+    auto is_terminator() const -> bool;
 
     /// Get the source location of this instruction.
     [[nodiscard]]
@@ -445,7 +446,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return +v->kind() >= +Kind::Alloca; }
+    static auto classof(const Value* v) -> bool { return +v->kind() >= +Kind::Alloca; }
 };
 static_assert(
     std::has_virtual_destructor_v<Inst>,
@@ -471,8 +472,8 @@ class Block : public UseTrackingValue {
 
 public:
     explicit Block(std::string n = "")
-        : UseTrackingValue(Kind::Block),
-          block_name(std::move(n)) {}
+        : UseTrackingValue(Kind::Block)
+        , block_name(std::move(n)) {}
 
     /// Get an iterator to the first instruction in this block.
     [[nodiscard]]
@@ -585,15 +586,15 @@ public:
             return nullptr;
 
         auto* i = inst_list.back();
-        if (not i->is_terminator())
-            return nullptr;
+        if (i->is_terminator())
+            return i;
 
-        return i;
+        return nullptr;
     }
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Block; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Block; }
 };
 
 /// An IR function.
@@ -731,7 +732,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Function; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Function; }
 };
 
 /// A parameter reference.
@@ -744,7 +745,10 @@ class Parameter : public UseTrackingValue {
     /// The parameter index.
     u32 i{};
 
-    Parameter(Type* ty, u32 idx) : UseTrackingValue(Kind::Parameter, ty), i(idx) {}
+    Parameter(Type* ty, u32 idx)
+        : UseTrackingValue(Kind::Parameter, ty)
+        , i(idx) {}
+
 public:
     /// Get the parameter index.
     [[nodiscard]]
@@ -756,7 +760,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Parameter; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Parameter; }
 };
 
 /// ============================================================================
@@ -771,14 +775,15 @@ class AllocaInst : public Inst {
 
 public:
     explicit AllocaInst(Type* ty, Location location = {})
-        : Inst(Kind::Alloca, Type::PtrTy, location), _allocated_type(ty) {}
+        : Inst(Kind::Alloca, Type::PtrTy, location)
+        , _allocated_type(ty) {}
 
     [[nodiscard]]
     auto allocated_type() -> Type* { return _allocated_type; }
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Alloca; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Alloca; }
 };
 
 /// A call instruction.
@@ -814,8 +819,9 @@ class CallInst : public Inst {
 
     /// Used by the IR Parser.
     explicit CallInst(FunctionType* ftype, Location location)
-        : Inst(Kind::Call, ftype->ret(), location),
-          callee_type(ftype), cc(CallConv::C) {}
+        : Inst(Kind::Call, ftype->ret(), location)
+        , callee_type(ftype)
+        , cc(CallConv::C) {}
 
 public:
     explicit CallInst(
@@ -824,11 +830,12 @@ public:
         std::vector<Value*> arguments_,
         Location location = {},
         CallConv calling_convention = {}
-    ) : Inst(Kind::Call, callee_ty->ret(), location),
-        callee_value(callee),
-        callee_type(callee_ty),
-        arguments(std::move(arguments_)),
-        cc(calling_convention) {
+    )
+        : Inst(Kind::Call, callee_ty->ret(), location)
+        , callee_value(callee)
+        , callee_type(callee_ty)
+        , arguments(std::move(arguments_))
+        , cc(calling_convention) {
         AddUse(callee_value, this);
         for (auto* a : this->arguments) AddUse(a, this);
     }
@@ -865,7 +872,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Call; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Call; }
 };
 
 /// Backend intrinsic.
@@ -884,8 +891,10 @@ public:
         IntrinsicKind intrinsic_,
         std::vector<Value*> operands,
         Location location = {}
-    ) : Inst(Kind::Intrinsic, Type::UnknownTy, location),
-        intrinsic(intrinsic_), operand_list(std::move(operands)) {
+    )
+        : Inst(Kind::Intrinsic, Type::UnknownTy, location)
+        , intrinsic(intrinsic_)
+        , operand_list(std::move(operands)) {
         for (auto* o : operand_list) AddUse(o, this);
     }
 
@@ -899,7 +908,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Intrinsic; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Intrinsic; }
 };
 
 /// Base class for GEP/GMP.
@@ -917,10 +926,10 @@ protected:
     Type* element_type{};
 
     explicit GEPBaseInst(Kind k, Type* elementType, Value* ptr, Value* idx, Location location = {})
-        : Inst(k, Type::PtrTy, location),
-          pointer(ptr),
-          index(idx),
-          element_type(elementType) {
+        : Inst(k, Type::PtrTy, location)
+        , pointer(ptr)
+        , index(idx)
+        , element_type(elementType) {
         /// IR Parser may cause nullptr to be passed here.
         if (pointer) AddUse(pointer, this);
         if (index) AddUse(index, this);
@@ -940,7 +949,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool {
+    static auto classof(const Value* v) -> bool {
         return v->kind() == Kind::GetElementPtr
             or v->kind() == Kind::GetMemberPtr;
     }
@@ -973,7 +982,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::GetElementPtr; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::GetElementPtr; }
 };
 
 // Get the Nth member of struct pointed to by ptr().
@@ -1001,7 +1010,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::GetMemberPtr; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::GetMemberPtr; }
 };
 
 /// A load instruction.
@@ -1013,11 +1022,13 @@ class LoadInst : public Inst {
     Value* pointer{};
 
     /// Used by the IR parser.
-    explicit LoadInst(Type* ty, Location location = {}) : Inst(Kind::Load, ty, location) {}
+    explicit LoadInst(Type* ty, Location location = {})
+        : Inst(Kind::Load, ty, location) {}
 
 public:
     explicit LoadInst(Type* ty, Value* ptr, Location location = {})
-        : Inst(Kind::Load, ty, location), pointer(ptr) {
+        : Inst(Kind::Load, ty, location)
+        , pointer(ptr) {
         LCC_ASSERT(
             ptr->type() == Type::PtrTy,
             "IR: LoadInst can only load from pointers, which {} is not",
@@ -1037,7 +1048,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Load; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Load; }
 };
 
 /// A store instruction.
@@ -1052,11 +1063,14 @@ class StoreInst : public Inst {
     Value* pointer{};
 
     /// Used by the IR parser.
-    explicit StoreInst(Location location = {}) : Inst(Kind::Store, Type::VoidTy, location) {}
+    explicit StoreInst(Location location = {})
+        : Inst(Kind::Store, Type::VoidTy, location) {}
 
 public:
     explicit StoreInst(Value* val, Value* ptr, Location location = {})
-        : Inst(Kind::Store, Type::VoidTy, location), value(val), pointer(ptr) {
+        : Inst(Kind::Store, Type::VoidTy, location)
+        , value(val)
+        , pointer(ptr) {
         LCC_ASSERT(ptr->type() == Type::PtrTy, "StoreInst can only store to pointers");
         AddUse(value, this);
         AddUse(pointer, this);
@@ -1078,7 +1092,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Store; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Store; }
 };
 
 /// PHI instruction.
@@ -1206,7 +1220,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Phi; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Phi; }
 };
 
 /// ============================================================================
@@ -1223,11 +1237,13 @@ class BranchInst : public Inst {
     Block* target_block{};
 
     /// Used by the IR parser.
-    explicit BranchInst(Location location = {}) : Inst(Kind::Branch, Type::VoidTy, location) {}
+    explicit BranchInst(Location location = {})
+        : Inst(Kind::Branch, Type::VoidTy, location) {}
 
 public:
     explicit BranchInst(Block* target, Location location = {})
-        : Inst(Kind::Branch, Type::UnknownTy, location), target_block(target) {
+        : Inst(Kind::Branch, Type::UnknownTy, location)
+        , target_block(target) {
         AddUse(target_block, this);
     }
 
@@ -1240,7 +1256,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Branch; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Branch; }
 };
 
 /// Conditional branch instruction.
@@ -1258,7 +1274,8 @@ class CondBranchInst : public Inst {
     Block* otherwise{};
 
     /// Used by the IR parser.
-    explicit CondBranchInst(Location location = {}) : Inst(Kind::CondBranch, Type::VoidTy, location) {}
+    explicit CondBranchInst(Location location = {})
+        : Inst(Kind::CondBranch, Type::VoidTy, location) {}
 
 public:
     explicit CondBranchInst(
@@ -1266,8 +1283,11 @@ public:
         Block* then_,
         Block* otherwise_,
         Location location = {}
-    ) : Inst(Kind::CondBranch, Type::UnknownTy, location),
-        condition(cond), then(then_), otherwise(otherwise_) {
+    )
+        : Inst(Kind::CondBranch, Type::UnknownTy, location)
+        , condition(cond)
+        , then(then_)
+        , otherwise(otherwise_) {
         AddUse(condition, this);
         AddUse(then, this);
         AddUse(otherwise, this);
@@ -1296,7 +1316,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::CondBranch; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::CondBranch; }
 };
 
 /// Return instruction.
@@ -1309,7 +1329,8 @@ class ReturnInst : public Inst {
 
 public:
     explicit ReturnInst(Value* val, Location location = {})
-        : Inst(Kind::Return, Type::VoidTy, location), value(val) {
+        : Inst(Kind::Return, Type::VoidTy, location)
+        , value(val) {
         if (value) AddUse(value, this);
     }
 
@@ -1326,7 +1347,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Return; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Return; }
 };
 
 /// Unreachable instruction.
@@ -1340,7 +1361,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Unreachable; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Unreachable; }
 };
 
 /// ============================================================================
@@ -1370,7 +1391,9 @@ protected:
 
 public:
     explicit BinaryInst(Kind k, Value* lhs, Value* rhs, Type* ty, Location location = {})
-        : Inst(k, ty, location), left(lhs), right(rhs) {
+        : Inst(k, ty, location)
+        , left(lhs)
+        , right(rhs) {
         /// IR parser may pass nullptr here.
         if (left) AddUse(left, this);
         if (right) AddUse(right, this);
@@ -1395,7 +1418,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return +v->kind() >= +Kind::Add; }
+    static auto classof(const Value* v) -> bool { return +v->kind() >= +Kind::Add; }
 };
 
 /// An add instruction.
@@ -1403,7 +1426,8 @@ class AddInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit AddInst(Type* ty, Location location = {}) : BinaryInst(Kind::Add, nullptr, nullptr, ty, location) {}
+    explicit AddInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::Add, nullptr, nullptr, ty, location) {}
 
 public:
     explicit AddInst(Value* lhs, Value* rhs, Location location = {})
@@ -1413,7 +1437,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Add; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Add; }
 };
 
 /// A subtract instruction.
@@ -1421,7 +1445,8 @@ class SubInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit SubInst(Type* ty, Location location = {}) : BinaryInst(Kind::Sub, nullptr, nullptr, ty, location) {}
+    explicit SubInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::Sub, nullptr, nullptr, ty, location) {}
 
 public:
     explicit SubInst(Value* lhs, Value* rhs, Location location = {})
@@ -1431,7 +1456,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Sub; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Sub; }
 };
 
 /// A multiply instruction.
@@ -1439,7 +1464,8 @@ class MulInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit MulInst(Type* ty, Location location = {}) : BinaryInst(Kind::Mul, nullptr, nullptr, ty, location) {}
+    explicit MulInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::Mul, nullptr, nullptr, ty, location) {}
 
 public:
     explicit MulInst(Value* lhs, Value* rhs, Location location = {})
@@ -1449,7 +1475,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Mul; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Mul; }
 };
 
 /// A signed divide instruction.
@@ -1457,7 +1483,8 @@ class SDivInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit SDivInst(Type* ty, Location location = {}) : BinaryInst(Kind::SDiv, nullptr, nullptr, ty, location) {}
+    explicit SDivInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::SDiv, nullptr, nullptr, ty, location) {}
 
 public:
     explicit SDivInst(Value* lhs, Value* rhs, Location location = {})
@@ -1467,7 +1494,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::SDiv; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::SDiv; }
 };
 
 /// A signed remainder instruction.
@@ -1475,7 +1502,8 @@ class SRemInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit SRemInst(Type* ty, Location location = {}) : BinaryInst(Kind::SRem, nullptr, nullptr, ty, location) {}
+    explicit SRemInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::SRem, nullptr, nullptr, ty, location) {}
 
 public:
     explicit SRemInst(Value* lhs, Value* rhs, Location location = {})
@@ -1485,7 +1513,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::SRem; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::SRem; }
 };
 
 /// An unsigned divide instruction.
@@ -1493,7 +1521,8 @@ class UDivInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit UDivInst(Type* ty, Location location = {}) : BinaryInst(Kind::UDiv, nullptr, nullptr, ty, location) {}
+    explicit UDivInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::UDiv, nullptr, nullptr, ty, location) {}
 
 public:
     explicit UDivInst(Value* lhs, Value* rhs, Location location = {})
@@ -1503,7 +1532,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::UDiv; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::UDiv; }
 };
 
 /// An unsigned remainder instruction.
@@ -1511,7 +1540,8 @@ class URemInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit URemInst(Type* ty, Location location = {}) : BinaryInst(Kind::URem, nullptr, nullptr, ty, location) {}
+    explicit URemInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::URem, nullptr, nullptr, ty, location) {}
 
 public:
     explicit URemInst(Value* lhs, Value* rhs, Location location = {})
@@ -1521,7 +1551,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::URem; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::URem; }
 };
 
 /// A left shift instruction.
@@ -1529,7 +1559,8 @@ class ShlInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit ShlInst(Type* ty, Location location = {}) : BinaryInst(Kind::Shl, nullptr, nullptr, ty, location) {}
+    explicit ShlInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::Shl, nullptr, nullptr, ty, location) {}
 
 public:
     explicit ShlInst(Value* lhs, Value* rhs, Location location = {})
@@ -1539,7 +1570,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Shl; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Shl; }
 };
 
 /// An arithmetic right shift. SIGNED
@@ -1557,7 +1588,8 @@ class SarInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit SarInst(Type* ty, Location location = {}) : BinaryInst(Kind::Sar, nullptr, nullptr, ty, location) {}
+    explicit SarInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::Sar, nullptr, nullptr, ty, location) {}
 
 public:
     explicit SarInst(Value* lhs, Value* rhs, Location location = {})
@@ -1567,7 +1599,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Sar; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Sar; }
 };
 
 /// A logical right shift. UNSIGNED
@@ -1595,7 +1627,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Shr; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Shr; }
 };
 
 /// A bitwise and instruction.
@@ -1603,7 +1635,8 @@ class AndInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit AndInst(Type* ty, Location location = {}) : BinaryInst(Kind::And, nullptr, nullptr, ty, location) {}
+    explicit AndInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::And, nullptr, nullptr, ty, location) {}
 
 public:
     explicit AndInst(Value* lhs, Value* rhs, Location location = {})
@@ -1613,7 +1646,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::And; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::And; }
 };
 
 /// A bitwise or instruction.
@@ -1621,7 +1654,8 @@ class OrInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit OrInst(Type* ty, Location location = {}) : BinaryInst(Kind::Or, nullptr, nullptr, ty, location) {}
+    explicit OrInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::Or, nullptr, nullptr, ty, location) {}
 
 public:
     explicit OrInst(Value* lhs, Value* rhs, Location location = {})
@@ -1631,7 +1665,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Or; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Or; }
 };
 
 /// A bitwise xor instruction.
@@ -1639,7 +1673,8 @@ class XorInst : public BinaryInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit XorInst(Type* ty, Location location = {}) : BinaryInst(Kind::Xor, nullptr, nullptr, ty, location) {}
+    explicit XorInst(Type* ty, Location location = {})
+        : BinaryInst(Kind::Xor, nullptr, nullptr, ty, location) {}
 
 public:
     explicit XorInst(Value* lhs, Value* rhs, Location location = {})
@@ -1649,7 +1684,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Xor; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Xor; }
 };
 
 /// Base class for comparison instructions; this is just so we
@@ -1664,7 +1699,7 @@ protected:
 public:
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return +v->kind() >= +Kind::Eq; }
+    static auto classof(const Value* v) -> bool { return +v->kind() >= +Kind::Eq; }
 };
 
 /// Instruction that compares two values for equality.
@@ -1672,7 +1707,8 @@ class EqInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit EqInst(Location location = {}) : CompareInst(Kind::Eq, nullptr, nullptr, location) {}
+    explicit EqInst(Location location = {})
+        : CompareInst(Kind::Eq, nullptr, nullptr, location) {}
 
 public:
     explicit EqInst(Value* lhs, Value* rhs, Location location = {})
@@ -1682,7 +1718,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Eq; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Eq; }
 };
 
 /// Instruction that compares two values for inequality.
@@ -1690,7 +1726,8 @@ class NeInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit NeInst(Location location = {}) : CompareInst(Kind::Ne, nullptr, nullptr, location) {}
+    explicit NeInst(Location location = {})
+        : CompareInst(Kind::Ne, nullptr, nullptr, location) {}
 
 public:
     explicit NeInst(Value* lhs, Value* rhs, Location location = {})
@@ -1700,7 +1737,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Ne; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Ne; }
 };
 
 /// Instruction that compares two values for less-than.
@@ -1708,7 +1745,8 @@ class SLtInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit SLtInst(Location location = {}) : CompareInst(Kind::SLt, nullptr, nullptr, location) {}
+    explicit SLtInst(Location location = {})
+        : CompareInst(Kind::SLt, nullptr, nullptr, location) {}
 
 public:
     explicit SLtInst(Value* lhs, Value* rhs, Location location = {})
@@ -1718,14 +1756,15 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::SLt; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::SLt; }
 };
 
 class ULtInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit ULtInst(Location location = {}) : CompareInst(Kind::ULt, nullptr, nullptr, location) {}
+    explicit ULtInst(Location location = {})
+        : CompareInst(Kind::ULt, nullptr, nullptr, location) {}
 
 public:
     explicit ULtInst(Value* lhs, Value* rhs, Location location = {})
@@ -1735,7 +1774,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::ULt; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::ULt; }
 };
 
 /// Instruction that compares two values for less-than-or-equal.
@@ -1743,7 +1782,9 @@ class SLeInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit SLeInst(Location location = {}) : CompareInst(Kind::SLe, nullptr, nullptr, location) {}
+    explicit SLeInst(Location location = {})
+        : CompareInst(Kind::SLe, nullptr, nullptr, location) {}
+
 public:
     explicit SLeInst(Value* lhs, Value* rhs, Location location = {})
         : CompareInst(Kind::SLe, lhs, rhs, location) {
@@ -1752,14 +1793,16 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::SLe; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::SLe; }
 };
 
 class ULeInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit ULeInst(Location location = {}) : CompareInst(Kind::ULe, nullptr, nullptr, location) {}
+    explicit ULeInst(Location location = {})
+        : CompareInst(Kind::ULe, nullptr, nullptr, location) {}
+
 public:
     explicit ULeInst(Value* lhs, Value* rhs, Location location = {})
         : CompareInst(Kind::ULe, lhs, rhs, location) {
@@ -1768,7 +1811,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::ULe; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::ULe; }
 };
 
 /// Instruction that compares two values for greater-than.
@@ -1776,7 +1819,8 @@ class SGtInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit SGtInst(Location location = {}) : CompareInst(Kind::SGt, nullptr, nullptr, location) {}
+    explicit SGtInst(Location location = {})
+        : CompareInst(Kind::SGt, nullptr, nullptr, location) {}
 
 public:
     explicit SGtInst(Value* lhs, Value* rhs, Location location = {})
@@ -1786,14 +1830,15 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::SGt; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::SGt; }
 };
 
 class UGtInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit UGtInst(Location location = {}) : CompareInst(Kind::UGt, nullptr, nullptr, location) {}
+    explicit UGtInst(Location location = {})
+        : CompareInst(Kind::UGt, nullptr, nullptr, location) {}
 
 public:
     explicit UGtInst(Value* lhs, Value* rhs, Location location = {})
@@ -1803,7 +1848,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::UGt; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::UGt; }
 };
 
 /// Instruction that compares two values for greater-than-or-equal.
@@ -1811,7 +1856,8 @@ class SGeInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit SGeInst(Location location = {}) : CompareInst(Kind::SGe, nullptr, nullptr, location) {}
+    explicit SGeInst(Location location = {})
+        : CompareInst(Kind::SGe, nullptr, nullptr, location) {}
 
 public:
     explicit SGeInst(Value* lhs, Value* rhs, Location location = {})
@@ -1821,14 +1867,15 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::SGe; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::SGe; }
 };
 
 class UGeInst : public CompareInst {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit UGeInst(Location location = {}) : CompareInst(Kind::UGe, nullptr, nullptr, location) {}
+    explicit UGeInst(Location location = {})
+        : CompareInst(Kind::UGe, nullptr, nullptr, location) {}
 
 public:
     explicit UGeInst(Value* lhs, Value* rhs, Location location = {})
@@ -1838,7 +1885,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::UGe; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::UGe; }
 };
 
 /// Unary instructions.
@@ -1850,7 +1897,8 @@ class UnaryInstBase : public Inst {
 
 protected:
     explicit UnaryInstBase(Kind k, Value* v, Type* ty, Location location = {})
-        : Inst(k, ty, location), op(v) {
+        : Inst(k, ty, location)
+        , op(v) {
         /// IR parser may pass nullptr here.
         if (op) AddUse(op, this);
     }
@@ -1864,7 +1912,7 @@ public:
     void operand(Value* v) { UpdateOperand(op, v); }
 
     [[nodiscard]]
-    static auto classof(Value* v) -> bool {
+    static auto classof(const Value* v) -> bool {
         return +v->kind() >= +Kind::ZExt and +v->kind() <= +Kind::Compl;
     }
 };
@@ -1874,7 +1922,8 @@ class CopyInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit CopyInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::Copy, nullptr, ty, location) {}
+    explicit CopyInst(Type* ty, Location location = {})
+        : UnaryInstBase(Kind::Copy, nullptr, ty, location) {}
 
 public:
     explicit CopyInst(Value* v, Location location = {})
@@ -1882,7 +1931,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Copy; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Copy; }
 };
 
 /// Zero-extend an integer value.
@@ -1890,7 +1939,8 @@ class ZExtInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit ZExtInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::ZExt, nullptr, ty, location) {}
+    explicit ZExtInst(Type* ty, Location location = {})
+        : UnaryInstBase(Kind::ZExt, nullptr, ty, location) {}
 
 public:
     explicit ZExtInst(Value* v, Type* ty, Location location = {})
@@ -1898,7 +1948,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::ZExt; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::ZExt; }
 };
 
 /// Sign-extend an integer value.
@@ -1906,7 +1956,8 @@ class SExtInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit SExtInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::SExt, nullptr, ty, location) {}
+    explicit SExtInst(Type* ty, Location location = {})
+        : UnaryInstBase(Kind::SExt, nullptr, ty, location) {}
 
 public:
     explicit SExtInst(Value* v, Type* ty, Location location = {})
@@ -1914,7 +1965,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::SExt; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::SExt; }
 };
 
 /// Truncate an integer value.
@@ -1922,7 +1973,8 @@ class TruncInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit TruncInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::Trunc, nullptr, ty, location) {}
+    explicit TruncInst(Type* ty, Location location = {})
+        : UnaryInstBase(Kind::Trunc, nullptr, ty, location) {}
 
 public:
     explicit TruncInst(Value* v, Type* ty, Location location = {})
@@ -1930,7 +1982,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Trunc; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Trunc; }
 };
 
 /// Bitcast a value to another type.
@@ -1938,7 +1990,8 @@ class BitcastInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit BitcastInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::Bitcast, nullptr, ty, location) {}
+    explicit BitcastInst(Type* ty, Location location = {})
+        : UnaryInstBase(Kind::Bitcast, nullptr, ty, location) {}
 
 public:
     explicit BitcastInst(Value* v, Type* ty, Location location = {})
@@ -1950,7 +2003,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Bitcast; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Bitcast; }
 };
 
 /// Negate an integer value.
@@ -1960,7 +2013,8 @@ class NegInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit NegInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::Neg, nullptr, ty, location) {}
+    explicit NegInst(Type* ty, Location location = {})
+        : UnaryInstBase(Kind::Neg, nullptr, ty, location) {}
 
 public:
     explicit NegInst(Value* v, Location location = {})
@@ -1968,7 +2022,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Neg; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Neg; }
 };
 
 /// Bitwise complement of an integer value.
@@ -1976,7 +2030,8 @@ class ComplInst : public UnaryInstBase {
     friend parser::Parser;
 
     /// Used by the IR parser.
-    explicit ComplInst(Type* ty, Location location = {}) : UnaryInstBase(Kind::Compl, nullptr, ty, location) {}
+    explicit ComplInst(Type* ty, Location location = {})
+        : UnaryInstBase(Kind::Compl, nullptr, ty, location) {}
 
 public:
     explicit ComplInst(Value* v, Location location = {})
@@ -1984,7 +2039,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Compl; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Compl; }
 };
 
 /// ============================================================================
@@ -1996,8 +2051,8 @@ class IntegerConstant : public Value {
 
 public:
     explicit IntegerConstant(Type* ty, aint value)
-        : Value(Kind::IntegerConstant, ty),
-          _value(value.trunc(u8(as<IntegerType>(ty)->bits()))) {
+        : Value(Kind::IntegerConstant, ty)
+        , _value(value.trunc(u8(as<IntegerType>(ty)->bits()))) {
         LCC_ASSERT(as<IntegerType>(ty)->bits() <= 64, "Integer constants must be 64 bits or less");
     }
 
@@ -2007,7 +2062,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::IntegerConstant; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::IntegerConstant; }
 };
 
 /// Fractional value.
@@ -2016,8 +2071,8 @@ class FractionalConstant : public Value {
 
 public:
     explicit FractionalConstant(Type* ty, FixedPointNumber value)
-        : Value(Kind::FractionalConstant, ty),
-          _value(value) {}
+        : Value(Kind::FractionalConstant, ty)
+        , _value(value) {}
 
     /// Get the value.
     [[nodiscard]]
@@ -2025,7 +2080,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::FractionalConstant; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::FractionalConstant; }
 };
 
 /// Packed array.
@@ -2038,9 +2093,9 @@ class ArrayConstant : public Value {
 
 public:
     explicit ArrayConstant(Type* ty, std::vector<char> data, bool is_string_literal = false)
-        : Value(Kind::ArrayConstant, ty),
-          _data(std::move(data)),
-          _is_string_literal(is_string_literal) {}
+        : Value(Kind::ArrayConstant, ty)
+        , _data(std::move(data))
+        , _is_string_literal(is_string_literal) {}
 
     /// Get an iterator to the start of the data.
     [[nodiscard]]
@@ -2067,7 +2122,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::ArrayConstant; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::ArrayConstant; }
 };
 
 /// Poison value.
@@ -2078,7 +2133,7 @@ public:
 
     /// RTTI.
     [[nodiscard]]
-    static auto classof(Value* v) -> bool { return v->kind() == Kind::Poison; }
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Poison; }
 };
 
 } // namespace lcc

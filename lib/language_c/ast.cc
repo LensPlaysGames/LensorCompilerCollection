@@ -39,9 +39,9 @@ auto fmt::formatter<lcc::language_c::Node>::format(
             return tag(ctx.out(), depth, "<invalid>");
 
         case lcc::language_c::NodeKind::Group: {
-            const auto* g = (const lcc::language_c::Group*) &n;
+            const auto& g = *(const lcc::language_c::Group*) &n;
 
-            if (g->constituents().empty())
+            if (g.constituents().empty())
                 return tag(ctx.out(), depth, "<group/>");
 
             tag(ctx.out(), depth, "<group>");
@@ -51,7 +51,7 @@ auto fmt::formatter<lcc::language_c::Node>::format(
                 "{}",
                 fmt::join(
                     std::ranges::views::transform(
-                        g->constituents(),
+                        g.constituents(),
                         [&](const lcc::language_c::Node* constituent) {
                             return fmt::format("{:{}}", *constituent, depth);
                         }
@@ -64,9 +64,9 @@ auto fmt::formatter<lcc::language_c::Node>::format(
         }
 
         case lcc::language_c::NodeKind::Block: {
-            const auto* b = (const lcc::language_c::Block*) &n;
+            const auto& b = *(const lcc::language_c::Block*) &n;
 
-            if (b->constituents().empty())
+            if (b.constituents().empty())
                 return tag(ctx.out(), depth, "<block/>");
 
             tag(ctx.out(), depth, "<block>");
@@ -76,7 +76,7 @@ auto fmt::formatter<lcc::language_c::Node>::format(
                 "{}",
                 fmt::join(
                     std::ranges::views::transform(
-                        b->constituents(),
+                        b.constituents(),
                         [&](const lcc::language_c::Node* constituent) {
                             return fmt::format("{:{}}", *constituent, depth);
                         }
@@ -89,16 +89,17 @@ auto fmt::formatter<lcc::language_c::Node>::format(
         }
 
         case lcc::language_c::NodeKind::IntegerLiteral: {
+            const auto& i = (*(lcc::language_c::IntegerLiteral*) &n);
             indent(ctx.out(), depth);
             return fmt::format_to(
                 ctx.out(),
                 "<integer-literal>{}</integer-literal>\n",
-                (*(lcc::language_c::IntegerLiteral*) &n).value()
+                i.value()
             );
         }
 
         case lcc::language_c::NodeKind::Return: {
-            const auto& r = (*(lcc::language_c::Return*) &n);
+            const auto& r = *(lcc::language_c::Return*) &n;
             if (not r.expression())
                 return tag(ctx.out(), depth, "<return/>");
 
@@ -108,22 +109,22 @@ auto fmt::formatter<lcc::language_c::Node>::format(
         }
 
         case lcc::language_c::NodeKind::Declaration: {
-            const auto* d = (const lcc::language_c::Declaration*) &n;
+            const auto& d = *(const lcc::language_c::Declaration*) &n;
             tag(ctx.out(), depth, "<declaration>");
             ++depth;
 
             indent(ctx.out(), depth);
-            fmt::format_to(ctx.out(), "<name>{}</name>\n", d->name());
+            fmt::format_to(ctx.out(), "<name>{}</name>\n", d.name());
 
             indent(ctx.out(), depth);
-            fmt::format_to(ctx.out(), "<type>{}</type>\n", *d->type());
+            fmt::format_to(ctx.out(), "<type>{}</type>\n", *d.type());
 
-            if (d->initialising_expression()) {
+            if (d.initialising_expression()) {
                 tag(ctx.out(), depth, "<initial>");
                 fmt::format_to(
                     ctx.out(),
                     "{:{}}",
-                    *d->initialising_expression(),
+                    *d.initialising_expression(),
                     depth + 1
                 );
                 tag(ctx.out(), depth, "</initial>");
@@ -134,22 +135,32 @@ auto fmt::formatter<lcc::language_c::Node>::format(
         }
 
         case lcc::language_c::NodeKind::BinaryOperation: {
-            const auto* b = (const lcc::language_c::BinaryOperation*) &n;
+            const auto& b = *(const lcc::language_c::BinaryOperation*) &n;
             tag(ctx.out(), depth, "<binary>");
             ++depth;
 
             indent(ctx.out(), depth);
-            fmt::format_to(ctx.out(), "<operator>{}</operator>\n", b->binary_operator());
+            fmt::format_to(ctx.out(), "<operator>{}</operator>\n", b.binary_operator());
 
             tag(ctx.out(), depth, "<lhs>");
-            fmt::format_to(ctx.out(), "{:{}}", *b->lhs(), depth + 1);
+            fmt::format_to(ctx.out(), "{:{}}", *b.lhs(), depth + 1);
             tag(ctx.out(), depth, "</lhs>");
             tag(ctx.out(), depth, "<rhs>");
-            fmt::format_to(ctx.out(), "{:{}}", *b->rhs(), depth + 1);
+            fmt::format_to(ctx.out(), "{:{}}", *b.rhs(), depth + 1);
             tag(ctx.out(), depth, "</rhs>");
 
             --depth;
             return tag(ctx.out(), depth, "</binary>");
+        }
+
+        case lcc::language_c::NodeKind::NameReference: {
+            const auto& name_ref = *(const lcc::language_c::NameReference*) &n;
+            indent(ctx.out(), depth);
+            return fmt::format_to(
+                ctx.out(),
+                "<integer-literal>{}</integer-literal>\n",
+                name_ref.name()
+            );
         }
 
         case lcc::language_c::NodeKind::Count:
@@ -173,6 +184,7 @@ auto Node::langtest_name() -> std::string_view {
         case NodeKind::Invalid: return "invalid";
         case NodeKind::Group: return "group";
         case NodeKind::Block: return "block";
+        case NodeKind::NameReference: return "name";
         case NodeKind::Declaration: return "declaration";
         case NodeKind::IntegerLiteral: return "integer_literal";
         case NodeKind::Return: return "return";
@@ -186,6 +198,34 @@ auto Node::langtest_name() -> std::string_view {
                 case TokenKind::OpPercent: return "binary_remainder";
                 case TokenKind::LeftSquareBracket: return "binary_subscript";
 
+                case TokenKind::OpEqual: return "binary_assign";
+                case TokenKind::OpLessThan: return "binary_less_than";
+                case TokenKind::OpGreaterThan: return "binary_greater_than";
+                case TokenKind::OpDoublePipe: return "binary_logical_or";
+                case TokenKind::OpDoubleAmpersand: return "binary_logical_and";
+                case TokenKind::OpDot: return "binary_dot";
+                case TokenKind::OpArrow: return "binary_arrow";
+                case TokenKind::OpCaret: return "binary_bit_xor";
+                case TokenKind::OpPipe: return "binary_bit_or";
+                case TokenKind::OpAmpersand: return "binary_bit_and";
+                case TokenKind::OpTilde: return "binary_bit_negation";
+                case TokenKind::OpShiftLeft: return "binary_bitshift_left";
+                case TokenKind::OpShiftRight: return "binary_bitshift_right";
+                case TokenKind::OpDoubleEqual: return "binary_equality";
+                case TokenKind::OpLessThanEqual: return "binary__assign";
+                case TokenKind::OpGreaterThanEqual: return "binary__assign";
+                case TokenKind::OpExclamationEqual: return "binary_inequality";
+                case TokenKind::OpPlusEqual: return "binary_add_assign";
+                case TokenKind::OpMinusEqual: return "binary_subtract_assign";
+                case TokenKind::OpAsteriskEqual: return "binary_multiply_assign";
+                case TokenKind::OpSlashEqual: return "binary_divide_assign";
+                case TokenKind::OpPercentEqual: return "binary_remainder_assign";
+                case TokenKind::OpCaretEqual: return "binary_bit_xor_assign";
+                case TokenKind::OpPipeEqual: return "binary_bit_or_assign";
+                case TokenKind::OpAmpersandEqual: return "binary_bit_and_assign";
+                case TokenKind::OpShiftLeftEqual: return "binary_bitshift_left_assign";
+                case TokenKind::OpShiftRightEqual: return "binary_bitshift_right_assign";
+
                 case TokenKind::Invalid:
                 case TokenKind::Identifier:
                 case TokenKind::Integer:
@@ -193,7 +233,12 @@ auto Node::langtest_name() -> std::string_view {
                 case TokenKind::KwVoid:
                 case TokenKind::KwInt:
                 case TokenKind::KwReturn:
+                case TokenKind::KwSizeof:
+                case TokenKind::KwAlignof:
+                case TokenKind::OpPlusPlus:
+                case TokenKind::OpMinusMinus:
                 case TokenKind::OpComma:
+                case TokenKind::OpExclamation:
                 case TokenKind::LeftParenthesis:
                 case TokenKind::RightParenthesis:
                 case TokenKind::RightSquareBracket:
@@ -212,6 +257,7 @@ auto Node::langtest_name() -> std::string_view {
 auto Node::langtest_children() -> std::vector<Node*> {
     switch (kind()) {
         case NodeKind::IntegerLiteral:
+        case NodeKind::NameReference:
             return {};
 
         case NodeKind::Group: return ((Group*) this)->constituents();

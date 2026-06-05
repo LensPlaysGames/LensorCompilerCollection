@@ -62,7 +62,8 @@ public:
 
 protected:
     /// Construct a type.
-    explicit constexpr Type(Kind kind_) : kind(kind_) {}
+    explicit constexpr Type(Kind kind_)
+        : kind(kind_) {}
 
 public:
     virtual ~Type() = default;
@@ -110,7 +111,10 @@ class ArrayType : public Type {
     Type* _element_type;
 
 private:
-    ArrayType(usz length, Type* element_type) : Type(Kind::Array), _length(length), _element_type(element_type) {}
+    ArrayType(usz length, Type* element_type)
+        : Type(Kind::Array)
+        , _length(length)
+        , _element_type(element_type) {}
 
 public:
     static auto Get(Context* ctx, usz length, Type* element_type) -> ArrayType*;
@@ -137,17 +141,25 @@ class FunctionType : public Type {
     std::vector<Type*> param_types;
 
     bool _variadic{false};
+    bool _noreturn{false};
 
 private:
-    FunctionType(Type* ret, std::vector<Type*> params, bool variadic = false)
-        : Type(Kind::Function),
-          return_type(ret),
-          param_types(std::move(params)),
-          _variadic(variadic) {}
+    FunctionType(Type* ret, std::vector<Type*> params, bool variadic = false, bool noreturn = false)
+        : Type(Kind::Function)
+        , return_type(ret)
+        , param_types(std::move(params))
+        , _variadic(variadic)
+        , _noreturn(noreturn) {}
 
 public:
     /// Get or create a function type.
-    static auto Get(Context* ctx, Type* ret, std::vector<Type*> params, bool is_variadic = false) -> FunctionType*;
+    static auto Get(
+        Context* ctx,
+        Type* ret,
+        std::vector<Type*> params,
+        bool is_variadic = false,
+        bool is_noreturn = false
+    ) -> FunctionType*;
 
     /// Get the return type of this function.
     Type* ret() const { return return_type; }
@@ -164,6 +176,9 @@ public:
     /// True if this function type is (C-style) variadic, false otherwise.
     bool variadic() const { return _variadic; }
 
+    /// True if this function type does not return, false otherwise.
+    bool noreturn() const { return _noreturn; }
+
     /// RTTI.
     static bool classof(const Type* t) { return t->kind == Kind::Function; }
 };
@@ -175,7 +190,9 @@ class IntegerType : public Type {
     usz _width;
 
 private:
-    constexpr IntegerType(usz width) : Type(Kind::Integer), _width(width) {}
+    constexpr IntegerType(usz width)
+        : Type(Kind::Integer)
+        , _width(width) {}
 
 public:
     static auto Get(Context* ctx, usz width) -> IntegerType*;
@@ -195,7 +212,9 @@ class FractionalType : public Type {
     usz _width;
 
 private:
-    constexpr FractionalType(usz width) : Type(Kind::Fractional), _width(width) {}
+    constexpr FractionalType(usz width)
+        : Type(Kind::Fractional)
+        , _width(width) {}
 
 public:
     static auto Get(Context* ctx, usz width) -> FractionalType*;
@@ -213,23 +232,28 @@ class StructType : public Type {
     friend class lcc::Context;
 
     std::vector<Type*> _members;
-    std::variant<long int, std::string> _id;
+    std::variant<isz, std::string> _id;
     usz _align{AlignNotSet};
 
 private:
     StructType(std::vector<Type*> members, std::string name)
-        : Type(Kind::Struct),
-          _members(std::move(members)),
-          _id(std::move(name)) {}
-    StructType(std::vector<Type*> members, long int index)
-        : Type(Kind::Struct),
-          _members(std::move(members)),
-          _id(index) {}
+        : Type(Kind::Struct)
+        , _members(std::move(members))
+        , _id(std::move(name)) {}
+    StructType(std::vector<Type*> members, isz index)
+        : Type(Kind::Struct)
+        , _members(std::move(members))
+        , _id(index) {}
 
 public:
     static constexpr usz AlignNotSet = (usz) -1;
 
-    static auto Get(Context* ctx, std::vector<Type*> member_types, usz align_bits = AlignNotSet, std::string name = {}) -> StructType*;
+    static auto Get(
+        Context* ctx,
+        std::vector<Type*> member_types,
+        usz align_bits = AlignNotSet,
+        std::string name = {}
+    ) -> StructType*;
 
     /// Return the element count.
     usz member_count() const { return _members.size(); }
@@ -272,9 +296,9 @@ public:
     auto name() const -> const std::string& { return std::get<std::string>(_id); }
 
     /// The global index, within its context, for this struct if it is unnamed
-    auto index() const -> long int {
-        LCC_ASSERT(std::holds_alternative<long int>(_id));
-        return std::get<long int>(_id);
+    auto index() const -> isz {
+        LCC_ASSERT(std::holds_alternative<isz>(_id));
+        return std::get<isz>(_id);
     }
 
     /// True if this is a unique, named struct type, false otherwise.

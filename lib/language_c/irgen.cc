@@ -89,6 +89,10 @@ void IRGen::generate_expression(const Node* n) {
             return;
         }
 
+        case NodeKind::NameReference: {
+            Diag::ICE("Handle name-reference irgen...");
+        }
+
         case NodeKind::Declaration: {
             Diag::ICE("Handle declaration irgen...");
         }
@@ -125,24 +129,48 @@ void IRGen::generate_expression(const Node* n) {
             generate_expression(b->lhs());
             generate_expression(b->rhs());
 #define BINARY_ARGS generated_ir[b->lhs()], generated_ir[b->rhs()], b->location()
+#define BINARY_CASE(operator_, opcode)               \
+    case operator_:                                  \
+        inst = new (*ir_module) opcode(BINARY_ARGS); \
+        break;
 
             Inst* inst{};
             switch (b->binary_operator()) {
-                case TokenKind::OpPlus:
-                    inst = new (*ir_module) lcc::AddInst(BINARY_ARGS);
-                    break;
-                case TokenKind::OpMinus:
-                    inst = new (*ir_module) lcc::SubInst(BINARY_ARGS);
-                    break;
-                case TokenKind::OpAsterisk:
-                    inst = new (*ir_module) lcc::MulInst(BINARY_ARGS);
-                    break;
+                BINARY_CASE(TokenKind::OpPlus, lcc::AddInst)
+                BINARY_CASE(TokenKind::OpMinus, lcc::SubInst)
+                BINARY_CASE(TokenKind::OpAsterisk, lcc::MulInst)
+                BINARY_CASE(TokenKind::OpDoubleEqual, lcc::EqInst)
+                BINARY_CASE(TokenKind::OpCaret, lcc::XorInst)
+                BINARY_CASE(TokenKind::OpShiftLeft, lcc::ShlInst)
+
+                case TokenKind::OpPipe:
+                    BINARY_CASE(TokenKind::OpDoublePipe, lcc::OrInst)
+
+                case TokenKind::OpAmpersand:
+                    BINARY_CASE(TokenKind::OpDoubleAmpersand, lcc::AndInst)
+
+                // TODO: Signed vs. Unsigned choice
                 case TokenKind::OpSlash:
                     inst = new (*ir_module) lcc::SDivInst(BINARY_ARGS);
                     break;
                 case TokenKind::OpPercent:
                     inst = new (*ir_module) lcc::SRemInst(BINARY_ARGS);
                     break;
+                case TokenKind::OpLessThan:
+                    inst = new (*ir_module) lcc::SLtInst(BINARY_ARGS);
+                    break;
+                case TokenKind::OpGreaterThan:
+                    inst = new (*ir_module) lcc::SGtInst(BINARY_ARGS);
+                    break;
+                case TokenKind::OpShiftRight:
+                    inst = new (*ir_module) lcc::SarInst(BINARY_ARGS);
+                    break;
+
+                case TokenKind::OpEqual:
+                case TokenKind::OpDot:
+                case TokenKind::OpArrow: {
+                    Diag::ICE("Handle {} irgen...", b->binary_operator());
+                }
 
                 case TokenKind::Invalid:
                 case TokenKind::Identifier:
@@ -151,7 +179,24 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::KwVoid:
                 case TokenKind::KwInt:
                 case TokenKind::KwReturn:
+                case TokenKind::OpPlusPlus:
+                case TokenKind::OpMinusMinus:
                 case TokenKind::OpComma:
+                case TokenKind::OpTilde:
+                case TokenKind::OpExclamation:
+                case TokenKind::OpLessThanEqual:
+                case TokenKind::OpGreaterThanEqual:
+                case TokenKind::OpExclamationEqual:
+                case TokenKind::OpPlusEqual:
+                case TokenKind::OpMinusEqual:
+                case TokenKind::OpAsteriskEqual:
+                case TokenKind::OpSlashEqual:
+                case TokenKind::OpPercentEqual:
+                case TokenKind::OpCaretEqual:
+                case TokenKind::OpPipeEqual:
+                case TokenKind::OpAmpersandEqual:
+                case TokenKind::OpShiftLeftEqual:
+                case TokenKind::OpShiftRightEqual:
                 case TokenKind::LeftParenthesis:
                 case TokenKind::RightParenthesis:
                 case TokenKind::LeftSquareBracket:
@@ -161,9 +206,12 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::Semicolon:
                 case TokenKind::Eof:
                 case TokenKind::Count:
+                case TokenKind::KwSizeof:
+                case TokenKind::KwAlignof:
                     Diag::ICE("unreachable");
             }
 #undef BINARY_ARGS
+#undef BINARY_CASE
             LCC_ASSERT(inst, "Binary operation should have created instruction");
             generated_ir[n] = inst;
             insert(inst);

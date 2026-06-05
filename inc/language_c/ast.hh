@@ -25,6 +25,7 @@ enum class NodeKind {
     Invalid,
     Group,
     Block,
+    NameReference,
     Declaration,
     IntegerLiteral,
     Return,
@@ -38,7 +39,8 @@ struct Node {
 
 public:
     Node(NodeKind kind, Location location)
-        : _kind(kind), _location(location) {}
+        : _kind(kind)
+        , _location(location) {}
 
     auto kind() const { return _kind; }
     auto location() const { return _location; }
@@ -63,7 +65,8 @@ struct Group : public Node {
 
 public:
     Group(std::vector<Node*> constituents, Location location)
-        : Node(NodeKind::Group, location), _constituents(std::move(constituents)) {}
+        : Node(NodeKind::Group, location)
+        , _constituents(std::move(constituents)) {}
 
     auto constituents() const { return _constituents; }
 };
@@ -73,9 +76,24 @@ struct Block : public Node {
 
 public:
     Block(std::vector<Node*> constituents, Location location)
-        : Node(NodeKind::Block, location), _constituents(std::move(constituents)) {}
+        : Node(NodeKind::Block, location)
+        , _constituents(std::move(constituents)) {}
 
     auto constituents() const { return _constituents; }
+};
+
+struct NameReference : public Node {
+    std::string _name;
+    Scope* _within_scope;
+
+public:
+    NameReference(std::string name, Scope* within_scope, Location location)
+        : Node(NodeKind::NameReference, location)
+        , _name(std::move(name))
+        , _within_scope(within_scope) {}
+
+    auto name() const { return _name; }
+    auto within_scope() const { return _within_scope; }
 };
 
 struct IntegerLiteral : public Node {
@@ -83,7 +101,8 @@ struct IntegerLiteral : public Node {
 
 public:
     IntegerLiteral(size_t value, Location location)
-        : Node(NodeKind::IntegerLiteral, location), _value(value) {}
+        : Node(NodeKind::IntegerLiteral, location)
+        , _value(value) {}
 
     auto value() const { return _value; }
 };
@@ -95,8 +114,10 @@ struct BinaryOperation : public Node {
 
 public:
     BinaryOperation(TokenKind operator_, Node* lhs, Node* rhs, Location location)
-        : Node(NodeKind::BinaryOperation, location),
-          _operator(operator_), _lhs(lhs), _rhs(rhs) {}
+        : Node(NodeKind::BinaryOperation, location)
+        , _operator(operator_)
+        , _lhs(lhs)
+        , _rhs(rhs) {}
 
     auto binary_operator() const { return _operator; }
     auto lhs() const { return _lhs; }
@@ -108,7 +129,8 @@ struct Return : public Node {
 
 public:
     Return(Node* expression, Location location)
-        : Node(NodeKind::Return, location), _expression(expression) {}
+        : Node(NodeKind::Return, location)
+        , _expression(expression) {}
 
     auto expression() const { return _expression; }
 };
@@ -126,11 +148,12 @@ public:
         Scope* encapsulating_scope,
         Node* initialising_expression,
         Location location
-    ) : Node(NodeKind::Declaration, location),
-        _type(type),
-        _name(std::string(owned_name)),
-        _encapsulating_scope(encapsulating_scope),
-        _initialising_expression(initialising_expression) {
+    )
+        : Node(NodeKind::Declaration, location)
+        , _type(type)
+        , _name(std::string(owned_name))
+        , _encapsulating_scope(encapsulating_scope)
+        , _initialising_expression(initialising_expression) {
         // Declare itself in the given scope
         encapsulating_scope->declarations.emplace(_name, this);
     };

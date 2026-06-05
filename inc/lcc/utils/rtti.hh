@@ -3,6 +3,8 @@
 
 #include <lcc/utils.hh>
 
+#include <type_traits>
+
 namespace lcc::detail {
 // Check that an object is a pointer to a class type.
 template <typename Type>

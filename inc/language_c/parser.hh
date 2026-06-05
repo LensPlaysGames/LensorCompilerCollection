@@ -28,6 +28,17 @@ enum class TokenKind : unsigned int {
     KwVoid,
     KwInt,
     KwReturn,
+    KwSizeof,
+    KwAlignof,
+
+    OpEqual,
+    Assign = OpEqual,
+    OpLessThan,
+    OpGreaterThan,
+    OpDoublePipe,
+    OpDoubleAmpersand,
+
+    OpExclamation,
 
     OpPlus,
     OpMinus,
@@ -35,10 +46,39 @@ enum class TokenKind : unsigned int {
     OpSlash,
     OpPercent,
     OpComma,
+    OpDot,
+    OpArrow, // ->
+
+    OpPlusPlus,
+    OpMinusMinus,
+
+    OpCaret,
+    OpPipe,
+    OpAmpersand,
+    OpTilde,
+    OpShiftLeft,
+    OpShiftRight,
+
+    OpDoubleEqual,
+    OpLessThanEqual,
+    OpGreaterThanEqual,
+    OpExclamationEqual,
+
+    OpPlusEqual,
+    OpMinusEqual,
+    OpAsteriskEqual,
+    OpSlashEqual,
+    OpPercentEqual,
+    OpCaretEqual,
+    OpPipeEqual,
+    OpAmpersandEqual,
+    OpShiftLeftEqual,
+    OpShiftRightEqual,
 
     LeftParenthesis,
     RightParenthesis,
     LeftSquareBracket,
+    Subscript = LeftSquareBracket,
     RightSquareBracket,
     LeftCurlyBrace,
     RightCurlyBrace,
@@ -48,27 +88,37 @@ enum class TokenKind : unsigned int {
     Count,
 };
 using Token = syntax::Token<TokenKind>;
-using Lexer = syntax::Lexer<Token>;
-
-class Parser : Lexer {
-    Node* tree{};
-
-    std::vector<Scope*> _scopes{};
-    Scope* _current_scope{};
-
+class Lexer : public syntax::Lexer<Token> {
     std::list<Token> _next_tokens{};
+    std::list<std::vector<char>> _including{};
+    usz _including_offset{};
 
-    bool preprocessing{false};
     StringMap<std::vector<Token>> _simple_defines{};
 
-private:
+    bool preprocessing{false};
+
     static constexpr std::string_view preprocessor_whitespace{" \t\f"};
     Result<void> preprocessor_define(std::string_view name, std::vector<Token> contents);
     void preprocessor_undefine(std::string_view name);
 
     void NextNumber();
     void NextIdentifier();
+
+public:
+    Lexer(Context* c, File* f)
+        : syntax::Lexer<Token>(c, f) {}
+
     void NextToken();
+    void NextChar();
+
+    auto& defines() const { return _simple_defines; }
+};
+
+class Parser : Lexer {
+    Node* tree{};
+
+    std::vector<Scope*> _scopes{};
+    Scope* _current_scope{};
 
     bool IsFunctionDefinition(Node*);
 

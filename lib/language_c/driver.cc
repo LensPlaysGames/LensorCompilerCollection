@@ -20,7 +20,7 @@ auto produce_module(Context* context, File& source) -> lcc::Module* {
     // TODO: Handle print_stats
 
     // Perform semantic analysis.
-    Sema::Analyse(context, mod);
+    auto makes_sense = Sema::Analyse(context, mod);
     // if (context->option_print_ast()) {
     //     fmt::print("\nAfter Sema:\n");
     //     mod->print(context->option_use_colour());
@@ -29,7 +29,7 @@ auto produce_module(Context* context, File& source) -> lcc::Module* {
     // TODO: Handle print_stats (after semantic analysis)
 
     // The error condition is handled by the caller already.
-    if (context->has_error()) return {};
+    if (not makes_sense or context->has_error()) return {};
 
     // Stop after sema if requested.
     if (context->option_stopat_sema()) return {};

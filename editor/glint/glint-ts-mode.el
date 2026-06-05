@@ -309,7 +309,11 @@ with the braces' contents having the same indentation.
   (treesit-font-lock-rules
    :default-language 'glint
    :feature 'comment
-   `((comment) @font-lock-comment-face)
+   `([(comment) (block_comment) (notice)] @font-lock-comment-face)
+
+   :feature 'comment
+   :override t ;; overwrite "comment" face
+   `((notice (_) @font-lock-doc-face))
 
    :feature 'variable
    `((identifier) @font-lock-variable-name-face)

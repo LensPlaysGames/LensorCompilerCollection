@@ -227,16 +227,16 @@ public:
         // STYLE NOTE: Because this is a struct where we are meant to access the members
         // directly, we use a trailing underscore to disambiguate.
         Ref(std::string name_, Module* module_, Location location_)
-            : name(name_),
-              module(module_),
-              location(location_),
-              aliased_name("") {}
+            : name(name_)
+            , module(module_)
+            , location(location_)
+            , aliased_name("") {}
 
         Ref(std::string name_, Module* module_, std::string alias_, Location location_)
-            : name(name_),
-              module(module_),
-              location(location_),
-              aliased_name(alias_) {}
+            : name(name_)
+            , module(module_)
+            , location(location_)
+            , aliased_name(alias_) {}
     };
 
 private:
@@ -460,7 +460,8 @@ class Scope {
     Location _location;
 
 public:
-    explicit Scope(Scope* parent) : _parent(parent) {
+    explicit Scope(Scope* parent)
+        : _parent(parent) {
         // Assert no recursive scopes.
         auto p = parent;
         while (p) {
@@ -602,7 +603,8 @@ private:
 
 protected:
     constexpr SemaNode() = default;
-    constexpr SemaNode(Location location) : _location(location) {}
+    constexpr SemaNode(Location location)
+        : _location(location) {}
 
 public:
     // Check if this expression was successfully analysed by sema.
@@ -713,7 +715,8 @@ private:
 
 protected:
     constexpr Type(Kind kind, Location location)
-        : SemaNode(location), _kind(kind) {}
+        : SemaNode(location)
+        , _kind(kind) {}
 
 public:
     virtual ~Type() = default;
@@ -965,7 +968,8 @@ private:
     BuiltinKind _kind;
 
     constexpr BuiltinType(K k, Location location)
-        : Type(Kind::Builtin, location), _kind(k) {
+        : Type(Kind::Builtin, location)
+        , _kind(k) {
         set_sema_done();
     }
 
@@ -1011,7 +1015,9 @@ class IntegerType : public Type {
 
 public:
     constexpr IntegerType(usz bitWidth, bool isSigned, Location location)
-        : Type(Kind::Integer, location), _bit_width(bitWidth), _is_signed(isSigned) {}
+        : Type(Kind::Integer, location)
+        , _bit_width(bitWidth)
+        , _is_signed(isSigned) {}
 
     [[nodiscard]]
     auto is_signed() const { return _is_signed; }
@@ -1029,7 +1035,8 @@ class TypeofType : public Type {
 
 public:
     constexpr TypeofType(Expr* e, Location location)
-        : Type(Kind::Typeof, location), _expression(e) {}
+        : Type(Kind::Typeof, location)
+        , _expression(e) {}
 
     [[nodiscard]]
     auto expression() const { return _expression; }
@@ -1065,7 +1072,9 @@ private:
     using K = FFIKind;
 
     K kind;
-    constexpr FFIType(K k, Location location) : Type(Kind::FFIType, location), kind(k) {}
+    constexpr FFIType(K k, Location location)
+        : Type(Kind::FFIType, location)
+        , kind(k) {}
 
 public:
     /// Get the kind of this C FFI type.
@@ -1117,7 +1126,9 @@ class NamedType : public Type {
 
 public:
     NamedType(std::string name, Scope* name_scope, Location location)
-        : Type(Kind::Named, location), _name(std::move(name)), _scope(name_scope) {}
+        : Type(Kind::Named, location)
+        , _name(std::move(name))
+        , _scope(name_scope) {}
 
     [[nodiscard]]
     auto name() const { return _name; }
@@ -1136,7 +1147,8 @@ class TypeWithOneElement : public Type {
 
 protected:
     constexpr TypeWithOneElement(Kind kind, Location location, Type* element_type)
-        : Type(kind, location), _element_type(element_type) {}
+        : Type(kind, location)
+        , _element_type(element_type) {}
 
 public:
     [[nodiscard]]
@@ -1190,9 +1202,7 @@ public:
 
 class FuncType : public Type {
 public:
-    /// This should allow us to easily support attributes that
-    /// take arguments once we need those.
-    using Attributes = std::unordered_map<FuncAttr, bool>;
+    using Attributes = std::vector<FuncAttr>;
 
     struct Param {
         std::string name;
@@ -1200,7 +1210,9 @@ public:
         Location location;
 
         Param(std::string name_, Type* type_, Location location_)
-            : name(std::move(name_)), type(type_), location(location_) {}
+            : name(std::move(name_))
+            , type(type_)
+            , location(location_) {}
     };
 
 private:
@@ -1214,21 +1226,25 @@ public:
         Type* return_type,
         Attributes attrs,
         Location location
-    ) : Type(Kind::Function, location),
-        _return_type(return_type),
-        _params(std::move(params)),
-        _attributes(std::move(attrs)) {}
+    )
+        : Type(Kind::Function, location)
+        , _return_type(return_type)
+        , _params(std::move(params))
+        , _attributes(std::move(attrs)) {}
 
     [[nodiscard]]
     auto attributes() const -> const Attributes& {
         return _attributes;
     }
-
     /// Query whether this function has an attribute.
     [[nodiscard]]
     auto has_attr(FuncAttr attr) const -> bool {
-        return _attributes.contains(attr);
+        return rgs::contains(_attributes, attr);
     }
+    /// Set an attribute on this function.
+    void set_attr(FuncAttr attr) { _attributes.emplace_back(attr); }
+    /// Remove an attribute from this function.
+    void remove_attr(FuncAttr attr) { std::erase(_attributes, attr); }
 
     /// Get the parameters of this function.
     [[nodiscard]]
@@ -1236,17 +1252,11 @@ public:
     [[nodiscard]]
     auto params() const -> const std::vector<Param>& { return _params; }
 
-    /// Remove an attribute from this function.
-    void remove_attr(FuncAttr attr) { _attributes.erase(attr); }
-
     /// Get the return type of this function.
     [[nodiscard]]
     auto return_type() -> Type*& { return _return_type; }
     [[nodiscard]]
     auto return_type() const { return _return_type; }
-
-    /// Set an attribute on this function.
-    void set_attr(FuncAttr attr) { _attributes[attr] = true; }
 
     [[nodiscard]]
     bool has_auto();
@@ -1267,7 +1277,8 @@ class DeclaredType : public Type {
 
 public:
     DeclaredType(Kind kind, Scope* scope, Location location)
-        : Type(kind, location), _scope(scope) {}
+        : Type(kind, location)
+        , _scope(scope) {}
 
     /// Associate this type with a declaration.
     void associate_with_decl(TypeDecl* decl) {
@@ -1310,16 +1321,18 @@ public:
         bool supplanted{false};
 
         Member(std::string name_, Type* type_, Location location_)
-            : type(type_), name(std::move(name_)), location(location_) {}
+            : type(type_)
+            , name(std::move(name_))
+            , location(location_) {}
 
         // For when you already know everything about a member (i.e. when
         // deserialising a struct from module metadata).
         Member(std::string name_, Type* type_, Location location_, usz byte_offset_, bool supplanted_)
-            : type(type_),
-              name(std::move(name_)),
-              location(location_),
-              byte_offset(byte_offset_),
-              supplanted(supplanted_) {}
+            : type(type_)
+            , name(std::move(name_))
+            , location(location_)
+            , byte_offset(byte_offset_)
+            , supplanted(supplanted_) {}
     };
 
 private:
@@ -1329,7 +1342,8 @@ private:
 
 public:
     StructType(Scope* scope, std::vector<Member> members, Location location)
-        : DeclaredType(Kind::Struct, scope, location), _members(std::move(members)) {}
+        : DeclaredType(Kind::Struct, scope, location)
+        , _members(std::move(members)) {}
 
     // Alignment of this struct type in bytes
     [[nodiscard]]
@@ -1385,7 +1399,8 @@ class ArrayType : public TypeWithOneElement {
 
 public:
     ArrayType(Type* element_type, Expr* size, Location location = {})
-        : TypeWithOneElement(Kind::Array, location, element_type), _size(size) {}
+        : TypeWithOneElement(Kind::Array, location, element_type)
+        , _size(size) {}
 
     /// Get the dimension of this array.
     [[nodiscard]]
@@ -1448,7 +1463,8 @@ public:
     static constexpr usz IntegerWidth = 32;
 
     DynamicArrayType(Type* element_type, Expr* size, Location location = {})
-        : TypeWithOneElement(K, location, element_type), _initial_size(size) {}
+        : TypeWithOneElement(K, location, element_type)
+        , _initial_size(size) {}
 
     [[nodiscard]]
     auto initial_size() -> Expr*& { return _initial_size; }
@@ -1493,7 +1509,10 @@ public:
         Location location;
 
         Member(std::string name_, Type* type_, Expr* expr_, Location location_)
-            : type(type_), expr(expr_), name(std::move(name_)), location(location_) {}
+            : type(type_)
+            , expr(expr_)
+            , name(std::move(name_))
+            , location(location_) {}
     };
 
 private:
@@ -1504,7 +1523,8 @@ private:
 
 public:
     SumType(Scope* scope, std::vector<Member> members, Location location)
-        : DeclaredType(Kind::Sum, scope, location), _members(std::move(members)) {}
+        : DeclaredType(Kind::Sum, scope, location)
+        , _members(std::move(members)) {}
 
     [[nodiscard]]
     auto alignment() const { return _alignment; }
@@ -1555,7 +1575,9 @@ public:
         Location location;
 
         Member(std::string name_, Type* type_, Location location_)
-            : type(type_), name(std::move(name_)), location(location_) {}
+            : type(type_)
+            , name(std::move(name_))
+            , location(location_) {}
     };
 
 private:
@@ -1568,7 +1590,8 @@ private:
 
 public:
     UnionType(Scope* scope, std::vector<Member> members, Location location)
-        : DeclaredType(Kind::Union, scope, location), _members(std::move(members)) {}
+        : DeclaredType(Kind::Union, scope, location)
+        , _members(std::move(members)) {}
 
     /// BYTES, _NOT BITS_
     [[nodiscard]]
@@ -1607,9 +1630,9 @@ class EnumType : public DeclaredType {
 
 public:
     EnumType(Scope* scope, Type* underlying_type, std::vector<EnumeratorDecl*> enumerators, Location location)
-        : DeclaredType(Kind::Enum, scope, location),
-          _enumerators(std::move(enumerators)),
-          _underlying_type(underlying_type) {}
+        : DeclaredType(Kind::Enum, scope, location)
+        , _enumerators(std::move(enumerators))
+        , _underlying_type(underlying_type) {}
 
     [[nodiscard]]
     auto enumerators() -> std::vector<EnumeratorDecl*>& { return _enumerators; }
@@ -1699,7 +1722,8 @@ private:
 
 protected:
     Expr(Kind kind, Location location)
-        : SemaNode(location), _kind(kind) {}
+        : SemaNode(location)
+        , _kind(kind) {}
 
 public:
     virtual ~Expr() = default;
@@ -1792,7 +1816,8 @@ class TypedExpr : public Expr {
 
 protected:
     TypedExpr(Kind kind, Location location, Type* type = Type::Unknown)
-        : Expr(kind, location), _type(type) {}
+        : Expr(kind, location)
+        , _type(type) {}
 
 public:
     [[nodiscard]]
@@ -1818,8 +1843,8 @@ class GroupExpr : public TypedExpr {
 
 public:
     GroupExpr(std::vector<Expr*> exprs, Location location)
-        : TypedExpr(Kind::Group, location),
-          _expressions(exprs) {}
+        : TypedExpr(Kind::Group, location)
+        , _expressions(exprs) {}
 
     [[nodiscard]]
     auto expressions() const { return _expressions; }
@@ -1841,7 +1866,8 @@ class Decl : public TypedExpr {
 
 protected:
     Decl(Kind kind, std::string name, Type* type, Location location)
-        : TypedExpr(kind, location, type), _name(std::move(name)) {}
+        : TypedExpr(kind, location, type)
+        , _name(std::move(name)) {}
 
 public:
     [[nodiscard]]
@@ -1864,13 +1890,15 @@ class IntegerLiteral : public TypedExpr {
 
 public:
     IntegerLiteral(aint value, Location location)
-        : TypedExpr(Kind::IntegerLiteral, location, Type::Int), _value(value) {
+        : TypedExpr(Kind::IntegerLiteral, location, Type::Int)
+        , _value(value) {
         /// For now, there should be no way that the value could be out of range.
         set_sema_done();
     }
 
     IntegerLiteral(aint value, Type* ty, Location location)
-        : TypedExpr(Kind::IntegerLiteral, location, ty), _value(value) {
+        : TypedExpr(Kind::IntegerLiteral, location, ty)
+        , _value(value) {
         /// For now, there should be no way that the value could be out of range.
         set_sema_done();
     }
@@ -1889,13 +1917,15 @@ class FractionalLiteral : public TypedExpr {
 
 public:
     FractionalLiteral(FixedPointNumber value, Location location)
-        : TypedExpr(Kind::FractionalLiteral, location, Type::Float), _value(value) {
+        : TypedExpr(Kind::FractionalLiteral, location, Type::Float)
+        , _value(value) {
         /// For now, there should be no way that the value could be out of range.
         set_sema_done();
     }
 
     FractionalLiteral(FixedPointNumber value, Type* ty, Location location)
-        : TypedExpr(Kind::FractionalLiteral, location, ty), _value(value) {
+        : TypedExpr(Kind::FractionalLiteral, location, ty)
+        , _value(value) {
         /// For now, there should be no way that the value could be out of range.
         set_sema_done();
     }
@@ -1941,7 +1971,8 @@ private:
 
 public:
     CompoundLiteral(std::vector<Member> values, Location location, Type* type = Type::Unknown)
-        : TypedExpr(Kind::CompoundLiteral, location, type), _values(std::move(values)) {}
+        : TypedExpr(Kind::CompoundLiteral, location, type)
+        , _values(std::move(values)) {}
 
     CompoundLiteral(const std::vector<Expr*>& values, Location location, Type* type = Type::Unknown)
         : TypedExpr(Kind::CompoundLiteral, location, type) {
@@ -1987,8 +2018,8 @@ class EnumeratorDecl : public Decl {
 
 public:
     EnumeratorDecl(std::string name, Expr* init, Location location)
-        : Decl(Kind::EnumeratorDecl, std::move(name), Type::Int, location),
-          _init(init) {}
+        : Decl(Kind::EnumeratorDecl, std::move(name), Type::Int, location)
+        , _init(init) {}
 
     [[nodiscard]]
     auto init() -> Expr*& { return _init; }
@@ -2015,9 +2046,10 @@ protected:
         Module* mod,
         Linkage linkage,
         Location location
-    ) : Decl(kind, std::move(name), type, location),
-        _mod(mod),
-        _linkage(linkage) {}
+    )
+        : Decl(kind, std::move(name), type, location)
+        , _mod(mod)
+        , _linkage(linkage) {}
 
 public:
     /// Get the mangled name of this declaration.
@@ -2051,8 +2083,8 @@ public:
               std::string(reference.name),
               Type::Void,
               location
-          ),
-          _reference(reference) {}
+          )
+        , _reference(reference) {}
 
     auto reference() -> decltype(_reference)& { return _reference; }
     auto reference() const -> const decltype(_reference) { return _reference; }
@@ -2076,8 +2108,9 @@ public:
         Module* mod,
         Linkage linkage,
         Location location
-    ) : ObjectDecl(Kind::VarDecl, type, std::move(name), mod, linkage, location),
-        _init(init) {}
+    )
+        : ObjectDecl(Kind::VarDecl, type, std::move(name), mod, linkage, location)
+        , _init(init) {}
 
     [[nodiscard]]
     auto init() -> Expr*& { return _init; }
@@ -2121,8 +2154,11 @@ protected:
         Linkage linkage,
         Location location,
         CallConv cc = CallConv::Glint
-    ) : ObjectDecl(kind, type, std::move(name), mod, linkage, location),
-        _body(body), _scope(scope), _cc(cc) {
+    )
+        : ObjectDecl(kind, type, std::move(name), mod, linkage, location)
+        , _body(body)
+        , _scope(scope)
+        , _cc(cc) {
         mod->add_function(this);
 
         // Functions receive special handling in sema and their types are
@@ -2141,7 +2177,8 @@ public:
         Linkage linkage,
         Location location,
         CallConv cc = CallConv::Glint
-    ) : FuncDecl(Kind::FuncDecl, name, type, body, scope, mod, linkage, location, cc) {}
+    )
+        : FuncDecl(Kind::FuncDecl, name, type, body, scope, mod, linkage, location, cc) {}
 
     [[nodiscard]]
     auto body() -> Expr*& { return _body; }
@@ -2218,7 +2255,8 @@ public:
         Linkage linkage,
         Location location,
         CallConv cc = CallConv::Glint
-    ) : FuncDecl(Kind::TemplatedFuncDecl, name, type, body, scope, mod, linkage, location, cc) {}
+    )
+        : FuncDecl(Kind::TemplatedFuncDecl, name, type, body, scope, mod, linkage, location, cc) {}
 
     [[nodiscard]]
     auto find_instantiation(FuncType* signature) -> FuncDecl*;
@@ -2256,8 +2294,8 @@ class TypeDecl : public Decl {
 
 public:
     TypeDecl(Module* mod, std::string name, DeclaredType* declared_type, Location location)
-        : Decl(Kind::TypeDecl, std::move(name), declared_type, location),
-          _module(mod) {
+        : Decl(Kind::TypeDecl, std::move(name), declared_type, location)
+        , _module(mod) {
         declared_type->associate_with_decl(this);
     }
 
@@ -2293,7 +2331,8 @@ class OverloadSet : public TypedExpr {
 
 public:
     OverloadSet(std::vector<FuncDecl*> overloads, Location location)
-        : TypedExpr(Kind::OverloadSet, location), _overloads(std::move(overloads)) {}
+        : TypedExpr(Kind::OverloadSet, location)
+        , _overloads(std::move(overloads)) {}
 
     [[nodiscard]]
     auto overloads() const -> const std::vector<FuncDecl*>& { return _overloads; }
@@ -2310,7 +2349,9 @@ class ApplyExpr : public Expr {
 
 public:
     ApplyExpr(Expr* function, std::vector<Expr*> argument_lists, Location location)
-        : Expr(Kind::Apply, location), _function(function), _argument_lists(argument_lists) {}
+        : Expr(Kind::Apply, location)
+        , _function(function)
+        , _argument_lists(argument_lists) {}
 
     Expr*& function() { return _function; }
     Expr* function() const { return _function; }
@@ -2330,9 +2371,10 @@ class IfExpr : public TypedExpr {
 
 public:
     IfExpr(Expr* condition, Expr* then, Expr* otherwise, Location location)
-        : TypedExpr(Kind::If, location),
-          _condition(condition),
-          _then(then), _otherwise(otherwise) {}
+        : TypedExpr(Kind::If, location)
+        , _condition(condition)
+        , _then(then)
+        , _otherwise(otherwise) {}
 
     [[nodiscard]]
     auto condition() -> Expr*& { return _condition; }
@@ -2383,7 +2425,9 @@ class MatchExpr : public Expr {
     std::vector<Expr*> _bodies;
 
 public:
-    MatchExpr(Expr* object, Location location) : Expr(Kind::Match, location), _object(object) {}
+    MatchExpr(Expr* object, Location location)
+        : Expr(Kind::Match, location)
+        , _object(object) {}
 
     [[nodiscard]]
     auto object() const { return _object; }
@@ -2419,8 +2463,8 @@ class SwitchExpr : public Expr {
 
 public:
     SwitchExpr(Expr* object, Location location)
-        : Expr(Kind::Switch, location),
-          _object(object) {}
+        : Expr(Kind::Switch, location)
+        , _object(object) {}
 
     [[nodiscard]]
     auto object() const { return _object; }
@@ -2455,7 +2499,9 @@ class Loop : public Expr {
 
 public:
     Loop(Kind kind, Expr* condition, Expr* body, Location location)
-        : Expr(kind, location), _body(body), _condition(condition) {}
+        : Expr(kind, location)
+        , _body(body)
+        , _condition(condition) {}
 
     [[nodiscard]]
     auto body() const { return _body; }
@@ -2488,7 +2534,9 @@ class ForExpr : public Loop {
 
 public:
     ForExpr(Expr* init, Expr* condition, Expr* increment, Expr* body, Location location)
-        : Loop(Kind::For, condition, body, location), _init(init), _increment(increment) {}
+        : Loop(Kind::For, condition, body, location)
+        , _init(init)
+        , _increment(increment) {}
 
     [[nodiscard]]
     auto init() -> Expr*& { return _init; }
@@ -2509,7 +2557,8 @@ class BlockExpr : public TypedExpr {
 
 public:
     BlockExpr(std::vector<Expr*> children, Location location)
-        : TypedExpr(Kind::Block, location), _children(std::move(children)) {}
+        : TypedExpr(Kind::Block, location)
+        , _children(std::move(children)) {}
 
     /// Add an expression to this block.
     void add(Expr* expr) { _children.push_back(expr); }
@@ -2542,7 +2591,8 @@ class ReturnExpr : public Expr {
 
 public:
     ReturnExpr(Expr* value, Location location)
-        : Expr(Kind::Return, location), _value(value) {}
+        : Expr(Kind::Return, location)
+        , _value(value) {}
 
     [[nodiscard]]
     auto value() -> Expr*& { return _value; }
@@ -2558,7 +2608,8 @@ class ContinueExpr : public Expr {
 
 public:
     ContinueExpr(Expr* target, Location location)
-        : Expr(Kind::Continue, location), _target(target) {}
+        : Expr(Kind::Continue, location)
+        , _target(target) {}
 
     [[nodiscard]]
     auto target() -> Expr*& { return _target; }
@@ -2576,7 +2627,8 @@ class BreakExpr : public Expr {
 
 public:
     BreakExpr(Expr* target, Location location)
-        : Expr(Kind::Break, location), _target(target) {}
+        : Expr(Kind::Break, location)
+        , _target(target) {}
 
     [[nodiscard]]
     auto target() -> Expr*& { return _target; }
@@ -2596,16 +2648,16 @@ class ConstantExpr : public TypedExpr {
 
 public:
     ConstantExpr(Expr* expr, EvalResult value)
-        : TypedExpr(Kind::EvaluatedConstant, expr->location(), expr->type()),
-          _value(std::move(value)),
-          _expression(expr) {
+        : TypedExpr(Kind::EvaluatedConstant, expr->location(), expr->type())
+        , _value(std::move(value))
+        , _expression(expr) {
         LCC_ASSERT(expr->ok());
         set_sema_done();
     }
 
     ConstantExpr(Type* ty, EvalResult value, Location location)
-        : TypedExpr(Kind::EvaluatedConstant, location, ty),
-          _value(std::move(value)) {
+        : TypedExpr(Kind::EvaluatedConstant, location, ty)
+        , _value(std::move(value)) {
         set_sema_done();
     }
 
@@ -2633,7 +2685,9 @@ class CallExpr : public TypedExpr {
 
 public:
     CallExpr(Expr* callee, std::vector<Expr*> args, Location location)
-        : TypedExpr(Kind::Call, location), _callee(callee), _args(std::move(args)) {}
+        : TypedExpr(Kind::Call, location)
+        , _callee(callee)
+        , _args(std::move(args)) {}
 
     [[nodiscard]]
     auto args() -> std::vector<Expr*>& { return _args; }
@@ -2659,7 +2713,9 @@ class IntrinsicCallExpr : public TypedExpr {
 
 public:
     IntrinsicCallExpr(IntrinsicKind kind, std::vector<Expr*> args)
-        : TypedExpr(Kind::IntrinsicCall, {}), _kind(kind), _args(std::move(args)) {}
+        : TypedExpr(Kind::IntrinsicCall, {})
+        , _kind(kind)
+        , _args(std::move(args)) {}
 
     [[nodiscard]]
     auto args() -> std::vector<Expr*>& { return _args; }
@@ -2679,7 +2735,9 @@ class CastExpr : public TypedExpr {
 
 public:
     CastExpr(Expr* value, Type* ty, CastKind k, Location location)
-        : TypedExpr(Kind::Cast, location, ty), _value(value), _cast_kind(k) {}
+        : TypedExpr(Kind::Cast, location, ty)
+        , _value(value)
+        , _cast_kind(k) {}
 
     [[nodiscard]]
     auto cast_kind() const { return _cast_kind; }
@@ -2715,7 +2773,10 @@ class UnaryExpr : public TypedExpr {
 
 public:
     UnaryExpr(TokenKind op, Expr* operand, bool is_postfix, Location location)
-        : TypedExpr(Kind::Unary, location), _operand(operand), _op(op), _postfix(is_postfix) {}
+        : TypedExpr(Kind::Unary, location)
+        , _operand(operand)
+        , _op(op)
+        , _postfix(is_postfix) {}
 
     /// Check if this is a postfix unary expression.
     [[nodiscard]]
@@ -2742,7 +2803,10 @@ class BinaryExpr : public TypedExpr {
 
 public:
     BinaryExpr(TokenKind op, Expr* lhs, Expr* rhs, Location location)
-        : TypedExpr(Kind::Binary, location), _lhs(lhs), _rhs(rhs), _op(op) {}
+        : TypedExpr(Kind::Binary, location)
+        , _lhs(lhs)
+        , _rhs(rhs)
+        , _op(op) {}
 
     /// Get the left-hand side of this expression.
     [[nodiscard]]
@@ -2771,7 +2835,9 @@ class NameRefExpr : public TypedExpr {
 
 public:
     NameRefExpr(std::string name, Scope* name_scope, Location location)
-        : TypedExpr(Kind::NameRef, location), _name(std::move(name)), _scope(name_scope) {}
+        : TypedExpr(Kind::NameRef, location)
+        , _name(std::move(name))
+        , _scope(name_scope) {}
 
     [[nodiscard]]
     auto name() const -> const std::string& { return _name; }
@@ -2798,8 +2864,8 @@ public:
               Kind::Type,
               location,
               new (mod) TypeType(location)
-          ),
-          _contained_type(_ty) {}
+          )
+        , _contained_type(_ty) {}
 
     auto contained_type() { return _contained_type; }
     auto contained_type_ref() { return &_contained_type; }
@@ -2820,7 +2886,9 @@ class MemberAccessExpr : public TypedExpr {
 
 public:
     MemberAccessExpr(Expr* object, std::string name, Location location)
-        : TypedExpr(Kind::MemberAccess, location), _object(object), _name(std::move(name)) {}
+        : TypedExpr(Kind::MemberAccess, location)
+        , _object(object)
+        , _name(std::move(name)) {}
 
     void finalise(StructType* type, usz member_index) {
         _member_index = member_index;
@@ -2852,7 +2920,8 @@ class ModuleExpr : public Expr {
 
 public:
     ModuleExpr(Module* _module, Location location)
-        : Expr(Kind::Module, location), _mod(_module) {}
+        : Expr(Kind::Module, location)
+        , _mod(_module) {}
 
     [[nodiscard]]
     auto mod() const -> Module* {
@@ -2870,7 +2939,8 @@ class SizeofExpr : public Expr {
 
 public:
     SizeofExpr(Expr* _expression, Location location)
-        : Expr(Kind::Sizeof, location), _expr(_expression) {}
+        : Expr(Kind::Sizeof, location)
+        , _expr(_expression) {}
 
     [[nodiscard]]
     auto expr() const -> Expr* {
@@ -2891,7 +2961,8 @@ class AlignofExpr : public Expr {
 
 public:
     AlignofExpr(Expr* _expression, Location location)
-        : Expr(Kind::Alignof, location), _expr(_expression) {}
+        : Expr(Kind::Alignof, location)
+        , _expr(_expression) {}
 
     [[nodiscard]]
     auto expr() const -> Expr* {
@@ -2921,9 +2992,9 @@ private:
 
 public:
     TemplateExpr(Expr* body, std::vector<Param> params, Location location)
-        : Expr(Kind::Template, location),
-          _body(body),
-          _params(std::move(params)) {}
+        : Expr(Kind::Template, location)
+        , _body(body)
+        , _params(std::move(params)) {}
 
     [[nodiscard]]
     auto body() const -> Expr* { return _body; }
@@ -2956,9 +3027,10 @@ public:
         std::vector<Param> params,
         std::vector<Member> members,
         Location location
-    ) : DeclaredType(Kind::TemplatedStruct, scope, location),
-        _params(std::move(params)),
-        _members(std::move(members)) {}
+    )
+        : DeclaredType(Kind::TemplatedStruct, scope, location)
+        , _params(std::move(params))
+        , _members(std::move(members)) {}
 
     [[nodiscard]]
     auto params() -> std::vector<Param>& { return _params; }

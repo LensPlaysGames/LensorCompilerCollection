@@ -1742,19 +1742,19 @@ auto lcc::glint::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
     };
 
     /// Parse attributes while we’re at an identifier.
-    FuncType::Attributes attrs;
+    FuncType::Attributes attrs{};
     for (;;) {
         if (not At(Tk::Ident)) return attrs;
         auto it = attrs_map.find(tok.text);
         if (it == attrs_map.end()) return attrs;
-        if (attrs[it->second]) {
+        auto [_, attribute] = *it;
+        if (rgs::contains(attrs, attribute)) {
             Warning(
                 tok.location,
                 ErrorId::Miscellaneous,
                 "Duplicate attribute ignored"
             );
-        }
-        attrs[it->second] = true;
+        } else attrs.emplace_back(attribute);
         NextToken();
     }
 }

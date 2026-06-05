@@ -6,8 +6,11 @@
 #include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/core.hh>
+#include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/fractionals.hh>
+
+#include <object/coff.h>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -193,32 +196,34 @@ void emit_gnu_att_assembly(
     // these directives anyway, so we just don't emit them.
     for (auto* var : module->vars()) {
         for (auto n : var->names()) {
-            if (IsExportedLinkage(n.linkage))
-                out += fmt::format(
-                    "    .globl {}\n"
-                    "    .type {},@object\n"
-                    "    .size {},{}\n",
-                    n.name,
-                    n.name,
-                    n.name,
-                    var->allocated_type()->bytes()
-                );
+            if (IsExportedLinkage(n.linkage)) {
+                out += fmt::format("    .globl {}\n", n.name);
+                if (not module->context()->target()->is_platform_windows()) {
+                    // ELF-style symbol definition
+                    out += fmt::format(
+                        "    .type {},@object\n"
+                        "    .size {},{}\n",
+                        n.name,
+                        n.name,
+                        var->allocated_type()->bytes()
+                    );
+                }
+            }
         }
     }
 
     for (auto& function : mir) {
         bool imported{false};
+
         for (auto n : function.names()) {
             // From GNU as manual: `.extern` is accepted in the source program--for
             // compatibility with other assemblers--but it is ignored. `as` treats all
             // undefined symbols as external.
             if (IsExportedLinkage(n.linkage)) {
-                out += fmt::format(
-                    "    .globl {}\n"
-                    "    .type {},@function\n",
-                    n.name,
-                    n.name
-                );
+                out += fmt::format("    .globl {}\n", n.name);
+                // ELF-style
+                if (not module->context()->target()->is_platform_windows())
+                    out += fmt::format("    .type {},@function\n", n.name);
             }
 
             if (IsImportedLinkage(n.linkage))
@@ -424,14 +429,15 @@ void emit_gnu_att_assembly(
                     auto mnemonic = std::string(ToString(Opcode(+x86_64::Opcode::MoveDereferenceRHS)));
                     // Append "sd" to mnemonic if saving scalar
                     // FIXME: is_scalar()
-                    if (r.value >= +x86_64::RegisterId::XMM0)
+                    if (r.value >= +x86_64::RegisterId::XMM0 and r.value <= +x86_64::RegisterId::XMM15)
                         mnemonic += "sd";
                     out += fmt::format(
-                        "    {} {}, -{}(%rbp)  {} SPILL\n",
+                        "    {} {}, -{}(%rbp)  {} SPILL (slot {})\n",
                         mnemonic,
                         ToString(function, r),
                         spill_offsets.at(i.value),
-                        comment_begin
+                        comment_begin,
+                        i.value
                     );
                     continue;
                 }
@@ -450,14 +456,15 @@ void emit_gnu_att_assembly(
                         mnemonic += "sd";
 
                     out += fmt::format(
-                        "    {} -{}(%rbp), {}  {} UNSPILL\n",
+                        "    {} -{}(%rbp), {}  {} UNSPILL (slot {})\n",
                         mnemonic,
                         spill_offsets.at(i.value),
                         ToString(
                             function,
                             MOperandRegister(instruction.reg(), (uint) instruction.regsize())
                         ),
-                        comment_begin
+                        comment_begin,
+                        i.value
                     );
                     continue;
                 }
@@ -687,8 +694,11 @@ void emit_gnu_att_assembly(
         out += fmt::format("    .cfi_endproc\n");
 
         for (auto n : function.names()) {
-            if (IsExportedLinkage(n.linkage))
-                out += fmt::format("    .size {}, .-{}\n", n.name, n.name);
+            if (IsExportedLinkage(n.linkage)) {
+                // ELF-style
+                if (not module->context()->target()->is_platform_windows())
+                    out += fmt::format("    .size {}, .-{}\n", n.name, n.name);
+            }
         }
     }
 
@@ -817,7 +827,9 @@ void emit_gnu_att_assembly(
         );
     }
 
-    out += ".section .note.GNU-stack\n";
+    // ELF-style
+    if (not module->context()->target()->is_platform_windows())
+        out += ".section .note.GNU-stack\n";
 
     if (output_path.empty() or output_path == "-")
         fmt::print("{}", out);

@@ -237,7 +237,7 @@ if (VERIFY_COMPILERS)
   add_custom_target(
     llvmgnu_build
     COMMAND
-    ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B llvmgnu -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libstdc++"  ${COMMON_DEFINES}
+    ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B llvmgnu -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libstdc++" ${COMMON_DEFINES}
     COMMAND
     ${CMAKE_COMMAND} --build llvmgnu --target lcc
     VERBATIM
@@ -250,4 +250,20 @@ if (VERIFY_COMPILERS)
     llvmgnu_build
   )
   add_dependencies(test verify_compilers)
+
+  find_program(MINGW_CXX NAMES ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++)
+  if (MINGW_CXX)
+    add_custom_target(
+      mingw_build
+      COMMAND
+      ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B mingw
+      -DCMAKE_CXX_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++
+      -DCMAKE_C_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-gcc
+      ${COMMON_DEFINES}
+      COMMAND
+      ${CMAKE_COMMAND} --build mingw --target lcc
+      VERBATIM
+    )
+    add_dependencies(verify_compilers mingw_build)
+  endif()
 endif()

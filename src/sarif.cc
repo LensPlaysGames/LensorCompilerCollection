@@ -72,7 +72,12 @@ std::string as_sarif(lcc::Context& ctx, std::string_view command_line) {
             JSONObject artifact{};
 
             JSONObject location{};
-            location.add_property("uri", lcc::fs::absolute(f->path()).lexically_relative(pwd_path));
+            location.add_property(
+                "uri",
+                lcc::fs::absolute(f->path())
+                    .lexically_relative(pwd_path)
+                    .string()
+            );
             location.add_property("uriBaseId", "PWD");
             artifact.add_property("location", location);
 

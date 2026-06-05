@@ -336,7 +336,7 @@ strings were stored to."
 
 (defun run-test--glint-orgtest (org-filepath)
   ""
-  ;; (message "Running glint test at %s" org-filepath)
+  ;; (message "Running Glint test: %s" org-filepath)
   (let ((test (run-test--parse-test-from-org org-filepath)))
     (if (not test)
         (message
@@ -412,8 +412,7 @@ strings were stored to."
                    ,(concat
                      "(progn"
                      "(setf lcc-path " (prin1-to-string lcc-path) ")"
-                     "(run-test--glint-orgtest " (prin1-to-string org-filepath)  ")"
-                     ;; "(run-test--glint-orgtest " (prin1-to-string org-filepath) ")"
+                     "(run-test--glint-orgtest " (prin1-to-string org-filepath) ")"
                      ")"
                      ))))
     (make-process
@@ -431,13 +430,27 @@ strings were stored to."
   ;; NOTE: If we used a child emacs process to operate on the parsed test,
   ;; we could dispatch each test as soon as it's parsed, running them in
   ;; parallel.
-  (let ((processes (mapcar
-                    #'run-test--glint-dispatch
-                    (directory-files "corpus/glint/" 'absolute "\\.org\\'"))))
-    (while (cl-some #'process-live-p processes)
-      (accept-process-output nil 0 100)))
-
-  ;; TODO: We have to somehow wait for all the emacs above to be done...
+  (let ((job-count (1- (num-processors)))
+        (test-paths (directory-files "corpus/glint/" 'absolute "\\.org\\'"))
+        (processes ()))
+    (setf processes (mapcar #'run-test--glint-dispatch
+                            (take job-count test-paths)))
+    ;; Remove batch of tests that is currently running.
+    (setf test-paths (nthcdr job-count test-paths))
+    ;; Wait for dispatched processes to complete.
+    (while (or
+            (length> test-paths 0) ;; tests to run
+            (cl-some #'process-live-p processes)) ;; tests running
+      ;; Wait
+      (accept-process-output nil 0 125)
+      ;; Start more tests, if possible
+      (let ((running-test-count (cl-count-if #'process-live-p processes)))
+        (when (< running-test-count job-count)
+          (setf processes
+                (append processes
+                        (mapcar #'run-test--glint-dispatch
+                                (take (- job-count running-test-count) test-paths))))
+          (setf test-paths (nthcdr (- job-count running-test-count) test-paths))))))
 
   ;; Hacky fix: I'm not exactly sure where these are coming from, but I can't
   ;; seem to get all of the executables to delete...
