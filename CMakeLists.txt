@@ -24,6 +24,23 @@ set(
   CACHE BOOL
   "Whether or not to utilise address sanitization via -fsanitize=address."
 )
+set(
+  USE_UBSAN FALSE
+  CACHE BOOL
+  "Whether or not to utilise undefined behaviour sanitization via -fsanitize=undefined."
+)
+
+set(
+  PROFILING FALSE
+  CACHE BOOL
+  "Whether or not to generate profiling data for gprof via -pg."
+)
+
+set(
+  COVERAGE FALSE
+  CACHE BOOL
+  "Whether or not to generate coverage data for gcov via --coverage."
+)
 
 set(
   USE_COLOUR TRUE
@@ -93,6 +110,13 @@ if (PROFILING)
   if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-pg)
     add_link_options(-pg)
+  endif()
+endif()
+
+if (COVERAGE)
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(--coverage)
+    add_link_options(--coverage)
   endif()
 endif()
 
@@ -268,6 +292,13 @@ if (USE_ASAN)
   target_compile_options(options INTERFACE -fsanitize=address)
   target_link_options(options INTERFACE -fsanitize=address)
   target_compile_definitions(options INTERFACE -DUSE_ASAN=1)
+endif()
+
+# Enable UndefinedBehaviourSanitizer if requested
+if (USE_UBSAN)
+  target_compile_options(options INTERFACE -fsanitize=undefined)
+  target_link_options(options INTERFACE -fsanitize=undefined)
+  target_compile_definitions(options INTERFACE -DUSE_UBSAN=1)
 endif()
 
 # ============================================================================
