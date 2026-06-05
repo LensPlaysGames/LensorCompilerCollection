@@ -449,7 +449,7 @@ auto Inst::Children() -> Generator<Value**> {
         case Kind::Poison:
         case Kind::GlobalVariable:
         case Kind::Parameter:
-            LCC_UNREACHABLE();
+            Diag::ICE("Children() called on {}", ToString(kind()));
 
         case Kind::Alloca:
         case Kind::Branch:
@@ -552,7 +552,7 @@ void Inst::EraseImpl() {
     for (auto* usee : children())
         RemoveUse(usee, this);
 
-    // Erase this instruction from the containing block.
+    // Erase this instruction from the containing block's list of users.
     if (parent) {
         // Sometimes values are poisoned/erased *without* their parent being updated
         // to nullptr. This should be a compiler error, but, for now, we just make
@@ -565,8 +565,6 @@ void Inst::EraseImpl() {
         //     "Erasing an instruction that has a parent block, but the instruction is not present within the specified parent block..."
         // );
         if (it != parent->instructions().end()) {
-            // Remove the instruction from the instruction list.
-            parent->instructions().erase(it);
             // Remove the instruction from the users list of the block, if necessary.
             // This is required for PHI instructions, for example.
             RemoveUse(parent, this);
@@ -587,15 +585,36 @@ auto Inst::children() const -> Generator<Value*> {
     }
 }
 
+void Inst::PerformErasure() {
+    LCC_ASSERT(users().empty(), "Cannot remove used instruction");
+    if (parent) {
+        std::erase_if(parent->instructions(), [&](const auto& i) {
+            return i.get() == this;
+        });
+    }
+}
+
 void Inst::erase() {
     LCC_ASSERT(users().empty(), "Cannot remove used instruction");
+    // Remove this instruction as a user from it's children
     EraseImpl();
+    // Remove this instruction from it's place in a block, freeing the
+    // underlying memory.
+    PerformErasure();
 }
 
 void Inst::erase_cascade() {
     EraseImpl();
+
     while (not users().empty())
         users().front()->erase_cascade();
+
+    // Remove the instruction from the instruction list.
+    if (parent) {
+        std::erase_if(parent->instructions(), [&](const auto& i) {
+            return i.get() == this;
+        });
+    }
 }
 
 auto Inst::instructions_before_this() -> std::vector<Inst*> {

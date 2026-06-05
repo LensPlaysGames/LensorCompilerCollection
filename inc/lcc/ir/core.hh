@@ -220,7 +220,7 @@ class UseTrackingValue : public Value {
     friend Inst;
 
     /// Users of this value.
-    std::vector<Inst*> user_list;
+    std::vector<Inst*> user_list{};
 
 protected:
     explicit UseTrackingValue(Kind k, Type* t = Type::UnknownTy)
@@ -241,9 +241,9 @@ struct IRName {
 };
 
 class GlobalVariable : public UseTrackingValue {
-    std::vector<IRName> _names;
-    Value* _init;
-    Type* _allocated_type;
+    std::vector<IRName> _names{};
+    Value* _init{};
+    Type* _allocated_type{};
 
 public:
     explicit GlobalVariable(
@@ -317,9 +317,11 @@ protected:
     [[nodiscard]]
     auto Children() -> Generator<Value**>;
 
-    /// Erase this instruction without checking if it
-    /// is still used by anything.
+    /// Prepare for actual erasure/deletion by removing all tracked uses of
+    /// this instruction. Does NOT remove from block, delete memory, etc.
     void EraseImpl();
+    /// Actually remove this instruction from the parent block.
+    void PerformErasure();
 
     /// Remove a use by an instruction.
     static void RemoveUse(Value* of_value, Inst* by) {
@@ -378,11 +380,14 @@ public:
                 co_yield c;
     }
 
-    /// Erase this instruction from its parent block.
+    /// Remove this instruction from its parent block.
     void erase();
 
     /// Erase this instruction and all instructions that use this
     /// instruction. Be careful when using this.
+    /// Basically, if you have identified that a particular value is completely
+    /// removable from the program (including all of it's children and all of
+    /// it's users), call this.
     void erase_cascade();
 
     void insert_before(std::unique_ptr<Inst> to_insert);
@@ -998,8 +1003,19 @@ class GetMemberPtrInst : public GEPBaseInst {
         : GEPBaseInst(Kind::GetMemberPtr, structType, nullptr, nullptr, location) {}
 
 public:
-    explicit GetMemberPtrInst(Type* structType, Value* structPointer, Value* memberIndex, Location location = {})
-        : GEPBaseInst(Kind::GetMemberPtr, structType, structPointer, memberIndex, location) {
+    explicit GetMemberPtrInst(
+        Type* structType,
+        Value* structPointer,
+        Value* memberIndex,
+        Location location = {}
+    )
+        : GEPBaseInst(
+              Kind::GetMemberPtr,
+              structType,
+              structPointer,
+              memberIndex,
+              location
+          ) {
         LCC_ASSERT(
             pointer->type() == Type::PtrTy,
             "GetMemberInst may only operate on opaque pointers, which `{}` is not",
