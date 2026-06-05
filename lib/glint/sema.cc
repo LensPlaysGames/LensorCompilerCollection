@@ -541,11 +541,13 @@ auto lcc::glint::Sema::try_get_metadata_blob_from_assembly(
 
         assembly_string.remove_prefix(found + section_string.size());
         assembly_string.remove_prefix(assembly_string.find_first_not_of(" \t"));
-        size_t step = 0;
+        char* end = 0;
         while (assembly_string.size() and assembly_string.front() != '\n') {
-            auto byte_value = std::stoul(assembly_string.begin(), &step);
+            auto byte_value = std::strtoul(assembly_string.data(), &end, 0);
             metadata_blob.emplace_back(u8(byte_value));
-            assembly_string.remove_prefix(step);
+            assembly_string.remove_prefix(
+                usz(std::distance(assembly_string.data(), (const char*) end))
+            );
             assembly_string.remove_prefix(assembly_string.find_first_not_of(", \t"));
         }
         // Deserialise metadata blob into a newly created shell of a module.
