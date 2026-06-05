@@ -54,6 +54,9 @@ public:
 /// For a correctness proof and an in-depth explanation of
 /// the algorithm, see the paper mentioned above.
 struct DomTreeBuilder {
+    // Immediate dominators.
+    // idoms at block->id() == block ID of immediate dominator, or InvalidId
+    // if there isn't one.
     Buffer<usz>& idoms;
     Buffer<std::vector<usz>>& children;
     Function* f;
@@ -89,6 +92,7 @@ struct DomTreeBuilder {
     std::unordered_multimap<usz, std::pair<usz, usz>> arcs{};
 
     void Build() {
+        // The (immediate) dominator for the start node is the start node itself.
         idoms[0] = 0;
 
         for (auto [i, u] : vws::enumerate(f->blocks()))
@@ -104,6 +108,7 @@ private:
         for (auto [_, e] : rgs::subrange(v1, vn)) map.emplace(x, e);
     }
 
+    // @param u  index of block to traverse, depth-first.
     void DFS(usz u) {
         Previsit(u);
 
@@ -126,6 +131,7 @@ private:
     }
 
     void Postvisit(usz u) {
+        added[u] = 0;
         auto [fst, lst] = arcs.equal_range(u);
         for (auto [_, arc] : rgs::subrange(fst, lst)) {
             auto [x, y] = arc;
@@ -192,13 +198,19 @@ lcc::DomTree::DomTree(Function* function, bool compute_dominance_frontiers)
     DomTreeBuilder{idoms, children, function}.Build();
 
     /// Compute dominance frontiers.
-    if (not compute_dominance_frontiers) return;
+    if (not compute_dominance_frontiers)
+        return;
+
     for (auto [i, a] : vws::enumerate(function->blocks())) {
         for (auto b : a->successors()) {
-            for (Block* x = a.get(); not strictly_dominates(x, b);) {
-                auto xid = x->id();
-                df[xid].push_back(b);
-                x = function->blocks()[idoms[xid]].get();
+            for (
+                Block* x = a.get();
+                not strictly_dominates(x, b);
+                /** No Increment */
+            ) {
+                auto x_id = x->id();
+                df[x_id].push_back(b);
+                x = function->blocks()[idoms[x_id]].get();
             }
         }
     }
