@@ -326,8 +326,8 @@ bool perform_ir_match_block(
         inst_i < expected_block->instructions().size();
         ++inst_i
     ) {
-        auto* expected_inst = expected_block->instructions().at(inst_i);
-        auto* got_inst = got_block->instructions().at(inst_i);
+        auto* expected_inst = expected_block->instructions().at(inst_i).get();
+        auto* got_inst = got_block->instructions().at(inst_i).get();
         expected_to_got[expected_inst] = got_inst;
 
         if (expected_inst->kind() != got_inst->kind()) {
@@ -471,8 +471,8 @@ bool perform_ir_match_function(
         block_i < expected_function->blocks().size();
         ++block_i
     ) {
-        auto* expected_block = expected_function->blocks().at(block_i);
-        auto* got_block = got_func->blocks().at(block_i);
+        auto* expected_block = expected_function->blocks().at(block_i).get();
+        auto* got_block = got_func->blocks().at(block_i).get();
         if (
             not perform_ir_match_block(
                 got,
@@ -494,12 +494,12 @@ bool perform_ir_match(lcc::Module& got, lcc::Module& expected) {
     // For every function in the expected IR, check that the function also
     // exists in the IR we got.
     bool functions_match{true};
-    for (auto* expected_function : expected.code()) {
+    for (auto& expected_function : expected.code()) {
         if (
             not perform_ir_match_function(
                 got,
                 expected,
-                expected_function
+                expected_function.get()
             )
         ) functions_match = false;
     }
