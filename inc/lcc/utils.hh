@@ -173,7 +173,7 @@ public:
 
 private:
     void CheckInbounds(usz idx) const {
-        LCC_ASSERT(idx < size(), "Index out of bounds");
+        LCC_ASSERT(idx < size(), "Index out of bounds: {} >= {}", idx, size());
     }
 };
 
