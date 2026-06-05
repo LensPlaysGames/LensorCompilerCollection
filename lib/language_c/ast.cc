@@ -211,7 +211,7 @@ auto Node::langtest_name() -> std::string_view {
                 case TokenKind::OpTilde: return "binary_bit_negation";
                 case TokenKind::OpShiftLeft: return "binary_bitshift_left";
                 case TokenKind::OpShiftRight: return "binary_bitshift_right";
-                case TokenKind::OpEqualEqual: return "binary_equality";
+                case TokenKind::OpDoubleEqual: return "binary_equality";
                 case TokenKind::OpLessThanEqual: return "binary__assign";
                 case TokenKind::OpGreaterThanEqual: return "binary__assign";
                 case TokenKind::OpExclamationEqual: return "binary_inequality";
