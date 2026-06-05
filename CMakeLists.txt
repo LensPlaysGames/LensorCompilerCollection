@@ -348,7 +348,7 @@ add_library(
   inc/lcc/ir/type.hh
   inc/lcc/lcc-c.h
   inc/lcc/location.hh
-  inc/lcc/opt/opt.hh
+  inc/lcc/opt.hh
   inc/lcc/stringmap.hh
   inc/lcc/syntax/lexer.hh
   inc/lcc/syntax/token.hh
@@ -391,7 +391,7 @@ add_library(
   lib/lcc/ir/parser.cc
   lib/lcc/lcc-c.cc
   lib/lcc/location.cc
-  lib/lcc/opt/opt.cc
+  lib/lcc/opt.cc
   lib/lcc/platform.cc
   lib/lcc/utils.cc
   lib/lcc/utils/fractionals.cc
