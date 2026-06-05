@@ -20,6 +20,12 @@ set(
 )
 
 set(
+  USE_ASAN FALSE
+  CACHE BOOL
+  "Whether or not to utilise address sanitization via -fsanitize=address."
+)
+
+set(
   USE_COLOUR TRUE
   CACHE BOOL
   "Whether or not to tell the compiler to use color for emitting
@@ -258,10 +264,10 @@ else()
 endif()
 
 # Enable AddressSanitizer if requested
-if (ENABLE_ASAN)
+if (USE_ASAN)
   target_compile_options(options INTERFACE -fsanitize=address)
   target_link_options(options INTERFACE -fsanitize=address)
-  target_compile_definitions(options INTERFACE ENABLE_ASAN=1)
+  target_compile_definitions(options INTERFACE -DUSE_ASAN=1)
 endif()
 
 # ============================================================================
