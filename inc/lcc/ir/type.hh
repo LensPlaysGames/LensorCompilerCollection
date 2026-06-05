@@ -232,7 +232,7 @@ class StructType : public Type {
     friend class lcc::Context;
 
     std::vector<Type*> _members;
-    std::variant<long int, std::string> _id;
+    std::variant<isz, std::string> _id;
     usz _align{AlignNotSet};
 
 private:
@@ -240,7 +240,7 @@ private:
         : Type(Kind::Struct)
         , _members(std::move(members))
         , _id(std::move(name)) {}
-    StructType(std::vector<Type*> members, long int index)
+    StructType(std::vector<Type*> members, isz index)
         : Type(Kind::Struct)
         , _members(std::move(members))
         , _id(index) {}
@@ -248,7 +248,12 @@ private:
 public:
     static constexpr usz AlignNotSet = (usz) -1;
 
-    static auto Get(Context* ctx, std::vector<Type*> member_types, usz align_bits = AlignNotSet, std::string name = {}) -> StructType*;
+    static auto Get(
+        Context* ctx,
+        std::vector<Type*> member_types,
+        usz align_bits = AlignNotSet,
+        std::string name = {}
+    ) -> StructType*;
 
     /// Return the element count.
     usz member_count() const { return _members.size(); }
@@ -291,9 +296,9 @@ public:
     auto name() const -> const std::string& { return std::get<std::string>(_id); }
 
     /// The global index, within its context, for this struct if it is unnamed
-    auto index() const -> long int {
-        LCC_ASSERT(std::holds_alternative<long int>(_id));
-        return std::get<long int>(_id);
+    auto index() const -> isz {
+        LCC_ASSERT(std::holds_alternative<isz>(_id));
+        return std::get<isz>(_id);
     }
 
     /// True if this is a unique, named struct type, false otherwise.
