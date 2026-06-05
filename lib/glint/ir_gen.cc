@@ -2005,6 +2005,13 @@ auto IRGen::Generate(Context* context, glint::Module& mod) -> lcc::Module* {
     for (auto* f : mod.functions())
         ir_gen.generate_function(f);
 
+    // Ideally we'd just never generate IR for them, but, er, Glint always
+    // does a DCE pass.
+    std::erase_if(ir_gen.mod()->code(), [&](const std::unique_ptr<lcc::Function>& f) {
+        // NOTE: Don't erase top level function
+        return f->users().empty() and not f->has_name(mod.top_level_function()->name());
+    });
+
     return ir_gen.mod();
 }
 
