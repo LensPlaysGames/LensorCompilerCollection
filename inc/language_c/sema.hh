@@ -30,6 +30,7 @@ class Sema {
     [[nodiscard]]
     Result<void> analyse_name_reference(NameReference*&);
 
+    // @return diagnostic(s) produced by semantic analysis.
     [[nodiscard]]
     Result<void> analyse(Node*&);
 
