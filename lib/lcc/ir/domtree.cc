@@ -13,10 +13,13 @@ class DisjointSets {
 public:
     explicit DisjointSets(usz entry_count)
         : entries(entry_count) {
-        rgs::generate(entries, [i = 0] mutable { return i++; });
+        rgs::generate(
+            entries,
+            [i = 0] mutable { return i++; }
+        );
     }
 
-    /// Get all elements of a set.
+    // Get all elements of a set.
     auto elements(usz a) -> Generator<usz> {
         for (auto root = find(a); auto [i, e] : vws::enumerate(entries))
             if (find(e) == root)
@@ -53,42 +56,63 @@ public:
 ///
 /// For a correctness proof and an in-depth explanation of
 /// the algorithm, see the paper mentioned above.
+///
+/// TERMS:
+///
+///   DOMINANCE -- A node A is said to *dominate* a node B iff control flow
+///                MUST pass through A to reach B. That is, every path from the entry
+///                point of the function MUST exit basic block A BEFORE entering basic
+///                block B.
+///
+///   DOMINATOR -- A node A that dominates another node B is known as the
+///                dominator of B.
+///
+///   IMMEDIATE DOMINATOR -- Predecessor.
+///
+///   POST DOMINATOR -- Reverse dominance. A node A is said to *post-dominate*
+///                     a node B iff control flow MUST enter A AFTER exiting B.
+///
+///   ARC -- A directed path from a node A to a node B indicating that node A
+///          dominates node B.
+///
 struct DomTreeBuilder {
     // Immediate dominators.
     // idoms at block->id() == block ID of immediate dominator, or InvalidId
     // if there isn't one.
     Buffer<usz>& idoms;
+
     Buffer<std::vector<usz>>& children;
+
     Function* f;
 
-    /// Flags indicating whether we’ve already visited a node.
+    // Flag indicating whether we’ve already visited a node.
     Buffer<bool> visited{f->blocks().size()};
 
-    /// DFS parents of each node.
+    // DFS parents of each node.
     Buffer<usz> parents{f->blocks().size()};
 
-    /// Number of unmarked arcs for each node.
+    // Number of unmarked arcs for each node.
     Buffer<usz> total{f->blocks().size()};
 
-    /// Number of unmarked arcs added in the inner loop for each node.
+    // Number of unmarked arcs added in the inner loop for each node.
     Buffer<usz> added{f->blocks().size()};
 
-    /// Nearest common ancestors.
+    // Nearest common ancestors.
     DisjointSets ncas{f->blocks().size()};
 
-    /// Mapping from original vertices to contracted vertices.
+    // Mapping from original vertices to contracted vertices.
     DisjointSets contr{f->blocks().size()};
 
-    /// Sets of vertices with the same immediate dominator.
+    // Sets of vertices with the same immediate dominator.
     DisjointSets same{f->blocks().size()};
 
-    /// List of outgoing arcs for each vertex.
+    // List of outgoing arcs for each vertex.
     std::unordered_multimap<usz, usz> out{};
 
-    /// List of incoming arcs for each vertex.
+    // List of incoming arcs for each vertex.
     std::unordered_multimap<usz, usz> in{};
 
-    /// For each vertex v, the list of arcs (a, b) such that v = nca(a, b).
+    // For each vertex v, the list of arcs (a, b) such that v = nca(a, b).
     std::unordered_multimap<usz, std::pair<usz, usz>> arcs{};
 
     void Build() {
@@ -105,7 +129,8 @@ private:
     /// Merge two ranges in a multimap.
     void Merge(decltype(out)& map, usz x, usz v) {
         auto [v1, vn] = map.equal_range(v);
-        for (auto [_, e] : rgs::subrange(v1, vn)) map.emplace(x, e);
+        for (auto [_, e] : rgs::subrange(v1, vn))
+            map.emplace(x, e);
     }
 
     // @param u  index of block to traverse, depth-first.
