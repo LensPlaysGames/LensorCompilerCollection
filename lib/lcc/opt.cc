@@ -1139,16 +1139,16 @@ private:
             Pass p{{mod}};
 
             /// Use indices here to avoid iterator invalidation.
-            for (usz bi = 0; bi < f->blocks().size(); bi++) {
+            for (usz block_index = 0; block_index < f->blocks().size(); block_index++) {
                 if constexpr (requires { &Pass::enter_block; })
-                    p.enter_block(f->blocks()[bi].get());
+                    p.enter_block(f->blocks()[block_index].get());
 
                 // Run on every instruction
                 if constexpr (requires { &Pass::run_on_instruction; }) {
-                    for (usz ii = 0; ii < f->blocks()[bi]->instructions().size(); ii++) {
+                    for (usz instruction_index = 0; instruction_index < f->blocks()[block_index]->instructions().size(); instruction_index++) {
                         auto Done = [&] {
-                            return bi >= f->blocks().size()
-                                or ii >= f->blocks()[bi]->instructions().size();
+                            return block_index >= f->blocks().size()
+                                or instruction_index >= f->blocks()[block_index]->instructions().size();
                         };
 
                         /// Some passes may end up deleting all remaining instructions,
@@ -1159,21 +1159,21 @@ private:
                         /// Run the pass on the instruction.
                         Inst* inst;
                         do {
-                            inst = f->blocks()[bi]->instructions()[ii].get();
+                            inst = f->blocks()[block_index]->instructions()[instruction_index].get();
                             p.run_on_instruction(inst);
                         } while (
                             not Done()
-                            and inst != f->blocks()[bi]->instructions()[ii].get()
+                            and inst != f->blocks()[block_index]->instructions()[instruction_index].get()
                         );
                     }
                 }
 
                 if constexpr (requires { &Pass::leave_block; })
-                    p.leave_block(f->blocks()[bi]);
+                    p.leave_block(f->blocks()[block_index]);
 
                 /// Call atfork() callback if there is one *and we’re at a fork*.
                 if constexpr (requires { &Pass::atfork; }) {
-                    auto& b = f->blocks()[bi];
+                    auto& b = f->blocks()[block_index];
                     if (b->terminator() and is<CondBranchInst>(b->terminator()))
                         p.atfork(b);
                 }
