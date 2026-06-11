@@ -1,0 +1,40 @@
+:root {
+    --list-char: "▪️";
+}
+
+:where(block, declaration, return, initial) {
+    display: block;
+    margin-left: 1em;
+    font-weight: bold;
+}
+
+:where(block, declaration, return, initial):before {
+    color: #656463;
+}
+
+return:before {
+    content: var(--list-char)"return";
+}
+
+block:before {
+    content: var(--list-char)"block";
+}
+
+declaration:before {
+    content: var(--list-char)"declaration";
+}
+
+initial:before {
+    content: var(--list-char)"initialiser";
+}
+
+*:before:empty {
+    content: "";
+}
+
+name {
+    color: darkgreen;
+}
+type {
+    color: #2cabff;
+}
