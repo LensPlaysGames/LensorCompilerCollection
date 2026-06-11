@@ -1,12 +1,13 @@
 #ifndef LANGUAGE_C_TYPE_HH
 #define LANGUAGE_C_TYPE_HH
 
+#include <language_c/translation_unit.hh>
+#include <lcc/location.hh>
+
 #include <fmt/base.h>
 
 #include <string>
 #include <vector>
-
-#include <lcc/location.hh>
 
 namespace lcc::language_c {
 
@@ -24,7 +25,8 @@ enum class TypeKind {
 
 struct Node;
 
-class Type {
+struct Type {
+private:
     TypeKind _kind{TypeKind::Invalid};
     Location _location{};
 
@@ -32,6 +34,16 @@ public:
     Type(TypeKind kind, Location location)
         : _kind(kind)
         , _location(location) {}
+
+    virtual ~Type() = default;
+
+    void* operator new(size_t) = delete;
+    [[nodiscard]]
+    void* operator new(size_t size, TranslationUnit& tu) {
+        auto ptr = ::operator new(size);
+        tu.allocated_types.push_back(static_cast<const Type*>(ptr));
+        return ptr;
+    };
 
     auto kind() const { return _kind; }
     auto location() { return _location; }

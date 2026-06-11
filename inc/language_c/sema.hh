@@ -10,10 +10,10 @@
 namespace lcc::language_c {
 
 class Sema {
+    TranslationUnit& tu;
     lcc::Context* context;
     std::unordered_set<Node*> analysed{};
     Declaration* defining{};
-    Node* _root{};
 
     std::unordered_map<const Node*, Type*> _type_cache{};
 
@@ -48,12 +48,17 @@ class Sema {
     }
 
 public:
-    Sema(lcc::Context* context_, Node* root)
-        : context(context_)
-        , _root(root) {}
+    Sema(lcc::Context* context_, TranslationUnit& tu_)
+        : tu(tu_)
+        , context(context_) {
+        if (not context)
+            Diag::ICE("context is nullptr");
+        if (not tu.tree)
+            Diag::ICE("root is nullptr");
+    }
 
     [[nodiscard]]
-    auto root() { return _root; }
+    auto& root() { return tu.tree; }
 
     [[nodiscard]]
     static bool Analyse(lcc::Context*, TranslationUnit&);

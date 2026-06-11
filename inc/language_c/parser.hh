@@ -115,7 +115,7 @@ public:
 };
 
 class Parser : Lexer {
-    Node* tree{};
+    TranslationUnit& tu;
 
     std::vector<Scope*> _scopes{};
     Scope* _current_scope{};
@@ -127,17 +127,18 @@ class Parser : Lexer {
     Result<Node*> ParseExpression(size_t precedence);
     Result<std::vector<Node*>> ParseExpressions(TokenKind until);
 
-    // @param of_file
-    // name of file that we are parsing the top level of.
-    auto ParseTopLevel(std::string of_file) -> TranslationUnit;
+    // @param of_file  name of file that we are parsing the top level of.
+    // Parses into translation unit member.
+    void ParseTopLevel(std::string of_file);
 
 public:
-    Parser(Context* c, File& f)
-        : Lexer(c, &f) {
+    Parser(Context* c, TranslationUnit& tu_, File& f)
+        : Lexer(c, &f)
+        , tu(tu_) {
         // Initialise first token.
         NextToken();
         // Create global scope
-        _current_scope = new Scope();
+        _current_scope = new (tu) Scope();
         _scopes.emplace_back(_current_scope);
     }
 

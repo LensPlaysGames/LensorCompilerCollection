@@ -1,6 +1,7 @@
 #ifndef LANGUAGE_C_AST_HH
 #define LANGUAGE_C_AST_HH
 
+#include <language_c/translation_unit.hh>
 #include <language_c/type.hh>
 
 #include <lcc/location.hh>
@@ -9,16 +10,26 @@
 #include <fmt/base.h>
 #include <fmt/format.h>
 
+#include <string>
+#include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace lcc::language_c {
 
-struct Declaration;
 enum struct TokenKind : unsigned int;
 
 struct Scope {
     Scope* parent{};
     std::unordered_map<std::string_view, Declaration*> declarations{};
+
+    void* operator new(size_t) = delete;
+    [[nodiscard]]
+    void* operator new(size_t size, TranslationUnit& tu) {
+        auto ptr = ::operator new(size);
+        tu.allocated_scopes.push_back(static_cast<const Scope*>(ptr));
+        return ptr;
+    };
 };
 
 enum class NodeKind {
@@ -42,6 +53,16 @@ public:
         : _kind(kind)
         , _location(location) {}
 
+    virtual ~Node() = default;
+
+    void* operator new(size_t) = delete;
+    [[nodiscard]]
+    void* operator new(size_t size, TranslationUnit& tu) {
+        auto ptr = ::operator new(size);
+        tu.allocated_nodes.push_back(static_cast<const Node*>(ptr));
+        return ptr;
+    };
+
     auto kind() const { return _kind; }
     auto location() const { return _location; }
     auto location() -> Location& { return _location; }
@@ -52,7 +73,10 @@ public:
 
     // Turn a list of nodes into a single node, or nullptr if the list was
     // empty.
-    static auto MaybeToGroup(std::vector<Node*> nodes) -> Node*;
+    static auto MaybeToGroup(
+        TranslationUnit& tu,
+        std::vector<Node*> nodes
+    ) -> Node*;
 
     auto name() const -> std::string_view;
     auto children() const -> std::vector<Node*>;
@@ -167,15 +191,6 @@ public:
     auto type() const { return _type; }
     auto scope() const { return _encapsulating_scope; }
     auto initialising_expression() const { return _initialising_expression; }
-};
-
-struct TranslationUnit {
-    // Produced by the parser.
-    Node* tree{};
-
-    // Filled in by semantic analysis.
-    std::vector<const Declaration*> functions{};
-    std::vector<const Declaration*> globals{};
 };
 
 } // namespace lcc::language_c

@@ -286,9 +286,9 @@ auto Node::children() const -> std::vector<Node*> {
     Diag::ICE("unreachable");
 }
 
-auto Node::MaybeToGroup(std::vector<Node*> nodes) -> Node* {
+auto Node::MaybeToGroup(TranslationUnit& tu, std::vector<Node*> nodes) -> Node* {
     if (nodes.size() > 1) {
-        return new Group(
+        return new (tu) Group(
             nodes,
             {nodes.front()->location(), nodes.back()->location()}
         );
@@ -298,6 +298,15 @@ auto Node::MaybeToGroup(std::vector<Node*> nodes) -> Node* {
         return nodes.at(0);
 
     return nullptr;
+}
+
+TranslationUnit::~TranslationUnit() {
+    for (const auto* const n : allocated_nodes)
+        delete n;
+    for (const auto* const s : allocated_scopes)
+        delete s;
+    for (const auto* const t : allocated_types)
+        delete t;
 }
 
 } // namespace lcc::language_c

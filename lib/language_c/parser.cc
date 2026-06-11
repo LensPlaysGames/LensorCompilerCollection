@@ -908,7 +908,7 @@ auto Parser::ParseDeclarators(Type* type_specifier)
                 case TokenKind::OpAsterisk:
                     auto location = Location{current_declarator_type->location(), tok.location};
                     NextToken();
-                    current_declarator_type = new PointerType(current_declarator_type, location);
+                    current_declarator_type = new (tu) PointerType(current_declarator_type, location);
                     break;
             }
             NextToken();
@@ -942,7 +942,7 @@ auto Parser::ParseDeclarators(Type* type_specifier)
                 // Eat ")".
                 NextToken();
 
-                current_declarator_type = new FunctionType(
+                current_declarator_type = new (tu) FunctionType(
                     current_declarator_type,
                     {},
                     location
@@ -973,7 +973,7 @@ auto Parser::ParseDeclarators(Type* type_specifier)
                 auto location = Location{current_declarator_type->location(), tok.location};
                 NextToken();
 
-                current_declarator_type = new ArrayType(
+                current_declarator_type = new (tu) ArrayType(
                     current_declarator_type,
                     *dimension,
                     location
@@ -1003,7 +1003,7 @@ auto Parser::ParseDeclarators(Type* type_specifier)
         }
 
         parsed_declarations.push_back(
-            new Declaration(
+            new (tu) Declaration(
                 current_declarator_type,
                 current_declarator_name,
                 current_scope(),
@@ -1023,7 +1023,7 @@ auto Parser::ParseDeclarators(Type* type_specifier)
 auto Parser::ParseDeclarations(Type* type_specifier) -> Result<Node*> {
     auto maybe_decls = ParseDeclarators(type_specifier);
     if (maybe_decls) {
-        auto out = Node::MaybeToGroup(*maybe_decls);
+        auto out = Node::MaybeToGroup(tu, *maybe_decls);
         // FIXME: Should we return an "empty" node?
         if (not out)
             Diag::ICE("No declarations parsed, but no error returned");
@@ -1128,23 +1128,23 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             if (tok.kind != TokenKind::Semicolon and tok.kind != TokenKind::Eof) {
                 auto expression = ParseExpression(reset_precedence);
                 if (not expression) return expression.diag();
-                lhs = new Return(
+                lhs = new (tu) Return(
                     *expression,
                     {start_location, expression->location()}
                 );
-            } else lhs = new Return(nullptr, start_location);
+            } else lhs = new (tu) Return(nullptr, start_location);
         } break;
 
         case TokenKind::KwInt: {
             NextToken();
             // Encountering just 'int' implies a declaration follows.
-            lhs = ParseDeclarations(new IntType(start_location));
+            lhs = ParseDeclarations(new (tu) IntType(start_location));
         } break;
 
         case TokenKind::KwVoid: {
             NextToken();
             // Encountering just 'void' implies a declaration follows.
-            lhs = ParseDeclarations(new VoidType(start_location));
+            lhs = ParseDeclarations(new (tu) VoidType(start_location));
         } break;
 
         case TokenKind::Semicolon: {
@@ -1172,7 +1172,7 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             // Eat "}"
             NextToken();
 
-            lhs = new Block(*constituents, location);
+            lhs = new (tu) Block(*constituents, location);
         } break;
 
         case TokenKind::LeftParenthesis: {
@@ -1195,7 +1195,7 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
         } break;
 
         case TokenKind::Integer: {
-            lhs = new IntegerLiteral(size_t(tok.integer_value), tok.location);
+            lhs = new (tu) IntegerLiteral(size_t(tok.integer_value), tok.location);
             NextToken();
         } break;
 
@@ -1265,7 +1265,7 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
                 NextToken();
                 auto rhs = ParseExpression(binary_precedence(operator_));
                 if (not rhs) return rhs.diag();
-                lhs = new BinaryOperation(
+                lhs = new (tu) BinaryOperation(
                     operator_,
                     *lhs,
                     *rhs,
@@ -1314,10 +1314,10 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
     return lhs;
 };
 
-auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {
+void Parser::ParseTopLevel(std::string of_file) {
     auto top_level = ParseExpressions(TokenKind::Eof);
-    if (not top_level) return {};
-    tree = new Block(*top_level, {});
+    if (not top_level) return;
+    tu.tree = new (tu) Block(*top_level, {});
 
     if (context->option_print_ast()) { /** Print Debug Info **/
         for (auto [i, s] : std::ranges::views::enumerate(scopes())) {
@@ -1342,13 +1342,13 @@ auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {
             );
         }
     }
-
-    return {.tree = tree};
 }
 
 auto Parser::Parse(Context* context, File& file) -> TranslationUnit {
-    Parser parser{context, file};
-    return parser.ParseTopLevel(file.path().filename().string());
+    TranslationUnit tu{};
+    Parser parser{context, tu, file};
+    parser.ParseTopLevel(file.path().filename().string());
+    return tu;
 }
 
 } // namespace lcc::language_c

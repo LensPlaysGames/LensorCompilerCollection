@@ -98,7 +98,7 @@ Type* Sema::type_of(const Node* n) {
         }
 
         case NodeKind::IntegerLiteral:
-            out = new IntType(n->location());
+            out = new (tu) IntType(n->location());
             break;
 
         case NodeKind::Invalid:
@@ -106,7 +106,7 @@ Type* Sema::type_of(const Node* n) {
         case NodeKind::Block:
         case NodeKind::Return:
         case NodeKind::Count:
-            out = new VoidType(n->location());
+            out = new (tu) VoidType(n->location());
             break;
     }
 
@@ -132,7 +132,7 @@ Result<void> Sema::analyse_declaration(Declaration*& d) {
             ((Block*) (d->initialising_expression()))
                 ->_constituents
                 .emplace_back(
-                    new Return(nullptr, {})
+                    new (tu) Return(nullptr, {})
                 );
         }
 
@@ -212,10 +212,10 @@ Result<void> Sema::analyse_binary(BinaryOperation*& b) {
         case TokenKind::OpAmpersandEqual:
         case TokenKind::OpShiftLeftEqual:
         case TokenKind::OpShiftRightEqual: {
-            b = new BinaryOperation(
+            b = new (tu) BinaryOperation(
                 TokenKind::Assign,
                 b->lhs(),
-                new BinaryOperation(
+                new (tu) BinaryOperation(
                     b->binary_operator(),
                     b->lhs(),
                     b->rhs(),
@@ -345,8 +345,8 @@ bool Sema::Analyse(Context* context, TranslationUnit& tu) {
     if (not tu.tree)
         Diag::ICE("cannot analyse nullptr");
 
-    Sema semantic{context, tu.tree};
-    bool passed = semantic.analyse(semantic._root).is_value();
+    Sema semantic{context, tu};
+    bool passed = semantic.analyse(semantic.root()).is_value();
     if (not passed) return false;
 
     if (semantic.root()->kind() == NodeKind::Block) {
