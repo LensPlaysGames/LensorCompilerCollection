@@ -40,7 +40,7 @@ template <typename T>
 requires ast2dot_node_requirements<T>
 void identify_node(IdMap<T>& ids, const T& node) {
     if (not ids.contains(&node))
-        ids[&node] = ids.size();
+        ids[&node] = (unsigned int) ids.size();
 }
 
 template <typename T>
