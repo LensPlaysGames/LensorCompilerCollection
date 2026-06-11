@@ -178,8 +178,7 @@ auto Node::get_past_location() -> Location {
     return out;
 }
 
-#ifdef LCC_LANGTEST
-auto Node::langtest_name() -> std::string_view {
+auto Node::name() const -> std::string_view {
     switch (kind()) {
         case NodeKind::Invalid: return "invalid";
         case NodeKind::Group: return "group";
@@ -254,7 +253,7 @@ auto Node::langtest_name() -> std::string_view {
     }
     Diag::ICE("unreachable");
 }
-auto Node::langtest_children() -> std::vector<Node*> {
+auto Node::children() const -> std::vector<Node*> {
     switch (kind()) {
         case NodeKind::IntegerLiteral:
         case NodeKind::NameReference:
@@ -286,7 +285,6 @@ auto Node::langtest_children() -> std::vector<Node*> {
     }
     Diag::ICE("unreachable");
 }
-#endif
 
 auto Node::MaybeToGroup(std::vector<Node*> nodes) -> Node* {
     if (nodes.size() > 1) {

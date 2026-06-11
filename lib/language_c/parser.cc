@@ -1319,8 +1319,7 @@ auto Parser::ParseTopLevel(std::string of_file) -> TranslationUnit {
     if (not top_level) return {};
     tree = new Block(*top_level, {});
 
-    if (context->option_print_ast()) {
-        fmt::print("{}", *tree);
+    if (context->option_print_ast()) { /** Print Debug Info **/
         for (auto [i, s] : std::ranges::views::enumerate(scopes())) {
             fmt::print("Scope[{}] ({}):\n", i, fmt::ptr(s));
             for (auto [n, d] : s->declarations) {

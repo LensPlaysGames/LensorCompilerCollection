@@ -54,9 +54,12 @@ public:
     // empty.
     static auto MaybeToGroup(std::vector<Node*> nodes) -> Node*;
 
+    auto name() const -> std::string_view;
+    auto children() const -> std::vector<Node*>;
+
 #ifdef LCC_LANGTEST
-    auto langtest_name() -> std::string_view;
-    auto langtest_children() -> std::vector<Node*>;
+    auto langtest_name() const -> std::string_view { return name(); }
+    auto langtest_children() const -> std::vector<Node*> { return children(); }
 #endif
 };
 
