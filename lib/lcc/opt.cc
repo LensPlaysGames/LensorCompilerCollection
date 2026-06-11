@@ -1,11 +1,14 @@
+#include <lcc/opt.hh>
+
+#include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/domtree.hh>
 #include <lcc/ir/module.hh>
-#include <lcc/opt.hh>
 #include <lcc/utils.hh>
 
 #include <algorithm>
 #include <concepts>
+#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <string_view>
@@ -16,6 +19,35 @@
 
 namespace lcc::opt {
 namespace {
+constexpr bool emit_stages(Module* mod) {
+    return mod
+       and mod->context()
+       and mod->context()->has_option("opt-stages");
+}
+// @param id  usually the abbreviation of the optimisation pass, or "before"
+void emit_a_stage(Module* mod, std::string_view id) {
+    auto s = mod->as_lcc_ir(false);
+    // Using unique vreg guarantees uniqueness and growing "chronologically".
+    auto stage_filename = fmt::format("opt-{}-{}.lcc", mod->next_vreg(), id);
+    // Saves all stages in "_optstages" subdirectory
+    auto dir = fs::path("_optstages");
+    auto stage_path = dir / stage_filename;
+    // Create directory *before* attempting to write to file within it.
+    (void) fs::create_directory(dir);
+    auto write_success = File::Write(s.data(), s.size(), stage_path);
+    if (not write_success) {
+        fmt::print(
+            stderr,
+            "Failed to write IR to {} during intermediate optimisation pass {}...",
+            stage_filename,
+            id
+        );
+    }
+}
+
+template <typename Pass>
+void emit_a_stage(Module* mod) { emit_a_stage(mod, Pass::abbreviation); }
+
 /// Base class for all optimisation passes.
 /// Optimisation pass that runs on an instruction kind.
 struct OptimisationPass {
@@ -122,6 +154,8 @@ struct ModuleRewritePass : OptimisationPass {};
 /// operate on individual instructions and don’t really fit in anywhere
 /// else can also go here.
 struct InstCombinePass : InstructionRewritePass {
+    static constexpr auto abbreviation = "icmb";
+
 private:
     /// Get the lhs and rhs of a binary expression as integer constants.
     static auto GetIntegerPair(BinaryInst* b) {
@@ -426,6 +460,8 @@ public:
 /// into multiple variables if possible so we can optimise
 /// each one in isolation.
 struct SROAPass : InstructionRewritePass {
+    static constexpr auto abbreviation = "sroa";
+
 private:
     void TrySplitAlloca(AllocaInst* a) {
         /// Skip if this is not a struct or array type.
@@ -617,6 +653,8 @@ public:
 
 /// Pass that performs simple store forwarding.
 struct StoreForwardingPass : InstructionRewritePass {
+    static constexpr auto abbreviation = "sfwd";
+
     struct Var {
         AllocaInst* alloca;
         StoreInst* store{};
@@ -738,6 +776,8 @@ private:
 
 /// SSA construction pass (aka mem2reg).
 struct SSAConstructionPass : InstructionRewritePass {
+    static constexpr auto abbreviation = "ssa";
+
     std::vector<AllocaInst*> allocas{};
 
     void run_on_instruction(Inst* i) {
@@ -867,6 +907,8 @@ private:
 
 // CFG simplification pass.
 struct CFGSimplePass : InstructionRewritePass {
+    static constexpr auto abbreviation = "cfg";
+
     void run_on_function(Function* f) {
         // We start at 1 because the entry block is always reachable.
         for (usz i = 1; i < f->blocks().size(); /** No increment! **/) {
@@ -936,6 +978,8 @@ struct CFGSimplePass : InstructionRewritePass {
 
 /// Eliminate instructions whose results are unused if they have no side-effects.
 struct DCEPass : InstructionRewritePass {
+    static constexpr auto abbreviation = "dce";
+
     void run_on_instruction(Inst* i) {
         if (not i->users().empty()) return;
 
@@ -982,6 +1026,8 @@ struct DCEPass : InstructionRewritePass {
 };
 
 struct FunctionDCEPass : ModuleRewritePass {
+    static constexpr auto abbreviation = "gdce";
+
     void run() {
         for (usz i = 0; i < mod->code().size(); /** No increment! **/) {
             auto* f = mod->code()[i].get();
@@ -1009,6 +1055,8 @@ struct FunctionDCEPass : ModuleRewritePass {
 
 /// Debugging pass to print the dominator tree of a function.
 struct PrintDOMTreePass : InstructionRewritePass {
+    static constexpr auto abbreviation = "print-dom";
+
     static void run_on_function(Function* f) {
         fmt::print("{}", DomTree{f, false}.debug());
     }
@@ -1053,7 +1101,10 @@ struct Optimiser {
     Optimiser(Module* m, OptimisationLevel o)
         : mod(m)
         , opt_level(o) {
+        LCC_ASSERT(mod, "Created optimiser from nullptr IR module");
         LCC_ASSERT(+opt_level);
+        if (emit_stages(mod))
+            emit_a_stage(mod, "untouched");
     }
 
     Optimiser(Module* m, int o)
@@ -1099,16 +1150,32 @@ struct Optimiser {
     void run_passes(std::string_view passes) {
         for (const auto& p : vws::split(passes, ',')) {
             auto s = std::string_view{p};
-            if (s == "sroa") (void) RunPass<SROAPass>();
-            else if (s == "sfwd") (void) RunPass<StoreForwardingPass>();
-            else if (s == "icmb") (void) RunPass<InstCombinePass>();
-            else if (s == "dce") (void) RunPass<DCEPass>();
-            else if (s == "gdce") (void) RunPass<FunctionDCEPass>();
-            else if (s == "ssa") (void) RunPass<SSAConstructionPass>();
-            else if (s == "cfgs") (void) RunPass<CFGSimplePass>();
-            else if (s == "print-dom") (void) RunPass<PrintDOMTreePass>();
+            if (s == SROAPass::abbreviation) (void) RunPass<SROAPass>();
+            else if (s == StoreForwardingPass::abbreviation) (void) RunPass<StoreForwardingPass>();
+            else if (s == InstCombinePass::abbreviation) (void) RunPass<InstCombinePass>();
+            else if (s == DCEPass::abbreviation) (void) RunPass<DCEPass>();
+            else if (s == FunctionDCEPass::abbreviation) (void) RunPass<FunctionDCEPass>();
+            else if (s == SSAConstructionPass::abbreviation) (void) RunPass<SSAConstructionPass>();
+            else if (s == CFGSimplePass::abbreviation) (void) RunPass<CFGSimplePass>();
+            else if (s == PrintDOMTreePass::abbreviation) (void) RunPass<PrintDOMTreePass>();
             else if (s == "*") run();
-            else Diag::Fatal("Unknown pass '{}'", s);
+            else Diag::Fatal(
+                "Unknown pass '{}'."
+                " Use `*` for passes selected based on optimisation level."
+                " Non-exhaustive list of available passes: {}",
+                s,
+                fmt::join(
+                    {SROAPass::abbreviation,
+                     StoreForwardingPass::abbreviation,
+                     InstCombinePass::abbreviation,
+                     DCEPass::abbreviation,
+                     FunctionDCEPass::abbreviation,
+                     SSAConstructionPass::abbreviation,
+                     CFGSimplePass::abbreviation,
+                     PrintDOMTreePass::abbreviation},
+                    ","
+                )
+            );
         }
     }
 
@@ -1122,13 +1189,20 @@ private:
     template <typename Pass>
     [[nodiscard]]
     auto RunPass() -> bool {
+        bool changed{false};
         if constexpr (std::derived_from<Pass, InstructionRewritePass>) {
-            return RunPassOnInstructions<Pass>();
+            changed = RunPassOnInstructions<Pass>();
         } else if constexpr (std::derived_from<Pass, ModuleRewritePass>) {
-            return RunPassOnModule<Pass>();
+            changed = RunPassOnModule<Pass>();
         } else {
             static_assert(always_false<Pass>, "Pass must be an InstructionRewritePass or ModuleRewritePass");
         }
+
+        // Emit IR after each optimisation pass that changes the output, if requested.
+        if (changed and emit_stages(mod))
+            emit_a_stage<Pass>(mod);
+
+        return changed;
     };
 
     template <typename Pass>
