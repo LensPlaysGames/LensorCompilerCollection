@@ -475,6 +475,7 @@ public:
 
     /// Disallow creating scopes without a module reference.
     void* operator new(size_t) = delete;
+    [[nodiscard]]
     void* operator new(size_t sz, Module& mod) {
         auto ptr = ::operator new(sz);
         mod.scopes.push_back(static_cast<Scope*>(ptr));
@@ -722,6 +723,7 @@ public:
     virtual ~Type() = default;
 
     auto operator new(size_t) -> void* = delete;
+    [[nodiscard]]
     auto operator new(size_t sz, Module& mod) -> void* {
         auto* ptr = ::operator new(sz);
         mod.types.push_back(static_cast<Type*>(ptr));
@@ -1728,7 +1730,6 @@ protected:
 public:
     virtual ~Expr() = default;
 
-    [[nodiscard]]
     auto operator new(size_t) -> void* = delete;
     [[nodiscard]]
     auto operator new(size_t sz, Module& mod) -> void* {
