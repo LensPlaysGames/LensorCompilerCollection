@@ -26,9 +26,9 @@ Dependencies:
 
 - [[https://cmake.org/][CMake >= 3.20]]
 
-- Any C++ Compiler (We like [[https://gcc.gnu.org/][GCC]])
+- Any C++ Compiler (We like [[https://gcc.gnu.org/][GCC]], preferably a _recent_ version)
 
-NOTE: If on Windows *and* using Visual Studio, see [[file:documentation/lcc/VISUAL_STUDIO.org][this document]] instead. Also, switch to Linux :^).
+NOTE: If on Windows *and* using Visual Studio, see [[file:documentation/lcc/VISUAL_STUDIO.org][this document]] instead. Also, switch to Linux, it takes minutes :^).
 
 First, generate a build tree using CMake.
 #+begin_src shell
