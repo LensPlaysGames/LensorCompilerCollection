@@ -611,6 +611,9 @@ auto main(int argc, const char** argv) -> int {
             do_link(context, output_paths, configured_output_file_path);
     }
 
+    for (const auto& o : context.unchecked_options())
+        lcc::Diag::Warning("Provided user option was never checked for: {}", o);
+
     if (options.run)
         return do_run(context, configured_output_file_path);
 

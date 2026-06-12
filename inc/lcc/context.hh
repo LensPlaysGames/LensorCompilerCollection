@@ -102,6 +102,9 @@ private:
     // User Options
     // (conventionally with prefixed triple dash `---`)
     std::vector<std::string> __options{};
+    // Options checked via has_option(). If a user option is provided and
+    // never checked for, we can warn the user.
+    std::vector<std::string> _checked_options{};
 
     /// Called once the first time a context is created.
     static void InitialiseLCCData();
@@ -255,6 +258,16 @@ public:
         return __options;
     }
 
+    // Collect provided options that were never checked for.
+    auto unchecked_options() const -> std::vector<std::string> {
+        std::vector<std::string> out{};
+        for (auto provided_option : __options) {
+            if (not rgs::contains(_checked_options, provided_option))
+                out.push_back(provided_option);
+        }
+        return out;
+    }
+
     static constexpr std::string_view without_dashes(std::string_view in) {
         if (in.starts_with("---"))
             return in.substr(0, in.size() - 3);
@@ -268,6 +281,8 @@ public:
     }
 
     bool has_option(std::string_view option) {
+        if (not rgs::contains(_checked_options, without_dashes(option)))
+            _checked_options.emplace_back(without_dashes(option));
         return rgs::contains(
             __options,
             without_dashes(option)
