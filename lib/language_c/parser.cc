@@ -993,8 +993,6 @@ auto Parser::ParseDeclarators(Type* type_specifier)
             }
 
         } else {
-            // TODO: Parse initialiser, if present (i.e. "= <expression>");
-            // if (tok.kind == TokenKind::Equal)
             if (tok.kind == TokenKind::OpEqual) {
                 NextToken();
                 auto maybe_initialiser = ParseExpression(reset_precedence);

@@ -45,3 +45,15 @@ Integer: 0b01001001
 ---
 
 (block (integer_literal))
+
+================
+Identifier
+:syntax
+:desc Just an identifier
+================
+
+foo;
+
+---
+
+(block (name))

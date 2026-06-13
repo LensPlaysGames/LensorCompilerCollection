@@ -28,7 +28,7 @@ class Sema {
     [[nodiscard]]
     Result<void> analyse_return(Return*&);
     [[nodiscard]]
-    Result<void> analyse_name_reference(NameReference*&);
+    Result<Declaration*> analyse_name_reference(NameReference*&);
     [[nodiscard]]
     Result<void> analyse_call(Call*&);
 

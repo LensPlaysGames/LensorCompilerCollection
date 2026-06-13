@@ -303,9 +303,10 @@ Result<void> Sema::analyse_return(Return*& r) {
     return {};
 }
 
-Result<void> Sema::analyse_name_reference(NameReference*& n) {
+Result<Declaration*> Sema::analyse_name_reference(NameReference*& n) {
+    if (not n) Diag::ICE("nullptr argument");
     auto* s = n->within_scope();
-    const std::string_view name{n->name()};
+    const std::string_view name{n->_name};
     if (not s or name.empty()) {
         Diag::ICE(
             "Invalid NameReference: scope={},name=`{}`",
@@ -321,11 +322,73 @@ Result<void> Sema::analyse_name_reference(NameReference*& n) {
         return Error(n->location(), "c/symbol-resolution", "Dafuq is dis?");
 
     LCC_ASSERT(s->declarations.contains(name));
-    return {};
+    return s->declarations.at(name);
 }
 
 Result<void> Sema::analyse_call(Call*& c) {
-    return Error(c->location(), "c/todo", "TODO: Analyse call");
+    if (not c) Diag::ICE("nullptr argument");
+    if (not c->callee()) Diag::ICE("malformed call");
+
+    // Analyse callee
+    if (
+        auto callee_result = analyse(c->_callee);
+        not callee_result
+    ) return callee_result.diag();
+
+    switch (c->callee()->kind()) {
+        case NodeKind::Declaration: {
+            auto* d = (Declaration*) c->callee();
+            if (d->type()->kind() != TypeKind::Function) {
+                return Error(
+                    c->location(),
+                    "c/type-mismatch",
+                    "Cannot call non-function type: {}",
+                    *d->type()
+                );
+            }
+            auto* f = (FunctionType*) d->type();
+
+            if (c->arguments().size() != f->parameters().size()) {
+                return Error(
+                    c->location(),
+                    "c/argument-count",
+                    "Invalid number of arguments to function"
+                );
+            }
+            for (auto [argument, parameter] : vws::zip(c->arguments(), f->parameters())) {
+                // Analyse argument
+                if (
+                    auto argument_result = analyse(argument);
+                    not argument_result
+                ) return argument_result.diag();
+
+                // TODO: Better type comparison...
+                if (type_of(argument)->kind() != parameter.type->kind()) {
+                    auto e = Error(
+                        argument->location(),
+                        "c/type-mismatch",
+                        "Invalid argument type {} (expected {})",
+                        *type_of(argument),
+                        *parameter.type
+                    );
+                    e.attach(Note(d->location(), "", "Declared here"));
+                    return e;
+                }
+            }
+        } break;
+
+        case NodeKind::Invalid:
+        case NodeKind::Group:
+        case NodeKind::Block:
+        case NodeKind::NameReference:
+        case NodeKind::IntegerLiteral:
+        case NodeKind::Return:
+        case NodeKind::BinaryOperation:
+        case NodeKind::Call:
+        case NodeKind::Count:
+            Diag::ICE("unreachable");
+    }
+    return {};
 }
 
 auto Sema::analyse(Node*& node) -> Result<void> {
@@ -355,8 +418,12 @@ auto Sema::analyse(Node*& node) -> Result<void> {
         case NodeKind::Call:
             return analyse_call(*(Call**) &node);
 
-        case NodeKind::NameReference:
-            return analyse_name_reference(*(NameReference**) &node);
+        case NodeKind::NameReference: {
+            auto resolved = analyse_name_reference(*(NameReference**) &node);
+            if (not resolved) return resolved.diag();
+            node = *resolved;
+            return {};
+        }
 
         case NodeKind::Declaration:
             return analyse_declaration(*(Declaration**) &node);
