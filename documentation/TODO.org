@@ -2,6 +2,14 @@
 
 * LCC
 
+- [CHECKS]: It's a mess, currently
+
+  I want a _regular function_ I can call with a severity level enum which dictates *at compile time* whether or not the function call actually happens or not...
+
+  Basically, allow the programmer to dictate how important the assertion/check they are performing is. If it's a confidence check, put it under that severity level. If it's a check that should be performed no matter what, even in release builds, put it under "Release" severity level. Etc.
+
+  Replace LCC_ASSERT, LCC_TODO, etc.
+
 - [MIRTest]: MIR -> MIR testing facility
   This will allow us to test register allocation, instruction selection, among other things.
 
