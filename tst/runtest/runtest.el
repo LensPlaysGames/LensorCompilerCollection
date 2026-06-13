@@ -50,14 +50,19 @@
 (defvar run-test--test-database-path "runtest.sqlite"
   "Path to test database.")
 
-(defun run-test--record-test-result (test-name test-path test-passed)
-  ""
+(defun run-test--record-test-result
+    (test-name test-path test-passed test-language)
+  "
+TEST-NAME      | Name of the test to record the result of.
+TEST-PATH      | Path where the test originates from.
+TEST-PASSED    | Integer value denoting a boolean value regarding whether or not test passed.
+TEST-LANGUAGE  | A string representing the language this test was ran as."
   (let ((db (sqlite-open run-test--test-database-path)))
     (sqlite-execute db "PRAGMA busy_timeout = 5000;")
     (sqlite-execute
      db
-     "INSERT INTO tests (name, path, passed) VALUES (?, ?, ?)"
-     (list test-name test-path (if test-passed 1 0)))
+     "INSERT INTO tests (name, path, passed, language) VALUES (?, ?, ?, ?)"
+     (list test-name test-path (if test-passed 1 0) test-language))
     (sqlite-close db)))
 
 (defun run-test--print-test-result (test)
@@ -310,7 +315,8 @@ strings were stored to."
         (run-test--record-test-result
          (plist-get test :name)
          (plist-get test :path)
-         (not (plist-get test :failed)))
+         (not (plist-get test :failed))
+         "IR")
 
         ;; Print the test result
         (run-test--print-test-result test)
@@ -384,7 +390,8 @@ strings were stored to."
         (run-test--record-test-result
          (plist-get test :name)
          (plist-get test :path)
-         (not (plist-get test :failed)))
+         (not (plist-get test :failed))
+         "Glint")
 
         (run-test--print-test-result test)
 
@@ -512,7 +519,8 @@ strings were stored to."
         (run-test--record-test-result
          (plist-get test :name)
          (plist-get test :path)
-         (not (plist-get test :failed)))
+         (not (plist-get test :failed))
+         "C")
 
         (run-test--print-test-result test)
 
@@ -556,8 +564,9 @@ strings were stored to."
                      (let
                          ((path (nth 0 result))
                           (name (nth 1 result))
-                          (passed (nth 2 result)))
-		               `((ruleId . "RunTest")
+                          (passed (nth 2 result))
+                          (language (nth 3 result)))
+		               `((ruleId . ,(concat "RunTest." language))
 		                 ,(if (> passed 0) '(kind . "pass") '(level . "error"))
 		                 (message . ((text . ,name))))))
 	               results))))
@@ -587,7 +596,7 @@ strings were stored to."
   ;; Initialize state
   (let ((db (sqlite-open run-test--test-database-path)))
     (sqlite-execute db "DROP TABLE IF EXISTS tests;")
-    (sqlite-execute db "CREATE TABLE tests (path TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, passed INTEGER NOT NULL);")
+    (sqlite-execute db "CREATE TABLE tests (path TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, passed INTEGER NOT NULL, language TEXT NOT NULL);")
     (sqlite-close db))
 
   ;; Turn off file backups (becomes a mess with all of the I/O that tests
