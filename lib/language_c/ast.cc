@@ -163,7 +163,7 @@ auto fmt::formatter<lcc::language_c::Node>::format(
             indent(ctx.out(), depth);
             return fmt::format_to(
                 ctx.out(),
-                "<integer-literal>{}</integer-literal>\n",
+                "<name>{}</name>\n",
                 name_ref.name()
             );
         }
