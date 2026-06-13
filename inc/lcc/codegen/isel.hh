@@ -538,7 +538,7 @@ public:
                 return MOperandFunction(operand::function);
 
             case OperandKind::Block:
-                return MOperandGlobal(operand::block);
+                return MOperandBlock(operand::block);
 
             case OperandKind::InputOperandReference: {
                 auto op_result = input_operand_by_index(operand::index);
