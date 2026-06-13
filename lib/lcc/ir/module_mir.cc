@@ -7,6 +7,7 @@
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/macros.hh>
 
 #include <algorithm>
 #include <unordered_map>
@@ -79,6 +80,76 @@ constexpr auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
     }
     LCC_UNREACHABLE();
 }
+
+auto assign_virtual_register(
+    Module& mod,
+    std::unordered_map<Value*, usz>& virts,
+    Value* v
+) {
+    // Don't double-assign registers.
+    if (virts.contains(v)) return;
+    // Otherwise, don't assign registers to values that don't require them.
+    switch (v->kind()) {
+        // Instructions that can never produce a value
+        case Value::Kind::Store:
+        case Value::Kind::Branch:
+        case Value::Kind::CondBranch:
+        case Value::Kind::Return:
+        case Value::Kind::Unreachable:
+        // Non-instructions
+        case Value::Kind::Function:
+        case Value::Kind::Block:
+        case Value::Kind::IntegerConstant:
+        case Value::Kind::FractionalConstant:
+        case Value::Kind::ArrayConstant:
+        case Value::Kind::Poison:
+        case Value::Kind::GlobalVariable:
+        case Value::Kind::Parameter:
+            return;
+
+        // These need a virtual register
+        case Value::Kind::Alloca:
+        case Value::Kind::Call:
+        case Value::Kind::GetElementPtr:
+        case Value::Kind::GetMemberPtr:
+        case Value::Kind::Intrinsic:
+        case Value::Kind::Load:
+        case Value::Kind::Phi:
+        case Value::Kind::ZExt:
+        case Value::Kind::SExt:
+        case Value::Kind::Trunc:
+        case Value::Kind::Bitcast:
+        case Value::Kind::Neg:
+        case Value::Kind::Copy:
+        case Value::Kind::Compl:
+        case Value::Kind::Add:
+        case Value::Kind::Sub:
+        case Value::Kind::Mul:
+        case Value::Kind::SDiv:
+        case Value::Kind::UDiv:
+        case Value::Kind::SRem:
+        case Value::Kind::URem:
+        case Value::Kind::Shl:
+        case Value::Kind::Sar:
+        case Value::Kind::Shr:
+        case Value::Kind::And:
+        case Value::Kind::Or:
+        case Value::Kind::Xor:
+        case Value::Kind::Eq:
+        case Value::Kind::Ne:
+        case Value::Kind::SLt:
+        case Value::Kind::SLe:
+        case Value::Kind::SGt:
+        case Value::Kind::SGe:
+        case Value::Kind::ULt:
+        case Value::Kind::ULe:
+        case Value::Kind::UGt:
+        case Value::Kind::UGe:
+            break;
+    }
+    // Actually assign unique virtual register to the given value.
+    virts[v] = mod.next_vreg();
+}
 } // namespace
 
 auto Module::mir() -> std::vector<MFunction> {
@@ -92,30 +163,6 @@ auto Module::mir() -> std::vector<MFunction> {
     // and then later, if you haven't done anything to clobber it, that result
     // will still be there. A virtual register is exactly that.
     std::unordered_map<Value*, usz> virts{};
-    const auto assign_virtual_register = [&](Value* v) {
-        if (virts[v]) return; // don't double-assign registers
-        switch (v->kind()) {
-            // Instructions that can never produce a value
-            case Value::Kind::Store:
-            case Value::Kind::Branch:
-            case Value::Kind::CondBranch:
-            case Value::Kind::Return:
-            case Value::Kind::Unreachable:
-            // Non-instructions
-            case Value::Kind::Function:
-            case Value::Kind::Block:
-            case Value::Kind::IntegerConstant:
-            case Value::Kind::ArrayConstant:
-            case Value::Kind::Poison:
-            case Value::Kind::GlobalVariable:
-            case Value::Kind::Parameter:
-                return;
-
-            default:
-                break;
-        }
-        virts[v] = next_vreg();
-    };
 
     // virtual register assignment
     for (auto& function : code()) {
@@ -126,120 +173,9 @@ auto Module::mir() -> std::vector<MFunction> {
                     [](const auto& p) { return p.get(); }
                 )
             ) {
-                assign_virtual_register(instruction);
-                switch (instruction->kind()) {
-                    // Non-instructions
-                    case Value::Kind::Function:
-                    case Value::Kind::Block:
-                    case Value::Kind::IntegerConstant:
-                    case Value::Kind::FractionalConstant:
-                    case Value::Kind::ArrayConstant:
-                    case Value::Kind::Poison:
-                    case Value::Kind::GlobalVariable:
-                    case Value::Kind::Parameter:
-                        LCC_UNREACHABLE();
-
-                    // Instructions that do not produce a value and do not have operands that
-                    // produce a value.
-                    case Value::Kind::Branch:
-                    // Instructions with zero *IR* operands
-                    case Value::Kind::Alloca:
-                    case Value::Kind::Unreachable:
-                        break;
-
-                    case Value::Kind::Copy:
-                        assign_virtual_register(as<CopyInst>(instruction)->operand());
-                        break;
-
-                    case Value::Kind::CondBranch:
-                        assign_virtual_register(as<CondBranchInst>(instruction)->cond());
-                        break;
-
-                    case Value::Kind::Return: {
-                        auto* ret = as<ReturnInst>(instruction);
-                        if (ret->has_value()) assign_virtual_register(ret->val());
-                    } break;
-
-                    case Value::Kind::Call: {
-                        auto* call = as<CallInst>(instruction);
-                        assign_virtual_register(call->callee());
-                        for (auto& arg : call->args())
-                            assign_virtual_register(arg);
-                    } break;
-
-                    case Value::Kind::GetElementPtr: {
-                        auto* gep = as<GEPInst>(instruction);
-                        assign_virtual_register(gep->ptr());
-                        assign_virtual_register(gep->idx());
-                    } break;
-
-                    case Value::Kind::GetMemberPtr: {
-                        auto* gmp = as<GetMemberPtrInst>(instruction);
-                        assign_virtual_register(gmp->ptr());
-                        assign_virtual_register(gmp->idx());
-                    } break;
-
-                    case Value::Kind::Intrinsic:
-                        // TODO: Assign virtual register to intrinsic operands, if any
-                        break;
-
-                    case Value::Kind::Load: {
-                        assign_virtual_register(as<LoadInst>(instruction)->ptr());
-                    } break;
-
-                    case Value::Kind::Store: {
-                        auto* store = as<StoreInst>(instruction);
-                        assign_virtual_register(store->ptr());
-                        assign_virtual_register(store->val());
-                    } break;
-
-                    case Value::Kind::Phi: {
-                        for (auto phi_operand : as<PhiInst>(instruction)->operands()) {
-                            // phi_operand.block handled, or will be handled, in block iteration above.
-                            assign_virtual_register(phi_operand.value);
-                        }
-                    } break;
-
-                    // Unary
-                    case Value::Kind::Bitcast:
-                    case Value::Kind::ZExt:
-                    case Value::Kind::SExt:
-                    case Value::Kind::Trunc:
-                    case Value::Kind::Neg:
-                    case Value::Kind::Compl: {
-                        auto* unary = as<UnaryInstBase>(instruction);
-                        assign_virtual_register(unary->operand());
-                    } break;
-
-                    // Binary
-                    case Value::Kind::Add:
-                    case Value::Kind::Sub:
-                    case Value::Kind::Mul:
-                    case Value::Kind::SDiv:
-                    case Value::Kind::UDiv:
-                    case Value::Kind::SRem:
-                    case Value::Kind::URem:
-                    case Value::Kind::Shl:
-                    case Value::Kind::Sar:
-                    case Value::Kind::Shr:
-                    case Value::Kind::And:
-                    case Value::Kind::Or:
-                    case Value::Kind::Xor:
-                    case Value::Kind::Eq:
-                    case Value::Kind::Ne:
-                    case Value::Kind::SLt:
-                    case Value::Kind::SLe:
-                    case Value::Kind::SGt:
-                    case Value::Kind::SGe:
-                    case Value::Kind::ULt:
-                    case Value::Kind::ULe:
-                    case Value::Kind::UGt:
-                    case Value::Kind::UGe: {
-                        auto* binary = as<BinaryInst>(instruction);
-                        assign_virtual_register(binary->lhs());
-                        assign_virtual_register(binary->rhs());
-                    } break;
-                }
+                assign_virtual_register(*this, virts, instruction);
+                for (auto child : instruction->children())
+                    assign_virtual_register(*this, virts, child);
             }
         }
     }
