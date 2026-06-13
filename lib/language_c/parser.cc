@@ -870,6 +870,34 @@ constexpr size_t binary_precedence(TokenKind kind) {
 }
 constexpr size_t reset_precedence{0};
 
+auto try_declarations_to_parameters(
+    Context* context,
+    std::vector<FunctionType::Parameter>& parameters,
+    const Node* parameter
+) -> Result<void> {
+    if (parameter->kind() == NodeKind::Group) {
+        for (auto c : ((Group*) parameter)->constituents()) {
+            auto result = try_declarations_to_parameters(context, parameters, c);
+            if (not result) return result.diag();
+        }
+    } else if (parameter->kind() == NodeKind::Declaration) {
+        auto* d = (Declaration*) parameter;
+        parameters.emplace_back(
+            std::string(d->name()),
+            d->type()
+        );
+    } else {
+        return Diag::Error(
+            context,
+            parameter->location(),
+            "c/expected",
+            "Expected parameter to be a declaration, but got {}",
+            parameter->name()
+        );
+    }
+    return {};
+};
+
 auto Parser::ParseDeclarators(Type* type_specifier)
     -> Result<std::vector<Node*>> {
     std::vector<Node*> parsed_declarations{};
@@ -925,12 +953,21 @@ auto Parser::ParseDeclarators(Type* type_specifier)
 
             case TokenKind::LeftParenthesis: {
                 NextToken();
+                std::vector<FunctionType::Parameter> parameters{};
+
                 while (
                     tok.kind != TokenKind::RightParenthesis
                     and tok.kind != TokenKind::Eof
                     and tok.kind != TokenKind::Invalid
                 ) {
-                    Diag::ICE("Parse parameters (at `{}`)...", tok.kind);
+                    auto parameter = ParseExpression(reset_precedence);
+                    if (not parameter) return parameter.diag();
+                    auto declared = try_declarations_to_parameters(
+                        context,
+                        parameters,
+                        *parameter
+                    );
+                    if (not declared) return declared.diag();
                 }
                 if (tok.kind != TokenKind::RightParenthesis) {
                     return Error(
@@ -945,7 +982,7 @@ auto Parser::ParseDeclarators(Type* type_specifier)
 
                 current_declarator_type = new (tu) FunctionType(
                     current_declarator_type,
-                    {},
+                    parameters,
                     location
                 );
             } break;
