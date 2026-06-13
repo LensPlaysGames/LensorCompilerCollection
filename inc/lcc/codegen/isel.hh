@@ -69,6 +69,26 @@ enum struct OperandKind {
     // TODO: The operand kinds
 };
 
+static inline std::string StringifyEnum(OperandKind k) {
+    switch (k) {
+        case OperandKind::Immediate: return "immediate";
+        case OperandKind::Sizeof: return "sizeof_operand";
+        case OperandKind::SizeofInstruction: return "sizeof_instruction";
+        case OperandKind::Register: return "register";
+        case OperandKind::RegisterOfCategory: return "register_categorized";
+        case OperandKind::NewVirtual: return "new_virtual_register";
+        case OperandKind::ResizedRegister: return "resized_register";
+        case OperandKind::Local: return "local";
+        case OperandKind::OffsetLocal: return "local_offset";
+        case OperandKind::Global: return "global";
+        case OperandKind::Function: return "function";
+        case OperandKind::Block: return "block";
+        case OperandKind::InputInstructionReference: return "input_instruction";
+        case OperandKind::InputOperandReference: return "input_operand";
+    }
+    LCC_UNREACHABLE();
+}
+
 // NOTE: The operand values are a bit scuffed, in that each one needs all
 // of the accessors in order for everything to compile...
 
@@ -562,6 +582,61 @@ public:
         }
         LCC_UNREACHABLE();
     }
+
+    static constexpr auto string() -> std::string {
+        std::string out{};
+        if (opcode < +MInst::Kind::COUNT)
+            out = ToString((MInst::Kind) opcode);
+        else out = fmt::format("CODE:{}", opcode);
+        foreach_operand([&]<typename op>() -> void {
+            out += fmt::format(" OP:{}", op::kind);
+            switch (op::kind) {
+                case OperandKind::Immediate:
+                case OperandKind::InputInstructionReference:
+                case OperandKind::InputOperandReference:
+                    out += fmt::format(":i{},size{}", op::immediate, op::size);
+                    break;
+                case OperandKind::Sizeof:
+                    out += fmt::format(":op{}", op::index);
+                    break;
+                case OperandKind::SizeofInstruction:
+                    out += fmt::format(":inst{}", op::index);
+                    break;
+                case OperandKind::Register:
+                    out += fmt::format(":r{},size{}", op::value, op::sz::immediate);
+                    break;
+                case OperandKind::RegisterOfCategory:
+                    out += fmt::format(":r{},size{},cat{}", op::value, op::sz::immediate, op::immediate);
+                    break;
+                case OperandKind::NewVirtual:
+                    out += fmt::format(":slot{},sizeof{}", op::index, op::size);
+                    break;
+                case OperandKind::ResizedRegister:
+                    out += fmt::format(":op{},newsize{}", op::index, op::size);
+                    break;
+                case OperandKind::Local: break;
+                case OperandKind::OffsetLocal:
+                    out += fmt::format(":offset{}", op::sz::immediate);
+                    break;
+                case OperandKind::Global: {
+                    GlobalVariable* g = op::global;
+                    if (g)
+                        out += fmt::format(":global{}", g->names().at(0).name);
+                } break;
+                case OperandKind::Function: {
+                    lcc::Function* f = op::function;
+                    if (f)
+                        out += fmt::format(":function{}", f->names().at(0).name);
+                } break;
+                case OperandKind::Block: {
+                    lcc::Block* b = op::block;
+                    if (b)
+                        out += fmt::format(":block{}", b->name());
+                }
+            }
+        });
+        return out;
+    }
 };
 
 template <usz category_, typename clobbers_, usz opcode_, typename... operands>
@@ -577,6 +652,16 @@ struct InstList {
 
     static constexpr void foreach (auto&& lambda) {
         (lambda.template operator()<instructions>(), ...);
+    }
+
+    static constexpr auto string(unsigned int indent) -> std::string {
+        std::string out{};
+        foreach ([&]<typename inst> {
+            out.append(indent, ' ');
+            out += inst::string();
+            out += '\n';
+        });
+        return out;
     }
 };
 
@@ -707,11 +792,26 @@ struct PatternList {
                     // If pattern does not match, continue trying more patterns.
                     if (not pattern_matches) return;
 
+                    if (mod and mod->context() and mod->context()->has_option("isel-patterns")) {
+                        fmt::print(
+                            "Pattern Applied:\n  IN:\n{}  OUT:\n{}",
+                            pattern::input::string(4),
+                            pattern::output::string(4)
+                        );
+                    }
+
                     // Remove pattern input instruction(s) from instruction window,
                     // keeping references to it/them.
                     std::vector<MInst*> input{};
-                    input.insert(input.begin(), instructions.begin(), instructions.begin() + pattern::input::size());
-                    instructions.erase(instructions.begin(), instructions.begin() + pattern::input::size());
+                    input.insert(
+                        input.begin(),
+                        instructions.begin(),
+                        instructions.begin() + pattern::input::size()
+                    );
+                    instructions.erase(
+                        instructions.begin(),
+                        instructions.begin() + pattern::input::size()
+                    );
 
                     // Add pattern output instruction(s) to instruction window, fixing
                     // up reference-type operands (operand references get updated to the
@@ -745,7 +845,9 @@ struct PatternList {
                         });
 
                         inst::foreach_operand([&]<typename op> {
-                            output->add_operand(inst::template get_operand<op>(mod, function, input, new_virtuals));
+                            output->add_operand(
+                                inst::template get_operand<op>(mod, function, input, new_virtuals)
+                            );
                         });
 
                         // Stupidly match use count (not sure if even necessary).
@@ -781,7 +883,10 @@ struct PatternList {
                 // instructions that there may be). If the window is empty, but there are
                 // still more instructions to handle in this block, also go back and
                 // handle them.
-            } while (not instructions.empty() or instructions_handled < old_block.instructions().size());
+            } while (
+                not instructions.empty()
+                or instructions_handled < old_block.instructions().size()
+            );
         }
 
         return out;

@@ -140,6 +140,7 @@ public:
         Spill,
         Unspill,
 
+        COUNT,
         ArchStart = 0x420,
     };
 
@@ -526,7 +527,10 @@ inline std::string ToString(MInst::Kind k) {
         case MInst::Kind::UGe: return "M.UGe";
         case MInst::Kind::Spill: return "M.Spill";
         case MInst::Kind::Unspill: return "M.Unspill";
-        case MInst::Kind::ArchStart: return "M.ArchStart";
+
+        case MInst::Kind::ArchStart:
+        case MInst::Kind::COUNT:
+            break;
     }
     LCC_UNREACHABLE();
 }
