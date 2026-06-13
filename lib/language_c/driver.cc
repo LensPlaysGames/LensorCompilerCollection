@@ -35,15 +35,17 @@ auto produce_module(Context* context, File& source) -> lcc::Module* {
     auto mod = Parser::Parse(context, source);
 
     if (context->option_print_ast()) {
-        fmt::print("{}", *mod.tree);
-        // TODO: I don't think most people will find it helpful to get an entire C
-        // program's AST as a graph (noisy, large, etc). I think it would be
-        // better to have the user be able to select which particular function
-        // body they'd like to emit as a graph...
-        auto dot = ast2dot::to_graph(*mod.tree);
-        auto dot_path = std::filesystem::absolute(source.path().lexically_normal())
-                            .replace_extension("dot");
-        (void) File::Write(dot.data(), dot.size(), dot_path);
+        if (mod.tree) {
+            fmt::print("{}", *mod.tree);
+            // TODO: I don't think most people will find it helpful to get an entire C
+            // program's AST as a graph (noisy, large, etc). I think it would be
+            // better to have the user be able to select which particular function
+            // body they'd like to emit as a graph...
+            auto dot = ast2dot::to_graph(*mod.tree);
+            auto dot_path = std::filesystem::absolute(source.path().lexically_normal())
+                                .replace_extension("dot");
+            (void) File::Write(dot.data(), dot.size(), dot_path);
+        } else fmt::print("No AST Produced...\n");
     }
 
     // The error condition is handled by the caller already.

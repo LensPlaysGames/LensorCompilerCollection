@@ -11,7 +11,8 @@ void Sema::update_type(Node* n, Type* t) {
 }
 
 Type* Sema::type_of(const Node* n) {
-    if (not n) Diag::ICE("nullptr argument");
+    if (not n)
+        Diag::ICE("nullptr argument");
 
     // Only get the type of a node once.
     if (_type_cache.contains(n))
@@ -87,6 +88,20 @@ Type* Sema::type_of(const Node* n) {
                 case TokenKind::Count:
                     Diag::ICE("Not a binary operator");
             }
+        } break;
+
+        case NodeKind::Call: {
+            out = type_of(((Call*) n)->callee());
+            if (
+                out->kind() == TypeKind::Pointer
+                and ((PointerType*) out)->element_type()
+                and ((PointerType*) out)->element_type()->kind() == TypeKind::Function
+            ) out = ((PointerType*) out)->element_type();
+            if (out->kind() != TypeKind::Function)
+                Diag::ICE("call of non-function type");
+            // The result type of a call expression is the called function type's
+            // return type.
+            out = ((FunctionType*) out)->return_type();
         } break;
 
         case NodeKind::Declaration:
@@ -289,7 +304,28 @@ Result<void> Sema::analyse_return(Return*& r) {
 }
 
 Result<void> Sema::analyse_name_reference(NameReference*& n) {
-    return Error(n->location(), "c/todo", "TODO: Analyse name-reference: {}", n->name());
+    auto* s = n->within_scope();
+    const std::string_view name{n->name()};
+    if (not s or name.empty()) {
+        Diag::ICE(
+            "Invalid NameReference: scope={},name=`{}`",
+            fmt::ptr(s),
+            name
+        );
+    }
+
+    while (s and not s->declarations.contains(name))
+        s = s->parent;
+
+    if (not s)
+        return Error(n->location(), "c/symbol-resolution", "Dafuq is dis?");
+
+    LCC_ASSERT(s->declarations.contains(name));
+    return {};
+}
+
+Result<void> Sema::analyse_call(Call*& c) {
+    return Error(c->location(), "c/todo", "TODO: Analyse call");
 }
 
 auto Sema::analyse(Node*& node) -> Result<void> {
@@ -315,6 +351,9 @@ auto Sema::analyse(Node*& node) -> Result<void> {
             }
             return {};
         }
+
+        case NodeKind::Call:
+            return analyse_call(*(Call**) &node);
 
         case NodeKind::NameReference:
             return analyse_name_reference(*(NameReference**) &node);

@@ -64,10 +64,10 @@ struct CLanguageTest : langtest::Test {
 
         // Save diagnostics reported during parsing, and clear the context's
         // diagnostics so that we can separate parse/sema diagnostics.
-        auto parse_diagnostics = context.diagnostics();
+        auto diagnostics = context.diagnostics();
         context.diagnostics().clear();
 
-        return {std::move(tu), std::move(parse_diagnostics)};
+        return {std::move(tu), std::move(diagnostics)};
     };
 
     auto run() -> bool {
@@ -113,8 +113,8 @@ struct CLanguageTest : langtest::Test {
         bool warned_check{false};
         if (do_checking) {
             // Perform type-checking
-            lcc::language_c::Sema::Analyse(&context, parse_info.tu);
-            failed_check = context.has_error();
+            auto makes_sense = lcc::language_c::Sema::Analyse(&context, parse_info.tu);
+            failed_check = not makes_sense or context.has_error();
             warned_check = warning_reported(context);
         }
 
@@ -264,8 +264,8 @@ void output_ast(std::filesystem::path p) {
         );
     }
     // Perform type-checking
-    lcc::language_c::Sema::Analyse(&context, tu);
-    if (context.has_error()) {
+    auto makes_sense = lcc::language_c::Sema::Analyse(&context, tu);
+    if (not makes_sense or context.has_error()) {
         fmt::print(
             stderr,
             "ERROR: Cannot output AST matcher, error encountered during sema\n"
@@ -275,7 +275,10 @@ void output_ast(std::filesystem::path p) {
 
     {
         auto* root = tu.tree;
-        fmt::print("Sema:\n{}\n", langtest::print_node<lcc::language_c::Node>(root));
+        fmt::print(
+            "Sema:\n{}\n",
+            langtest::print_node<lcc::language_c::Node>(root)
+        );
     }
 }
 
@@ -307,7 +310,9 @@ void emit_sarif_file(
 
     JSONObject baseIds{};
     JSONObject pwd{};
-    const auto pwd_path = std::filesystem::absolute(std::filesystem::current_path());
+    const auto pwd_path = std::filesystem::absolute(
+        std::filesystem::current_path()
+    );
     pwd.add_property(
         "uri",
         fmt::format(

@@ -23,6 +23,17 @@ struct Scope {
     Scope* parent{};
     std::unordered_map<std::string_view, Declaration*> declarations{};
 
+    Scope() {};
+
+    // Enable Copying
+    Scope(const Scope&) = default;
+    Scope& operator=(const Scope&) = default;
+
+    // Enable Moving
+    Scope(Scope&& other) noexcept = default;
+    Scope& operator=(Scope&& other) noexcept = default;
+
+    // Tracked Allocation Only
     void* operator new(size_t) = delete;
     [[nodiscard]]
     void* operator new(size_t size, TranslationUnit& tu) {
@@ -41,6 +52,7 @@ enum class NodeKind {
     IntegerLiteral,
     Return,
     BinaryOperation,
+    Call,
     Count
 };
 
@@ -53,8 +65,18 @@ public:
         : _kind(kind)
         , _location(location) {}
 
+    // Dispatch based on derived class
     virtual ~Node() = default;
 
+    // Disable Copying
+    Node(const Node&) = delete;
+    Node& operator=(const Node&) = delete;
+
+    // Disable Moving
+    Node(Node&&) = delete;
+    Node& operator=(Node&&) = delete;
+
+    // Tracked Allocation Only
     void* operator new(size_t) = delete;
     [[nodiscard]]
     void* operator new(size_t size, TranslationUnit& tu) {
@@ -82,8 +104,12 @@ public:
     auto children() const -> std::vector<Node*>;
 
 #ifdef LCC_LANGTEST
-    auto langtest_name() const -> std::string_view { return name(); }
-    auto langtest_children() const -> std::vector<Node*> { return children(); }
+    constexpr auto langtest_name() const -> std::string_view {
+        return name();
+    }
+    constexpr auto langtest_children() const -> std::vector<Node*> {
+        return children();
+    }
 #endif
 };
 
@@ -160,6 +186,20 @@ public:
         , _expression(expression) {}
 
     auto expression() const { return _expression; }
+};
+
+struct Call : public Node {
+    Node* _callee;
+    std::vector<Node*> _arguments;
+
+public:
+    Call(Node* callee, std::vector<Node*> arguments, Location location)
+        : Node(NodeKind::Call, location)
+        , _callee(callee)
+        , _arguments(arguments) {}
+
+    auto callee() const { return _callee; }
+    auto arguments() const { return _arguments; }
 };
 
 struct Declaration : public Node {

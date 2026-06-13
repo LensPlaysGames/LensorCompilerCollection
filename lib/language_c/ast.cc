@@ -10,13 +10,18 @@
 
 #include <type_traits>
 
-auto fmt::formatter<lcc::language_c::Node>::indent(format_context::iterator out, size_t depth) const
-    -> format_context::iterator {
+auto fmt::formatter<lcc::language_c::Node>::indent(
+    format_context::iterator out,
+    size_t depth
+) const -> format_context::iterator {
     return fmt::format_to(out, "{:{}}", "", depth * indent_width);
 }
 
-auto fmt::formatter<lcc::language_c::Node>::tag(format_context::iterator out, size_t depth, std::string_view tag) const
-    -> format_context::iterator {
+auto fmt::formatter<lcc::language_c::Node>::tag(
+    format_context::iterator out,
+    size_t depth,
+    std::string_view tag
+) const -> format_context::iterator {
     indent(out, depth);
     return fmt::format_to(out, "{}\n", tag);
 }
@@ -163,6 +168,21 @@ auto fmt::formatter<lcc::language_c::Node>::format(
             );
         }
 
+        case lcc::language_c::NodeKind::Call: {
+            const auto& call = *(const lcc::language_c::Call*) &n;
+            tag(ctx.out(), depth, "<call>");
+            ++depth;
+            tag(ctx.out(), depth, "<callee>");
+            fmt::format_to(ctx.out(), "{:{}}", *call.callee(), depth + 1);
+            tag(ctx.out(), depth, "</callee>");
+            tag(ctx.out(), depth, "<arguments>");
+            for (const auto* arg : call.arguments())
+                fmt::format_to(ctx.out(), "{:{}}\n", *arg, depth + 1);
+            tag(ctx.out(), depth, "</arguments>");
+            --depth;
+            return tag(ctx.out(), depth, "</call>");
+        }
+
         case lcc::language_c::NodeKind::Count:
             break;
     }
@@ -186,6 +206,7 @@ auto Node::name() const -> std::string_view {
         case NodeKind::NameReference: return "name";
         case NodeKind::Declaration: return "declaration";
         case NodeKind::IntegerLiteral: return "integer_literal";
+        case NodeKind::Call: return "call";
         case NodeKind::Return: return "return";
         case NodeKind::BinaryOperation: {
             auto* b = ((BinaryOperation*) this);
@@ -251,7 +272,7 @@ auto Node::name() const -> std::string_view {
         }
         case NodeKind::Count: break;
     }
-    Diag::ICE("unreachable");
+    Diag::ICE("unreachable: invalid node kind {}", +kind());
 }
 auto Node::children() const -> std::vector<Node*> {
     switch (kind()) {
@@ -261,6 +282,22 @@ auto Node::children() const -> std::vector<Node*> {
 
         case NodeKind::Group: return ((Group*) this)->constituents();
         case NodeKind::Block: return ((Block*) this)->constituents();
+
+        case NodeKind::Call: {
+            auto* c = (Call*) this;
+            std::vector<Node*> out{c->callee()};
+#ifdef __cpp_lib_containers_ranges
+            out.append_range(c->arguments());
+#else
+            const auto& children = c->arguments();
+            out.insert(
+                out.end(),
+                children.cbegin(),
+                children.cend()
+            );
+#endif
+            return out;
+        }
 
         case NodeKind::BinaryOperation: {
             auto* b = (BinaryOperation*) this;

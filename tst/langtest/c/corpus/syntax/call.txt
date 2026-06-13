@@ -1,0 +1,93 @@
+================
+Call
+:syntax
+================
+
+foo();
+
+---
+
+(block
+ (call (name)))
+
+================
+Call, 1 arg
+:syntax
+================
+
+foo(0);
+
+---
+
+(block
+ (call (name)
+  (integer_literal)))
+
+================
+Call, 2 comma-separated args
+:syntax
+================
+
+foo(0,0);
+
+---
+
+(block
+ (call (name)
+  (integer_literal)
+  (integer_literal)))
+
+================
+Call, 2 args not separated
+:syntax_error
+================
+
+foo(0 0);
+
+---
+
+(block
+ (call (name)
+  (integer_literal)
+  (integer_literal)))
+
+================
+Call, 3 comma-separated args
+:syntax
+================
+
+foo(0,0,0);
+
+---
+
+(block
+ (call (name)
+  (integer_literal)
+  (integer_literal)
+  (integer_literal)))
+
+================
+Call, 3 comma-separated args (+whitespace)
+:syntax
+================
+
+foo (   0   ,
+
+
+
+              0    ,     0
+
+
+      )
+
+
+;
+
+---
+
+(block
+ (call (name)
+  (integer_literal)
+  (integer_literal)
+  (integer_literal)))
+

@@ -4,6 +4,7 @@
 #include <language_c/type.hh>
 
 #include <lcc/diags.hh>
+#include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
 
 #include <fmt/format.h>
@@ -1179,6 +1180,13 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             // Eat "("
             NextToken();
 
+            if (tok.kind == TokenKind::RightParenthesis) {
+                return Error(
+                    "c/expected",
+                    "Expected expression inside parenthesis..."
+                );
+            }
+
             lhs = ParseExpression(reset_precedence);
 
             if (tok.kind != TokenKind::RightParenthesis) {
@@ -1199,8 +1207,14 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             NextToken();
         } break;
 
-        case TokenKind::Identifier:
-            Diag::ICE("identifier is unhandled (got `{}`)...", tok.text);
+        case TokenKind::Identifier: {
+            lhs = new (tu) NameReference(
+                tok.text,
+                current_scope(),
+                tok.location
+            );
+            NextToken();
+        } break;
 
         case TokenKind::Fractional:
         case TokenKind::OpAsterisk:
@@ -1218,6 +1232,9 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
 
     if (not lhs) return lhs.diag();
 
+    if (tok.kind == TokenKind::OpComma)
+        return lhs;
+
     // Once we've parsed an expression, we should check if that expression is
     // the lhs of a binary expression.
     // NOTE: non-zero precedence = an operator
@@ -1228,6 +1245,9 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
         ) return lhs;
 
         switch (tok.kind) {
+            case lcc::language_c::TokenKind::OpComma:
+                Diag::ICE("unreachable");
+
             case TokenKind::OpEqual:
             case TokenKind::OpLessThan:
             case TokenKind::OpGreaterThan:
@@ -1282,11 +1302,34 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             } break;
 
             case TokenKind::LeftParenthesis: {
-                Diag::ICE("Handle function call parsing...");
-            }
+                const auto operator_location = tok.location;
+                // Yeet '(';
+                NextToken();
+                std::vector<Node*> arguments{};
+                while (tok.kind != TokenKind::Eof and tok.kind != TokenKind::RightParenthesis) {
+                    auto argument = ParseExpression(reset_precedence);
+                    if (not argument) return argument.diag();
+                    arguments.push_back(*argument);
+                    // Yeet separating comma, or hard expect right parenthesis.
+                    if (tok.kind == TokenKind::OpComma)
+                        NextToken();
+                    else break;
+                }
+                if (tok.kind != TokenKind::RightParenthesis) {
+                    auto e = Error("c/expected", "Expected `)`");
+                    e.attach(Note(operator_location, "c/expected", "To match this `(`"));
+                    return e;
+                }
+                lhs = new (tu) Call(
+                    *lhs,
+                    std::move(arguments),
+                    {lhs->location(), tok.location}
+                );
+                // Yeet ')';
+                NextToken();
+            } break;
 
             // These are NOT binary operators
-            case TokenKind::OpComma:
             case TokenKind::OpExclamation:
             case TokenKind::Invalid:
             case TokenKind::Identifier:

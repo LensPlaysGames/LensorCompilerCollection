@@ -22,6 +22,16 @@ struct TranslationUnit {
     std::vector<const Declaration*> functions{};
     std::vector<const Declaration*> globals{};
 
+    // Disable Copying
+    TranslationUnit(const TranslationUnit&) = delete;
+    TranslationUnit& operator=(const TranslationUnit&) = delete;
+
+    // Enable Moving
+    TranslationUnit(TranslationUnit&& other) noexcept = default;
+    TranslationUnit& operator=(TranslationUnit&& other) noexcept = default;
+
+    TranslationUnit() {};
+
     ~TranslationUnit();
 };
 

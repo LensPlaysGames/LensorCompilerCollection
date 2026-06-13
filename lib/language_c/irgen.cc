@@ -123,6 +123,25 @@ void IRGen::generate_expression(const Node* n) {
             return;
         }
 
+        case NodeKind::Call: {
+            const auto* c = (Call*) n;
+            generate_expression(c->callee());
+            std::vector<Value*> args{};
+            for (auto arg : c->arguments()) {
+                generate_expression(arg);
+                args.emplace_back(generated_ir[arg]);
+            }
+            auto inst = new (*ir_module) CallInst(
+                generated_ir[c->callee()],
+                {},
+                std::move(args),
+                c->location()
+            );
+            generated_ir[n] = inst;
+            insert(inst);
+            return;
+        } break;
+
         case NodeKind::BinaryOperation: {
             const auto* b = (BinaryOperation*) n;
 
