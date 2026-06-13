@@ -452,6 +452,23 @@ bool Sema::Analyse(Context* context, TranslationUnit& tu) {
         Diag::ICE("cannot analyse nullptr");
 
     Sema semantic{context, tu};
+
+    // Define string literals in top level scope, or something.
+    for (auto str : tu.string_literals) {
+        // For side effect of declaring global
+        (void) new (tu) Declaration(
+            new (tu) PointerType(
+                // TODO: CharType, not IntType
+                new (tu) IntType({}),
+                {}
+            ),
+            fmt::format("__str{}", tu.intern(str)),
+            tu.allocated_scopes.at(0), // TODO: global scope
+            nullptr,
+            {}
+        );
+    }
+
     bool passed = semantic.analyse(semantic.root()).is_value();
     if (not passed) return false;
 

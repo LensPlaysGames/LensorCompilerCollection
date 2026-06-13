@@ -455,12 +455,14 @@ add_library(
   inc/language_c/irgen.hh
   inc/language_c/parser.hh
   inc/language_c/sema.hh
+  inc/language_c/translation_unit.hh
   inc/language_c/type.hh
   lib/language_c/ast.cc
   lib/language_c/driver.cc
   lib/language_c/irgen.cc
   lib/language_c/parser.cc
   lib/language_c/sema.cc
+  lib/language_c/translation_unit.cc
   lib/language_c/type.cc
 )
 target_include_directories(languagec PUBLIC inc)

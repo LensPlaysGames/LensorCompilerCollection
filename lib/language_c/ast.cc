@@ -337,13 +337,4 @@ auto Node::MaybeToGroup(TranslationUnit& tu, std::vector<Node*> nodes) -> Node* 
     return nullptr;
 }
 
-TranslationUnit::~TranslationUnit() {
-    for (const auto* const n : allocated_nodes)
-        delete n;
-    for (const auto* const s : allocated_scopes)
-        delete s;
-    for (const auto* const t : allocated_types)
-        delete t;
-}
-
 } // namespace lcc::language_c
