@@ -19,6 +19,20 @@
 (block)
 
 ================
+#define foo, foo
+:syntax
+:desc macro definition, no replacement, use of defined macro
+================
+
+#define foo
+
+foo
+
+---
+
+(block)
+
+================
 #undef
 :syntax_error
 :desc missing macro name
