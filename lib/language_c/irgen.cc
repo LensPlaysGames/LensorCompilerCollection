@@ -131,10 +131,15 @@ void IRGen::generate_expression(const Node* n) {
                 generate_expression(arg);
                 args.emplace_back(generated_ir[arg]);
             }
-            LCC_TODO("Callee function type");
+            if (c->callee()->kind() != NodeKind::Declaration)
+                Diag::ICE("IRGen only generates call expressions that call function declarations");
+            auto callee_declaration = (Declaration*) c->callee();
+            auto callee_lcc_type = convert(callee_declaration->type());
+            // Use as<> to enforce checked cast
+            auto callee_lcc_func_type = as<lcc::FunctionType>(callee_lcc_type);
             auto inst = new (*ir_module) CallInst(
                 generated_ir[c->callee()],
-                {},
+                callee_lcc_func_type,
                 std::move(args),
                 c->location()
             );
