@@ -21,9 +21,11 @@ namespace lcc::language_c {
 enum class TokenKind : unsigned int {
     Invalid = 0,
 
+    // Literals
     Identifier,
     Integer,
     Fractional,
+    String,
 
     KwVoid,
     KwInt,

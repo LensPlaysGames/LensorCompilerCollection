@@ -26,6 +26,7 @@ std::string_view ToString(TokenKind k) {
         case TokenKind::Identifier: return "identifier";
         case TokenKind::Integer: return "integer-literal";
         case TokenKind::Fractional: return "float-literal";
+        case TokenKind::String: return "string-literal";
         case TokenKind::KwVoid: return "void";
         case TokenKind::KwInt: return "int";
         case TokenKind::KwReturn: return "return";
@@ -95,6 +96,9 @@ Result<std::string> ToSource(Token& t) {
 
         case TokenKind::Fractional:
             return fmt::format("{}", t.fractional_value);
+
+        case TokenKind::String:
+            return fmt::format("\"{}\"", t.text);
 
         case TokenKind::KwVoid:
         case TokenKind::KwInt:
@@ -540,12 +544,6 @@ void Lexer::NextToken() {
             }
         } break;
 
-        // The only way to get here is if the preprocessor calls NextToken but
-        // there isn't another one in the line, and the newline isn't escaped.
-        case '\n':
-            tok.kind = TokenKind::Invalid;
-            break;
-
         case '#': {
             NextChar();
 
@@ -686,6 +684,80 @@ void Lexer::NextToken() {
             Diag::ICE("unreachable");
         }
 
+        case '"': {
+            auto operator_location = tok.location;
+            tok.kind = TokenKind::String;
+            NextChar();
+            tok.text.clear();
+            while (lastc and lastc != '"' and lastc != '\n') {
+                if (lastc > 0xff) [[unlikely]] {
+                    Diag::Error(
+                        "Truncating non-ASCII character in string literal... {} -> {}",
+                        lastc,
+                        (int) ((char) lastc)
+                    );
+                }
+                // Handle Escapes
+                if (lastc == '\\') {
+                    NextChar();
+                    switch (lastc) {
+#define PASSTHROUGH_ESCAPE(c, e) \
+    case c:                      \
+        tok.text += e;           \
+        continue; /** (!) **/
+                        PASSTHROUGH_ESCAPE('r', '\r');
+                        PASSTHROUGH_ESCAPE('n', '\n');
+                        PASSTHROUGH_ESCAPE('t', '\t');
+                        PASSTHROUGH_ESCAPE('e', '\e');
+                        PASSTHROUGH_ESCAPE('f', '\f');
+                        PASSTHROUGH_ESCAPE('b', '\b');
+                        PASSTHROUGH_ESCAPE('a', '\a');
+                        PASSTHROUGH_ESCAPE('v', '\v');
+#undef PASSTHROUGH_ESCAPE
+
+                        case '\n':
+                            NextChar();
+                            continue;
+
+                        default:
+                            tok.text += '\\';
+                            if (lastc <= 0xff) {
+                                Diag::Warning(
+                                    "c/unrecognized-escape-sequence",
+                                    "Unrecognized escape sequence `\\{}`",
+                                    (char) lastc
+                                );
+                            } else Diag::Warning(
+                                "c/unrecognized-escape-sequence",
+                                "Unrecognized escaped character 0x{:x}",
+                                lastc
+                            );
+                            break;
+                    }
+                }
+                tok.text += (char) lastc;
+                NextChar();
+            }
+            if (lastc != '"') {
+                auto e = Error(
+                    "c/invalid-literal",
+                    "Expected closing `\"`"
+                );
+                e.attach(Note(
+                    operator_location,
+                    "c/invalid-literal",
+                    "To match this `\"`"
+                ));
+            }
+            NextChar(); // Eat closing `"`
+        } break;
+
+        // The only way to get here is if the preprocessor calls NextToken but
+        // there isn't another one in the line, and the newline isn't escaped.
+        case '\n':
+            tok.kind = TokenKind::Invalid;
+            break;
+
         default: {
             if (IsDecimalDigit(lastc)) {
                 NextNumber();
@@ -758,6 +830,7 @@ constexpr size_t unary_precedence(TokenKind kind) {
         case TokenKind::Identifier:
         case TokenKind::Integer:
         case TokenKind::Fractional:
+        case TokenKind::String:
         case TokenKind::KwVoid:
         case TokenKind::KwInt:
         case TokenKind::KwReturn:
@@ -871,6 +944,7 @@ constexpr size_t binary_precedence(TokenKind kind) {
         case TokenKind::Identifier:
         case TokenKind::Integer:
         case TokenKind::Fractional:
+        case TokenKind::String:
         case TokenKind::KwVoid:
         case TokenKind::KwInt:
         case TokenKind::KwReturn:
@@ -1265,6 +1339,19 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             NextToken();
         } break;
 
+        case TokenKind::String: {
+            // The idea is to intern the string, then reference the interned string
+            // via it's name.
+            auto interned_index = tu.intern(tok.text);
+            auto string_literal_name = fmt::format("__str{}", interned_index);
+            lhs = new (tu) NameReference(
+                string_literal_name,
+                current_scope(), // TODO: global_scope()
+                tok.location
+            );
+            NextToken();
+        } break;
+
         case TokenKind::Identifier: {
             lhs = new (tu) NameReference(
                 tok.text,
@@ -1393,6 +1480,7 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             case TokenKind::Identifier:
             case TokenKind::Integer:
             case TokenKind::Fractional:
+            case TokenKind::String:
             case TokenKind::KwVoid:
             case TokenKind::KwInt:
             case TokenKind::KwReturn:

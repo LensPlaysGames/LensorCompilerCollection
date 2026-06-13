@@ -57,3 +57,23 @@ foo;
 ---
 
 (block (name))
+
+================
+String
+:syntax
+:desc Just a string literal. Generates `name` because string literal is a global
+================
+
+"foo";
+
+---
+
+(block (name))
+
+================
+Unterminated String
+:syntax_error
+:desc Just a string literal without a closing `"`
+================
+
+"foo;

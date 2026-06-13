@@ -201,6 +201,7 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::Identifier:
                 case TokenKind::Integer:
                 case TokenKind::Fractional:
+                case TokenKind::String:
                 case TokenKind::KwVoid:
                 case TokenKind::KwInt:
                 case TokenKind::KwReturn:

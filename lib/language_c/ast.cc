@@ -250,6 +250,7 @@ auto Node::name() const -> std::string_view {
                 case TokenKind::Identifier:
                 case TokenKind::Integer:
                 case TokenKind::Fractional:
+                case TokenKind::String:
                 case TokenKind::KwVoid:
                 case TokenKind::KwInt:
                 case TokenKind::KwReturn:

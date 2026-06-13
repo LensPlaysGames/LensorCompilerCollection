@@ -38,7 +38,7 @@ struct Scope {
     [[nodiscard]]
     void* operator new(size_t size, TranslationUnit& tu) {
         auto ptr = ::operator new(size);
-        tu.allocated_scopes.push_back(static_cast<const Scope*>(ptr));
+        tu.allocated_scopes.push_back(static_cast<Scope*>(ptr));
         return ptr;
     };
 };
