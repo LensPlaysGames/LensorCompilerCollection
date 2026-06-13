@@ -644,7 +644,12 @@ void Lexer::NextToken() {
                             "Included file \"{}\" does not exist\nChecked:\n  {}",
                             path,
                             fmt::join(
-                                context->include_directories(),
+                                lcc::rgs::transform_view(
+                                    context->include_directories(),
+                                    [&](const auto& d) {
+                                        return fs::path(d) / path;
+                                    }
+                                ),
                                 "\n  "
                             )
                         );
