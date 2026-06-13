@@ -506,9 +506,16 @@ auto main(int argc, const char** argv) -> int {
 
     context.add_include_directory(".");
     for (const auto& directory : options.include_directories) {
+        auto processed_directory = lcc::fs::path(directory).lexically_normal().string();
         if (options.verbose)
-            fmt::print("Added input directory: {}\n", directory);
-        context.add_include_directory(directory);
+            fmt::print("Added input directory: {}\n", processed_directory);
+        if (not lcc::fs::exists(processed_directory)) {
+            lcc::Diag::Warning(
+                "Provided include directory `{}` does not exist",
+                processed_directory
+            );
+        }
+        context.add_include_directory(processed_directory);
     }
 
     for (const auto& option : options.frontend_options) {
