@@ -11,6 +11,7 @@
 #include <fmt/std.h>
 
 #include <cstdlib>
+#include <filesystem>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -610,6 +611,7 @@ void Lexer::NextToken() {
                             e.fix_by_inserting_at(tok.location, ">");
                         }
                     }
+                    // TODO: include string syntax
                     // else if (tok.kind == TokenKind::String) {
                     //     path = tok.text;
                     // }
@@ -624,11 +626,27 @@ void Lexer::NextToken() {
                         return;
                     }
 
-                    if (not std::filesystem::exists(path)) {
+                    fs::path fullpath{};
+                    if (fs::exists(path))
+                        fullpath = fs::absolute(path);
+                    else {
+                        for (auto dir : context->include_directories()) {
+                            auto dirpath = fs::path(dir);
+                            if (fs::exists(dirpath / path)) {
+                                fullpath = fs::absolute(dirpath / path);
+                                break;
+                            }
+                        }
+                    }
+                    if (fullpath.empty()) {
                         Error(
                             "c/preprocessor",
-                            "Included file \"{}\" does not exist",
-                            path
+                            "Included file \"{}\" does not exist\nChecked:\n  {}",
+                            path,
+                            fmt::join(
+                                context->include_directories(),
+                                "\n  "
+                            )
                         );
                         tok.kind = TokenKind::Eof;
                         return;
