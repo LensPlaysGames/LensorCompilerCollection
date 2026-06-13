@@ -131,6 +131,7 @@ void IRGen::generate_expression(const Node* n) {
                 generate_expression(arg);
                 args.emplace_back(generated_ir[arg]);
             }
+            LCC_TODO("Callee function type");
             auto inst = new (*ir_module) CallInst(
                 generated_ir[c->callee()],
                 {},
