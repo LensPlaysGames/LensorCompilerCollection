@@ -49,8 +49,10 @@ enum class NodeKind {
     Block,
     NameReference,
     Declaration,
+    ArrayLiteral,
     IntegerLiteral,
     Return,
+    UnaryOperation,
     BinaryOperation,
     Call,
     Count
@@ -101,7 +103,9 @@ public:
     ) -> Node*;
 
     auto name() const -> std::string_view;
+    // TODO: std::reference_wrapper???
     auto children() const -> std::vector<Node*>;
+    auto children_ref() const -> std::vector<Node**>;
 
 #ifdef LCC_LANGTEST
     constexpr auto langtest_name() const -> std::string_view {
@@ -158,6 +162,35 @@ public:
         , _value(value) {}
 
     auto value() const { return _value; }
+};
+
+struct ArrayLiteral : public Node {
+    std::vector<Node*> _elements;
+
+    // By sema
+    Type* _element_type{nullptr};
+
+public:
+    ArrayLiteral(std::vector<Node*> elements, Location location)
+        : Node(NodeKind::ArrayLiteral, location)
+        , _elements(std::move(elements)) {}
+
+    auto elements() const { return _elements; }
+};
+
+struct UnaryOperation : public Node {
+    TokenKind _operator;
+    Node* _operand;
+
+public:
+    UnaryOperation(TokenKind operator_, Node* operand, Location location)
+        : Node(NodeKind::UnaryOperation, location)
+        , _operator(operator_)
+        , _operand(operand) {}
+
+    auto unary_operator() const { return _operator; }
+    auto operand() const { return _operand; }
+    auto& operand() { return _operand; }
 };
 
 struct BinaryOperation : public Node {

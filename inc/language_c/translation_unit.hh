@@ -1,11 +1,11 @@
 #ifndef LCC_LANGUAGE_C_TRANSLATION_UNIT_HH
 #define LCC_LANGUAGE_C_TRANSLATION_UNIT_HH
 
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace lcc::language_c {
-struct Node;
 struct Node;
 struct Declaration;
 struct Scope;

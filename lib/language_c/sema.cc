@@ -4,21 +4,25 @@
 #include <language_c/parser.hh>
 #include <language_c/type.hh>
 
+#include <lcc/utils/macros.hh>
+#include <lcc/utils/result.hh>
+
 namespace lcc::language_c {
 
-void Sema::update_type(Node* n, Type* t) {
+void Sema::update_type(const Node* n, Type* t) {
     _type_cache[n] = t;
 }
 
-Type* Sema::type_of(const Node* n) {
-    if (not n)
-        Diag::ICE("nullptr argument");
+auto Sema::type_of(const Node* n) -> Result<Type*> {
+    if (not n) Diag::ICE("nullptr argument");
 
     // Only get the type of a node once.
     if (_type_cache.contains(n))
         return _type_cache.at(n);
 
-    Type* out{nullptr};
+    /** (!) -- Assign Before Use! **/
+    auto out = Result<Type*>::Null();
+
     switch (n->kind()) {
         case NodeKind::BinaryOperation: {
             auto* b = (BinaryOperation*) n;
@@ -91,32 +95,171 @@ Type* Sema::type_of(const Node* n) {
             }
         } break;
 
+        case NodeKind::UnaryOperation: {
+            auto* u = (UnaryOperation*) n;
+            auto operand_type = type_of(u->operand());
+            if (not operand_type) return operand_type;
+            switch (u->unary_operator()) {
+                // Dereference
+                case TokenKind::OpAsterisk: {
+                    if (operand_type->kind() != TypeKind::Pointer) {
+                        auto e = Error(
+                            u->operand()->location(),
+                            "c/type-mismatch",
+                            "The operand of the unary `*` operator shall have pointer type | C23 § 6.5.4.2"
+                        );
+                        e.attach(Note(
+                            u->operand()->location(),
+                            "c/type-mismatch",
+                            "Type is {}",
+                            **operand_type
+                        ));
+                        fmt::print("{}", *(Node*) u);
+                        return e;
+                    }
+                    out = ((PointerType*) *operand_type)->element_type();
+                    break;
+                }
+
+                // Address-of
+                case TokenKind::OpAmpersand: {
+                    out = new (tu) PointerType(
+                        *operand_type,
+                        u->location()
+                    );
+                } break;
+
+                case TokenKind::OpPlus:
+                case TokenKind::OpMinus:
+                case TokenKind::OpPlusPlus:
+                case TokenKind::OpMinusMinus: {
+                    out = *operand_type;
+                } break;
+
+                case TokenKind::OpTilde: {
+                    if (operand_type->kind() != TypeKind::Int) {
+                        return Error(
+                            u->location(),
+                            "c/type-mismatch",
+                            "The operand of the unary `~` operator shall have integer type | C23 § 6.5.4.3"
+                        );
+                    }
+                    out = *operand_type;
+                } break;
+
+                case TokenKind::OpExclamation: {
+                    // TODO: The operand of the unary `!` operator shall have scalar type | C23 § 6.5.4.3
+                    // TODO: BoolType?
+                    out = new (tu) IntType(u->location());
+                } break;
+
+                case TokenKind::Invalid:
+                case TokenKind::Identifier:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
+                case TokenKind::String:
+                case TokenKind::KwVoid:
+                case TokenKind::KwInt:
+                case TokenKind::KwReturn:
+                case TokenKind::KwSizeof:
+                case TokenKind::KwAlignof:
+                case TokenKind::OpEqual:
+                case TokenKind::OpLessThan:
+                case TokenKind::OpGreaterThan:
+                case TokenKind::OpDoublePipe:
+                case TokenKind::OpDoubleAmpersand:
+                case TokenKind::OpSlash:
+                case TokenKind::OpPercent:
+                case TokenKind::OpComma:
+                case TokenKind::OpDot:
+                case TokenKind::OpArrow:
+                case TokenKind::OpCaret:
+                case TokenKind::OpPipe:
+                case TokenKind::OpShiftLeft:
+                case TokenKind::OpShiftRight:
+                case TokenKind::OpDoubleEqual:
+                case TokenKind::OpLessThanEqual:
+                case TokenKind::OpGreaterThanEqual:
+                case TokenKind::OpExclamationEqual:
+                case TokenKind::OpPlusEqual:
+                case TokenKind::OpMinusEqual:
+                case TokenKind::OpAsteriskEqual:
+                case TokenKind::OpSlashEqual:
+                case TokenKind::OpPercentEqual:
+                case TokenKind::OpCaretEqual:
+                case TokenKind::OpPipeEqual:
+                case TokenKind::OpAmpersandEqual:
+                case TokenKind::OpShiftLeftEqual:
+                case TokenKind::OpShiftRightEqual:
+                case TokenKind::LeftParenthesis:
+                case TokenKind::RightParenthesis:
+                case TokenKind::LeftSquareBracket:
+                case TokenKind::RightSquareBracket:
+                case TokenKind::LeftCurlyBrace:
+                case TokenKind::RightCurlyBrace:
+                case TokenKind::Semicolon:
+                case TokenKind::Eof:
+                case TokenKind::Count:
+                    Diag::ICE("Not a unary operator");
+            }
+            // CheckLevel: Debug
+            if (not out) Diag::ICE("Unary operator typeof() did not set type...");
+        } break;
+
         case NodeKind::Call: {
             out = type_of(((Call*) n)->callee());
+            if (not out) return out.diag();
             if (
                 out->kind() == TypeKind::Pointer
-                and ((PointerType*) out)->element_type()
-                and ((PointerType*) out)->element_type()->kind() == TypeKind::Function
-            ) out = ((PointerType*) out)->element_type();
+                and ((PointerType*) *out)->element_type()
+                and ((PointerType*) *out)->element_type()->kind() == TypeKind::Function
+            ) out = ((PointerType*) *out)->element_type();
             if (out->kind() != TypeKind::Function)
                 Diag::ICE("call of non-function type");
             // The result type of a call expression is the called function type's
             // return type.
-            out = ((FunctionType*) out)->return_type();
+            out = ((FunctionType*) *out)->return_type();
         } break;
 
         case NodeKind::Declaration:
             out = ((Declaration*) n)->type();
             break;
 
-        case NodeKind::NameReference: {
-            Diag::ICE("Handle name-reference typeof...");
-        }
-
         case NodeKind::IntegerLiteral:
             out = new (tu) IntType(n->location());
             break;
 
+        case NodeKind::ArrayLiteral: {
+            auto* a = (ArrayLiteral*) n;
+            LCC_ASSERT(not a->elements().empty());
+            auto element_type = type_of(a->elements().at(0));
+            if (not element_type) return element_type.diag();
+            a->_element_type = *element_type;
+            for (const auto* element : a->elements()) {
+                // TODO: Better type comparison
+                if (type_of(element)->kind() != a->_element_type->kind()) {
+                    return Error(
+                        element->location(),
+                        "c/invalid-literal",
+                        "Array literal elements must all be of the same expected type, {}",
+                        *a->_element_type
+                    );
+                }
+            }
+            out = new (tu) ArrayType(
+                a->_element_type,
+                new (tu) IntegerLiteral(a->elements().size(), {}),
+                n->location()
+            );
+        } break;
+
+        // We just sort of *don't*...
+        // We *could* walk scopes and find the type of the decl, but, that's
+        // basically the entire sema for a name reference, so it'd suck to do it
+        // twice for no reason. If you want the type of what a name reference
+        // refers to, you should analyse it and get the type of the resulting
+        // declaration.
+        case NodeKind::NameReference:
         case NodeKind::Invalid:
         case NodeKind::Group:
         case NodeKind::Block:
@@ -126,18 +269,15 @@ Type* Sema::type_of(const Node* n) {
             break;
     }
 
-    if (not out)
+    if (not out or out.value() == nullptr)
         Diag::ICE("no node is allowed a null type");
 
+    update_type(n, *out);
     return out;
 }
 
 Result<void> Sema::analyse_declaration(Declaration*& d) {
     if (d->initialising_expression()) {
-        defining = d;
-        auto result = analyse(d->_initialising_expression);
-        if (not result) return result;
-
         // Function declaration returning void defined with empty block:
         // -> insert implicit return.
         if (
@@ -146,16 +286,14 @@ Result<void> Sema::analyse_declaration(Declaration*& d) {
             and ((Block*) (d->initialising_expression()))->constituents().empty()
         ) {
             ((Block*) (d->initialising_expression()))
-                ->_constituents
-                .emplace_back(
+                ->_constituents.emplace_back(
                     new (tu) Return(nullptr, {})
                 );
         }
-
-        defining = nullptr;
     }
 
     // TODO: Ensure no duplicate definitions
+    // TODO: Warn on shadowing definitions
 
     return {};
 }
@@ -188,8 +326,8 @@ Result<void> Sema::analyse_binary(BinaryOperation*& b) {
                     b->lhs()->location(),
                     "c/type-mismatch",
                     "Arithmetic must be performed on like types ({} and {} are different)",
-                    *type_of(b->lhs()),
-                    *type_of(b->rhs())
+                    **type_of(b->lhs()),
+                    **type_of(b->rhs())
                 );
             }
 
@@ -272,6 +410,103 @@ Result<void> Sema::analyse_binary(BinaryOperation*& b) {
     return {};
 }
 
+bool Sema::type_is_arithmetic(const Type* t) {
+    switch (t->kind()) {
+        case TypeKind::Int:
+            return true;
+
+        case TypeKind::Void:
+        case TypeKind::Pointer:
+        case TypeKind::Function:
+        case TypeKind::Array:
+            return false;
+
+        case TypeKind::Invalid:
+        case TypeKind::Count:
+            break;
+    }
+    Diag::ICE("unreachable");
+}
+
+Result<void> Sema::analyse_unary(UnaryOperation*& u) {
+    auto operand_type = type_of(u->operand());
+    if (not operand_type) return operand_type.diag();
+    switch (u->unary_operator()) {
+        case TokenKind::OpPlus:
+        case TokenKind::OpMinus: {
+            // Operand type must be of an arithmetic type.
+            if (not type_is_arithmetic(*operand_type)) {
+                return Error(
+                    u->operand()->location(),
+                    "c/type-mismatch",
+                    "The operand of the unary `+` or `-` operator shall have arithmetic type | C23 § 6.5.4.3"
+                );
+            }
+        } break;
+
+        case TokenKind::OpAsterisk: {
+            // Handled in type_of()...
+        } break;
+
+        case TokenKind::OpTilde:
+        case TokenKind::OpPlusPlus:
+        case TokenKind::OpMinusMinus:
+        case TokenKind::OpExclamation:
+        case TokenKind::OpAmpersand:
+            Diag::ICE("Handle unary operator {}", u->unary_operator());
+
+        case TokenKind::Invalid:
+        case TokenKind::Identifier:
+        case TokenKind::Integer:
+        case TokenKind::Fractional:
+        case TokenKind::String:
+        case TokenKind::KwVoid:
+        case TokenKind::KwInt:
+        case TokenKind::KwReturn:
+        case TokenKind::KwSizeof:
+        case TokenKind::KwAlignof:
+        case TokenKind::OpEqual:
+        case TokenKind::OpLessThan:
+        case TokenKind::OpGreaterThan:
+        case TokenKind::OpDoublePipe:
+        case TokenKind::OpDoubleAmpersand:
+        case TokenKind::OpSlash:
+        case TokenKind::OpPercent:
+        case TokenKind::OpComma:
+        case TokenKind::OpDot:
+        case TokenKind::OpArrow:
+        case TokenKind::OpCaret:
+        case TokenKind::OpPipe:
+        case TokenKind::OpShiftLeft:
+        case TokenKind::OpShiftRight:
+        case TokenKind::OpDoubleEqual:
+        case TokenKind::OpLessThanEqual:
+        case TokenKind::OpGreaterThanEqual:
+        case TokenKind::OpExclamationEqual:
+        case TokenKind::OpPlusEqual:
+        case TokenKind::OpMinusEqual:
+        case TokenKind::OpAsteriskEqual:
+        case TokenKind::OpSlashEqual:
+        case TokenKind::OpPercentEqual:
+        case TokenKind::OpCaretEqual:
+        case TokenKind::OpPipeEqual:
+        case TokenKind::OpAmpersandEqual:
+        case TokenKind::OpShiftLeftEqual:
+        case TokenKind::OpShiftRightEqual:
+        case TokenKind::LeftParenthesis:
+        case TokenKind::RightParenthesis:
+        case TokenKind::LeftSquareBracket:
+        case TokenKind::RightSquareBracket:
+        case TokenKind::LeftCurlyBrace:
+        case TokenKind::RightCurlyBrace:
+        case TokenKind::Semicolon:
+        case TokenKind::Eof:
+        case TokenKind::Count:
+            Diag::ICE("unreachable");
+    }
+    return {};
+}
+
 Result<void> Sema::analyse_return(Return*& r) {
     if (not defining or defining->type()->kind() != TypeKind::Function) {
         return Error(
@@ -321,7 +556,10 @@ Result<Declaration*> Sema::analyse_name_reference(NameReference*& n) {
         s = s->parent;
 
     if (not s)
-        return Error(n->location(), "c/symbol-resolution", "Dafuq is dis?");
+        return Error(n->location(), "c/symbol-resolution", "Dafuq is dis? `{}`", name);
+
+    // Update name reference scope to the scope that actually contains it
+    n->_within_scope = s;
 
     LCC_ASSERT(s->declarations.contains(name));
     return s->declarations.at(name);
@@ -370,7 +608,7 @@ Result<void> Sema::analyse_call(Call*& c) {
                         argument->location(),
                         "c/type-mismatch",
                         "Invalid argument type {} (expected {})",
-                        *type_of(argument),
+                        **type_of(argument),
                         *parameter.type
                     );
                     e.attach(Note(d->location(), "", "Declared here"));
@@ -384,8 +622,10 @@ Result<void> Sema::analyse_call(Call*& c) {
         case NodeKind::Block:
         case NodeKind::NameReference:
         case NodeKind::IntegerLiteral:
+        case NodeKind::ArrayLiteral:
         case NodeKind::Return:
         case NodeKind::BinaryOperation:
+        case NodeKind::UnaryOperation:
         case NodeKind::Call:
         case NodeKind::Count:
             Diag::ICE("unreachable");
@@ -399,10 +639,37 @@ auto Sema::analyse(Node*& node) -> Result<void> {
         return {};
     analysed.emplace(node);
 
+    // Previsit declarations such that we know the type ahead of time, and
+    // know when a variable is used in it's own initialiser.
+    if (node->kind() == NodeKind::Declaration) {
+        auto* d = (Declaration*) node;
+
+        auto type_makes_sense = type_of(node);
+        if (not type_makes_sense) return type_makes_sense.diag();
+
+        if (d->initialising_expression())
+            defining = d;
+    }
+
+    // Visit children.
+    for (auto** child : node->children_ref()) {
+        auto child_makes_sense = analyse(*child);
+        if (not child_makes_sense) return child_makes_sense.diag();
+    }
+
+    if (node->kind() == NodeKind::Declaration) {
+        if (((Declaration*) node)->initialising_expression())
+            defining = nullptr;
+    }
+
+    // Type analysis
+    auto type_makes_sense = type_of(node);
+    if (not type_makes_sense) return type_makes_sense.diag();
+
     switch (node->kind()) {
         case NodeKind::Group: {
             auto g = (Group*) node;
-            for (auto* c : g->constituents()) {
+            for (auto*& c : g->constituents()) {
                 if (auto d = analyse(c); not d)
                     return d;
             }
@@ -410,7 +677,7 @@ auto Sema::analyse(Node*& node) -> Result<void> {
         }
         case NodeKind::Block: {
             auto b = (Block*) node;
-            for (auto* c : b->constituents()) {
+            for (auto*& c : b->constituents()) {
                 if (auto result = analyse(c); not result)
                     return result;
             }
@@ -433,9 +700,13 @@ auto Sema::analyse(Node*& node) -> Result<void> {
         case NodeKind::Return:
             return analyse_return(*(Return**) &node);
 
+        case NodeKind::UnaryOperation:
+            return analyse_unary(*(UnaryOperation**) &node);
+
         case NodeKind::BinaryOperation:
             return analyse_binary(*(BinaryOperation**) &node);
 
+        case NodeKind::ArrayLiteral:
         case NodeKind::IntegerLiteral:
             return {};
 
@@ -454,23 +725,6 @@ bool Sema::Analyse(Context* context, TranslationUnit& tu) {
         Diag::ICE("cannot analyse nullptr");
 
     Sema semantic{context, tu};
-
-    // Define string literals in top level scope, or something.
-    for (auto str : tu.string_literals) {
-        // For side effect of declaring global
-        (void) new (tu) Declaration(
-            new (tu) PointerType(
-                // TODO: CharType, not IntType
-                new (tu) IntType({}),
-                {}
-            ),
-            fmt::format("__str{}", tu.intern(str)),
-            tu.allocated_scopes.at(0), // TODO: global scope
-            nullptr,
-            {}
-        );
-    }
-
     bool passed = semantic.analyse(semantic.root()).is_value();
     if (not passed) return false;
 

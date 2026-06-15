@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <language_c/ast.hh>
 
 #include <language_c/parser.hh>
@@ -8,7 +9,11 @@
 #include <fmt/base.h>
 #include <fmt/format.h>
 
+#include <ranges>
+#include <string>
+#include <string_view>
 #include <type_traits>
+#include <vector>
 
 auto fmt::formatter<lcc::language_c::Node>::indent(
     format_context::iterator out,
@@ -103,6 +108,27 @@ auto fmt::formatter<lcc::language_c::Node>::format(
             );
         }
 
+        case lcc::language_c::NodeKind::ArrayLiteral: {
+            const auto& a = (*(lcc::language_c::ArrayLiteral*) &n);
+            tag(ctx.out(), depth, "<array-literal>");
+            ++depth;
+            fmt::format_to(
+                ctx.out(),
+                "{}",
+                fmt::join(
+                    std::ranges::views::transform(
+                        a.elements(),
+                        [&](const lcc::language_c::Node* constituent) {
+                            return fmt::format("{:{}}", *constituent, depth);
+                        }
+                    ),
+                    "\n"
+                )
+            );
+            --depth;
+            return tag(ctx.out(), depth, "</array-literal>");
+        }
+
         case lcc::language_c::NodeKind::Return: {
             const auto& r = *(lcc::language_c::Return*) &n;
             if (not r.expression())
@@ -137,6 +163,20 @@ auto fmt::formatter<lcc::language_c::Node>::format(
 
             --depth;
             return tag(ctx.out(), depth, "</declaration>");
+        }
+
+        case lcc::language_c::NodeKind::UnaryOperation: {
+            const auto& u = *(const lcc::language_c::UnaryOperation*) &n;
+            tag(ctx.out(), depth, "<unary>");
+            ++depth;
+
+            indent(ctx.out(), depth);
+            fmt::format_to(ctx.out(), "<operator>{}</operator>\n", u.unary_operator());
+
+            fmt::format_to(ctx.out(), "{:{}}", *u.operand(), depth);
+
+            --depth;
+            return tag(ctx.out(), depth, "</unary>");
         }
 
         case lcc::language_c::NodeKind::BinaryOperation: {
@@ -205,9 +245,74 @@ auto Node::name() const -> std::string_view {
         case NodeKind::Block: return "block";
         case NodeKind::NameReference: return "name";
         case NodeKind::Declaration: return "declaration";
+        case NodeKind::ArrayLiteral: return "array_literal";
         case NodeKind::IntegerLiteral: return "integer_literal";
         case NodeKind::Call: return "call";
         case NodeKind::Return: return "return";
+        case NodeKind::UnaryOperation: {
+            auto* u = ((UnaryOperation*) this);
+            switch (u->unary_operator()) {
+                case TokenKind::OpPlus: return "unary_positive";
+                case TokenKind::OpMinus: return "unary_negative";
+                case TokenKind::OpAsterisk: return "unary_dereference";
+                case TokenKind::OpAmpersand: return "binary_addressof";
+                case TokenKind::OpTilde: return "unary_bit_negation";
+                case TokenKind::OpPlusPlus: return "unary_increment";
+                case TokenKind::OpMinusMinus: return "unary_decrement";
+                case TokenKind::OpExclamation: return "unary_logical_not";
+
+                case TokenKind::OpSlash:
+                case TokenKind::OpPercent:
+                case TokenKind::LeftSquareBracket:
+                case TokenKind::OpEqual:
+                case TokenKind::OpLessThan:
+                case TokenKind::OpGreaterThan:
+                case TokenKind::OpDoublePipe:
+                case TokenKind::OpDoubleAmpersand:
+                case TokenKind::OpDot:
+                case TokenKind::OpArrow:
+                case TokenKind::OpCaret:
+                case TokenKind::OpPipe:
+                case TokenKind::OpShiftLeft:
+                case TokenKind::OpShiftRight:
+                case TokenKind::OpDoubleEqual:
+                case TokenKind::OpLessThanEqual:
+                case TokenKind::OpGreaterThanEqual:
+                case TokenKind::OpExclamationEqual:
+                case TokenKind::OpPlusEqual:
+                case TokenKind::OpMinusEqual:
+                case TokenKind::OpAsteriskEqual:
+                case TokenKind::OpSlashEqual:
+                case TokenKind::OpPercentEqual:
+                case TokenKind::OpCaretEqual:
+                case TokenKind::OpPipeEqual:
+                case TokenKind::OpAmpersandEqual:
+                case TokenKind::OpShiftLeftEqual:
+                case TokenKind::OpShiftRightEqual:
+                case TokenKind::Invalid:
+                case TokenKind::Identifier:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
+                case TokenKind::String:
+                case TokenKind::KwVoid:
+                case TokenKind::KwInt:
+                case TokenKind::KwReturn:
+                case TokenKind::KwSizeof:
+                case TokenKind::KwAlignof:
+                case TokenKind::OpComma:
+                case TokenKind::LeftParenthesis:
+                case TokenKind::RightParenthesis:
+                case TokenKind::RightSquareBracket:
+                case TokenKind::LeftCurlyBrace:
+                case TokenKind::RightCurlyBrace:
+                case TokenKind::Semicolon:
+                case TokenKind::Eof:
+                case TokenKind::Count:
+                    Diag::ICE("Invalid unary operator `{}`", u->unary_operator());
+            }
+            Diag::ICE("unreachable");
+        }
+
         case NodeKind::BinaryOperation: {
             auto* b = ((BinaryOperation*) this);
             switch (b->binary_operator()) {
@@ -228,7 +333,6 @@ auto Node::name() const -> std::string_view {
                 case TokenKind::OpCaret: return "binary_bit_xor";
                 case TokenKind::OpPipe: return "binary_bit_or";
                 case TokenKind::OpAmpersand: return "binary_bit_and";
-                case TokenKind::OpTilde: return "binary_bit_negation";
                 case TokenKind::OpShiftLeft: return "binary_bitshift_left";
                 case TokenKind::OpShiftRight: return "binary_bitshift_right";
                 case TokenKind::OpDoubleEqual: return "binary_equality";
@@ -260,6 +364,7 @@ auto Node::name() const -> std::string_view {
                 case TokenKind::OpMinusMinus:
                 case TokenKind::OpComma:
                 case TokenKind::OpExclamation:
+                case TokenKind::OpTilde:
                 case TokenKind::LeftParenthesis:
                 case TokenKind::RightParenthesis:
                 case TokenKind::RightSquareBracket:
@@ -270,51 +375,74 @@ auto Node::name() const -> std::string_view {
                 case TokenKind::Count:
                     Diag::ICE("Invalid binary operator `{}`", b->binary_operator());
             }
+            Diag::ICE("unreachable");
         }
         case NodeKind::Count: break;
     }
     Diag::ICE("unreachable: invalid node kind {}", +kind());
 }
 auto Node::children() const -> std::vector<Node*> {
+    std::vector<Node*> out{};
+    for (auto& c : children_ref())
+        out.emplace_back(*c);
+
+    return out;
+}
+
+auto Node::children_ref() const -> std::vector<Node**> {
     switch (kind()) {
         case NodeKind::IntegerLiteral:
         case NodeKind::NameReference:
             return {};
 
-        case NodeKind::Group: return ((Group*) this)->constituents();
-        case NodeKind::Block: return ((Block*) this)->constituents();
+        case NodeKind::Group: {
+            std::vector<Node**> out{};
+            for (auto& elem : ((Group*) this)->_constituents)
+                out.emplace_back(&elem);
+            return out;
+        }
+        case NodeKind::Block: {
+            std::vector<Node**> out{};
+            for (auto& elem : ((Block*) this)->_constituents)
+                out.emplace_back(&elem);
+            return out;
+        }
+
+        case NodeKind::ArrayLiteral: {
+            std::vector<Node**> out{};
+            for (auto& elem : ((ArrayLiteral*) this)->_elements)
+                out.emplace_back(&elem);
+            return out;
+        }
 
         case NodeKind::Call: {
             auto* c = (Call*) this;
-            std::vector<Node*> out{c->callee()};
-#ifdef __cpp_lib_containers_ranges
-            out.append_range(c->arguments());
-#else
-            const auto& children = c->arguments();
-            out.insert(
-                out.end(),
-                children.cbegin(),
-                children.cend()
-            );
-#endif
+            std::vector<Node**> out{&c->_callee};
+            for (auto& arg : c->_arguments)
+                out.emplace_back(&arg);
             return out;
+        }
+
+        case NodeKind::UnaryOperation: {
+            auto* b = (UnaryOperation*) this;
+            return {&b->_operand};
         }
 
         case NodeKind::BinaryOperation: {
             auto* b = (BinaryOperation*) this;
-            return {b->lhs(), b->rhs()};
+            return {&b->_lhs, &b->_rhs};
         }
 
         case NodeKind::Declaration: {
             auto d = (Declaration*) this;
-            if (d->initialising_expression())
-                return {d->initialising_expression()};
+            if (d->_initialising_expression)
+                return {&d->_initialising_expression};
             return {};
         };
         case NodeKind::Return: {
             auto r = ((Return*) this);
-            if (r->expression())
-                return {r->expression()};
+            if (r->_expression)
+                return {&r->_expression};
             return {};
         }
 

@@ -2,7 +2,9 @@
 #define LANGUAGE_C_TYPE_HH
 
 #include <language_c/translation_unit.hh>
+
 #include <lcc/location.hh>
+#include <lcc/utils/result.hh>
 
 #include <fmt/base.h>
 
@@ -121,6 +123,15 @@ struct fmt::formatter<lcc::language_c::Type> {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     auto format(const lcc::language_c::Type&, format_context& ctx) const
         -> format_context::iterator;
+};
+
+template <>
+struct fmt::formatter<lcc::Result<lcc::language_c::Type*>> {
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+    auto format(
+        lcc::Result<lcc::language_c::Type*>&,
+        format_context& ctx
+    ) const -> format_context::iterator;
 };
 
 #endif /* LANGUAGE_C_TYPE_HH */

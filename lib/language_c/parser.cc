@@ -1209,11 +1209,13 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
 
 auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
     Location start_location = tok.location;
+    UnaryOperation* unary{nullptr};
     Result<Node*> lhs = Result<Node*>::Null(); /** (!) **/
 
     // Prefix unary operators
-    if (unary_precedence(tok.kind)) {
-        Diag::ICE("Handle unary prefix operator");
+    while (unary_precedence(tok.kind)) {
+        unary = new (tu) UnaryOperation(tok.kind, unary, tok.location);
+        NextToken();
     }
 
     switch (tok.kind) {
@@ -1344,9 +1346,43 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             // via it's name.
             auto interned_index = tu.intern(tok.text);
             auto string_literal_name = fmt::format("__str{}", interned_index);
+
+            // Don't double-declare global (but do declare it)
+            auto s = scopes().at(0); // TODO: global scope
+            if (not s->declarations.contains(string_literal_name)) {
+                std::vector<Node*> elements{};
+                for (auto c : tok.text) {
+                    elements.emplace_back(
+                        new (tu) IntegerLiteral((usz) c, tok.location)
+                    );
+                }
+                auto init = new (tu) ArrayLiteral(
+                    std::move(elements),
+                    tok.location
+                );
+                // For side effect of declaring global (so sema lookup will resolve
+                // properly), as well as telling IRGen to .
+                if (not tu.tree or tu.tree->kind() != NodeKind::Block)
+                    Diag::ICE("unexpected root");
+                auto decl = new (tu) Declaration(
+                    new (tu) PointerType(
+                        // TODO: CharType, not IntType
+                        // TODO: const
+                        new (tu) IntType(tok.location),
+                        tok.location
+                    ),
+                    string_literal_name,
+                    s,
+                    init,
+                    tok.location
+                );
+                // Place in top level manually...
+                ((Block*) tu.tree)->_constituents.emplace_back(decl);
+            }
+
             lhs = new (tu) NameReference(
                 string_literal_name,
-                current_scope(), // TODO: global_scope()
+                s,
                 tok.location
             );
             NextToken();
@@ -1362,10 +1398,10 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
         } break;
 
         case TokenKind::Fractional:
-        case TokenKind::OpAsterisk:
         case TokenKind::LeftSquareBracket:
         case TokenKind::OpPlus:
         case TokenKind::OpMinus:
+        case TokenKind::OpAsterisk:
         case TokenKind::KwSizeof:
         case TokenKind::KwAlignof:
         case TokenKind::OpExclamation:
@@ -1376,6 +1412,11 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
     }
 
     if (not lhs) return lhs.diag();
+
+    if (unary) {
+        unary->operand() = *lhs;
+        lhs = unary;
+    }
 
     if (tok.kind == TokenKind::OpComma)
         return lhs;
@@ -1504,9 +1545,11 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
 };
 
 void Parser::ParseTopLevel(std::string of_file) {
+    tu.tree = new (tu) Block({}, {});
     auto top_level = ParseExpressions(TokenKind::Eof);
     if (not top_level) return;
-    tu.tree = new (tu) Block(*top_level, {});
+    for (auto n : *top_level)
+        ((Block*) tu.tree)->_constituents.emplace_back(n);
 
     if (context->option_print_ast()) { /** Print Debug Info **/
         for (auto [i, s] : std::ranges::views::enumerate(scopes())) {

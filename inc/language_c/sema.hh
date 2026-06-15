@@ -18,11 +18,15 @@ class Sema {
     std::unordered_map<const Node*, Type*> _type_cache{};
 
     [[nodiscard]]
-    Type* type_of(const Node* n);
-    void update_type(Node*, Type*);
+    Result<Type*> type_of(const Node* n);
+    void update_type(const Node*, Type*);
+
+    bool type_is_arithmetic(const Type*);
 
     [[nodiscard]]
     Result<void> analyse_declaration(Declaration*&);
+    [[nodiscard]]
+    Result<void> analyse_unary(UnaryOperation*&);
     [[nodiscard]]
     Result<void> analyse_binary(BinaryOperation*&);
     [[nodiscard]]

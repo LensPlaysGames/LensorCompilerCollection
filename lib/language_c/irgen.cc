@@ -1,4 +1,8 @@
+#include "language_c/type.hh"
 #include <language_c/irgen.hh>
+
+#include <language_c/ast.hh>
+#include <language_c/parser.hh>
 
 #include <lcc/context.hh>
 #include <lcc/core.hh>
@@ -7,9 +11,7 @@
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
-
-#include <language_c/ast.hh>
-#include <language_c/parser.hh>
+#include <lcc/utils/macros.hh>
 
 namespace lcc::language_c {
 
@@ -90,11 +92,58 @@ void IRGen::generate_expression(const Node* n) {
         }
 
         case NodeKind::NameReference: {
-            Diag::ICE("Handle name-reference irgen...");
+            auto nr = (NameReference*) n;
+            auto d = nr->within_scope()->declarations.at(nr->name());
+            generate_expression(d);
+            generated_ir[n] = generated_ir[d];
+            return;
         }
 
         case NodeKind::Declaration: {
-            Diag::ICE("Handle declaration irgen...");
+            auto d = (Declaration*) n;
+
+            if (d->initialising_expression())
+                generate_expression(d->initialising_expression());
+
+            if (not d->scope()->parent) {
+                if (d->initialising_expression()) {
+                    auto global = new (*ir_module) GlobalVariable(
+                        ir_module,
+                        convert(d->type()),
+                        std::string(d->name()),
+                        Linkage::Exported,
+                        generated_ir[d->initialising_expression()]
+                    );
+                    generated_ir[n] = global;
+                } else {
+                    auto global = new (*ir_module) GlobalVariable(
+                        ir_module,
+                        convert(d->type()),
+                        std::string(d->name()),
+                        Linkage::Imported,
+                        nullptr
+                    );
+                    generated_ir[n] = global;
+                }
+            } else {
+                auto local = new (*ir_module) AllocaInst(
+                    convert(d->type()),
+                    d->location()
+                );
+                insert(local);
+
+                if (d->initialising_expression()) {
+                    auto* local_init = new (*ir_module) StoreInst(
+                        generated_ir[d->initialising_expression()],
+                        local,
+                        d->initialising_expression()->location()
+                    );
+                    insert(local_init);
+                }
+
+                generated_ir[n] = local;
+            }
+            return;
         }
 
         case NodeKind::IntegerLiteral: {
@@ -102,6 +151,50 @@ void IRGen::generate_expression(const Node* n) {
             generated_ir[n] = new (*ir_module) lcc::IntegerConstant(
                 IntegerType::Get(context, context->target()->ffi.size_of_int),
                 i->value()
+            );
+            return;
+        }
+
+        case NodeKind::ArrayLiteral: {
+            const auto& a = *(ArrayLiteral*) n;
+            LCC_ASSERT(a._element_type);
+            LCC_ASSERT(a.elements().size());
+            std::vector<char> data{};
+            for (auto e : a.elements()) {
+                std::vector<u8> bytes{};
+                // literal_to_bytes(Node* e)
+                switch (e->kind()) {
+                    case NodeKind::IntegerLiteral:
+                        bytes = utils::to_vec(
+                            utils::to_bytes(
+                                ((IntegerLiteral*) e)->value()
+                            )
+                        );
+                        break;
+
+                    case NodeKind::ArrayLiteral:
+                    case NodeKind::Invalid:
+                    case NodeKind::Group:
+                    case NodeKind::Block:
+                    case NodeKind::NameReference:
+                    case NodeKind::Declaration:
+                    case NodeKind::Return:
+                    case NodeKind::UnaryOperation:
+                    case NodeKind::BinaryOperation:
+                    case NodeKind::Call:
+                    case NodeKind::Count:
+                        Diag::ICE("unreachable (invalid element kind in array literal)");
+                }
+#ifdef __cpp_lib_containers_ranges
+                data.append_range(bytes);
+#else
+                data.insert(data.end(), bytes.begin(), bytes.end());
+#endif
+            }
+            generated_ir[n] = new (*ir_module) lcc::ArrayConstant(
+                convert(a._element_type),
+                std::move(data),
+                false
             );
             return;
         }
@@ -146,7 +239,129 @@ void IRGen::generate_expression(const Node* n) {
             generated_ir[n] = inst;
             insert(inst);
             return;
-        } break;
+        }
+
+        case NodeKind::UnaryOperation: {
+            const auto* u = (UnaryOperation*) n;
+            generate_expression(u->operand());
+            switch (u->unary_operator()) {
+                case TokenKind::OpPlus:
+                    generated_ir[n] = generated_ir[u->operand()];
+                    break;
+
+                case TokenKind::OpMinus:
+                    generated_ir[n] = new (*ir_module) NegInst(
+                        generated_ir[u->operand()],
+                        u->location()
+                    );
+                    break;
+
+                case TokenKind::OpTilde:
+                    generated_ir[n] = new (*ir_module) ComplInst(
+                        generated_ir[u->operand()],
+                        n->location()
+                    );
+                    break;
+
+                // "The expression !E is equivalent to (0==E)."
+                // ^ is from the C23 standard, and we take that literally.
+                case TokenKind::OpExclamation:
+                    generated_ir[n] = new (*ir_module) EqInst(
+                        new (*ir_module) IntegerConstant(
+                            lcc::IntegerType::Get(context, context->target()->ffi.size_of_int),
+                            0
+                        ),
+                        generated_ir[u->operand()],
+                        u->location()
+                    );
+                    break;
+
+                case TokenKind::OpPlusPlus:
+                    generated_ir[n] = new (*ir_module) AddInst(
+                        new (*ir_module) IntegerConstant(
+                            lcc::IntegerType::Get(context, context->target()->ffi.size_of_int),
+                            1
+                        ),
+                        generated_ir[u->operand()],
+                        u->location()
+                    );
+                    break;
+
+                case TokenKind::OpMinusMinus:
+                    generated_ir[n] = new (*ir_module) SubInst(
+                        new (*ir_module) IntegerConstant(
+                            lcc::IntegerType::Get(context, context->target()->ffi.size_of_int),
+                            1
+                        ),
+                        generated_ir[u->operand()],
+                        u->location()
+                    );
+                    break;
+
+                case TokenKind::OpAmpersand:
+                    Diag::ICE("todo irgen unary {}", u->unary_operator());
+
+                case TokenKind::OpAsterisk: {
+                    LCC_TODO("irgen needs element type of pointer");
+                    generated_ir[n] = new (*ir_module) LoadInst(
+                        {}, // TODO: element type of pointer
+                        generated_ir[u->operand()],
+                        n->location()
+                    );
+                    Diag::ICE("todo irgen unary dereference");
+                }
+
+                case TokenKind::Invalid:
+                case TokenKind::Identifier:
+                case TokenKind::Integer:
+                case TokenKind::Fractional:
+                case TokenKind::String:
+                case TokenKind::KwVoid:
+                case TokenKind::KwInt:
+                case TokenKind::KwReturn:
+                case TokenKind::KwSizeof:
+                case TokenKind::KwAlignof:
+                case TokenKind::OpEqual:
+                case TokenKind::OpLessThan:
+                case TokenKind::OpGreaterThan:
+                case TokenKind::OpDoublePipe:
+                case TokenKind::OpDoubleAmpersand:
+                case TokenKind::OpSlash:
+                case TokenKind::OpPercent:
+                case TokenKind::OpComma:
+                case TokenKind::OpDot:
+                case TokenKind::OpArrow:
+                case TokenKind::OpCaret:
+                case TokenKind::OpPipe:
+                case TokenKind::OpShiftLeft:
+                case TokenKind::OpShiftRight:
+                case TokenKind::OpDoubleEqual:
+                case TokenKind::OpLessThanEqual:
+                case TokenKind::OpGreaterThanEqual:
+                case TokenKind::OpExclamationEqual:
+                case TokenKind::OpPlusEqual:
+                case TokenKind::OpMinusEqual:
+                case TokenKind::OpAsteriskEqual:
+                case TokenKind::OpSlashEqual:
+                case TokenKind::OpPercentEqual:
+                case TokenKind::OpCaretEqual:
+                case TokenKind::OpPipeEqual:
+                case TokenKind::OpAmpersandEqual:
+                case TokenKind::OpShiftLeftEqual:
+                case TokenKind::OpShiftRightEqual:
+                case TokenKind::LeftParenthesis:
+                case TokenKind::RightParenthesis:
+                case TokenKind::LeftSquareBracket:
+                case TokenKind::RightSquareBracket:
+                case TokenKind::LeftCurlyBrace:
+                case TokenKind::RightCurlyBrace:
+                case TokenKind::Semicolon:
+                case TokenKind::Eof:
+                case TokenKind::Count:
+                    Diag::ICE("unreachable");
+            }
+            return;
+        }
 
         case NodeKind::BinaryOperation: {
             const auto* b = (BinaryOperation*) n;

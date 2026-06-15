@@ -1,13 +1,16 @@
 #include <language_c/type.hh>
 
+#include <lcc/diags.hh>
+#include <lcc/utils/result.hh>
+
 #include <fmt/base.h>
 #include <fmt/format.h>
 #include <fmt/std.h>
 
-#include <lcc/diags.hh>
-
-auto fmt::formatter<lcc::language_c::Type>::format(const lcc::language_c::Type& t, format_context& ctx) const
-    -> format_context::iterator {
+auto fmt::formatter<lcc::language_c::Type>::format(
+    const lcc::language_c::Type& t,
+    format_context& ctx
+) const -> format_context::iterator {
     switch (t.kind()) {
         case lcc::language_c::TypeKind::Void:
             return fmt::format_to(ctx.out(), "void");
@@ -29,9 +32,19 @@ auto fmt::formatter<lcc::language_c::Type>::format(const lcc::language_c::Type& 
     lcc::Diag::ICE("unreachable");
 }
 
-auto fmt::formatter<lcc::language_c::FunctionType::Parameter>::format(const lcc::language_c::FunctionType::Parameter& p, format_context& ctx) const
-    -> format_context::iterator {
+auto fmt::formatter<lcc::language_c::FunctionType::Parameter>::format(
+    const lcc::language_c::FunctionType::Parameter& p,
+    format_context& ctx
+) const -> format_context::iterator {
     if (p.type)
         return fmt::format_to(ctx.out(), "{} {}", *p.type, p.name);
     else return fmt::format_to(ctx.out(), "<null-type> {}", p.name);
+}
+
+auto fmt::formatter<lcc::Result<lcc::language_c::Type*>>::format(
+    lcc::Result<lcc::language_c::Type*>& r,
+    format_context& ctx
+) const -> format_context::iterator {
+    if (r) return fmt::format_to(ctx.out(), "{}", **r);
+    return fmt::format_to(ctx.out(), "<bad-type-result>");
 }
