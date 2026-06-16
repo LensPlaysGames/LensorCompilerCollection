@@ -21,7 +21,8 @@ class Sema {
     Result<Type*> type_of(const Node* n);
     void update_type(const Node*, Type*);
 
-    bool type_is_arithmetic(const Type*);
+    static bool type_is_arithmetic(const Type*);
+    static bool type_is_integral(const Type*);
 
     [[nodiscard]]
     Result<void> analyse_declaration(Declaration*&);

@@ -1273,7 +1273,7 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
         case TokenKind::KwInt: {
             NextToken();
             // Encountering just 'int' implies a declaration follows.
-            lhs = ParseDeclarations(new (tu) IntType(start_location));
+            lhs = ParseDeclarations(new (tu) IntType(false, start_location));
         } break;
 
         case TokenKind::KwVoid: {
@@ -1356,21 +1356,21 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
                         new (tu) IntegerLiteral((usz) c, tok.location)
                     );
                 }
+                elements.emplace_back(new (tu) IntegerLiteral(0, tok.location));
                 auto init = new (tu) ArrayLiteral(
                     std::move(elements),
                     tok.location
                 );
+                // TODO: const?
+                auto* char_type = new (tu) CharType(false, tok.location);
+                init->_element_type = char_type;
+
                 // For side effect of declaring global (so sema lookup will resolve
                 // properly), as well as telling IRGen to .
                 if (not tu.tree or tu.tree->kind() != NodeKind::Block)
                     Diag::ICE("unexpected root");
                 auto decl = new (tu) Declaration(
-                    new (tu) PointerType(
-                        // TODO: CharType, not IntType
-                        // TODO: const
-                        new (tu) IntType(tok.location),
-                        tok.location
-                    ),
+                    new (tu) PointerType(char_type, tok.location),
                     string_literal_name,
                     s,
                     init,

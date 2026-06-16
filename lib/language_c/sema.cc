@@ -7,6 +7,8 @@
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
 
+#include <string_view>
+
 namespace lcc::language_c {
 
 void Sema::update_type(const Node* n, Type* t) {
@@ -99,6 +101,7 @@ auto Sema::type_of(const Node* n) -> Result<Type*> {
             auto* u = (UnaryOperation*) n;
             auto operand_type = type_of(u->operand());
             if (not operand_type) return operand_type;
+            u->_operand_type = *operand_type;
             switch (u->unary_operator()) {
                 // Dereference
                 case TokenKind::OpAsterisk: {
@@ -149,8 +152,7 @@ auto Sema::type_of(const Node* n) -> Result<Type*> {
 
                 case TokenKind::OpExclamation: {
                     // TODO: The operand of the unary `!` operator shall have scalar type | C23 § 6.5.4.3
-                    // TODO: BoolType?
-                    out = new (tu) IntType(u->location());
+                    out = new (tu) BoolType(u->location());
                 } break;
 
                 case TokenKind::Invalid:
@@ -226,18 +228,28 @@ auto Sema::type_of(const Node* n) -> Result<Type*> {
             break;
 
         case NodeKind::IntegerLiteral:
-            out = new (tu) IntType(n->location());
+            out = new (tu) IntType(true, n->location());
             break;
 
         case NodeKind::ArrayLiteral: {
             auto* a = (ArrayLiteral*) n;
             LCC_ASSERT(not a->elements().empty());
-            auto element_type = type_of(a->elements().at(0));
-            if (not element_type) return element_type.diag();
-            a->_element_type = *element_type;
+            // Attempt to determine element type automatically, if not already set.
+            if (not a->_element_type) {
+                auto element_type = type_of(a->elements().at(0));
+                if (not element_type) return element_type.diag();
+                a->_element_type = *element_type;
+            }
             for (const auto* element : a->elements()) {
+                // Integer literal convertible to any integral type...
+                if (
+                    element->kind() == NodeKind::IntegerLiteral
+                    and type_is_integral(a->_element_type)
+                ) continue;
+                auto element_type = type_of(element);
+                if (not element_type) return element_type.diag();
                 // TODO: Better type comparison
-                if (type_of(element)->kind() != a->_element_type->kind()) {
+                if (element_type->kind() != a->_element_type->kind()) {
                     return Error(
                         element->location(),
                         "c/invalid-literal",
@@ -412,7 +424,35 @@ Result<void> Sema::analyse_binary(BinaryOperation*& b) {
 
 bool Sema::type_is_arithmetic(const Type* t) {
     switch (t->kind()) {
+        case TypeKind::Bool:
+        case TypeKind::Char:
+        case TypeKind::Short:
         case TypeKind::Int:
+        case TypeKind::Long:
+        case TypeKind::LongLong:
+            return true;
+
+        case TypeKind::Void:
+        case TypeKind::Pointer:
+        case TypeKind::Function:
+        case TypeKind::Array:
+            return false;
+
+        case TypeKind::Invalid:
+        case TypeKind::Count:
+            break;
+    }
+    Diag::ICE("unreachable");
+}
+
+bool Sema::type_is_integral(const Type* t) {
+    switch (t->kind()) {
+        case TypeKind::Bool:
+        case TypeKind::Char:
+        case TypeKind::Short:
+        case TypeKind::Int:
+        case TypeKind::Long:
+        case TypeKind::LongLong:
             return true;
 
         case TypeKind::Void:

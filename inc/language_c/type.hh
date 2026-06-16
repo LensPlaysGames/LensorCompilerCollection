@@ -4,6 +4,7 @@
 #include <language_c/translation_unit.hh>
 
 #include <lcc/location.hh>
+#include <lcc/target.hh>
 #include <lcc/utils/result.hh>
 
 #include <fmt/base.h>
@@ -16,7 +17,13 @@ namespace lcc::language_c {
 enum class TypeKind {
     Invalid,
 
+    Bool,
+    Char,
+    Short,
     Int,
+    Long,
+    LongLong,
+
     Void,
     Pointer,
     Function,
@@ -47,15 +54,57 @@ public:
         return ptr;
     };
 
+    usz size_bits(const Target* target) const;
+    usz size_bytes(const Target* target) const {
+        return size_bits(target) / 8;
+    }
+
     auto kind() const { return _kind; }
     auto location() { return _location; }
 };
 
-class IntType : public Type {
+class IntegralType : public Type {
+    bool _is_signed{};
+
 public:
-    IntType(Location location)
-        : Type(TypeKind::Int, location) {}
+    IntegralType(TypeKind kind, bool is_signed, Location location)
+        : Type(kind, location)
+        , _is_signed(is_signed) {}
+
+    bool is_signed() const { return _is_signed; }
 };
+
+class BoolType : public IntegralType {
+public:
+    BoolType(Location location)
+        : IntegralType(TypeKind::Bool, false, location) {}
+};
+class CharType : public IntegralType {
+public:
+    CharType(bool is_signed, Location location)
+        : IntegralType(TypeKind::Char, is_signed, location) {}
+};
+class ShortType : public IntegralType {
+public:
+    ShortType(bool is_signed, Location location)
+        : IntegralType(TypeKind::Short, is_signed, location) {}
+};
+class IntType : public IntegralType {
+public:
+    IntType(bool is_signed, Location location)
+        : IntegralType(TypeKind::Int, is_signed, location) {}
+};
+class LongType : public IntegralType {
+public:
+    LongType(bool is_signed, Location location)
+        : IntegralType(TypeKind::Long, is_signed, location) {}
+};
+class LongLongType : public IntegralType {
+public:
+    LongLongType(bool is_signed, Location location)
+        : IntegralType(TypeKind::LongLong, is_signed, location) {}
+};
+
 class VoidType : public Type {
 public:
     VoidType(Location location)

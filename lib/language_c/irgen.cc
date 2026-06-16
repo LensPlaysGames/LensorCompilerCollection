@@ -15,12 +15,44 @@
 
 namespace lcc::language_c {
 
-lcc::Type* IRGen::convert(const Type* t) {
+constexpr usz int_size(const Target* target, TypeKind k) {
+    switch (k) {
+        case TypeKind::Bool:
+            return target->ffi.size_of_bool;
+        case TypeKind::Char:
+            return target->ffi.size_of_char;
+        case TypeKind::Short:
+            return target->ffi.size_of_short;
+        case TypeKind::Int:
+            return target->ffi.size_of_int;
+        case TypeKind::Long:
+            return target->ffi.size_of_long;
+        case TypeKind::LongLong:
+            return target->ffi.size_of_long_long;
+        case TypeKind::Pointer:
+            return target->size_of_pointer;
+
+        case TypeKind::Array:
+        case TypeKind::Count:
+        case TypeKind::Function:
+        case TypeKind::Invalid:
+        case TypeKind::Void:
+            break;
+    }
+    Diag::ICE("unreachable");
+}
+
+auto IRGen::convert(const Type* t) -> lcc::Type* {
     switch (t->kind()) {
-        case TypeKind::Int: {
+        case TypeKind::Bool:
+        case TypeKind::Char:
+        case TypeKind::Short:
+        case TypeKind::Int:
+        case TypeKind::Long:
+        case TypeKind::LongLong: {
             return lcc::IntegerType::Get(
                 context,
-                context->target()->ffi.size_of_int
+                int_size(context->target(), t->kind())
             );
         }
 
@@ -170,6 +202,10 @@ void IRGen::generate_expression(const Node* n) {
                                 ((IntegerLiteral*) e)->value()
                             )
                         );
+                        // size of type depends on compilation target
+                        bytes.resize(
+                            a._element_type->size_bytes(context->target())
+                        );
                         break;
 
                     case NodeKind::ArrayLiteral:
@@ -245,28 +281,33 @@ void IRGen::generate_expression(const Node* n) {
             const auto* u = (UnaryOperation*) n;
             generate_expression(u->operand());
             switch (u->unary_operator()) {
+                case TokenKind::OpAmpersand:
                 case TokenKind::OpPlus:
                     generated_ir[n] = generated_ir[u->operand()];
                     break;
 
-                case TokenKind::OpMinus:
-                    generated_ir[n] = new (*ir_module) NegInst(
+                case TokenKind::OpMinus: {
+                    auto* inst = new (*ir_module) NegInst(
                         generated_ir[u->operand()],
                         u->location()
                     );
-                    break;
+                    insert(inst);
+                    generated_ir[n] = inst;
+                } break;
 
-                case TokenKind::OpTilde:
-                    generated_ir[n] = new (*ir_module) ComplInst(
+                case TokenKind::OpTilde: {
+                    auto* inst = new (*ir_module) ComplInst(
                         generated_ir[u->operand()],
                         n->location()
                     );
-                    break;
+                    insert(inst);
+                    generated_ir[n] = inst;
+                } break;
 
                 // "The expression !E is equivalent to (0==E)."
                 // ^ is from the C23 standard, and we take that literally.
-                case TokenKind::OpExclamation:
-                    generated_ir[n] = new (*ir_module) EqInst(
+                case TokenKind::OpExclamation: {
+                    auto* inst = new (*ir_module) EqInst(
                         new (*ir_module) IntegerConstant(
                             lcc::IntegerType::Get(context, context->target()->ffi.size_of_int),
                             0
@@ -274,10 +315,12 @@ void IRGen::generate_expression(const Node* n) {
                         generated_ir[u->operand()],
                         u->location()
                     );
-                    break;
+                    insert(inst);
+                    generated_ir[n] = inst;
+                } break;
 
-                case TokenKind::OpPlusPlus:
-                    generated_ir[n] = new (*ir_module) AddInst(
+                case TokenKind::OpPlusPlus: {
+                    auto* inst = new (*ir_module) AddInst(
                         new (*ir_module) IntegerConstant(
                             lcc::IntegerType::Get(context, context->target()->ffi.size_of_int),
                             1
@@ -285,10 +328,12 @@ void IRGen::generate_expression(const Node* n) {
                         generated_ir[u->operand()],
                         u->location()
                     );
-                    break;
+                    insert(inst);
+                    generated_ir[n] = inst;
+                } break;
 
-                case TokenKind::OpMinusMinus:
-                    generated_ir[n] = new (*ir_module) SubInst(
+                case TokenKind::OpMinusMinus: {
+                    auto* inst = new (*ir_module) SubInst(
                         new (*ir_module) IntegerConstant(
                             lcc::IntegerType::Get(context, context->target()->ffi.size_of_int),
                             1
@@ -296,20 +341,23 @@ void IRGen::generate_expression(const Node* n) {
                         generated_ir[u->operand()],
                         u->location()
                     );
-                    break;
-
-                case TokenKind::OpAmpersand:
-                    Diag::ICE("todo irgen unary {}", u->unary_operator());
+                    insert(inst);
+                    generated_ir[n] = inst;
+                } break;
 
                 case TokenKind::OpAsterisk: {
-                    LCC_TODO("irgen needs element type of pointer");
-                    generated_ir[n] = new (*ir_module) LoadInst(
-                        {}, // TODO: element type of pointer
+                    auto* operand_type = u->_operand_type;
+                    if (not operand_type or operand_type->kind() != TypeKind::Pointer)
+                        Diag::ICE("Bad Sema!");
+                    auto* loaded_type = ((PointerType*) operand_type)->element_type();
+                    auto* inst = new (*ir_module) LoadInst(
+                        convert(loaded_type),
                         generated_ir[u->operand()],
                         n->location()
                     );
-                    Diag::ICE("todo irgen unary dereference");
-                }
+                    insert(inst);
+                    generated_ir[n] = inst;
+                } break;
 
                 case TokenKind::Invalid:
                 case TokenKind::Identifier:

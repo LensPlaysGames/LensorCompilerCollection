@@ -103,8 +103,8 @@ public:
     ) -> Node*;
 
     auto name() const -> std::string_view;
-    // TODO: std::reference_wrapper???
     auto children() const -> std::vector<Node*>;
+    // TODO: std::reference_wrapper???
     auto children_ref() const -> std::vector<Node**>;
 
 #ifdef LCC_LANGTEST
@@ -167,7 +167,7 @@ public:
 struct ArrayLiteral : public Node {
     std::vector<Node*> _elements;
 
-    // By sema
+    // For IRGen
     Type* _element_type{nullptr};
 
 public:
@@ -181,6 +181,9 @@ public:
 struct UnaryOperation : public Node {
     TokenKind _operator;
     Node* _operand;
+
+    // By Sema, for IRGen
+    Type* _operand_type{nullptr};
 
 public:
     UnaryOperation(TokenKind operator_, Node* operand, Location location)
