@@ -187,12 +187,14 @@ add_custom_target(
   ./codetest/x86_64/codetest.sarif
   ./irtest/irtest.sarif
   ./langtest/glint/langtest.sarif
+  ./langtest/c/langtest.sarif
   ./runtest/runtest.sarif
   DEPENDS
   vew
   ./codetest/x86_64/codetest.sarif
   ./irtest/irtest.sarif
   ./langtest/glint/langtest.sarif
+  ./langtest/c/langtest.sarif
   ./runtest/runtest.sarif
   test
   WORKING_DIRECTORY
