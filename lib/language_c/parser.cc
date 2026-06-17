@@ -28,7 +28,11 @@ std::string_view ToString(TokenKind k) {
         case TokenKind::Fractional: return "float-literal";
         case TokenKind::String: return "string-literal";
         case TokenKind::KwVoid: return "void";
+        case TokenKind::KwBool: return "bool";
+        case TokenKind::KwChar: return "char";
+        case TokenKind::KwShort: return "short";
         case TokenKind::KwInt: return "int";
+        case TokenKind::KwLong: return "long";
         case TokenKind::KwReturn: return "return";
         case TokenKind::KwSizeof: return "sizeof";
         case TokenKind::KwAlignof: return "_Alignof";
@@ -101,7 +105,11 @@ Result<std::string> ToSource(Token& t) {
             return fmt::format("\"{}\"", t.text);
 
         case TokenKind::KwVoid:
+        case TokenKind::KwBool:
+        case TokenKind::KwChar:
+        case TokenKind::KwShort:
         case TokenKind::KwInt:
+        case TokenKind::KwLong:
         case TokenKind::KwReturn:
         case TokenKind::KwSizeof:
         case TokenKind::KwAlignof:
@@ -173,8 +181,12 @@ StringMap<TokenKind> keywords{
     {"int", TokenKind::KwInt},
     {"return", TokenKind::KwReturn},
     {"void", TokenKind::KwVoid},
+    {"char", TokenKind::KwChar},
+    {"bool", TokenKind::KwBool},
     {"sizeof", TokenKind::KwSizeof},
     {"_Alignof", TokenKind::KwAlignof},
+    {"long", TokenKind::KwLong},
+    {"short", TokenKind::KwShort},
 };
 
 bool IsSpace(uint32_t c) {
@@ -832,7 +844,11 @@ constexpr size_t unary_precedence(TokenKind kind) {
         case TokenKind::Fractional:
         case TokenKind::String:
         case TokenKind::KwVoid:
+        case TokenKind::KwBool:
+        case TokenKind::KwChar:
+        case TokenKind::KwShort:
         case TokenKind::KwInt:
+        case TokenKind::KwLong:
         case TokenKind::KwReturn:
         case TokenKind::OpEqual:
         case TokenKind::OpLessThan:
@@ -946,7 +962,11 @@ constexpr size_t binary_precedence(TokenKind kind) {
         case TokenKind::Fractional:
         case TokenKind::String:
         case TokenKind::KwVoid:
+        case TokenKind::KwBool:
+        case TokenKind::KwChar:
+        case TokenKind::KwShort:
         case TokenKind::KwInt:
+        case TokenKind::KwLong:
         case TokenKind::KwReturn:
         case TokenKind::KwSizeof:
         case TokenKind::KwAlignof:
@@ -1207,6 +1227,96 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
     return constituents;
 }
 
+auto Parser::ParseBaseType() -> Result<Type*> {
+    // TODO: type qualifiers (const, unsigned)
+    switch (tok.kind) {
+        case TokenKind::Identifier: {
+            Diag::ICE("TODO: Is identifier declared type?");
+        }
+
+        case TokenKind::KwVoid: {
+            NextToken();
+            return new (tu) VoidType(tok.location);
+        }
+        case TokenKind::KwBool: {
+            NextToken();
+            return new (tu) BoolType(tok.location);
+        }
+        case TokenKind::KwChar: {
+            NextToken();
+            return new (tu) CharType(true, tok.location);
+        }
+        case TokenKind::KwShort: {
+            NextToken();
+            return new (tu) ShortType(true, tok.location);
+        }
+        case TokenKind::KwInt: {
+            NextToken();
+            return new (tu) IntType(true, tok.location);
+        }
+        case TokenKind::KwLong: {
+            NextToken();
+            if (tok.kind == TokenKind::KwLong)
+                return new (tu) LongLongType(true, tok.location);
+            else return new (tu) LongType(true, tok.location);
+        }
+
+        case TokenKind::Invalid:
+        case TokenKind::Integer:
+        case TokenKind::Fractional:
+        case TokenKind::String:
+        case TokenKind::KwReturn:
+        case TokenKind::KwSizeof:
+        case TokenKind::KwAlignof:
+        case TokenKind::OpEqual:
+        case TokenKind::OpLessThan:
+        case TokenKind::OpGreaterThan:
+        case TokenKind::OpDoublePipe:
+        case TokenKind::OpDoubleAmpersand:
+        case TokenKind::OpExclamation:
+        case TokenKind::OpPlus:
+        case TokenKind::OpMinus:
+        case TokenKind::OpAsterisk:
+        case TokenKind::OpSlash:
+        case TokenKind::OpPercent:
+        case TokenKind::OpComma:
+        case TokenKind::OpDot:
+        case TokenKind::OpArrow:
+        case TokenKind::OpPlusPlus:
+        case TokenKind::OpMinusMinus:
+        case TokenKind::OpCaret:
+        case TokenKind::OpPipe:
+        case TokenKind::OpAmpersand:
+        case TokenKind::OpTilde:
+        case TokenKind::OpShiftLeft:
+        case TokenKind::OpShiftRight:
+        case TokenKind::OpDoubleEqual:
+        case TokenKind::OpLessThanEqual:
+        case TokenKind::OpGreaterThanEqual:
+        case TokenKind::OpExclamationEqual:
+        case TokenKind::OpPlusEqual:
+        case TokenKind::OpMinusEqual:
+        case TokenKind::OpAsteriskEqual:
+        case TokenKind::OpSlashEqual:
+        case TokenKind::OpPercentEqual:
+        case TokenKind::OpCaretEqual:
+        case TokenKind::OpPipeEqual:
+        case TokenKind::OpAmpersandEqual:
+        case TokenKind::OpShiftLeftEqual:
+        case TokenKind::OpShiftRightEqual:
+        case TokenKind::LeftParenthesis:
+        case TokenKind::RightParenthesis:
+        case TokenKind::LeftSquareBracket:
+        case TokenKind::RightSquareBracket:
+        case TokenKind::LeftCurlyBrace:
+        case TokenKind::RightCurlyBrace:
+        case TokenKind::Semicolon:
+        case TokenKind::Eof:
+        case TokenKind::Count: break;
+    }
+    return Error("c/expected", "Expected type, got {}", tok.kind);
+};
+
 auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
     Location start_location = tok.location;
     UnaryOperation* unary{nullptr};
@@ -1270,16 +1380,16 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             } else lhs = new (tu) Return(nullptr, start_location);
         } break;
 
-        case TokenKind::KwInt: {
-            NextToken();
-            // Encountering just 'int' implies a declaration follows.
-            lhs = ParseDeclarations(new (tu) IntType(false, start_location));
-        } break;
-
-        case TokenKind::KwVoid: {
-            NextToken();
-            // Encountering just 'void' implies a declaration follows.
-            lhs = ParseDeclarations(new (tu) VoidType(start_location));
+        case TokenKind::KwVoid:
+        case TokenKind::KwBool:
+        case TokenKind::KwChar:
+        case TokenKind::KwShort:
+        case TokenKind::KwInt:
+        case TokenKind::KwLong: {
+            // Encountering just 'bool' (etc.) implies a declaration follows.
+            auto t = ParseBaseType();
+            if (not t) return t.diag();
+            lhs = ParseDeclarations(*t);
         } break;
 
         case TokenKind::Semicolon: {
@@ -1523,7 +1633,11 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             case TokenKind::Fractional:
             case TokenKind::String:
             case TokenKind::KwVoid:
+            case TokenKind::KwBool:
+            case TokenKind::KwChar:
+            case TokenKind::KwShort:
             case TokenKind::KwInt:
+            case TokenKind::KwLong:
             case TokenKind::KwReturn:
             case TokenKind::RightParenthesis:
             case TokenKind::RightSquareBracket:

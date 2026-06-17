@@ -81,7 +81,11 @@ auto Sema::type_of(const Node* n) -> Result<Type*> {
                 case TokenKind::String:
                 case TokenKind::OpComma:
                 case TokenKind::KwVoid:
+                case TokenKind::KwBool:
+                case TokenKind::KwChar:
+                case TokenKind::KwShort:
                 case TokenKind::KwInt:
+                case TokenKind::KwLong:
                 case TokenKind::KwReturn:
                 case TokenKind::KwSizeof:
                 case TokenKind::KwAlignof:
@@ -161,7 +165,11 @@ auto Sema::type_of(const Node* n) -> Result<Type*> {
                 case TokenKind::Fractional:
                 case TokenKind::String:
                 case TokenKind::KwVoid:
+                case TokenKind::KwBool:
+                case TokenKind::KwChar:
+                case TokenKind::KwShort:
                 case TokenKind::KwInt:
+                case TokenKind::KwLong:
                 case TokenKind::KwReturn:
                 case TokenKind::KwSizeof:
                 case TokenKind::KwAlignof:
@@ -400,7 +408,11 @@ Result<void> Sema::analyse_binary(BinaryOperation*& b) {
         case TokenKind::Fractional:
         case TokenKind::String:
         case TokenKind::KwVoid:
+        case TokenKind::KwBool:
+        case TokenKind::KwChar:
+        case TokenKind::KwShort:
         case TokenKind::KwInt:
+        case TokenKind::KwLong:
         case TokenKind::KwReturn:
         case TokenKind::KwSizeof:
         case TokenKind::KwAlignof:
@@ -501,7 +513,11 @@ Result<void> Sema::analyse_unary(UnaryOperation*& u) {
         case TokenKind::Fractional:
         case TokenKind::String:
         case TokenKind::KwVoid:
+        case TokenKind::KwBool:
+        case TokenKind::KwChar:
+        case TokenKind::KwShort:
         case TokenKind::KwInt:
+        case TokenKind::KwLong:
         case TokenKind::KwReturn:
         case TokenKind::KwSizeof:
         case TokenKind::KwAlignof:

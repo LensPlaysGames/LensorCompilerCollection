@@ -365,7 +365,11 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::Fractional:
                 case TokenKind::String:
                 case TokenKind::KwVoid:
+                case TokenKind::KwBool:
+                case TokenKind::KwChar:
+                case TokenKind::KwShort:
                 case TokenKind::KwInt:
+                case TokenKind::KwLong:
                 case TokenKind::KwReturn:
                 case TokenKind::KwSizeof:
                 case TokenKind::KwAlignof:
@@ -466,7 +470,11 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::Fractional:
                 case TokenKind::String:
                 case TokenKind::KwVoid:
+                case TokenKind::KwBool:
+                case TokenKind::KwChar:
+                case TokenKind::KwShort:
                 case TokenKind::KwInt:
+                case TokenKind::KwLong:
                 case TokenKind::KwReturn:
                 case TokenKind::OpPlusPlus:
                 case TokenKind::OpMinusMinus:

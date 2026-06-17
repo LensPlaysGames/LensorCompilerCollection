@@ -28,7 +28,11 @@ enum class TokenKind : unsigned int {
     String,
 
     KwVoid,
+    KwBool,
+    KwChar,
+    KwShort,
     KwInt,
+    KwLong,
     KwReturn,
     KwSizeof,
     KwAlignof,
@@ -126,6 +130,7 @@ class Parser : Lexer {
 
     Result<std::vector<Node*>> ParseDeclarators(Type* type_specifier);
     Result<Node*> ParseDeclarations(Type* type_specifier);
+    Result<Type*> ParseBaseType();
     Result<Node*> ParseExpression(size_t precedence);
     Result<std::vector<Node*>> ParseExpressions(TokenKind until);
 

@@ -68,7 +68,14 @@ String
 
 ---
 
-(block (name))
+(block
+ (declaration
+  (array_literal
+   (integer_literal)
+   (integer_literal)
+   (integer_literal)
+   (integer_literal)))
+ (name))
 
 ================
 Unterminated String
