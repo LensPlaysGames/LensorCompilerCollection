@@ -28,9 +28,41 @@ auto Sema::type_of(const Node* n) -> Result<Type*> {
     switch (n->kind()) {
         case NodeKind::BinaryOperation: {
             auto* b = (BinaryOperation*) n;
+            // TODO: usual arithmetic conversions | C23 § 6.3.1.8 (promotion)
             switch (b->binary_operator()) {
-                case TokenKind::OpPlus:
+                case TokenKind::OpPlus: {
+                    auto lhs_type = type_of(b->lhs());
+                    if (not lhs_type) return lhs_type.diag();
+                    auto rhs_type = type_of(b->lhs());
+                    if (not rhs_type) return rhs_type.diag();
+                    // If one of the operands is a pointer, the other operand must be of
+                    // integer type. Otherwise, both operands must be of arithmetic type.
+                    if (
+                        (lhs_type->kind() == TypeKind::Pointer and not type_is_integral(*rhs_type))
+                        or (rhs_type->kind() == TypeKind::Pointer and not type_is_integral(*lhs_type))
+                        or (type_is_arithmetic(*lhs_type) and not type_is_arithmetic(*rhs_type))
+                    ) {
+                        return Error(
+                            b->location(),
+                            "c/type-mismatch",
+                            "For addition, either both operands shall have arithmetic type,"
+                            " or one operand shall be a pointer to a complete object type and the other shall have integer type"
+                            " | C23 § 6.5.7"
+                        );
+                    }
+                    out = type_of(b->lhs());
+                } break;
+
+                // "For subtraction, one of the following shall hold:
+                //  — both operands have arithmetic type;
+                //  — both operands are pointers to qualified or unqualified versions of
+                //    compatible complete object types; or
+                //  — the left operand is a pointer to a complete object type and the right
+                //    operand has integer type."
                 case TokenKind::OpMinus:
+                // For multiplicative operations (star, slash, percent)
+                // "Each of the operands shall have arithmetic type. The operands of the %
+                //  operator shall have integer type."
                 case TokenKind::OpAsterisk:
                 case TokenKind::OpSlash:
                 case TokenKind::OpPercent: {
