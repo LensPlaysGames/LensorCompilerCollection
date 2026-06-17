@@ -78,7 +78,7 @@ void help() {
         {"  --color", "Whether to include colors colours in the output (default: auto)\n"},
         {"", "    always, auto, never\n"},
         {"  -x", "What language to parse input code as (default: extension based)\n"},
-        {"", "    glint, ir\n"},
+        {"", "    glint, c, ir\n"},
         {"  -t", "What format to emit code in (default: matches building system)\n"},
         {"", "    x86_64_linux, x86_64_windows\n"},
         {"  -f", "What format to emit code in (default: asm)\n"},
