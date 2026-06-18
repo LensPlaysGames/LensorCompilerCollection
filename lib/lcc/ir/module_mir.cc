@@ -1,3 +1,5 @@
+#include <lcc/ir/module_mir.hh>
+
 #include <lcc/calling_conventions/ms_x64.hh>
 #include <lcc/calling_conventions/sysv_x86_64.hh>
 #include <lcc/codegen/mir.hh>
@@ -152,20 +154,8 @@ auto assign_virtual_register(
 }
 } // namespace
 
-auto Module::mir() -> std::vector<MFunction> {
-    if (_ctx->option_print_mir())
-        fmt::print("{}", as_lcc_ir(_ctx->option_use_colour()));
-
-    // Begin MIR generation by assigning virtual registers to each and every
-    // value in the IR. While the IR can reference the direct result of a
-    // value as an operand, machines generally can't. The best a machine can
-    // do is put the result of a certain computation in a specific register,
-    // and then later, if you haven't done anything to clobber it, that result
-    // will still be there. A virtual register is exactly that.
-    std::unordered_map<Value*, usz> virts{};
-
-    // virtual register assignment
-    for (auto& function : code()) {
+void MIRBuildContext::populate_virts() {
+    for (auto& function : mod.code()) {
         for (auto& block : function->blocks()) {
             for (
                 auto* instruction : vws::transform(
@@ -173,263 +163,29 @@ auto Module::mir() -> std::vector<MFunction> {
                     [](const auto& p) { return p.get(); }
                 )
             ) {
-                assign_virtual_register(*this, virts, instruction);
+                assign_virtual_register(mod, virts, instruction);
                 for (auto child : instruction->children())
-                    assign_virtual_register(*this, virts, child);
+                    assign_virtual_register(mod, virts, child);
             }
         }
     }
+}
 
-    // Generate MIR
-    std::vector<MFunction> funcs{};
-
-    // Find machine instruction based on virtual register.
-    const auto MInstByVirtualRegister = [&](usz virtual_register) -> MInst* {
-        for (auto& mfunc : funcs) {
-            for (auto& mblock : mfunc.blocks()) {
-                for (auto& instruction : mblock.instructions()) {
-                    if (instruction.reg() == virtual_register)
-                        return &instruction;
-                }
-            }
-        }
-        return nullptr;
-    };
-
-    // Handle inlining of values into operands vs using register references.
-    const auto MOperandValueReference
-        = [&](Function* f_ir, MFunction& f, Value* v) -> MOperand {
-        // Find MInst if possible, add to use count.
-        usz regsize{0};
-        if (auto* inst = MInstByVirtualRegister(virts[v])) {
-            inst->add_use();
-            regsize = inst->regsize();
-        }
-
-        switch (v->kind()) {
-            case Value::Kind::Function:
-                return MOperandFunction(as<Function>(v));
-
-            case Value::Kind::Block:
-                return MOperandBlock(as<Block>(v));
-
-            case Value::Kind::Parameter: {
-                auto* param = as<Parameter>(v);
-                // Best effort handling of parameter. May ICE in cases of multiple
-                // register parameters, as a single MOperand must not reference both of
-                // those registers; this would have to be split into multiple instructions
-                // with multiple operands, which we can't do /from here/. So, for the
-                // specific cases where we want to handle over-large values, we will.
-                // Otherwise, this will handle the general case of single-register
-                // parameters and memory parameters being referenced.
-                if (_ctx->target()->is_arch_x86_64()) {
-                    if (_ctx->target()->is_platform_windows()) {
-                        auto params_desc = cconv::msx64::parameter_description(f_ir);
-                        auto param_info = params_desc.info.at(param->index());
-                        switch (param_info.kind()) {
-                            case cconv::msx64::ParameterDescription::Parameter::Kinds::Float: {
-                                return MOperandRegister(
-                                    +cconv::msx64::float_regs.at(param_info.arg_reg_index()),
-                                    uint(param->type()->bits()),
-                                    Register::Category::FLOAT
-                                );
-                            }
-
-                            case cconv::msx64::ParameterDescription::Parameter::Kinds::SingleRegister:
-                            // FIXME: Is this how PointerInRegister parameter is handled (here)?
-                            // This may be the perfect spot to insert a dereference, if possible.
-                            case cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister: {
-                                // FIXME: Magic number. Why 2 registers wide? I believe this is to get
-                                // past the stack frame, if present (i.e. saved base pointer), but I don't
-                                // remember exactly.
-                                i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
-
-                                // Return Local with positive offset into parent stack frame.
-                                return MOperandLocal(
-                                    MOperandLocal::absolute_index,
-                                    offset + (8 * lcc::i32(param->index()))
-                                );
-                            }
-
-                            case cconv::msx64::ParameterDescription::Parameter::Kinds::Stack: {
-                                // Return Local with positive offset into parent stack frame.
-                                // To get the actual offset, we need to know how many memory parameters
-                                // come before this parameter, as well as their size (and alignment, I'd
-                                // think).
-
-                                // FIXME: Magic number. Why 2 registers wide? I believe this is to get
-                                // past the stack frame, if present (i.e. saved base pointer), but I don't
-                                // remember exactly.
-                                i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
-
-                                // x64 calling convention requires caller to designate 32 bytes on the
-                                // stack to save parameter registers into.
-                                constexpr decltype(offset) shadow_stack_size = 32;
-                                offset += shadow_stack_size;
-
-                                // FIXME: I'm not sure if this should be stack_byte_offset (including size
-                                // of current parameter), or if it should be stack_byte_offset_used
-                                // (before the current parameter's size has been added).
-                                offset += (decltype(offset)) param_info.stack_byte_offset_used;
-                                return MOperandLocal(
-                                    MOperandLocal::absolute_index,
-                                    offset
-                                );
-                            }
-                        }
-                    } else if (_ctx->target()->is_cconv_sysv()) {
-                        auto params_desc = cconv::sysv::parameter_description(f_ir);
-                        auto param_info = params_desc.info.at(param->index());
-                        switch (param_info.kind()) {
-                            using Kinds = cconv::sysv::ParameterDescription::Parameter::Kinds;
-                            case Kinds::SingleRegister:
-                                return MOperandRegister(
-                                    +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
-                                    uint(param->type()->bits())
-                                );
-
-                            case Kinds::Scalar:
-                                return MOperandRegister(
-                                    +cconv::sysv::scalar_regs.at(param_info.arg_scalars_used),
-                                    uint(param->type()->bits()),
-                                    Register::Category::FLOAT
-                                );
-
-                            case Kinds::DoubleRegister:
-                                LCC_ASSERT(
-                                    false,
-                                    "Cannot handle multiple register parameter in this way."
-                                    " IIRC you have to lower that out further up the chain in passes on LCC IR, or something."
-                                );
-
-                            case Kinds::Memory: {
-                                // Return Local with positive offset into parent stack frame.
-                                // To get the actual offset, we need to know how many memory parameters
-                                // come before this parameter, as well as their size (and alignment, I'd
-                                // think).
-                                // FIXME: Magic number. Why 2 registers wide? I believe this is to get
-                                // past the stack frame, if present (i.e. saved base pointer), but I don't
-                                // remember exactly.
-                                i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
-                                // FIXME: I'm not sure if this should be stack_byte_offset (including size
-                                // of current parameter), or if it should be stack_byte_offset_used
-                                // (before the current parameter's size has been added).
-                                offset += (decltype(offset)) param_info.stack_byte_offset_used;
-                                return MOperandLocal(
-                                    MOperandLocal::absolute_index,
-                                    offset
-                                );
-                            }
-                        }
-                    }
-                }
-                Diag::ICE("It appears we haven't handled the target properly, sorry");
-            } break;
-
-            case Value::Kind::Alloca: {
-                auto found = std::find(
-                    f.locals().begin(),
-                    f.locals().end(),
-                    as<AllocaInst>(v)
-                );
-                if (found == f.locals().end()) {
-                    v->print();
-                    fmt::print("\n");
-                    Diag::ICE(
-                        "MIR Generation: encountered reference to local before it has been declared"
-                    );
-                }
-                return MOperandLocal{u32(found - f.locals().begin())};
-            }
-
-            case Value::Kind::GlobalVariable:
-                return MOperandGlobal{as<GlobalVariable>(v)};
-
-            case Value::Kind::IntegerConstant:
-                return MOperandImmediate{
-                    (usz) *as<IntegerConstant>(v)->value(),
-                    uint(v->type()->bits()) //
-                };
-
-            case Value::Kind::FractionalConstant:
-                LCC_TODO("MIR generation from fractional constant");
-
-            case Value::Kind::ArrayConstant:
-                LCC_TODO("MIR generation from array constant");
-
-            case Value::Kind::Poison:
-                Diag::ICE("Cannot generate MIR from poison IR value");
-
-            // These value kinds are referenced through register operands.
-            case Value::Kind::Call:
-            case Value::Kind::GetElementPtr:
-            case Value::Kind::GetMemberPtr:
-            case Value::Kind::Intrinsic:
-            case Value::Kind::Load:
-            case Value::Kind::Phi:
-            case Value::Kind::Store:
-            case Value::Kind::Branch:
-            case Value::Kind::CondBranch:
-            case Value::Kind::Return:
-            case Value::Kind::Unreachable:
-            case Value::Kind::ZExt:
-            case Value::Kind::SExt:
-            case Value::Kind::Trunc:
-            case Value::Kind::Bitcast:
-            case Value::Kind::Neg:
-            case Value::Kind::Copy:
-            case Value::Kind::Compl:
-            case Value::Kind::Add:
-            case Value::Kind::Sub:
-            case Value::Kind::Mul:
-            case Value::Kind::SDiv:
-            case Value::Kind::UDiv:
-            case Value::Kind::SRem:
-            case Value::Kind::URem:
-            case Value::Kind::Shl:
-            case Value::Kind::Sar:
-            case Value::Kind::Shr:
-            case Value::Kind::And:
-            case Value::Kind::Or:
-            case Value::Kind::Xor:
-            case Value::Kind::Eq:
-            case Value::Kind::Ne:
-            case Value::Kind::SLt:
-            case Value::Kind::SLe:
-            case Value::Kind::SGt:
-            case Value::Kind::SGe:
-            case Value::Kind::ULt:
-            case Value::Kind::ULe:
-            case Value::Kind::UGt:
-            case Value::Kind::UGe:
-                break;
-        }
-
-        auto register_category = Register::Category::DEFAULT;
-        if (is<FractionalType>(v->type()))
-            register_category = Register::Category::FLOAT;
-
-        return MOperandRegister{
-            virts[v],
-            uint(regsize),
-            register_category
-        };
-    };
-
+void MIRBuildContext::populate_funcs() {
     // NOTE: We cannot add functions to the IR while iterating over them (use-
     // after-free nightmare), so, please, do not alter the IR in the main loop
     // that generates MIR, for here there be dragons.
 
     // TODO: if memcpy already in module, use that
     auto* memcpy_ty = FunctionType::Get(
-        _ctx,
+        mod.context(),
         Type::VoidTy,
         {Type::PtrTy,
          Type::PtrTy,
-         IntegerType::Get(_ctx, 32)}
+         IntegerType::Get(mod.context(), 32)}
     );
-    auto* memcpy_function = new (*this) Function(
-        this,
+    func_memcpy = new (mod) Function(
+        &mod,
         "memcpy",
         memcpy_ty,
         Linkage::Imported,
@@ -443,7 +199,7 @@ auto Module::mir() -> std::vector<MFunction> {
     {
         usz block_count = 0;
         std::unordered_set<std::string> encountered_block_names{};
-        for (auto [f_index, function] : vws::enumerate(code())) {
+        for (auto [f_index, function] : vws::enumerate(mod.code())) {
             for (auto [block_index, block] : vws::enumerate(function->blocks())) {
                 // Only update block name if it is a duplicate.
                 while (encountered_block_names.contains(block->name()))
@@ -457,7 +213,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
     // To avoid iterator invalidation when any of these vectors are resizing,
     // we "pre-construct" functions and blocks.
-    for (auto& function : code()) {
+    for (auto& function : mod.code()) {
         funcs.emplace_back(function->call_conv());
         auto& f = funcs.back();
         f.names() = function->names();
@@ -471,7 +227,7 @@ auto Module::mir() -> std::vector<MFunction> {
     // NOTE: I may want to make a "locking" vector that can be locked and
     // never resized again, to assert that all iterators taken will never
     // invalidate.
-    for (auto [f_index, function] : vws::enumerate(code())) {
+    for (auto [f_index, function] : vws::enumerate(mod.code())) {
         auto& f = funcs.at(usz(f_index));
         function->machine_function(&f);
         for (auto [block_index, block] : vws::enumerate(function->blocks())) {
@@ -479,12 +235,266 @@ auto Module::mir() -> std::vector<MFunction> {
             block->machine_block(&bb);
         }
     }
+}
+
+auto MIRBuildContext::minst_by_virtual_register(usz virtual_register) -> MInst* {
+    for (auto& mfunc : funcs) {
+        for (auto& mblock : mfunc.blocks()) {
+            for (auto& instruction : mblock.instructions()) {
+                if (instruction.reg() == virtual_register)
+                    return &instruction;
+            }
+        }
+    }
+    return nullptr;
+}
+
+auto MIRBuildContext::moperand_value_reference(
+    Function* f_ir,
+    MFunction& f,
+    Value* v
+) -> MOperand {
+    // Find MInst if possible, add to use count.
+    usz regsize{0};
+    if (auto* inst = minst_by_virtual_register(virts[v])) {
+        inst->add_use();
+        regsize = inst->regsize();
+    }
+
+    switch (v->kind()) {
+        case Value::Kind::Function:
+            return MOperandFunction(as<Function>(v));
+
+        case Value::Kind::Block:
+            return MOperandBlock(as<Block>(v));
+
+        case Value::Kind::Parameter: {
+            auto* param = as<Parameter>(v);
+            // Best effort handling of parameter. May ICE in cases of multiple
+            // register parameters, as a single MOperand must not reference both of
+            // those registers; this would have to be split into multiple instructions
+            // with multiple operands, which we can't do /from here/. So, for the
+            // specific cases where we want to handle over-large values, we will.
+            // Otherwise, this will handle the general case of single-register
+            // parameters and memory parameters being referenced.
+            if (mod.context()->target()->is_arch_x86_64()) {
+                if (mod.context()->target()->is_platform_windows()) {
+                    auto params_desc = cconv::msx64::parameter_description(f_ir);
+                    auto param_info = params_desc.info.at(param->index());
+                    switch (param_info.kind()) {
+                        case cconv::msx64::ParameterDescription::Parameter::Kinds::Float: {
+                            return MOperandRegister(
+                                +cconv::msx64::float_regs.at(param_info.arg_reg_index()),
+                                uint(param->type()->bits()),
+                                Register::Category::FLOAT
+                            );
+                        }
+
+                        case cconv::msx64::ParameterDescription::Parameter::Kinds::SingleRegister:
+                        // FIXME: Is this how PointerInRegister parameter is handled (here)?
+                        // This may be the perfect spot to insert a dereference, if possible.
+                        case cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister: {
+                            // FIXME: Magic number. Why 2 registers wide? I believe this is to get
+                            // past the stack frame, if present (i.e. saved base pointer), but I don't
+                            // remember exactly.
+                            i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
+
+                            // Return Local with positive offset into parent stack frame.
+                            return MOperandLocal(
+                                MOperandLocal::absolute_index,
+                                offset + (8 * lcc::i32(param->index()))
+                            );
+                        }
+
+                        case cconv::msx64::ParameterDescription::Parameter::Kinds::Stack: {
+                            // Return Local with positive offset into parent stack frame.
+                            // To get the actual offset, we need to know how many memory parameters
+                            // come before this parameter, as well as their size (and alignment, I'd
+                            // think).
+
+                            // FIXME: Magic number. Why 2 registers wide? I believe this is to get
+                            // past the stack frame, if present (i.e. saved base pointer), but I don't
+                            // remember exactly.
+                            i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
+
+                            // x64 calling convention requires caller to designate 32 bytes on the
+                            // stack to save parameter registers into.
+                            constexpr decltype(offset) shadow_stack_size = 32;
+                            offset += shadow_stack_size;
+
+                            // FIXME: I'm not sure if this should be stack_byte_offset (including size
+                            // of current parameter), or if it should be stack_byte_offset_used
+                            // (before the current parameter's size has been added).
+                            offset += (decltype(offset)) param_info.stack_byte_offset_used;
+                            return MOperandLocal(
+                                MOperandLocal::absolute_index,
+                                offset
+                            );
+                        }
+                    }
+                } else if (mod.context()->target()->is_cconv_sysv()) {
+                    auto params_desc = cconv::sysv::parameter_description(f_ir);
+                    auto param_info = params_desc.info.at(param->index());
+                    switch (param_info.kind()) {
+                        using Kinds = cconv::sysv::ParameterDescription::Parameter::Kinds;
+                        case Kinds::SingleRegister:
+                            return MOperandRegister(
+                                +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
+                                uint(param->type()->bits())
+                            );
+
+                        case Kinds::Scalar:
+                            return MOperandRegister(
+                                +cconv::sysv::scalar_regs.at(param_info.arg_scalars_used),
+                                uint(param->type()->bits()),
+                                Register::Category::FLOAT
+                            );
+
+                        case Kinds::DoubleRegister:
+                            LCC_ASSERT(
+                                false,
+                                "Cannot handle multiple register parameter in this way."
+                                " IIRC you have to lower that out further up the chain in passes on LCC IR, or something."
+                            );
+
+                        case Kinds::Memory: {
+                            // Return Local with positive offset into parent stack frame.
+                            // To get the actual offset, we need to know how many memory parameters
+                            // come before this parameter, as well as their size (and alignment, I'd
+                            // think).
+                            // FIXME: Magic number. Why 2 registers wide? I believe this is to get
+                            // past the stack frame, if present (i.e. saved base pointer), but I don't
+                            // remember exactly.
+                            i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
+                            // FIXME: I'm not sure if this should be stack_byte_offset (including size
+                            // of current parameter), or if it should be stack_byte_offset_used
+                            // (before the current parameter's size has been added).
+                            offset += (decltype(offset)) param_info.stack_byte_offset_used;
+                            return MOperandLocal(
+                                MOperandLocal::absolute_index,
+                                offset
+                            );
+                        }
+                    }
+                }
+            }
+            Diag::ICE("It appears we haven't handled the target properly, sorry");
+        } break;
+
+        case Value::Kind::Alloca: {
+            auto found = std::find(
+                f.locals().begin(),
+                f.locals().end(),
+                as<AllocaInst>(v)
+            );
+            if (found == f.locals().end()) {
+                v->print();
+                fmt::print("\n");
+                Diag::ICE(
+                    "MIR Generation: encountered reference to local before it has been declared"
+                );
+            }
+            return MOperandLocal{u32(found - f.locals().begin())};
+        }
+
+        case Value::Kind::GlobalVariable:
+            return MOperandGlobal{as<GlobalVariable>(v)};
+
+        case Value::Kind::IntegerConstant:
+            return MOperandImmediate{
+                (usz) *as<IntegerConstant>(v)->value(),
+                uint(v->type()->bits()) //
+            };
+
+        case Value::Kind::FractionalConstant:
+            LCC_TODO("MIR generation from fractional constant");
+
+        case Value::Kind::ArrayConstant:
+            LCC_TODO("MIR generation from array constant");
+
+        case Value::Kind::Poison:
+            Diag::ICE("Cannot generate MIR from poison IR value");
+
+        // These value kinds are referenced through register operands.
+        case Value::Kind::Call:
+        case Value::Kind::GetElementPtr:
+        case Value::Kind::GetMemberPtr:
+        case Value::Kind::Intrinsic:
+        case Value::Kind::Load:
+        case Value::Kind::Phi:
+        case Value::Kind::Store:
+        case Value::Kind::Branch:
+        case Value::Kind::CondBranch:
+        case Value::Kind::Return:
+        case Value::Kind::Unreachable:
+        case Value::Kind::ZExt:
+        case Value::Kind::SExt:
+        case Value::Kind::Trunc:
+        case Value::Kind::Bitcast:
+        case Value::Kind::Neg:
+        case Value::Kind::Copy:
+        case Value::Kind::Compl:
+        case Value::Kind::Add:
+        case Value::Kind::Sub:
+        case Value::Kind::Mul:
+        case Value::Kind::SDiv:
+        case Value::Kind::UDiv:
+        case Value::Kind::SRem:
+        case Value::Kind::URem:
+        case Value::Kind::Shl:
+        case Value::Kind::Sar:
+        case Value::Kind::Shr:
+        case Value::Kind::And:
+        case Value::Kind::Or:
+        case Value::Kind::Xor:
+        case Value::Kind::Eq:
+        case Value::Kind::Ne:
+        case Value::Kind::SLt:
+        case Value::Kind::SLe:
+        case Value::Kind::SGt:
+        case Value::Kind::SGe:
+        case Value::Kind::ULt:
+        case Value::Kind::ULe:
+        case Value::Kind::UGt:
+        case Value::Kind::UGe:
+            break;
+    }
+
+    auto register_category = Register::Category::DEFAULT;
+    if (is<FractionalType>(v->type()))
+        register_category = Register::Category::FLOAT;
+
+    return MOperandRegister{
+        virts[v],
+        uint(regsize),
+        register_category
+    };
+}
+
+auto Module::mir() -> std::vector<MFunction> {
+    if (_ctx->option_print_mir())
+        fmt::print("{}", as_lcc_ir(_ctx->option_use_colour()));
+
+    auto build_ctx = MIRBuildContext(*this);
+
+    // Begin MIR generation by assigning virtual registers to each and every
+    // value in the IR. While the IR can reference the direct result of a
+    // value as an operand, machines generally can't. The best a machine can
+    // do is put the result of a certain computation in a specific register,
+    // and then later, if you haven't done anything to clobber it, that result
+    // will still be there. A virtual register is exactly that.
+    build_ctx.populate_virts();
+
+    // Generate MIR (dummy entries to prevent iterator invalidation).
+    build_ctx.populate_funcs();
+
+    LCC_ASSERT(build_ctx.func_memcpy);
 
     // MSx64 ONLY: Store register parameters to reserved space (shadow stack)
     if (context()->target()->is_cconv_ms()) {
         constexpr lcc::i32 stack_frame_size = 16;
         for (auto [f_index, function] : vws::enumerate(code())) {
-            auto& f = funcs.at(usz(f_index));
+            auto& f = build_ctx.funcs.at(usz(f_index));
             if (f.blocks().empty()) continue;
 
             auto param_desc = cconv::msx64::parameter_description(function.get());
@@ -513,7 +523,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
     // The actual generation part
     for (auto [f_index, function] : vws::enumerate(code())) {
-        auto& f = funcs.at(usz(f_index));
+        auto& f = build_ctx.funcs.at(usz(f_index));
         for (auto [block_index, block] : vws::enumerate(function->blocks())) {
             auto& bb = f.blocks().at(usz(block_index));
             for (
@@ -545,13 +555,13 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto* copy_ir = as<CopyInst>(instruction);
                         auto copy = MInst(
                             MInst::Kind::Copy,
-                            {virts[instruction],
+                            {build_ctx.virts[instruction],
                              uint(copy_ir->type()->bits()),
                              register_category}
                         );
                         copy.location(copy_ir->location());
                         copy.add_operand(
-                            MOperandValueReference(function.get(), f, copy_ir->operand())
+                            build_ctx.moperand_value_reference(function.get(), f, copy_ir->operand())
                         );
                         bb.add_instruction(copy);
                     } break;
@@ -573,14 +583,14 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto phi = MInst(
                             MInst::Kind::Phi,
-                            {virts[instruction],
+                            {build_ctx.virts[instruction],
                              uint(phi_ir->type()->bits()),
                              register_category}
                         );
                         phi.location(phi_ir->location());
                         for (const auto& op : phi_ir->operands()) {
-                            phi.add_operand(MOperandValueReference(function.get(), f, op.block));
-                            phi.add_operand(MOperandValueReference(function.get(), f, op.value));
+                            phi.add_operand(build_ctx.moperand_value_reference(function.get(), f, op.block));
+                            phi.add_operand(build_ctx.moperand_value_reference(function.get(), f, op.value));
                         }
                         bb.add_instruction(phi);
                     } break;
@@ -612,7 +622,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                  Register::Category::FLOAT}
                                             );
                                             copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function.get(), f, arg));
+                                            copy.add_operand(build_ctx.moperand_value_reference(function.get(), f, arg));
                                             bb.add_instruction(copy);
                                         } break;
 
@@ -626,7 +636,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                  register_category}
                                             );
                                             copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function.get(), f, arg));
+                                            copy.add_operand(build_ctx.moperand_value_reference(function.get(), f, arg));
                                             bb.add_instruction(copy);
                                         } break;
 
@@ -662,7 +672,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                         // into that.
 
                                         // Remove the original argument; we will be building it by hand.
-                                        auto arg_mir = MOperandValueReference(function.get(), f, arg);
+                                        auto arg_mir = build_ctx.moperand_value_reference(function.get(), f, arg);
                                         LCC_ASSERT(std::holds_alternative<MOperandRegister>(arg_mir));
                                         auto arg_reg = std::get<MOperandRegister>(arg_mir);
                                         bb.remove_inst_by_reg(arg_reg.value);
@@ -711,7 +721,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                 {+cconv::sysv::arg_regs.at(1), 64}
                                             );
                                             copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function.get(), f, arg_ptr));
+                                            copy.add_operand(build_ctx.moperand_value_reference(function.get(), f, arg_ptr));
                                             bb.add_instruction(copy);
                                         }
                                         { // Size argument
@@ -729,7 +739,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                             {usz(x86_64::RegisterId::RETURN), 0}
                                         );
                                         call.location(call_ir->location());
-                                        call.add_operand(memcpy_function);
+                                        call.add_operand(build_ctx.func_memcpy);
                                         bb.add_instruction(call);
                                     }
                                 }
@@ -750,7 +760,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                  Register::Category::FLOAT}
                                             );
                                             copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function.get(), f, arg));
+                                            copy.add_operand(build_ctx.moperand_value_reference(function.get(), f, arg));
                                             bb.add_instruction(copy);
                                         } break;
 
@@ -762,7 +772,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                                  uint(arg->type()->bits())}
                                             );
                                             copy.location(call_ir->location());
-                                            copy.add_operand(MOperandValueReference(function.get(), f, arg));
+                                            copy.add_operand(build_ctx.moperand_value_reference(function.get(), f, arg));
                                             bb.add_instruction(copy);
                                         } break;
                                         case ParamKind::DoubleRegister: {
@@ -785,14 +795,14 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                             if (auto* load_arg = cast<LoadInst>(arg)) {
                                                 if (auto* alloca = cast<AllocaInst>(load_arg->ptr())) {
-                                                    load_a.add_operand(MOperandValueReference(function.get(), f, alloca));
+                                                    load_a.add_operand(build_ctx.moperand_value_reference(function.get(), f, alloca));
 
                                                     auto add_b = MInst(
                                                         MInst::Kind::Add,
                                                         {next_vreg(), x86_64::GeneralPurposeBitwidth}
                                                     );
                                                     add_b.location(call_ir->location());
-                                                    add_b.add_operand(MOperandValueReference(function.get(), f, alloca));
+                                                    add_b.add_operand(build_ctx.moperand_value_reference(function.get(), f, alloca));
                                                     add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
 
                                                     load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
@@ -800,7 +810,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                                     // In doing the copying and stuff, we have effectively loaded the thing
                                                     // manually. So, we remove the load that was there before.
-                                                    bb.remove_inst_by_reg(virts[load_arg]);
+                                                    bb.remove_inst_by_reg(build_ctx.virts[load_arg]);
 
                                                 } else {
                                                     LCC_TODO(
@@ -808,14 +818,14 @@ auto Module::mir() -> std::vector<MFunction> {
                                                     );
                                                 }
                                             } else if (arg->kind() == Value::Kind::Alloca) {
-                                                load_a.add_operand(MOperandValueReference(function.get(), f, arg));
+                                                load_a.add_operand(build_ctx.moperand_value_reference(function.get(), f, arg));
 
                                                 auto add_b = MInst(
                                                     MInst::Kind::Add,
                                                     {next_vreg(), x86_64::GeneralPurposeBitwidth}
                                                 );
                                                 add_b.location(call_ir->location());
-                                                add_b.add_operand(MOperandValueReference(function.get(), f, arg));
+                                                add_b.add_operand(build_ctx.moperand_value_reference(function.get(), f, arg));
                                                 add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
 
                                                 load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
@@ -836,13 +846,13 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto call = MInst(
                             MInst::Kind::Call,
-                            {virts[instruction],
+                            {build_ctx.virts[instruction],
                              uint(call_ir->function_type()->ret()->bits()),
                              register_category}
                         );
                         call.location(call_ir->location());
                         call.add_operand(
-                            MOperandValueReference(function.get(), f, call_ir->callee())
+                            build_ctx.moperand_value_reference(function.get(), f, call_ir->callee())
                         );
                         bb.add_instruction(call);
 
@@ -898,13 +908,13 @@ auto Module::mir() -> std::vector<MFunction> {
                                         {arg_regs.at(arg_regs_used++), uint(op->type()->bits())}
                                     );
                                     copy.location(intrinsic->location());
-                                    copy.add_operand(MOperandValueReference(function.get(), f, op));
+                                    copy.add_operand(build_ctx.moperand_value_reference(function.get(), f, op));
                                     bb.add_instruction(copy);
                                 }
 
                                 auto call = MInst(MInst::Kind::Call, {0, 0});
                                 call.location(intrinsic->location());
-                                call.add_operand(memcpy_function);
+                                call.add_operand(build_ctx.func_memcpy);
                                 bb.add_instruction(call);
                             } break;
 
@@ -918,7 +928,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::GetElementPtr: {
                         auto* gep_ir = as<GEPInst>(instruction);
                         Register reg{
-                            virts[instruction],
+                            build_ctx.virts[instruction],
                             uint(gep_ir->type()->bits()),
                             register_category
                         };
@@ -929,14 +939,14 @@ auto Module::mir() -> std::vector<MFunction> {
                             if (not offset) {
                                 auto copy = MInst(MInst::Kind::Copy, reg);
                                 copy.location(gep_ir->location());
-                                copy.add_operand(MOperandValueReference(function.get(), f, gep_ir->ptr()));
+                                copy.add_operand(build_ctx.moperand_value_reference(function.get(), f, gep_ir->ptr()));
                                 bb.add_instruction(copy);
                                 break;
                             }
 
                             auto add = MInst(MInst::Kind::Add, reg);
                             add.location(gep_ir->location());
-                            add.add_operand(MOperandValueReference(function.get(), f, gep_ir->ptr()));
+                            add.add_operand(build_ctx.moperand_value_reference(function.get(), f, gep_ir->ptr()));
                             add.add_operand(MOperandImmediate(offset, 32));
 
                             usz use_count = gep_ir->users().size();
@@ -949,11 +959,11 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto mul = MInst(MInst::Kind::Mul, reg);
                         mul.location(gep_ir->location());
                         mul.add_operand(MOperandImmediate(gep_ir->base_type()->bytes(), 32));
-                        mul.add_operand(MOperandValueReference(function.get(), f, gep_ir->idx()));
+                        mul.add_operand(build_ctx.moperand_value_reference(function.get(), f, gep_ir->idx()));
 
                         auto add = MInst(MInst::Kind::Add, reg);
                         add.location(gep_ir->location());
-                        add.add_operand(MOperandValueReference(function.get(), f, gep_ir->ptr()));
+                        add.add_operand(build_ctx.moperand_value_reference(function.get(), f, gep_ir->ptr()));
                         add.add_operand(reg);
 
                         usz use_count = gep_ir->users().size();
@@ -965,7 +975,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::GetMemberPtr: {
                         auto gmp_ir = as<GetMemberPtrInst>(instruction);
-                        auto reg = Register{virts[instruction], uint(gmp_ir->type()->bits())};
+                        auto reg = Register{build_ctx.virts[instruction], uint(gmp_ir->type()->bits())};
 
                         LCC_ASSERT(
                             gmp_ir->idx()->kind() == Value::Kind::IntegerConstant,
@@ -981,14 +991,14 @@ auto Module::mir() -> std::vector<MFunction> {
                         if (not offset) {
                             auto copy = MInst(MInst::Kind::Copy, reg);
                             copy.location(gmp_ir->location());
-                            copy.add_operand(MOperandValueReference(function.get(), f, gmp_ir->ptr()));
+                            copy.add_operand(build_ctx.moperand_value_reference(function.get(), f, gmp_ir->ptr()));
                             bb.add_instruction(copy);
                             break;
                         }
 
                         auto add = MInst(MInst::Kind::Add, reg);
                         add.location(gmp_ir->location());
-                        add.add_operand(MOperandValueReference(function.get(), f, gmp_ir->ptr()));
+                        add.add_operand(build_ctx.moperand_value_reference(function.get(), f, gmp_ir->ptr()));
                         add.add_operand(MOperandImmediate(offset, 32));
 
                         bb.add_instruction(add);
@@ -1000,10 +1010,10 @@ auto Module::mir() -> std::vector<MFunction> {
                         // size is zero.
                         auto branch = MInst(
                             MInst::Kind::Branch,
-                            {virts[instruction], 0}
+                            {build_ctx.virts[instruction], 0}
                         );
                         branch.location(branch_ir->location());
-                        auto op = MOperandValueReference(function.get(), f, branch_ir->target());
+                        auto op = build_ctx.moperand_value_reference(function.get(), f, branch_ir->target());
                         branch.add_operand(op);
                         bb.add_instruction(branch);
 
@@ -1021,12 +1031,12 @@ auto Module::mir() -> std::vector<MFunction> {
                         // size is zero.
                         auto branch = MInst(
                             MInst::Kind::CondBranch,
-                            {virts[instruction], 0}
+                            {build_ctx.virts[instruction], 0}
                         );
                         branch.location(branch_ir->location());
-                        branch.add_operand(MOperandValueReference(function.get(), f, branch_ir->cond()));
-                        auto then_op = MOperandValueReference(function.get(), f, branch_ir->then_block());
-                        auto else_op = MOperandValueReference(function.get(), f, branch_ir->else_block());
+                        branch.add_operand(build_ctx.moperand_value_reference(function.get(), f, branch_ir->cond()));
+                        auto then_op = build_ctx.moperand_value_reference(function.get(), f, branch_ir->then_block());
+                        auto else_op = build_ctx.moperand_value_reference(function.get(), f, branch_ir->else_block());
                         branch.add_operand(then_op);
                         branch.add_operand(else_op);
                         bb.add_instruction(branch);
@@ -1049,7 +1059,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         // size is zero.
                         auto unreachable = MInst(
                             MInst::Kind::Unreachable,
-                            {virts[instruction], 0}
+                            {build_ctx.virts[instruction], 0}
                         );
                         unreachable.location(as<UnreachableInst>(instruction)->location());
                         bb.add_instruction(unreachable);
@@ -1078,23 +1088,23 @@ auto Module::mir() -> std::vector<MFunction> {
 
                             auto store_a = MInst(
                                 MInst::Kind::Store,
-                                {virts[instruction], 0}
+                                {build_ctx.virts[instruction], 0}
                             );
                             store_a.location(store_ir->location());
                             store_a.add_operand(reg_a);
-                            store_a.add_operand(MOperandValueReference(function.get(), f, store_ir->ptr()));
+                            store_a.add_operand(build_ctx.moperand_value_reference(function.get(), f, store_ir->ptr()));
 
                             auto add_b = MInst(
                                 MInst::Kind::Add,
                                 {next_vreg(), 64}
                             );
                             add_b.location(store_ir->location());
-                            add_b.add_operand(MOperandValueReference(function.get(), f, store_ir->ptr()));
+                            add_b.add_operand(build_ctx.moperand_value_reference(function.get(), f, store_ir->ptr()));
                             add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
 
                             auto store_b = MInst(
                                 MInst::Kind::Store,
-                                {virts[instruction], 0}
+                                {build_ctx.virts[instruction], 0}
                             );
                             store_b.location(store_ir->location());
                             store_b.add_operand(reg_b);
@@ -1132,23 +1142,23 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                         auto store_a = MInst(
                                             MInst::Kind::Store,
-                                            {virts[instruction], 0}
+                                            {build_ctx.virts[instruction], 0}
                                         );
                                         store_a.location(store_ir->location());
                                         store_a.add_operand(reg_a);
-                                        store_a.add_operand(MOperandValueReference(function.get(), f, alloca));
+                                        store_a.add_operand(build_ctx.moperand_value_reference(function.get(), f, alloca));
 
                                         auto add_b = MInst(
                                             MInst::Kind::Add,
                                             {next_vreg(), x86_64::GeneralPurposeBitwidth}
                                         );
                                         add_b.location(store_ir->location());
-                                        add_b.add_operand(MOperandValueReference(function.get(), f, alloca));
+                                        add_b.add_operand(build_ctx.moperand_value_reference(function.get(), f, alloca));
                                         add_b.add_operand(MOperandImmediate(x86_64::GeneralPurposeBytewidth, 32));
 
                                         auto store_b = MInst(
                                             MInst::Kind::Store,
-                                            {virts[instruction], 0}
+                                            {build_ctx.virts[instruction], 0}
                                         );
                                         store_b.location(store_ir->location());
                                         store_b.add_operand(reg_b);
@@ -1168,11 +1178,11 @@ auto Module::mir() -> std::vector<MFunction> {
                         // size is zero.
                         auto store = MInst(
                             MInst::Kind::Store,
-                            {virts[instruction], 0}
+                            {build_ctx.virts[instruction], 0}
                         );
                         store.location(store_ir->location());
-                        store.add_operand(MOperandValueReference(function.get(), f, store_ir->val()));
-                        store.add_operand(MOperandValueReference(function.get(), f, store_ir->ptr()));
+                        store.add_operand(build_ctx.moperand_value_reference(function.get(), f, store_ir->val()));
+                        store.add_operand(build_ctx.moperand_value_reference(function.get(), f, store_ir->ptr()));
                         bb.add_instruction(store);
                     } break;
 
@@ -1180,12 +1190,12 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto* load_ir = as<LoadInst>(instruction);
                         auto load = MInst(
                             MInst::Kind::Load,
-                            {virts[instruction],
+                            {build_ctx.virts[instruction],
                              uint(load_ir->type()->bits()),
                              register_category}
                         );
                         load.location(load_ir->location());
-                        load.add_operand(MOperandValueReference(function.get(), f, load_ir->ptr()));
+                        load.add_operand(build_ctx.moperand_value_reference(function.get(), f, load_ir->ptr()));
                         bb.add_instruction(load);
                     } break;
 
@@ -1209,7 +1219,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                     {next_vreg(), x86_64::GeneralPurposeBitwidth}
                                 );
                                 copy_b.location(ret_ir->location());
-                                copy_b.add_operand(MOperandValueReference(function.get(), f, ret_ir->val()));
+                                copy_b.add_operand(build_ctx.moperand_value_reference(function.get(), f, ret_ir->val()));
 
                                 auto add_b = MInst(
                                     MInst::Kind::Add,
@@ -1224,7 +1234,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                     {usz(x86_64::RegisterId::RAX), x86_64::GeneralPurposeBitwidth}
                                 );
                                 load_a.location(ret_ir->location());
-                                load_a.add_operand(MOperandValueReference(function.get(), f, ret_ir->val()));
+                                load_a.add_operand(build_ctx.moperand_value_reference(function.get(), f, ret_ir->val()));
 
                                 auto load_b = MInst(
                                     MInst::Kind::Load,
@@ -1251,11 +1261,11 @@ auto Module::mir() -> std::vector<MFunction> {
                         if (ret_ir->has_value()) regsize = ret_ir->val()->type()->bits();
                         auto ret = MInst(
                             MInst::Kind::Return,
-                            {virts[instruction], uint(regsize), register_category}
+                            {build_ctx.virts[instruction], uint(regsize), register_category}
                         );
                         ret.location(ret_ir->location());
                         if (ret_ir->has_value())
-                            ret.add_operand(MOperandValueReference(function.get(), f, ret_ir->val()));
+                            ret.add_operand(build_ctx.moperand_value_reference(function.get(), f, ret_ir->val()));
                         bb.add_instruction(ret);
                     } break;
 
@@ -1269,12 +1279,12 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto* unary_ir = as<UnaryInstBase>(instruction);
                         auto unary = MInst(
                             ir_nary_inst_kind_to_mir(unary_ir->kind()),
-                            {virts[instruction],
+                            {build_ctx.virts[instruction],
                              uint(unary_ir->type()->bits()),
                              register_category}
                         );
                         unary.location(unary_ir->location());
-                        unary.add_operand(MOperandValueReference(function.get(), f, unary_ir->operand()));
+                        unary.add_operand(build_ctx.moperand_value_reference(function.get(), f, unary_ir->operand()));
                         bb.add_instruction(unary);
                     } break;
 
@@ -1305,16 +1315,16 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto* binary_ir = as<BinaryInst>(instruction);
                         auto binary = MInst(
                             ir_nary_inst_kind_to_mir(binary_ir->kind()),
-                            {virts[instruction],
+                            {build_ctx.virts[instruction],
                              uint(binary_ir->type()->bits()),
                              register_category}
                         );
                         binary.location(binary_ir->location());
                         binary.add_operand(
-                            MOperandValueReference(function.get(), f, binary_ir->lhs())
+                            build_ctx.moperand_value_reference(function.get(), f, binary_ir->lhs())
                         );
                         binary.add_operand(
-                            MOperandValueReference(function.get(), f, binary_ir->rhs())
+                            build_ctx.moperand_value_reference(function.get(), f, binary_ir->rhs())
                         );
                         bb.add_instruction(binary);
                     } break;
@@ -1324,7 +1334,7 @@ auto Module::mir() -> std::vector<MFunction> {
     }
 
     // Lowering
-    for (auto& mfunc : funcs) {
+    for (auto& mfunc : build_ctx.funcs) {
         for (auto& mblock : mfunc.blocks()) {
             std::vector<isz> indices_of_instructions_to_remove{};
             for (auto [minst_index, minst] : vws::enumerate(mblock.instructions())) {
@@ -1392,7 +1402,7 @@ auto Module::mir() -> std::vector<MFunction> {
         }
     }
 
-    return funcs;
+    return build_ctx.funcs;
 }
 
 } // namespace lcc
