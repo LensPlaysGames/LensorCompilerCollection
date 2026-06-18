@@ -60,7 +60,7 @@ auto elf_add_string(std::vector<u8>& string_table, std::string_view new_string) 
 
 } // namespace
 
-void GenericObject::as_elf(FILE* f) {
+void GenericObject::as_elf(FILE* f) const {
     elf64_header hdr = default_header();
     // Section header table entry count
     // NULL entry + GObj sections + ".strtab" + ".symtab" + ".rela.text"
@@ -135,7 +135,7 @@ void GenericObject::as_elf(FILE* f) {
         elf64_sym elf_sym{};
         elf_sym.st_name = elf_add_string(string_table, sym.name);
 
-        if (sym.kind != Symbol::Kind::EXTERNAL) {
+        if (sym.kind != Symbol::Kind::EXTERNAL and not sym.section_name.empty()) {
             // Get index of section by name
             bool found{false};
             usz elf_section_index{1}; // "1" because we need to start past NULL entry
@@ -212,7 +212,7 @@ void GenericObject::as_elf(FILE* f) {
         data_offset += shdr.sh_size;
     }
 
-    // ".text" relocations section headaer: ".rela.text"
+    // ".text" relocations section header: ".rela.text"
     {
         elf64_shdr shdr{};
         shdr.sh_type = SHT_RELA;
@@ -273,7 +273,7 @@ void GenericObject::as_elf(FILE* f) {
                 auto found_symbol = std::find_if(
                     symbols.begin(),
                     symbols.end(),
-                    [&](Symbol& symbol) {
+                    [&](const Symbol& symbol) {
                         return symbol.name == reloc.symbol.name;
                     }
                 );
@@ -289,8 +289,16 @@ void GenericObject::as_elf(FILE* f) {
                 else elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_PC32);
 
                 // DISP*32* -> 32-bit displacement -> 4 byte offset
+                // The 4 bytes is because the *4 byte* address goes at the very end of the
+                // binary instruction encoding, and, by the time the CPU is _executing_
+                // the instruction that takes this address as an operand (at the very end
+                // of the instruction's encoding), the program counter/instruction pointer
+                // is already at the beginning of the *next* instruction. This 4 byte
+                // offset takes into account the fact that what we are going to calculate
+                // involves the distance between the symbol definition and the exact
+                // location within the section we are overwriting, but that is not how the
+                // CPU will end up doing it at execution time.
                 elf_reloc.r_addend = -4;
-
             } break;
 
             case Relocation::Kind::DISPLACEMENT32:

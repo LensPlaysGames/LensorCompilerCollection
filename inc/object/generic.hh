@@ -7,7 +7,9 @@
 #include <lcc/utils.hh>
 
 #include <climits>
+#include <functional>
 #include <initializer_list>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -36,7 +38,8 @@ public:
     bool is_fill{false};
 
     Section() = default;
-    explicit Section(std::string name_) : name(std::move(name_)) {}
+    explicit Section(std::string name_)
+        : name(std::move(name_)) {}
 
     // Enum integer value is bit index into attributes field.
     enum struct Attribute {
@@ -54,6 +57,7 @@ public:
         MAX = sizeof(decltype(attributes)) * CHAR_BIT // NONE ALLOWED PAST THIS
     };
 
+    [[nodiscard]]
     bool attribute(Attribute n) const {
         return attributes & (u64(1) << int(n));
     }
@@ -65,28 +69,34 @@ public:
         return new_value;
     }
 
+    [[nodiscard]]
     auto& length() {
         LCC_ASSERT(is_fill, "Cannot access length unless section is_fill");
         return _length;
     }
+    [[nodiscard]]
     auto length() const {
         LCC_ASSERT(is_fill, "Cannot access length unless section is_fill");
         return _length;
     }
+    [[nodiscard]]
     auto& value() {
         LCC_ASSERT(is_fill, "Cannot access length unless section is_fill");
         return _value;
     }
-    auto value() const {
+    [[nodiscard]]
+    auto& value() const {
         LCC_ASSERT(is_fill, "Cannot access length unless section is_fill");
         return _value;
     }
 
+    [[nodiscard]]
     auto& contents() {
         LCC_ASSERT(not is_fill, "Cannot append to contents unless section !is_fill");
         return _contents;
     }
 
+    [[nodiscard]]
     auto& contents() const {
         LCC_ASSERT(not is_fill, "Cannot append to contents unless section !is_fill");
         return _contents;
@@ -111,7 +121,8 @@ public:
         return *this;
     }
 
-    std::string print() {
+    [[nodiscard]]
+    std::string print() const {
         auto out = fmt::format(
             "[SECTION]: {}\n"
             "CONTENTS:",
@@ -202,7 +213,7 @@ struct Symbol {
         EXTERNAL,
     } kind{Kind::NONE};
 
-    std::string kind_string(Kind k) {
+    constexpr std::string kind_string(Kind k) const {
         switch (k) {
             case Kind::NONE:
                 return "NONE";
@@ -230,7 +241,8 @@ struct Symbol {
     // Offset into originating section where symbol is defined.
     usz byte_offset{};
 
-    std::string print() {
+    [[nodiscard]]
+    std::string print() const {
         return fmt::format("[SYMBOL]: {}({}) {}  {}\n", byte_offset, section_name, name, kind_string(kind));
     }
 };
@@ -242,7 +254,7 @@ struct Relocation {
         DISPLACEMENT32_PCREL,
     } kind;
 
-    std::string kind_string(Kind k) {
+    constexpr std::string kind_string(Kind k) const {
         switch (k) {
             case Kind::NONE:
                 return "NONE";
@@ -254,17 +266,28 @@ struct Relocation {
         LCC_UNREACHABLE();
     }
 
-    // THOUGHTS: This /could/ be an index into symbols array of GenericObject,
-    // if we don't want to duplicate all these short strings and stuff.
+    // NOTE: We are kind of using symbol in a hacky way here, such that the
+    // symbol's byte offset and section name are commandeered by the
+    // relocation to store the section we are supposed to relocate within, and
+    // the byte offset within that section where the relocation is to occur.
     Symbol symbol;
 
     isz addend;
 
-    std::string print() {
-        return fmt::format("[RELOC]: {}  {}{:+}\n", kind_string(kind), symbol.name, addend);
+    [[nodiscard]]
+    std::string print() const {
+        return fmt::format(
+            "[RELOC]: {}  {}{:+} within `{}` at offset {}\n",
+            kind_string(kind),
+            symbol.name,
+            addend,
+            symbol.section_name,
+            symbol.byte_offset
+        );
     }
 };
 
+[[nodiscard]]
 constexpr isz align_to(isz value, isz alignment) {
     return value + ((alignment - (value % alignment)) % alignment);
 }
@@ -274,17 +297,26 @@ struct GenericObject {
     std::vector<Symbol> symbols{};
     std::vector<Relocation> relocations{};
 
-    Section& section(std::string_view name) {
+    std::optional<std::reference_wrapper<Section>> find_section(std::string_view name) {
         auto found = rgs::find_if(sections, [&](const Section& s) {
             return std::string_view(s.name) == name;
         });
+        if (found != sections.end())
+            return *found;
+        return {};
+    }
+
+    [[nodiscard]]
+    Section& section(std::string_view name) {
+        auto found_section = find_section(name);
         LCC_ASSERT(
-            found != sections.end(),
+            found_section,
             "Could not find section with name {}",
             name
         );
-        return *found;
+        return *found_section;
     }
+    [[nodiscard]]
     auto section(std::string_view name) const -> const Section& {
         // Call the non-const version of this function, and cast to const.
         return const_cast<GenericObject*>(this)->section(name);
@@ -380,7 +412,8 @@ struct GenericObject {
         }
     }
 
-    std::string print() {
+    [[nodiscard]]
+    std::string print() const {
         std::string out{};
         // out += fmt::format("SYMBOLS: {}\n", symbols.size());
         for (auto sym : symbols)
@@ -395,10 +428,10 @@ struct GenericObject {
     }
 
     // Write this generic object file in ELF format into the given file.
-    void as_elf(FILE* f);
+    void as_elf(FILE* f) const;
 
     // Write this generic object file in COFF format into the given file.
-    void as_coff(FILE* f);
+    void as_coff(FILE* f) const;
 };
 
 } // namespace lcc

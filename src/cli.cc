@@ -1,11 +1,11 @@
 #include <cli.hh>
-#include <version.hh>
 
 #include <lcc/assert.hh>
 #include <lcc/context.hh>
 #include <lcc/utils/platform.hh>
 #include <lcc/utils/string_distance.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
+#include <lcc/version.hh>
 
 #include <fmt/format.h>
 
@@ -17,8 +17,8 @@
 namespace cli {
 
 namespace {
-std::vector<std::string> known_arguments{
-    "--aluminium"
+constexpr std::array<std::string_view, 24> known_arguments{
+    "--aluminium",
     "--ast",
     "--color",
     "--diags-backtrace",
@@ -41,7 +41,7 @@ std::vector<std::string> known_arguments{
     "-o",
     "-t",
     "-v",
-    "-x",
+    "-x"
 };
 } // namespace
 

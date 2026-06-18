@@ -20,6 +20,7 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/fractionals.hh>
 #include <lcc/utils/ir_printer.hh>
+#include <lcc/version.hh>
 
 #include <object/generic.hh>
 
@@ -859,6 +860,12 @@ void Module::emit(std::filesystem::path output_file_path) {
                 if (_ctx->target()->is_arch_x86_64())
                     gobj = x86_64::emit_mcode_gobj(this, desc, machine_ir);
                 else Diag::ICE("Unhandled code emission target, sorry");
+
+                // .comment section to track toolchain (like Clang and GCC do).
+                auto comment_section = Section(".comment");
+                constexpr std::string_view comment_section_contents{LCC_IDENT};
+                comment_section.contents() = {comment_section_contents.begin(), comment_section_contents.end()};
+                gobj.sections.emplace_back(comment_section);
 
                 // TODO: if print requested...
                 fmt::print("{}\n", gobj.print());

@@ -9,6 +9,7 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/fractionals.hh>
+#include <lcc/version.hh>
 
 #include <object/coff.h>
 
@@ -830,6 +831,8 @@ void emit_gnu_att_assembly(
     // ELF-style
     if (not module->context()->target()->is_platform_windows())
         out += ".section .note.GNU-stack\n";
+
+    out += ".ident \"" LCC_IDENT "\"\n";
 
     if (output_path.empty() or output_path == "-")
         fmt::print("{}", out);

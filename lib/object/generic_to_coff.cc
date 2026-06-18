@@ -50,7 +50,7 @@ auto write_relocation_entry(
 
 } // namespace
 
-void GenericObject::as_coff(FILE* f) {
+void GenericObject::as_coff(FILE* f) const {
     auto coff_header = default_header();
 
     std::vector<std::string> strings{};

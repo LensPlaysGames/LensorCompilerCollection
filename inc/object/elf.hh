@@ -16,6 +16,7 @@ namespace lcc::elf {
 // @return a pair with the first element being whether or not the header
 // is valid, and the second a string being either one of "ok" if the
 // header is valid, or a descriptive error message if it is not.
+[[nodiscard]]
 auto validate_header(const elf64_header&)
     -> std::pair<bool, std::string>;
 

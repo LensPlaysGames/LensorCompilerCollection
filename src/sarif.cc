@@ -1,12 +1,11 @@
 #include <sarif.hh>
 
-#include <version.hh>
-
 #include <lccjson/lccjson.hh>
 
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/utils.hh>
+#include <lcc/version.hh>
 
 #include <fmt/format.h>
 

@@ -49,6 +49,18 @@
 /// x86_64
 #define EM_X86_64 0x3e
 
+/// Undefined Section Number
+#define SHN_UNDEF 0
+/// Lower Bound of Reserved Special Section Numbers
+#define SHN_LORESERVE 0xFF00
+/// Absolute Section Number
+/// Symbol values are constant, relocation changes nothing.
+#define SHN_ABS 0xFFF1
+/// Common Block Symbol Section Number (.bss)
+#define SHN_COMMON 0xFFF2
+/// Upper Bound of Reserved Special Section Numbers
+#define SHN_HIRESERVE 0xFFFF
+
 /// Section header table entry unused
 #define SHT_NULL 0x0
 ///  Program data
@@ -203,6 +215,8 @@ typedef struct elf64_shdr {
     uint64_t sh_size;
     /// Contains the section index of an associated section. This field
     /// is used for several purposes, depending on the type of section.
+    /// Every symbol table section (.symtab or .dynsym) links to its
+    /// corresponding string table.
     uint32_t sh_link;
     /// Contains extra information about the section. This field is used
     /// for several purposes, depending on the type of section.

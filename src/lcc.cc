@@ -1,8 +1,9 @@
 #include <cli.hh>
 #include <sarif.hh>
-#include <version.hh>
 
 #include <fmt/format.h>
+
+#include <clink/clink.hh>
 
 #include <lcc/assert.hh>
 #include <lcc/context.hh>
@@ -15,6 +16,7 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/platform.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
+#include <lcc/version.hh>
 
 #include <glint/driver.hh>
 #include <language_c/driver.hh>
@@ -271,6 +273,8 @@ void do_link(
         lcc::Diag::ICE("link: No input paths");
     if (output_path.empty())
         lcc::Diag::ICE("link: Empty output path");
+
+    // clink::link({"clinkin.o"}, "clinkout");
 
     // Get $CC (C compiler).
     const auto* cc = getenv("CC");

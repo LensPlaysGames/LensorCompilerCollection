@@ -512,6 +512,17 @@ add_library(
 target_include_directories(liblccjson PUBLIC inc)
 target_link_libraries(liblccjson PRIVATE options)
 
+# Custom Linker Library
+add_library(
+  libclink STATIC
+  inc/clink/clink.hh
+  inc/clink/link_elf.hh
+  lib/clink/clink.cc
+  lib/clink/link_elf.cc
+)
+target_include_directories(libclink PUBLIC inc)
+target_link_libraries(libclink PRIVATE options)
+
 # Add the driver.
 add_executable(
   lcc
@@ -525,15 +536,21 @@ target_include_directories(lcc PUBLIC src)
 target_link_libraries(lcc PRIVATE options liblcc)
 
 # Make project version accessible from source code
+# Get the current date and time
+string(TIMESTAMP BUILD_DATE "%Y-%m-%d" UTC)
 configure_file(
-  src/version.hh.in
-  ${CMAKE_CURRENT_BINARY_DIR}/version.hh
+  inc/lcc/version.hh.in
+  ${CMAKE_CURRENT_BINARY_DIR}/generated/lcc/version.hh
   @ONLY
 )
-target_include_directories(lcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(liblcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_include_directories(lcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 # Link lcc driver with simple json library.
 target_link_libraries(lcc PRIVATE liblccjson)
+
+# Link lcc driver with custom linker library.
+target_link_libraries(lcc PRIVATE libclink)
 
 # Link lcc driver with main lcc library.
 target_link_libraries(lcc PRIVATE liblcc)
