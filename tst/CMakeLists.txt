@@ -220,6 +220,9 @@ if (VERIFY_COMPILERS)
     COMMON_DEFINES
     -DUSE_LTO=OFF
   )
+
+  find_program(CLANG_PROGRAMS NAMES clang clang++)
+
   add_custom_target(
     gnu_build
     COMMAND
@@ -229,28 +232,32 @@ if (VERIFY_COMPILERS)
     VERBATIM
   )
   add_custom_target(
-    llvm_build
-    COMMAND
-    ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B fullllvm -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libc++" ${COMMON_DEFINES}
-    COMMAND
-    ${CMAKE_COMMAND} --build fullllvm --target lcc
-    VERBATIM
-  )
-  add_custom_target(
-    llvmgnu_build
-    COMMAND
-    ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B llvmgnu -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libstdc++" ${COMMON_DEFINES}
-    COMMAND
-    ${CMAKE_COMMAND} --build llvmgnu --target lcc
-    VERBATIM
-  )
-  add_custom_target(
     verify_compilers
     DEPENDS
     gnu_build
-    llvm_build
-    llvmgnu_build
   )
+
+  if (CLANG_PROGRAMS)
+    add_custom_target(
+      llvm_build
+      COMMAND
+      ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B fullllvm -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libc++" ${COMMON_DEFINES}
+      COMMAND
+      ${CMAKE_COMMAND} --build fullllvm --target lcc
+      VERBATIM
+    )
+    add_custom_target(
+      llvmgnu_build
+      COMMAND
+      ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B llvmgnu -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libstdc++" ${COMMON_DEFINES}
+      COMMAND
+      ${CMAKE_COMMAND} --build llvmgnu --target lcc
+      VERBATIM
+    )
+    add_dependencies(verify_compilers llvm_build llvmgnu_build)
+  else()
+    message(STATUS "LLVM compiler vefication is not available")
+  endif()
   add_dependencies(test verify_compilers)
 
   find_program(MINGW_CXX NAMES ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++)
