@@ -221,8 +221,6 @@ if (VERIFY_COMPILERS)
     -DUSE_LTO=OFF
   )
 
-  find_program(CLANG_PROGRAMS NAMES clang clang++)
-
   add_custom_target(
     gnu_build
     COMMAND
@@ -237,6 +235,7 @@ if (VERIFY_COMPILERS)
     gnu_build
   )
 
+  find_program(CLANG_PROGRAMS NAMES clang clang++)
   if (CLANG_PROGRAMS)
     add_custom_target(
       llvm_build
