@@ -255,7 +255,7 @@ if (VERIFY_COMPILERS)
     )
     add_dependencies(verify_compilers llvm_build llvmgnu_build)
   else()
-    message(STATUS "LLVM compiler vefication is not available")
+    message(STATUS "LLVM compiler verification is not available")
   endif()
   add_dependencies(test verify_compilers)
 
