@@ -235,8 +235,9 @@ if (VERIFY_COMPILERS)
     gnu_build
   )
 
-  find_program(CLANG_PROGRAMS NAMES clang clang++)
-  if (CLANG_PROGRAMS)
+  find_program(CLANG_PROGRAM clang)
+  find_program(CLANGXX_PROGRAM clang++)
+  if (CLANG_PROGRAM AND CLANGXX_PROGRAM)
     add_custom_target(
       llvm_build
       COMMAND
