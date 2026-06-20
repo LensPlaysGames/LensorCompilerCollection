@@ -285,6 +285,8 @@ void emit_gnu_att_assembly(
         }
 
         // Sum spilled registers' sizes, keeping track of their frame offsets.
+        // TODO: These lists are so small, vectors would improve performance
+        // simply due to cache locality and memory footprint.
         std::unordered_map<usz, usz> spill_offsets{};
         std::unordered_map<usz, MOperandRegister> spill_id_to_register{};
         for (auto& block : function.blocks()) {

@@ -1214,6 +1214,7 @@ auto emit_mcode_gobj(
     Section text_{".text"};
     Section data_{".data"};
     Section bss_{".bss"};
+    bss_.is_fill = true;
     text_.attribute(Section::Attribute::LOAD, true);
     text_.attribute(Section::Attribute::EXECUTABLE, true);
     data_.attribute(Section::Attribute::LOAD, true);

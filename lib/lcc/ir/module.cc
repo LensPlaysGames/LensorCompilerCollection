@@ -865,6 +865,7 @@ void Module::emit(std::filesystem::path output_file_path) {
                 auto comment_section = Section(".comment");
                 constexpr std::string_view comment_section_contents{LCC_IDENT};
                 comment_section.contents() = {comment_section_contents.begin(), comment_section_contents.end()};
+                comment_section += '\0';
                 gobj.sections.emplace_back(comment_section);
 
                 // TODO: if print requested...

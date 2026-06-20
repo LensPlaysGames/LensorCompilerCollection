@@ -1,9 +1,10 @@
 #include <clink/link_elf.hh>
 
-#include <cstddef>
 #include <object/elf.h>
 #include <object/elf.hh>
 #include <object/generic.hh>
+
+#include <fmt/format.h>
 
 #include <cstddef>
 #include <span>
@@ -47,21 +48,28 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
     ) {
         const auto& section_header = *section_header_iter;
         if (section_header.sh_type == SHT_SYMTAB) {
+            const auto symbol_count = section_header.sh_size / section_header.sh_entsize;
             const auto* const symbol_begin
                 = reinterpret_cast<elf64_sym*>(blob.data() + section_header.sh_offset);
-            const auto* const symbol_end
-                = symbol_begin + (section_header.sh_size / section_header.sh_entsize);
+
+            // I don't like copying for no reason, but, we get the following error,
+            // otherwise...
+            // `reference binding to misaligned address 0x... for type 'const struct
+            //  elf64_sym', which requires 8 byte alignment`
+            std::vector<elf64_sym> symbols;
+            symbols.resize(symbol_count);
+            memcpy(symbols.data(), symbol_begin, symbol_count * sizeof(*symbol_begin));
 
             auto* string_table_header = section_header_begin + section_header.sh_link;
             const char* string_table = blob.data() + string_table_header->sh_offset;
 
-            for (auto* symbol_iter = symbol_begin; symbol_iter < symbol_end; ++symbol_iter) {
-                auto& elf_symbol = *symbol_iter;
+            for (auto [i, elf_symbol] : std::ranges::views::enumerate(symbols)) {
                 auto symbol_type = ELF64_ST_TYPE(elf_symbol.st_info);
                 auto symbol_binding = ELF64_ST_BIND(elf_symbol.st_info);
 
-                // Skip symbols with no type (i.e. NULL entries).
-                if (symbol_type == STT_NOTYPE) continue;
+                // Skip _local_ symbols with no type (i.e. NULL entries).
+                if (symbol_binding == STB_LOCAL and symbol_type == STT_NOTYPE)
+                    continue;
 
                 lcc::Symbol symbol{};
 
@@ -84,11 +92,16 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
                     symbol.kind = lcc::Symbol::Kind::STATIC;
                 else symbol.kind = lcc::Symbol::Kind::EXPORT;
                 out.symbols.emplace_back(symbol);
-                indexed_symbols[symbol_iter - symbol_begin] = symbol;
+                indexed_symbols[i] = symbol;
             }
             break;
         }
     }
+
+    // fmt::print("collected indexed symbols:");
+    // for (auto [i, sym] : indexed_symbols)
+    //     fmt::print(" {}:{}", i, sym.name);
+    // fmt::print("\n");
 
     for (
         auto section_header_iter = section_header_begin;
@@ -108,6 +121,18 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
 
         lcc::Section section{};
         section.name = section_names_begin + section_header.sh_name;
+        section.attribute(
+            lcc::Section::Attribute::WRITABLE,
+            section_header.sh_flags & SHF_WRITE
+        );
+        section.attribute(
+            lcc::Section::Attribute::LOAD,
+            section_header.sh_flags & SHF_ALLOC
+        );
+        section.attribute(
+            lcc::Section::Attribute::EXECUTABLE,
+            section_header.sh_flags & SHF_EXECINSTR
+        );
 
         if (section_header.sh_type == SHT_NOBITS) {
             section.is_fill = true;
@@ -120,7 +145,8 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
             };
         }
 
-        if (section.name.starts_with(".rela")) {
+        // TODO: All relocations, not just .text
+        if (section.name.starts_with(".rela.text")) {
             // RELocations (with Addend)
             auto* relocation_begin = reinterpret_cast<elf64_rela*>(section.contents().data());
             const auto* relocation_end
@@ -147,7 +173,18 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
                     relocation_type == R_X86_64_PC32
                     or relocation_type == R_X86_64_PLT32
                 ) relocation.kind = lcc::Relocation::Kind::DISPLACEMENT32_PCREL;
-                else relocation.kind = lcc::Relocation::Kind::DISPLACEMENT32;
+                else if (relocation_type == R_X86_64_32)
+                    relocation.kind = lcc::Relocation::Kind::DISPLACEMENT32;
+                else {
+                    fmt::print(
+                        stderr,
+                        "clink: Unhandled ELF relocation type {}... ignoring (symbol {} in section {})\n",
+                        +relocation_type,
+                        relocation.symbol.name,
+                        relocation.symbol.section_name
+                    );
+                    continue;
+                }
                 out.relocations.emplace_back(relocation);
             }
             continue;

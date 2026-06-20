@@ -21,6 +21,7 @@
 #include <glint/driver.hh>
 #include <language_c/driver.hh>
 
+#include <algorithm>
 #include <cstdio>  // fopen and friends
 #include <cstdlib> // system
 #include <cstring> // strerror
@@ -274,7 +275,41 @@ void do_link(
     if (output_path.empty())
         lcc::Diag::ICE("link: Empty output path");
 
-    // clink::link({"clinkin.o"}, "clinkout");
+    if (context.has_option("clink")) {
+        if (context.format()->format() != lcc::Format::ELF_OBJECT) {
+            lcc::Diag::Fatal(
+                "clink: Only ELF is supported for now, sorry. We plan to support COFF and MachO"
+            );
+            return;
+        }
+
+        // TODO: If producing an executable vs object/shared
+        std::vector<std::string> system_libraries{
+            "/usr/lib64/crt1.o"
+        };
+        input_paths.insert(input_paths.begin(), system_libraries.begin(), system_libraries.end());
+
+        if (context.has_option("verbose")) {
+            fmt::print(
+                "Using interal linker: clink: {} -> `{}`\n",
+                input_paths,
+                output_path
+            );
+        }
+        auto link_success = clink::link(
+            input_paths,
+            output_path
+        );
+        if (not link_success)
+            lcc::Diag::Fatal("link: Failed");
+        else if (context.has_option("verbose")) {
+            fmt::print(
+                "Successfully generated output at `{}`\n",
+                output_path
+            );
+        }
+        return;
+    }
 
     // Get $CC (C compiler).
     const auto* cc = getenv("CC");
@@ -306,6 +341,11 @@ void do_link(
         lcc::Diag::Fatal(
             "Failed link: `{}`",
             link_command
+        );
+    } else if (context.has_option("verbose")) {
+        fmt::print(
+            "Successfully generated output at `{}`\n",
+            output_path
         );
     }
 }

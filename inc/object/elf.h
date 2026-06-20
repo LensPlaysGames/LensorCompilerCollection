@@ -172,6 +172,14 @@ typedef struct elf64_header {
 /// Processor mask (these bits are reserved per ISA)
 #define PF_MASKPROC 0xf0000000
 
+#define PT_NULL      0
+#define PT_LOAD      1
+#define PT_DYNAMIC   2
+#define PT_INTERP    3
+#define PT_NOTE      4
+#define PT_PHDR      6
+#define PT_GNU_STACK 0x6474e551
+
 /// ELF 64-bit Program Header
 typedef struct elf64_phdr {
     /// Type of segment. See PT_* macros for more info.
@@ -302,8 +310,8 @@ typedef struct elf64_sym {
 #define R_X86_64_64 1
 // dword S + A – P
 #define R_X86_64_PC32 2
-// dword S + A
-#define R_X86_64_32 10
+// dword G + A
+#define R_X86_64_GOT32 3
 // dword L + A – P
 // ffs...
 // https://github.com/torvalds/linux/commit/b21ebf2fb4cde1618915a97cc773e287ff49173e
@@ -312,6 +320,29 @@ typedef struct elf64_sym {
 // > protected symbol, it can resolved locally at link-time since it is used
 // > on a branch instruction. Linker can't do that for PC32 relocation
 #define R_X86_64_PLT32 4
+// Value is copied directly from shared object
+#define R_X86_64_COPY 5
+// qword S
+#define R_X86_64_GLOB_DAT 6
+// qword S
+#define R_X86_64_JUMP_SLOT 7
+// qword B + A
+#define R_X86_64_RELATIVE 8
+// dword G + GOT + A – P
+#define R_X86_64_GOTPCREL 9
+// dword S + A
+#define R_X86_64_32 10
+// dword S + A
+// S suffix -> sign extend 32 bits to 64-bit value
+#define R_X86_64_32S 11
+// This relocation is generated when the compiler needs to reference an
+// external or preemptible global variable but isn't quite sure if the
+// target will ultimately land within the PC-relative addressing
+// range once the binary is fully linked.
+// The linker can relax the load instruction (e.g., converting a memory
+// fetch into a much faster lea instruction or a direct mov instruction).
+#define R_X86_64_GOTPCRELX     41
+#define R_X86_64_REX_GOTPCRELX 42
 
 ///     A relocation section references two other sections: a symbol
 /// table and a section to modify. The section header’s sh_info and

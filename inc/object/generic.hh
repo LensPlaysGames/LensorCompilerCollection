@@ -124,9 +124,12 @@ public:
     [[nodiscard]]
     std::string print() const {
         auto out = fmt::format(
-            "[SECTION]: {}\n"
+            "[SECTION]: {}{}{}{}\n"
             "CONTENTS:",
-            name
+            name,
+            attribute(Attribute::LOAD) ? " LOAD" : "",
+            attribute(Attribute::WRITABLE) ? " WRITABLE" : "",
+            attribute(Attribute::EXECUTABLE) ? " EXECUTABLE" : ""
         );
 
         if (is_fill) {
@@ -296,6 +299,12 @@ struct GenericObject {
     std::vector<Section> sections{};
     std::vector<Symbol> symbols{};
     std::vector<Relocation> relocations{};
+    enum class Kind {
+        STATIC,
+        SHARED,
+        EXECUTABLE,
+        COUNT
+    } kind{Kind::STATIC};
 
     std::optional<std::reference_wrapper<Section>> find_section(std::string_view name) {
         auto found = rgs::find_if(sections, [&](const Section& s) {
@@ -341,13 +350,13 @@ struct GenericObject {
                 );
 
                 // Write init to .data section
-                Symbol::Kind kind
+                Symbol::Kind sym_kind
                     = exported
                         ? Symbol::Kind::EXPORT
                         : Symbol::Kind::STATIC;
 
                 symbols.push_back(
-                    {kind, n.name, ".data", data_offset}
+                    {sym_kind, n.name, ".data", data_offset}
                 );
             }
 
