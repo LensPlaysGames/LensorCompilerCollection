@@ -516,8 +516,10 @@ target_link_libraries(liblccjson PRIVATE options)
 add_library(
   libclink STATIC
   inc/clink/clink.hh
+  inc/clink/layout.hh
   inc/clink/link_elf.hh
   lib/clink/clink.cc
+  lib/clink/layout.cc
   lib/clink/link_elf.cc
 )
 target_include_directories(libclink PUBLIC inc)

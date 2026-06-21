@@ -175,10 +175,15 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
                 ) relocation.kind = lcc::Relocation::Kind::DISPLACEMENT32_PCREL;
                 else if (relocation_type == R_X86_64_32)
                     relocation.kind = lcc::Relocation::Kind::DISPLACEMENT32;
+                else if (
+                    relocation_type == R_X86_64_GOTPCREL
+                    or relocation_type == R_X86_64_GOTPCRELX
+                    or relocation_type == R_X86_64_REX_GOTPCRELX
+                ) relocation.kind = lcc::Relocation::Kind::DISPLACEMENT32_GOTPCREL;
                 else {
                     fmt::print(
                         stderr,
-                        "clink: Unhandled ELF relocation type {}... ignoring (symbol {} in section {})\n",
+                        "\nclink: Unhandled ELF relocation type {}... ignoring (symbol {} in section {}). Linking will likely fail\n\n",
                         +relocation_type,
                         relocation.symbol.name,
                         relocation.symbol.section_name

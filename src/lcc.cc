@@ -289,6 +289,8 @@ void do_link(
         };
         input_paths.insert(input_paths.begin(), system_libraries.begin(), system_libraries.end());
 
+        input_paths.emplace_back("/usr/lib64/libc.a");
+
         if (context.has_option("verbose")) {
             fmt::print(
                 "Using interal linker: clink: {} -> `{}`\n",
@@ -297,6 +299,7 @@ void do_link(
             );
         }
         auto link_success = clink::link(
+            context,
             input_paths,
             output_path
         );

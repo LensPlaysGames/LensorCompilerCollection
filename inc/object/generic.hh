@@ -1,10 +1,11 @@
 #ifndef LCC_GENERIC_OBJECT_HH
 #define LCC_GENERIC_OBJECT_HH
 
-#include <fmt/format.h>
 #include <lcc/ir/core.hh>
 #include <lcc/typedefs.hh>
 #include <lcc/utils.hh>
+
+#include <fmt/format.h>
 
 #include <climits>
 #include <functional>
@@ -14,6 +15,11 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+// Forward declaration....
+namespace clink {
+struct Layout;
+}
 
 namespace lcc {
 
@@ -100,6 +106,12 @@ public:
     auto& contents() const {
         LCC_ASSERT(not is_fill, "Cannot append to contents unless section !is_fill");
         return _contents;
+    }
+
+    auto size() const -> usz {
+        if (is_fill)
+            return length();
+        return contents().size();
     }
 
     Section& operator+=(u8 rhs) {
@@ -255,7 +267,10 @@ struct Relocation {
         NONE,
         DISPLACEMENT32,
         DISPLACEMENT32_PCREL,
+        DISPLACEMENT32_GOTPCREL,
     } kind;
+
+    // TODO: Relaxability?
 
     constexpr std::string kind_string(Kind k) const {
         switch (k) {
@@ -265,6 +280,8 @@ struct Relocation {
                 return "DISP32";
             case Kind::DISPLACEMENT32_PCREL:
                 return "DISP32_PCREL";
+            case Kind::DISPLACEMENT32_GOTPCREL:
+                return "DISP32_GOT_PCREL";
         }
         LCC_UNREACHABLE();
     }
@@ -310,8 +327,23 @@ struct GenericObject {
         auto found = rgs::find_if(sections, [&](const Section& s) {
             return std::string_view(s.name) == name;
         });
-        if (found != sections.end())
-            return *found;
+        if (found != sections.end()) return *found;
+        return {};
+    }
+
+    std::optional<std::reference_wrapper<Symbol>> find_symbol(std::string_view name) {
+        auto found = rgs::find_if(symbols, [&](const Symbol& s) {
+            return std::string_view(s.name) == name;
+        });
+        if (found != symbols.end()) return *found;
+        return {};
+    }
+
+    std::optional<std::reference_wrapper<const Symbol>> find_symbol(std::string_view name) const {
+        auto found = rgs::find_if(symbols, [&](const Symbol& s) {
+            return std::string_view(s.name) == name;
+        });
+        if (found != symbols.end()) return *found;
         return {};
     }
 
@@ -437,10 +469,10 @@ struct GenericObject {
     }
 
     // Write this generic object file in ELF format into the given file.
-    void as_elf(FILE* f) const;
+    void as_elf(FILE* f, const clink::Layout&) const;
 
     // Write this generic object file in COFF format into the given file.
-    void as_coff(FILE* f) const;
+    void as_coff(FILE* f, const clink::Layout&) const;
 };
 
 } // namespace lcc

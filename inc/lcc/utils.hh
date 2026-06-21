@@ -300,6 +300,7 @@ struct Colours {
 };
 
 /// Align a value to a given alignment.
+/// Will never return a value less than given value.
 template <typename T = usz>
 constexpr T AlignTo(T value, T align) {
     LCC_ASSERT(align != 0);

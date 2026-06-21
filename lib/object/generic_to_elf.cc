@@ -3,6 +3,8 @@
 
 #include <lcc/assert.hh>
 
+#include <clink/layout.hh>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -42,7 +44,10 @@ constexpr auto default_header() -> elf64_header {
 /// Append string to given byte buffer and return the index at the
 /// beginning of it.
 auto elf_add_string(std::vector<u8>& string_table, const char* new_string) {
-    LCC_ASSERT(new_string, "Invalid argument (cannot add NULL string to ELF string table)");
+    LCC_ASSERT(
+        new_string,
+        "Invalid argument (cannot add NULL string to ELF string table)"
+    );
     usz out = string_table.size();
     while (*new_string)
         string_table.push_back(u8(*new_string++));
@@ -69,47 +74,15 @@ uint16_t header_type(GenericObject::Kind k) {
 
 } // namespace
 
-void GenericObject::as_elf(FILE* f) const {
-    constexpr uint64_t BASE{0x400000};
-
-    std::vector<Section> sorted_sections{};
-    for (auto& s : sections) {
-// hack to make sure sorted_sections is always used
-#define sections static_assert(false);
-        auto placement_iterator = sorted_sections.begin();
-        // Place loaded sections before all other sections.
-        if (not s.attribute(Section::Attribute::LOAD)) {
-            while (
-                placement_iterator < sorted_sections.end()
-                and placement_iterator->attribute(Section::Attribute::LOAD)
-            ) ++placement_iterator;
-        } else {
-            // Place executable sections before all other sections.
-            if (not s.attribute(Section::Attribute::EXECUTABLE)) {
-                while (
-                    placement_iterator < sorted_sections.end()
-                    and placement_iterator->attribute(Section::Attribute::EXECUTABLE)
-                ) ++placement_iterator;
-            }
-            // Place writable sections after all non-writable sections.
-            if (s.attribute(Section::Attribute::WRITABLE)) {
-                while (
-                    placement_iterator < sorted_sections.end()
-                    and placement_iterator->attribute(Section::Attribute::LOAD)
-                    and not placement_iterator->attribute(Section::Attribute::WRITABLE)
-                ) ++placement_iterator;
-            }
-        }
-
-        sorted_sections.insert(placement_iterator, s);
-    }
+void GenericObject::as_elf(FILE* f, const clink::Layout& given_layout) const {
+    clink::Layout layout{given_layout};
 
     elf64_header hdr = default_header();
     hdr.e_type = header_type(kind);
     // Section header table entry count
     // NULL entry + GObj sections + ".strtab" + ".symtab" + ".rela.text"
-    hdr.e_shnum = u16(sorted_sections.size() + 4);
-    if (kind == GenericObject::Kind::EXECUTABLE) {
+    hdr.e_shnum = u16(sections.size() + 4);
+    if (relocations.empty()) {
         // ".rela.text" not added
         --hdr.e_shnum;
     }
@@ -141,7 +114,7 @@ void GenericObject::as_elf(FILE* f) const {
     if (kind == Kind::EXECUTABLE) {
         std::optional<decltype(Section::attributes)> current_attributes{};
         // PT_LOAD program headers (for loaded sections)
-        for (auto& s : sorted_sections) {
+        for (auto& s : sections) {
             // Skip unloaded sections
             if (not s.attribute(Section::Attribute::LOAD)) break;
 
@@ -170,9 +143,6 @@ void GenericObject::as_elf(FILE* f) const {
     // AKA Number of bytes to skip until after the section header table.
     // Used in loop just below.
     auto data_offset = hdr.e_shoff + (sizeof(elf64_shdr) * hdr.e_shnum);
-    // Byte offset within memory where section's data will be loaded at
-    // execution time (virtual address).
-    lcc::usz memory_offset = data_offset;
 
     // TODO: When we decide to place a segment at a specific virtual address,
     // it must pad the output binary file with zeros until the Offset matches
@@ -183,80 +153,63 @@ void GenericObject::as_elf(FILE* f) const {
     // the ordering of sections in the generic object file matches exactly the
     // ordering of section headers in the ELF file. This fact is used down
     // below to calculate ELF section indices.
-    {
-        std::optional<decltype(Section::attributes)> current_attributes{};
-        for (auto& section : sorted_sections) {
-            elf64_shdr shdr{};
+    for (auto& s : sections) {
+        elf64_shdr shdr{};
 
-            if (section.is_fill) {
-                shdr.sh_type = SHT_NOBITS;
-                shdr.sh_size = section.length();
-            } else {
-                shdr.sh_type = SHT_PROGBITS;
-                shdr.sh_size = section.contents().size();
-                shdr.sh_offset = data_offset;
-                data_offset += shdr.sh_size;
+        shdr.sh_size = s.size();
+        shdr.sh_offset = data_offset;
+        data_offset += shdr.sh_size;
+
+        if (s.is_fill)
+            shdr.sh_type = SHT_NOBITS;
+        else shdr.sh_type = SHT_PROGBITS;
+
+        // Memory offset grows for every loaded section
+        if (s.attribute(Attr::LOAD)) {
+            if (kind == GenericObject::Kind::EXECUTABLE) {
+                // FIXME: align needed all the time? page size (of target)?
+                shdr.sh_addralign = 0x1000;
+                shdr.sh_addr = layout.address(s.name);
+                // addr % align MUST equal offset % align
+                // A % x -> a
+                // B % x -> b
+                // a == b
+                // if a == 42 and b == 108, we need to add (b - a) to A.
+                auto address_page_offset = shdr.sh_addr % shdr.sh_addralign;
+                auto offset_page_offset = shdr.sh_offset % shdr.sh_addralign;
+                if (address_page_offset != offset_page_offset)
+                    shdr.sh_addr += offset_page_offset - address_page_offset;
             }
-
-            // Memory offset grows for every loaded section
-            if (section.attribute(Attr::LOAD)) {
-                if (kind == GenericObject::Kind::EXECUTABLE) {
-                    // FIXME: align needed all the time? page size (of target)?
-                    shdr.sh_addralign = 0x1000;
-
-                    // If this is the start of a new span of permissions (other than the
-                    // first), ensure we are past the previous page boundary so that the
-                    // permissions don't overwrite each other.
-                    if (
-                        current_attributes.has_value()
-                        and section.attributes != current_attributes.value()
-                        and memory_offset % 0x1000 != 0
-                    ) {
-                        memory_offset += 0x1000;
-                        fmt::print("Section {} changed permissions, memory offset:0x{:08x}\n", section.name, memory_offset);
-                    }
-                    shdr.sh_addr = BASE + memory_offset;
-                    current_attributes = section.attributes;
-                }
-
-                // FIXME: BIG BUG: For not is_fill sections, data_offset and memory_offset
-                // become mismatched, but, they have to stay the same (or at least the
-                // same modulo page size).
-                // Basically, if data_offset < memory_offset, we need to emit a bunch of
-                // zeroes into the binary...
-
-                memory_offset += shdr.sh_size;
-            }
-
-            if (section.attribute(Attr::WRITABLE))
-                shdr.sh_flags |= SHF_WRITE;
-            if (section.attribute(Attr::EXECUTABLE))
-                shdr.sh_flags |= SHF_EXECINSTR;
-            if (section.attribute(Attr::LOAD))
-                shdr.sh_flags |= SHF_ALLOC;
-
-            shdr.sh_name = elf_add_string(string_table, section.name);
-
-            // fmt::print(
-            //     "clink: Section {}: byte offset {}, size {}, address {:08x}, align {}\n",
-            //     section.name,
-            //     shdr.sh_offset,
-            //     shdr.sh_size,
-            //     shdr.sh_addr,
-            //     shdr.sh_addralign
-            // );
-
-            // Create symbol for this section
-            {
-                elf64_sym sym{};
-                sym.st_name = shdr.sh_name;
-                sym.st_shndx = u16(shdrs.size());
-                sym.st_info = ELF64_ST_INFO(STB_LOCAL, STT_SECTION);
-                syms.push_back(sym);
-            }
-
-            shdrs.emplace_back(shdr);
         }
+
+        if (s.attribute(Attr::WRITABLE))
+            shdr.sh_flags |= SHF_WRITE;
+        if (s.attribute(Attr::EXECUTABLE))
+            shdr.sh_flags |= SHF_EXECINSTR;
+        if (s.attribute(Attr::LOAD))
+            shdr.sh_flags |= SHF_ALLOC;
+
+        shdr.sh_name = elf_add_string(string_table, s.name);
+
+        // fmt::print(
+        //     "clink: Section {}: byte offset 0x{:x}, size {}, address 0x{:08x}, align {}\n",
+        //     s.name,
+        //     shdr.sh_offset,
+        //     shdr.sh_size,
+        //     shdr.sh_addr,
+        //     shdr.sh_addralign
+        // );
+
+        // Create symbol for this section
+        {
+            elf64_sym sym{};
+            sym.st_name = shdr.sh_name;
+            sym.st_shndx = u16(shdrs.size());
+            sym.st_info = ELF64_ST_INFO(STB_LOCAL, STT_SECTION);
+            syms.push_back(sym);
+        }
+
+        shdrs.emplace_back(shdr);
     }
 
     for (auto& sym : symbols) {
@@ -267,8 +220,8 @@ void GenericObject::as_elf(FILE* f) const {
             // Get index of section by name
             bool found{false};
             usz elf_section_index{1}; // "1" because we need to start past NULL entry
-            for (auto& section : sorted_sections) {
-                if (section.name == sym.section_name) {
+            for (auto& s : sections) {
+                if (s.name == sym.section_name) {
                     found = true;
                     break;
                 }
@@ -336,10 +289,9 @@ void GenericObject::as_elf(FILE* f) const {
     // Index of Section Header of symbol table (.symtab section)
     usz symbol_table_sh_index = shdrs.size();
     // Section header index of String Table (.strtab section)
-    // Skip NULL entry and symbol table entry in section header table.
-    usz string_table_sh_index = sorted_sections.size() + 3;
-    // Include .rela.text for non-executables
-    if (kind == GenericObject::Kind::EXECUTABLE) {
+    // Skip symbol table entry and .rela.text in section header table.
+    usz string_table_sh_index = shdrs.size() + 2;
+    if (relocations.empty()) {
         // ".rela.text" not added
         --string_table_sh_index;
     }
@@ -364,18 +316,30 @@ void GenericObject::as_elf(FILE* f) const {
 
         shdr.sh_entsize = sizeof(elf64_sym);
 
+        LCC_ASSERT(
+            symbol_table_sh_index == shdrs.size(),
+            "AoT calculated symbol table index {} does not match actual string table index {}",
+            symbol_table_sh_index,
+            shdrs.size()
+        );
+
         shdrs.emplace_back(shdr);
         data_offset += shdr.sh_size;
     }
 
     // ".text" relocations section header: ".rela.text"
-    if (kind != Kind::EXECUTABLE) {
+    if (relocations.size()) {
+        // TODO: For executables, we need (to make sure we have) a program header
+        // that covers this section...
+
         elf64_shdr shdr{};
         shdr.sh_type = SHT_RELA;
         shdr.sh_name = elf_add_string(string_table, ".rela.text");
         // "If the file has a loadable segment that includes relocation,
         // the sections’ attributes will include the SHF_ALLOC bit;
         // otherwise, that bit will be off."
+        // Basically, we should only set this bit if the relocation references a
+        // section that is actually loaded. Most of the time, this is the case.
         shdr.sh_flags |= SHF_ALLOC;
 
         /// The section header index of the associated symbol table.
@@ -391,7 +355,6 @@ void GenericObject::as_elf(FILE* f) const {
 
         shdrs.emplace_back(shdr);
         data_offset += shdr.sh_size;
-        memory_offset += shdr.sh_size;
     }
 
     // String Table Section Header
@@ -406,6 +369,13 @@ void GenericObject::as_elf(FILE* f) const {
         // shdr.sh_addr = shdr.sh_offset;
         hdr.e_shstrndx = u16(shdrs.size());
 
+        LCC_ASSERT(
+            string_table_sh_index == shdrs.size(),
+            "AoT calculated string table index {} does not match actual string table index {}",
+            string_table_sh_index,
+            shdrs.size()
+        );
+
         shdrs.emplace_back(shdr);
         data_offset += shdr.sh_size;
     }
@@ -413,6 +383,9 @@ void GenericObject::as_elf(FILE* f) const {
     // Build elf64_rela relocations
     std::vector<elf64_rela> elf_relocations{};
     for (auto& reloc : relocations) {
+        // Skip null/invalid entries
+        if (reloc.kind == Relocation::Kind::NONE) continue;
+
         // Find symbol with matching name.
         auto found = std::find_if(syms.begin(), syms.end(), [&](elf64_sym elf_sym) {
             char* sym_name = (char*) string_table.data() + elf_sym.st_name;
@@ -427,6 +400,9 @@ void GenericObject::as_elf(FILE* f) const {
         elf64_rela elf_reloc{};
         elf_reloc.r_offset = reloc.symbol.byte_offset;
         switch (reloc.kind) {
+            case Relocation::Kind::NONE:
+                LCC_UNREACHABLE();
+
             case Relocation::Kind::DISPLACEMENT32_PCREL: {
                 auto found_symbol = std::find_if(
                     symbols.begin(),
@@ -463,7 +439,9 @@ void GenericObject::as_elf(FILE* f) const {
                 elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_32);
                 break;
 
-            default: LCC_UNREACHABLE();
+            case Relocation::Kind::DISPLACEMENT32_GOTPCREL:
+                elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_GOTPCREL);
+                break;
         }
         elf_relocations.push_back(elf_reloc);
     }
@@ -555,14 +533,14 @@ void GenericObject::as_elf(FILE* f) const {
     for (auto& shdr : shdrs)
         fwrite(&shdr, 1, sizeof(shdr), f);
     // Write section's data
-    for (auto& section : sorted_sections) {
-        if (section.is_fill) {
+    for (auto& s : sections) {
+        if (s.is_fill) {
             // Skips .bss
-            if (section.attribute(Attr::LOAD)) {
-                for (usz n = section.length(); n; --n)
-                    fwrite(&section.value(), 1, 1, f);
+            if (s.attribute(Attr::LOAD)) {
+                for (usz n = s.length(); n; --n)
+                    fwrite(&s.value(), 1, 1, f);
             }
-        } else fwrite(section.contents().data(), 1, section.contents().size(), f);
+        } else fwrite(s.contents().data(), 1, s.contents().size(), f);
     }
     // Write symbol table ".symtab"
     fwrite(syms.data(), sizeof(*syms.data()), syms.size(), f);
@@ -570,6 +548,7 @@ void GenericObject::as_elf(FILE* f) const {
     fwrite(elf_relocations.data(), sizeof(*elf_relocations.data()), elf_relocations.size(), f);
     // Write string table ".strtab"
     fwrite(string_table.data(), 1, string_table.size(), f);
+#undef section
 #undef sections
 }
 

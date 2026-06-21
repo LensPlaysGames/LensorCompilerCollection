@@ -24,6 +24,8 @@
 
 #include <object/generic.hh>
 
+#include <clink/layout.hh>
+
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
@@ -879,10 +881,12 @@ void Module::emit(std::filesystem::path output_file_path) {
                     );
                 }
 
+                auto memory_layout = clink::layout(gobj);
+
                 if (_ctx->format()->format() == Format::ELF_OBJECT)
-                    gobj.as_elf(f);
+                    gobj.as_elf(f, memory_layout);
                 else if (_ctx->format()->format() == Format::COFF_OBJECT)
-                    gobj.as_coff(f);
+                    gobj.as_coff(f, memory_layout);
                 else Diag::ICE("Unhandled generic object output format");
 
                 fclose(f);

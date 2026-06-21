@@ -50,7 +50,7 @@ auto write_relocation_entry(
 
 } // namespace
 
-void GenericObject::as_coff(FILE* f) const {
+void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
     auto coff_header = default_header();
 
     std::vector<std::string> strings{};
@@ -269,6 +269,9 @@ void GenericObject::as_coff(FILE* f) const {
                 break;
             case Relocation::Kind::DISPLACEMENT32_PCREL:
                 coff_relocation.type = IMAGE_REL_AMD64_REL32;
+                break;
+            case Relocation::Kind::DISPLACEMENT32_GOTPCREL:
+                Diag::ICE("Unhandled relocation type in COFF output format (related to Global Offset Table)");
                 break;
         }
 
