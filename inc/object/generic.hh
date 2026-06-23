@@ -226,20 +226,17 @@ struct Symbol {
         STATIC,
         EXPORT, // like static but global
         EXTERNAL,
+        WEAK,
     } kind{Kind::NONE};
 
     constexpr std::string kind_string(Kind k) const {
         switch (k) {
-            case Kind::NONE:
-                return "NONE";
-            case Kind::FUNCTION:
-                return "FUNCTION";
-            case Kind::STATIC:
-                return "STATIC";
-            case Kind::EXPORT:
-                return "EXPORT";
-            case Kind::EXTERNAL:
-                return "EXTERNAL";
+            case Kind::NONE: return "NONE";
+            case Kind::FUNCTION: return "FUNCTION";
+            case Kind::STATIC: return "STATIC";
+            case Kind::EXPORT: return "EXPORT";
+            case Kind::EXTERNAL: return "EXTERNAL";
+            case Kind::WEAK: return "WEAK";
         }
         LCC_UNREACHABLE();
     }
@@ -268,6 +265,7 @@ struct Relocation {
         DISPLACEMENT32,
         DISPLACEMENT32_PCREL,
         DISPLACEMENT32_GOTPCREL,
+        DISPLACEMENT64
     } kind;
 
     // TODO: Relaxability?
@@ -282,6 +280,8 @@ struct Relocation {
                 return "DISP32_PCREL";
             case Kind::DISPLACEMENT32_GOTPCREL:
                 return "DISP32_GOT_PCREL";
+            case Kind::DISPLACEMENT64:
+                return "DISP64";
         }
         LCC_UNREACHABLE();
     }

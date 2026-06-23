@@ -2,6 +2,7 @@
 
 #include <clink/layout.hh>
 #include <clink/link_elf.hh>
+#include <clink/link_uarchive.hh>
 
 #include <object/elf.h>
 #include <object/elf.hh>
@@ -39,6 +40,22 @@ bool link(
 
 namespace {
 
+void perform_relocation__64(
+    lcc::Section& relevant_section,
+    const lcc::Relocation& relocation,
+    const lcc::Symbol& resolved_symbol
+) {
+    auto* relocation_position = relevant_section.contents().data() + relocation.symbol.byte_offset;
+    uint64_t calculated_value = (uint64_t) ((resolved_symbol.byte_offset
+                                             + (lcc::usz) relocation.addend)
+                                            - relocation.symbol.byte_offset);
+    // TODO: big vs little endian?
+#ifdef BIG_ENDIAN
+    calculated_value = std::byteswap(calculated_value);
+#endif
+    memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
+}
+
 void perform_relocation__32(
     lcc::Section& relevant_section,
     const lcc::Relocation& relocation,
@@ -48,7 +65,9 @@ void perform_relocation__32(
     uint32_t calculated_value = (uint32_t) ((resolved_symbol.byte_offset
                                              + (lcc::usz) relocation.addend)
                                             - relocation.symbol.byte_offset);
-    // TODO: big vs little endian?
+#ifdef BIG_ENDIAN
+    calculated_value = std::byteswap(calculated_value);
+#endif
     memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
 }
 
@@ -114,7 +133,12 @@ bool perform_relocation(
 
     switch (relocation.kind) {
         case lcc::Relocation::Kind::NONE:
-            return true;
+            break;
+
+        case lcc::Relocation::Kind::DISPLACEMENT64:
+            perform_relocation__64(relevant_section, relocation, found);
+            break;
+
         case lcc::Relocation::Kind::DISPLACEMENT32:
         case lcc::Relocation::Kind::DISPLACEMENT32_PCREL: {
             perform_relocation__32(relevant_section, relocation, found);
@@ -221,6 +245,134 @@ auto collect_strings(const lcc::Section& section) -> std::vector<std::string_vie
     return out;
 }
 
+void collect_undefined(
+    std::vector<std::string_view>& defined_symbols,
+    std::vector<std::string_view>& undefined_symbols,
+    const lcc::GenericObject& object
+) {
+    for (const auto& s : object.symbols) {
+        // If undefined and not yet defined, add to list of undefined symbols.
+        if (s.kind == lcc::Symbol::Kind::EXTERNAL) {
+            if (
+                // already defined
+                not std::ranges::contains(defined_symbols, s.name)
+                // no duplicates
+                and not std::ranges::contains(undefined_symbols, s.name)
+            ) undefined_symbols.emplace_back(s.name);
+        } else {
+            // If defined and already undefined, remove from list of undefined symbols.
+            std::erase(undefined_symbols, s.name);
+            // Prevent future external references to this symbol from adding this
+            // symbol as undefined (since this is it's definition).
+            if (not std::ranges::contains(defined_symbols, s.name))
+                defined_symbols.emplace_back(s.name);
+        }
+    }
+}
+
+struct ObjectCollectionContext {
+    // output
+    std::vector<lcc::GenericObject> parsed_objects{};
+
+    // bookkeeping
+    // Contains names of objects that we have already visited, in an attempt
+    // to prevent processing duplicate object files.
+    std::vector<std::string> visited{};
+    // Contains all symbols currently defined.
+    std::vector<std::string_view> defined{};
+    // Contains all symbols currently declared and not defined.
+    std::vector<std::string_view> undefined{};
+};
+
+// @param path  if the binary blob came from a file, this points to that
+// file. Keep in mind that the binary blob may have been extracted from
+// said file, so they are not guaranteed to be equivalent binary-wise.
+void collect_object(
+    lcc::Context& context,
+    std::string_view path,
+    std::vector<char>& blob,
+    ObjectCollectionContext& object_collection
+) {
+    // Determine binary format of object file
+    if (blob.size() > sizeof(elf64_header)) {
+        elf64_header elf_header{};
+        memcpy(&elf_header, blob.data(), sizeof(elf64_header));
+        auto valid_header = lcc::elf::validate_header(elf_header);
+        if (valid_header.first) {
+            // Scan and Collect
+            // Scan input object files, collect metadata about symbol definitions and
+            // necessary relocations.
+            // fmt::print("Collecting ELF file at `{}`\n", path);
+            auto collected_object = collect_elf(blob);
+            // fmt::print("{}\n", collected_object.print());
+            collect_undefined(
+                object_collection.defined,
+                object_collection.undefined,
+                collected_object
+            );
+            object_collection.parsed_objects.emplace_back(
+                std::move(collected_object)
+            );
+            return;
+        }
+    }
+
+    constexpr std::array<char, 8> archive_magic_bytes{'!', '<', 'a', 'r', 'c', 'h', '>', '\n'};
+    if (blob.size() > archive_magic_bytes.size()) {
+        std::array<char, 8> first_bytes{};
+        memcpy(first_bytes.data(), blob.data(), archive_magic_bytes.size());
+        if (first_bytes == archive_magic_bytes) {
+            bool found_needed_symbols{true};
+            // TODO: Parse uarchive into map or something so we don't have to keep
+            // decoding it over and over.
+            while (found_needed_symbols) {
+                // fmt::print("looking in archive at `{}`, undefined: {}\n", path, object_collection.undefined);
+                auto collected_object_blobs = collect_uarchive(
+                    blob,
+                    object_collection.undefined,
+                    object_collection.visited
+                );
+                found_needed_symbols = collected_object_blobs.size();
+                // fmt::print("found_needed_symbols:{}\n", found_needed_symbols);
+                for (auto& collected_blob : collected_object_blobs)
+                    collect_object(context, path, collected_blob, object_collection);
+                // fmt::print("!!collected objects\n");
+            }
+            return;
+        }
+    }
+
+    // TODO: Other binary formats (COFF, MachO)
+    fmt::print(
+        stderr,
+        "clink: could not determine binary format of given object file `{}`\n",
+        path
+    );
+}
+
+auto collect_objects(
+    lcc::Context& context,
+    std::vector<std::filesystem::path> objects
+) -> std::vector<lcc::GenericObject> {
+    ObjectCollectionContext object_collection{};
+    for (auto& p : objects) {
+        if (not std::filesystem::exists(p)) {
+            fmt::print(
+                stderr,
+                "clink: given object path does not exist `{}`\n",
+                p.string()
+            );
+            continue;
+        }
+
+        auto object_contents = lcc::File::Read(p);
+        auto pstr = p.string();
+        collect_object(context, pstr, object_contents, object_collection);
+    }
+
+    return object_collection.parsed_objects;
+}
+
 } // namespace
 
 bool link(
@@ -246,55 +398,9 @@ bool link(
     // relocation or symbol resolution we need to perform, or something like
     // that.
 
-    std::vector<lcc::GenericObject> parsed_objects{};
+    // I wonder if we should sort archives (.a files) to the back?
 
-    for (auto& p : objects) {
-        if (not std::filesystem::exists(p)) {
-            fmt::print(
-                stderr,
-                "clink: given object path does not exist `{}`\n",
-                p.string()
-            );
-            return false;
-        }
-
-        auto object_contents = lcc::File::Read(p);
-
-        // Determine binary format of object file
-        if (object_contents.size() > sizeof(elf64_header)) {
-            elf64_header elf_header{};
-            memcpy(&elf_header, object_contents.data(), sizeof(elf64_header));
-            auto valid_header = lcc::elf::validate_header(elf_header);
-            if (valid_header.first) {
-                // Scan and Collect
-                // Scan input object files, collect metadata about symbol definitions and
-                // necessary relocations.
-                auto collected_object = clink::collect_elf(object_contents);
-                // fmt::print("{}\n", collected_object.print());
-                parsed_objects.emplace_back(std::move(collected_object));
-                continue;
-            }
-        }
-
-        constexpr std::array<char, 8> archive_magic_bytes{'!', '<', 'a', 'r', 'c', 'h', '>', '\n'};
-        if (object_contents.size() > archive_magic_bytes.size()) {
-            std::array<char, 8> first_bytes{};
-            memcpy(first_bytes.data(), object_contents.data(), archive_magic_bytes.size());
-            if (first_bytes == archive_magic_bytes) {
-                fmt::print("Got archive at {}\n", p.string());
-                fmt::print(stderr, "clink: TODO read symbol table from archive\n");
-                fmt::print(stderr, "clink: TODO extract objects for necessary symbols\n");
-                continue;
-            }
-        }
-
-        // TODO: Other binary formats (COFF, MachO)
-        fmt::print(
-            stderr,
-            "clink: could not determine binary format of given object file `{}`\n",
-            p.string()
-        );
-    }
+    auto parsed_objects = collect_objects(context, objects);
 
     // Merge collected objects into global object.
     lcc::GenericObject out{};
@@ -433,21 +539,26 @@ bool link(
         }
 
         for (auto& sym : object.symbols) {
+            using K = lcc::Symbol::Kind;
             auto found = std::ranges::find_if(out.symbols, [&](const auto& s) {
                 return s.name == sym.name;
             });
             // New symbol, simply add it to global symbol table.
             if (found == out.symbols.end()) {
-                if (sym.kind != lcc::Symbol::Kind::STATIC)
+                if (sym.kind != K::STATIC)
                     out.symbols.emplace_back(sym);
                 continue;
             }
             // Existing symbol, still no definition
             if (
-                found->kind == lcc::Symbol::Kind::EXTERNAL
-                and sym.kind == lcc::Symbol::Kind::EXTERNAL
+                (found->kind == K::EXTERNAL or found->kind == K::WEAK)
+                and (sym.kind == K::EXTERNAL or sym.kind == K::WEAK)
             ) {
-                if (found->section_name != sym.section_name) {
+                if (
+                    not found->section_name.empty()
+                    and not sym.section_name.empty()
+                    and found->section_name != sym.section_name
+                ) {
                     fmt::print(
                         stderr,
                         "clink: duplicate definition of `{}`"
@@ -461,7 +572,7 @@ bool link(
                 continue;
             }
             // Existing symbol, but first definition
-            else if (found->kind == lcc::Symbol::Kind::EXTERNAL) {
+            else if (found->kind == K::EXTERNAL or found->kind == K::WEAK) {
                 if (
                     not found->section_name.empty()
                     and not sym.section_name.empty()
@@ -481,8 +592,10 @@ bool link(
                 *found = sym;
             } else {
                 // Definition already found, this must be an external reference
-                if (sym.kind != lcc::Symbol::Kind::EXTERNAL) {
+                if (sym.kind != K::EXTERNAL and sym.kind != K::WEAK) {
                     fmt::print(stderr, "clink: duplicate definition of `{}`\n", sym.name);
+                    fmt::print(stderr, "  existing:    {}", found->print());
+                    fmt::print(stderr, "  encountered: {}", sym.print());
                     // TODO: Would be nice to be able to print what files the symbols came from.
                     return false;
                 }

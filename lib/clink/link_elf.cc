@@ -67,10 +67,6 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
                 auto symbol_type = ELF64_ST_TYPE(elf_symbol.st_info);
                 auto symbol_binding = ELF64_ST_BIND(elf_symbol.st_info);
 
-                // Skip _local_ symbols with no type (i.e. NULL entries).
-                if (symbol_binding == STB_LOCAL and symbol_type == STT_NOTYPE)
-                    continue;
-
                 lcc::Symbol symbol{};
 
                 symbol.byte_offset = elf_symbol.st_value;
@@ -84,13 +80,21 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
                     symbol.name = symbol.section_name;
                 else symbol.name = string_table + elf_symbol.st_name;
 
-                if (elf_symbol.st_shndx == SHN_UNDEF)
+                if (symbol.name == "dummy")
+                    fmt::print("{}: TYPE:{} BIND:{}\n", symbol.name, symbol_type, symbol_binding);
+
+                // Determine LCC Symbol kind
+                // FIXME: not super semantically accurate mappings
+                if (symbol_binding == STB_WEAK)
+                    symbol.kind = lcc::Symbol::Kind::WEAK;
+                else if (elf_symbol.st_shndx == SHN_UNDEF)
                     symbol.kind = lcc::Symbol::Kind::EXTERNAL;
                 else if (symbol_type == STT_FUNC)
                     symbol.kind = lcc::Symbol::Kind::FUNCTION;
                 else if (symbol_binding == STB_LOCAL)
                     symbol.kind = lcc::Symbol::Kind::STATIC;
                 else symbol.kind = lcc::Symbol::Kind::EXPORT;
+
                 out.symbols.emplace_back(symbol);
                 indexed_symbols[i] = symbol;
             }
@@ -145,9 +149,8 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
             };
         }
 
-        // TODO: All relocations, not just .text
-        if (section.name.starts_with(".rela.text")) {
-            // RELocations (with Addend)
+        // RELocations (with Addend)
+        if (section.name.starts_with(".rela")) {
             auto* relocation_begin = reinterpret_cast<elf64_rela*>(section.contents().data());
             const auto* relocation_end
                 = relocation_begin + (section_header.sh_size / section_header.sh_entsize);
@@ -162,6 +165,7 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
 
                 lcc::Relocation relocation{};
 
+                // fmt::print("Relocation looking for symbol index {}\n", symbol_index);
                 relocation.symbol = indexed_symbols.at((ptrdiff_t) symbol_index);
                 relocation.symbol.section_name = section.name.substr(
                     std::string_view(".rela").length()
@@ -180,7 +184,28 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
                     or relocation_type == R_X86_64_GOTPCRELX
                     or relocation_type == R_X86_64_REX_GOTPCRELX
                 ) relocation.kind = lcc::Relocation::Kind::DISPLACEMENT32_GOTPCREL;
-                else {
+                else if (
+                    relocation_type == R_X86_64_64
+                ) relocation.kind = lcc::Relocation::Kind::DISPLACEMENT64;
+                else if (
+                    relocation_type == R_X86_64_DPTMOD64
+                    or relocation_type == R_X86_64_DTPOFF64
+                    or relocation_type == R_X86_64_TPOFF64
+                    or relocation_type == R_X86_64_TLSGD
+                    or relocation_type == R_X86_64_TLSLD
+                    or relocation_type == R_X86_64_DTPOFF32
+                    or relocation_type == R_X86_64_GOTTPOFF
+                    or relocation_type == R_X86_64_TPOFF32
+                ) {
+                    fmt::print(
+                        stderr,
+                        "\nclink: Unhandled ELF relocation type {} wrt thread local storage... ignoring (symbol {} in section {}). Linking will likely fail\n\n",
+                        +relocation_type,
+                        relocation.symbol.name,
+                        relocation.symbol.section_name
+                    );
+                    continue;
+                } else {
                     fmt::print(
                         stderr,
                         "\nclink: Unhandled ELF relocation type {}... ignoring (symbol {} in section {}). Linking will likely fail\n\n",

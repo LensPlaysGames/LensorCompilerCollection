@@ -112,7 +112,7 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
                 auto sym_name = coff_name(sym.name);
                 std::ranges::copy(sym_name, coff_sym.name);
 
-                coff_sym.storage_class = C_EXT;
+                coff_sym.storage_class = IMAGE_SYM_CLASS_EXTERNAL;
 
                 coff_symbols.emplace_back(coff_sym);
             } break;
@@ -124,7 +124,7 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
                 auto sym_name = coff_name(sym.name);
                 std::ranges::copy(sym_name, coff_sym.name);
 
-                coff_sym.storage_class = C_STAT;
+                coff_sym.storage_class = IMAGE_SYM_CLASS_STATIC;
 
                 coff_sym.type = 0x20;
 
@@ -137,6 +137,16 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
                 coff_sym.value = (uint32_t) sym.byte_offset;
 
                 coff_symbols.emplace_back(coff_sym);
+
+                // TODO: .bf, .lf, .ef sections
+
+                // Function definition aux entry
+                coff_symbol_aux_function_definition_entry coff_aux{};
+                // TODO: Symbol index of `.bf` (begin function) entry
+                coff_aux.tag_index = 0;
+                // TODO: Size of assembled code for function
+                coff_aux.total_size = 0;
+                // TODO: Record aux entry
             } break;
 
             case Symbol::Kind::STATIC: {
@@ -145,7 +155,7 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
                 auto sym_name = coff_name(sym.name);
                 std::ranges::copy(sym_name, coff_sym.name);
 
-                coff_sym.storage_class = C_STAT;
+                coff_sym.storage_class = IMAGE_SYM_CLASS_STATIC;
 
                 coff_sym.section = section_position_by_name(sym.section_name);
 
@@ -158,13 +168,42 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
                 coff_symbols.emplace_back(coff_sym);
             } break;
 
+            case Symbol::Kind::WEAK: {
+                coff_symbol_entry coff_sym{};
+
+                auto sym_name = coff_name(sym.name);
+                std::ranges::copy(sym_name, coff_sym.name);
+
+                coff_sym.storage_class = IMAGE_SYM_CLASS_WEAK_EXTERNAL;
+                coff_sym.section = N_UNDEF;
+
+                LCC_ASSERT(
+                    sym.byte_offset <= std::numeric_limits<uint32_t>::max(),
+                    "Symbol byte offset cannot be encoded in COFF format"
+                );
+                coff_sym.value = (uint32_t) sym.byte_offset;
+
+                coff_symbols.emplace_back(coff_sym);
+
+                // TODO: Record aux symbol entry somewhere...
+                // coff_symbol_aux_weak_external_entry coff_aux{};
+
+                // TODO: This needs to point to the definition of the symbol that will be
+                // used if this symbol doesn't get defined strongly.
+                // coff_aux.tag_index = 0;
+
+                LCC_TODO(
+                    "Generic2COFF: Handle weak symbol\n"
+                );
+            } break;
+
             case Symbol::Kind::EXPORT: {
                 coff_symbol_entry coff_sym{};
 
                 auto sym_name = coff_name(sym.name);
                 std::ranges::copy(sym_name, coff_sym.name);
 
-                coff_sym.storage_class = C_STAT;
+                coff_sym.storage_class = IMAGE_SYM_CLASS_STATIC;
 
                 coff_sym.section = section_position_by_name(sym.section_name);
 
@@ -179,11 +218,12 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
                 LCC_TODO(
                     "Generic2COFF: Handle exported symbol\n"
                 );
-            }
+            } break;
         }
     }
 
     coff_header.number_of_sections = (uint16_t) sections.size();
+    // TODO: aux entries
     coff_header.number_of_symbols = (uint32_t) coff_symbols.size();
 
     uint32_t total_section_data_size = std::ranges::fold_left(
@@ -264,6 +304,9 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
             case Relocation::Kind::NONE:
                 LCC_UNREACHABLE();
 
+            case Relocation::Kind::DISPLACEMENT64:
+                coff_relocation.type = IMAGE_REL_AMD64_ADDR64;
+                break;
             case Relocation::Kind::DISPLACEMENT32:
                 coff_relocation.type = IMAGE_REL_AMD64_ADDR32;
                 break;
@@ -289,12 +332,8 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
             );
         }
         auto sym_index = found - symbols.begin();
-
-        // FIXME: r.symbol.byte_offset? r.addend? It's been too long, and I don't
-        // have Windows or ReactOS.
         coff_relocation.reference_address
             = (int32_t) ((isz) r.symbol.byte_offset + r.addend);
-
         coff_relocation.symbol_index = (uint32_t) sym_index;
 
         // Find section symbol is defined in.
@@ -329,11 +368,17 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
     }
 
     // TODO: If executable, MS-DOS stub
+    if (kind == Kind::EXECUTABLE) {
+        fmt::print(stderr, "Generic2Coff: TODO: emit MS-DOS stub for PE32+ executable file\n");
+    }
 
     // Header
     fwrite(&coff_header, sizeof(coff_header), 1, f);
 
     // TODO: If executable, optional headers...
+    if (kind == Kind::EXECUTABLE) {
+        fmt::print(stderr, "Generic2Coff: TODO: emit optional headers for PE32+ executable file\n");
+    }
 
     // Section Table (Section Headers)
     for (const auto& s : section_headers)

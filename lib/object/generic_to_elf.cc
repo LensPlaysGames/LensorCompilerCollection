@@ -276,6 +276,11 @@ void GenericObject::as_elf(FILE* f, const clink::Layout& given_layout) const {
                 elf_sym.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
                 break;
 
+            case Symbol::Kind::WEAK:
+                // TODO: Not always an object
+                elf_sym.st_info = ELF64_ST_INFO(STB_WEAK, STT_OBJECT);
+                break;
+
             case Symbol::Kind::NONE: LCC_UNREACHABLE();
         }
 
@@ -434,6 +439,10 @@ void GenericObject::as_elf(FILE* f, const clink::Layout& given_layout) const {
                 // CPU will end up doing it at execution time.
                 elf_reloc.r_addend = -4;
             } break;
+
+            case Relocation::Kind::DISPLACEMENT64:
+                elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_64);
+                break;
 
             case Relocation::Kind::DISPLACEMENT32:
                 elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_32);

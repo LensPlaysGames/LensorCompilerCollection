@@ -285,11 +285,13 @@ void do_link(
 
         // TODO: If producing an executable vs object/shared
         std::vector<std::string> system_libraries{
-            "/usr/lib64/crt1.o"
+            "/usr/x86_64-linux-musl/lib64/crt1.o",
+            "/usr/x86_64-linux-musl/lib64/crti.o"
         };
         input_paths.insert(input_paths.begin(), system_libraries.begin(), system_libraries.end());
 
-        input_paths.emplace_back("/usr/lib64/libc.a");
+        input_paths.emplace_back("/usr/x86_64-linux-musl/lib64/libc.a");
+        input_paths.emplace_back("/usr/x86_64-linux-musl/lib64/crtn.o");
 
         if (context.has_option("verbose")) {
             fmt::print(

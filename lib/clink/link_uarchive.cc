@@ -49,8 +49,9 @@ namespace clink {
 
 auto collect_uarchive(
     std::span<char> blob,
-    std::vector<std::string_view> undefined
-) -> lcc::GenericObject {
+    std::vector<std::string_view> undefined,
+    std::vector<std::string>& visited
+) -> std::vector<std::vector<char>> {
     // Ensure blob is big enough for magic bytes + at least one file header...
     if (blob.size() <= uarchive::magic_bytes.size() + sizeof(uarchive::FileHeader))
         return {};
@@ -62,6 +63,8 @@ auto collect_uarchive(
         blob.data() + offset,
         sizeof(uarchive::FileHeader)
     );
+
+    std::vector<std::vector<char>> blobs{};
 
     // GNU Symbol Table
     // Layout:
@@ -87,12 +90,12 @@ auto collect_uarchive(
         );
         auto symbol_table_header_offsets = std::span<uint32_t>{
             reinterpret_cast<uint32_t*>(symbol_table_header_offsets_bytes.data()),
-            symbol_table_header_offsets_bytes.size() / sizeof(uint32_t)
+            symbol_count
         };
 
         uint32_t strings_offset{};
         auto symbol_table_strings = symbol_table_blob.subspan(
-            sizeof(symbol_count) + symbol_table_header_offsets.size()
+            sizeof(symbol_count) + symbol_table_header_offsets.size_bytes()
         );
 
         for (auto symbol_offset : symbol_table_header_offsets) {
@@ -112,16 +115,38 @@ auto collect_uarchive(
             if (not std::ranges::contains(undefined, symbol_name))
                 continue;
 
-            fmt::print("Found needed symbol `{}`\n", symbol_name);
+            // fmt::print("Found needed symbol `{}`\n", symbol_name);
             uarchive::FileHeader symbol_header{};
-            memcpy(&symbol_header, blob.data() + symbol_offset, sizeof(symbol_header));
-            fmt::print("  In object `{}`\n", symbol_header.identifier());
+            memcpy(
+                &symbol_header,
+                blob.data() + symbol_offset,
+                sizeof(symbol_header)
+            );
+            // fmt::print(
+            //     "  In object at offset 0x{:x} `{}`\n",
+            //     symbol_offset + sizeof(symbol_header),
+            //     symbol_header.identifier()
+            // );
+
+            // Only go on to extract this blob *if we haven't yet already*.
+            if (std::ranges::contains(visited, symbol_header.identifier()))
+                continue;
+
+            // NOTE: May want to "canonicalize" this or whatever.
+            visited.emplace_back(symbol_header.identifier());
+
+            std::vector<char> object_blob{};
+            object_blob.resize(symbol_header.size());
+            memcpy(
+                object_blob.data(),
+                blob.data() + symbol_offset + sizeof(uarchive::FileHeader),
+                symbol_header.size()
+            );
+            blobs.emplace_back(std::move(object_blob));
         }
     }
 
-    fmt::print(stderr, "clink: TODO extract objects for necessary symbols\n");
-
-    return {};
+    return blobs;
 }
 
 } // namespace clink

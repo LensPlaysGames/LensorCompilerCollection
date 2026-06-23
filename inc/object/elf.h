@@ -335,6 +335,39 @@ typedef struct elf64_sym {
 // dword S + A
 // S suffix -> sign extend 32 bits to 64-bit value
 #define R_X86_64_32S 11
+// word S + A
+#define R_X86_64_16 12
+// word S + A - P
+#define R_X86_64_PC16 13
+// halfword S + A
+#define R_X86_64_8 14
+// halfword S + A - P
+#define R_X86_64_PC8 15
+
+// qword (thread local storage)
+#define R_X86_64_DPTMOD64 16
+// qword (thread local storage)
+#define R_X86_64_DTPOFF64 17
+// qword (thread local storage)
+#define R_X86_64_TPOFF64 18
+// dword (thread local storage)
+#define R_X86_64_TLSGD 19
+// dword (thread local storage)
+#define R_X86_64_TLSLD 20
+// dword (thread local storage)
+#define R_X86_64_DTPOFF32 21
+// dword (thread local storage)
+#define R_X86_64_GOTTPOFF 22
+// dword (thread local storage)
+#define R_X86_64_TPOFF32 23
+
+// qword S + A - P
+#define R_X86_64_PC64 24
+// qword S + A - GOT
+#define R_X86_64_GOTOFF64 25
+// dword GOT + A - P
+#define R_X86_64_GOTPC32 26
+
 // This relocation is generated when the compiler needs to reference an
 // external or preemptible global variable but isn't quite sure if the
 // target will ultimately land within the PC-relative addressing

@@ -799,7 +799,6 @@ struct PatternList {
                             pattern::output::string(4)
                         );
                     }
-
                     // Remove pattern input instruction(s) from instruction window,
                     // keeping references to it/them.
                     std::vector<MInst*> input{};

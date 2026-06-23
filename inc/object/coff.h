@@ -222,6 +222,10 @@ typedef struct coff_section_header {
 // Section Type: BSS
 #define STYP_BSS 0x0080
 
+// Ignore this relocation type
+#define IMAGE_REL_AMD64_ABSOLUTE 0x0000
+// 64-bit virtual address
+#define IMAGE_REL_AMD64_ADDR64 0x0001
 // 32-bit virtual address
 #define IMAGE_REL_AMD64_ADDR32 0x0002
 // 32-bit address without an image base (RVA)
@@ -277,6 +281,31 @@ typedef struct coff_symbol_entry {
     uint8_t auxiliary_count;
 } coff_symbol_entry;
 
+typedef struct coff_symbol_aux_function_definition_entry {
+    // The symbol-table index of the corresponding .bf (begin function) symbol
+    // record.
+    uint32_t tag_index;
+    // The size of the executable code for the function itself.
+    uint32_t total_size;
+    // File offset to line number entry (or zero)
+    uint32_t line_number;
+    // The symbol-table index of the record for the next function. If the
+    // function is the last in the symbol table, this field is set to zero.
+    uint32_t next_function;
+    char reserved[2];
+} coff_symbol_aux_function_definition_entry;
+
+#define IMAGE_WEAK_EXTERN_SEARCH_NOLIBRARY 1
+#define IMAGE_WEAK_EXTERN_SEARCH_LIBRARY   2
+#define IMAGE_WEAK_EXTERN_SEARCH_ALIAS     3
+
+typedef struct coff_symbol_aux_weak_external_entry {
+    uint32_t tag_index;
+    // See IMAGE_WEAK_EXTERN_SEARCH_*
+    uint32_t characteristics;
+    char reserved[10];
+} coff_symbol_aux_weak_external_entry;
+
 // Symbol Section Value
 // Debugging symbol.
 #define N_DEBUG -2
@@ -292,6 +321,14 @@ typedef struct coff_symbol_entry {
 #define C_EXT 2
 // Storage Class: Static
 #define C_STAT 3
+
+#define IMAGE_SYM_CLASS_AUTOMATIC     1 // stack
+#define IMAGE_SYM_CLASS_EXTERNAL      2 // global (may or may not be defined in this file)
+#define IMAGE_SYM_CLASS_STATIC        3 // local (defined in this file, only used within this file)
+#define IMAGE_SYM_CLASS_FUNCTION      101
+#define IMAGE_SYM_CLASS_FILE          103
+#define IMAGE_SYM_CLASS_SECTION       104
+#define IMAGE_SYM_CLASS_WEAK_EXTERNAL 105 // (global, may be overridden)
 
 typedef struct coff_string_entry {
     union {
