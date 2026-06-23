@@ -19,6 +19,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -40,7 +41,43 @@ bool link(
 
 namespace {
 
-void perform_relocation__64(
+void perform_relocation__abs64(
+    lcc::Section& relevant_section,
+    const lcc::Relocation& relocation,
+    const lcc::Symbol& resolved_symbol,
+    // base address of the section resolved_symbol is defined within
+    uint64_t base
+) {
+    auto* relocation_position = relevant_section.contents().data() + relocation.symbol.byte_offset;
+    uint64_t calculated_value = base
+                              + resolved_symbol.byte_offset
+                              + (lcc::usz) relocation.addend;
+    // TODO: big vs little endian?
+#ifdef BIG_ENDIAN
+    calculated_value = std::byteswap(calculated_value);
+#endif
+    memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
+}
+
+void perform_relocation__abs32(
+    lcc::Section& relevant_section,
+    const lcc::Relocation& relocation,
+    const lcc::Symbol& resolved_symbol,
+    // base address of the section resolved_symbol is defined within
+    uint32_t base
+) {
+    auto* relocation_position = relevant_section.contents().data() + relocation.symbol.byte_offset;
+    uint32_t calculated_value = base
+                              + (uint32_t) resolved_symbol.byte_offset
+                              + (uint32_t) relocation.addend;
+    // TODO: big vs little endian?
+#ifdef BIG_ENDIAN
+    calculated_value = std::byteswap(calculated_value);
+#endif
+    memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
+}
+
+void perform_relocation__rel64(
     lcc::Section& relevant_section,
     const lcc::Relocation& relocation,
     const lcc::Symbol& resolved_symbol
@@ -56,7 +93,7 @@ void perform_relocation__64(
     memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
 }
 
-void perform_relocation__32(
+void perform_relocation__rel32(
     lcc::Section& relevant_section,
     const lcc::Relocation& relocation,
     const lcc::Symbol& resolved_symbol
@@ -75,7 +112,8 @@ bool perform_relocation(
     lcc::Context& context,
     lcc::GenericObject& out,
     const lcc::Relocation& relocation,
-    std::vector<std::string>& global_offset_table
+    std::vector<std::string>& global_offset_table,
+    std::optional<Layout> layout
 ) {
     auto found_sym = out.find_symbol(relocation.symbol.name);
     if (not found_sym) {
@@ -98,9 +136,8 @@ bool perform_relocation(
     // address of this symbol (since we know the byte offset within the
     // section of the symbol definition, and the layout will tell us the
     // address of the section it is within).
-    if (found.section_name != relocation.symbol.section_name) {
+    if (not layout and found.section_name != relocation.symbol.section_name)
         return false;
-    }
 
     // This is the section we are going to perform the relocation within.
     auto& relevant_section = out.section(relocation.symbol.section_name);
@@ -135,13 +172,26 @@ bool perform_relocation(
         case lcc::Relocation::Kind::NONE:
             break;
 
-        case lcc::Relocation::Kind::DISPLACEMENT64:
-            perform_relocation__64(relevant_section, relocation, found);
-            break;
+        case lcc::Relocation::Kind::DISPLACEMENT64: {
+            perform_relocation__abs64(
+                relevant_section,
+                relocation,
+                found,
+                layout ? layout->address(found.section_name) : 0
+            );
+        } break;
 
-        case lcc::Relocation::Kind::DISPLACEMENT32:
+        case lcc::Relocation::Kind::DISPLACEMENT32: {
+            auto base_address = layout
+                                  ? layout->address(found.section_name)
+                                  : 0;
+            if (base_address > std::numeric_limits<uint32_t>::max())
+                lcc::Diag::ICE("clink: oversized address {:x} for disp32 relocation of {}\n", base_address, found.name);
+            perform_relocation__abs32(relevant_section, relocation, found, (uint32_t) base_address);
+        } break;
+
         case lcc::Relocation::Kind::DISPLACEMENT32_PCREL: {
-            perform_relocation__32(relevant_section, relocation, found);
+            perform_relocation__rel32(relevant_section, relocation, found);
             // fmt::print(
             //     "Performed relocation in `{}` at offset {}, writing {:x}\n",
             //     relevant_section.name,
@@ -173,7 +223,7 @@ bool perform_relocation(
                 // TODO: Only for x86_64
                 if (relevant_section.contents().at(relocation.symbol.byte_offset - 2) == 0x8b) {
                     relevant_section.contents().at(relocation.symbol.byte_offset - 2) = 0x8d;
-                    perform_relocation__32(relevant_section, relocation, found);
+                    perform_relocation__rel32(relevant_section, relocation, found);
                     // fmt::print("Relaxed load from GOT of address of {} to lea\n", found->name);
                     return true;
                 }
@@ -186,7 +236,7 @@ bool perform_relocation(
                     relevant_section.contents().at(relocation.symbol.byte_offset + 3) = 0x90; // NOP
                     auto adjusted_relocation = relocation;
                     --adjusted_relocation.symbol.byte_offset;
-                    perform_relocation__32(relevant_section, adjusted_relocation, found);
+                    perform_relocation__rel32(relevant_section, adjusted_relocation, found);
                     // If there was a REX prefix, we have to get rid of it. There should never
                     // be one, no modern compiler would ever emit this, but, it's technically
                     // possible.
@@ -207,7 +257,7 @@ bool perform_relocation(
                     relevant_section.contents().at(relocation.symbol.byte_offset + 3) = 0x90; // NOP
                     auto adjusted_relocation = relocation;
                     --adjusted_relocation.symbol.byte_offset;
-                    perform_relocation__32(relevant_section, adjusted_relocation, found);
+                    perform_relocation__rel32(relevant_section, adjusted_relocation, found);
                     // If there was a REX prefix, we have to get rid of it.
                     if (
                         relocation.symbol.byte_offset >= 3
@@ -418,7 +468,7 @@ bool link(
         std::erase_if(
             object.relocations,
             [&](const auto& relocation) {
-                return perform_relocation(context, out, relocation, global_offset_table);
+                return perform_relocation(context, out, relocation, global_offset_table, std::nullopt);
             }
         );
         // fmt::print(
@@ -669,7 +719,7 @@ bool link(
     std::erase_if(
         out.relocations,
         [&](const auto& relocation) {
-            return perform_relocation(context, out, relocation, global_offset_table);
+            return perform_relocation(context, out, relocation, global_offset_table, memory_layout);
         }
     );
     // fmt::print(
@@ -684,8 +734,9 @@ bool link(
     for (auto& r : out.relocations) {
         fmt::print(
             stderr,
-            "\nclink: Undefined reference to `{}`\n",
-            r.symbol.name
+            "\nclink: Undefined reference to `{}`\n    {}",
+            r.symbol.name,
+            r.print()
         );
     }
 

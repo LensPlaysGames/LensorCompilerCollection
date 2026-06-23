@@ -80,20 +80,33 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
                     symbol.name = symbol.section_name;
                 else symbol.name = string_table + elf_symbol.st_name;
 
-                if (symbol.name == "dummy")
-                    fmt::print("{}: TYPE:{} BIND:{}\n", symbol.name, symbol_type, symbol_binding);
-
                 // Determine LCC Symbol kind
-                // FIXME: not super semantically accurate mappings
-                if (symbol_binding == STB_WEAK)
-                    symbol.kind = lcc::Symbol::Kind::WEAK;
-                else if (elf_symbol.st_shndx == SHN_UNDEF)
-                    symbol.kind = lcc::Symbol::Kind::EXTERNAL;
-                else if (symbol_type == STT_FUNC)
-                    symbol.kind = lcc::Symbol::Kind::FUNCTION;
-                else if (symbol_binding == STB_LOCAL)
-                    symbol.kind = lcc::Symbol::Kind::STATIC;
-                else symbol.kind = lcc::Symbol::Kind::EXPORT;
+                switch (symbol_binding) {
+                    case STB_WEAK:
+                        // weak reference
+                        if (elf_symbol.st_shndx == SHN_UNDEF)
+                            symbol.kind = lcc::Symbol::Kind::EXTERNAL;
+                        // weak definition
+                        else symbol.kind = lcc::Symbol::Kind::WEAK;
+                        break;
+                    case STB_LOCAL:
+                        symbol.kind = lcc::Symbol::Kind::STATIC;
+                        break;
+
+                    case STB_GLOBAL:
+                        // external reference
+                        if (elf_symbol.st_shndx == SHN_UNDEF)
+                            symbol.kind = lcc::Symbol::Kind::EXTERNAL;
+                        // global function definition
+                        else if (symbol_type == STT_FUNC)
+                            symbol.kind = lcc::Symbol::Kind::FUNCTION;
+                        // global variable
+                        else symbol.kind = lcc::Symbol::Kind::EXPORT;
+                        break;
+
+                    default:
+                        lcc::Diag::ICE("clink: unhandled ELF binding {}\n", symbol_binding);
+                }
 
                 out.symbols.emplace_back(symbol);
                 indexed_symbols[i] = symbol;
