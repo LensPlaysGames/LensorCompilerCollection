@@ -500,17 +500,11 @@ bool link(
 
     // 1. Build some sort of in-memory structure that saves (necessary)
     //    metadata about encountered *defined* symbols in each input object file.
-    //  1a. This will likely involve first determining the binary format of the
-    //      object file, and then parsing (portions of) it for the necessary info.
-    // 2. Resolve required symbol references, perform relocations, etc. using
-    //    the in-memory metadata.
-    // 3. Build a new object file from the resolved, "linked", in-memory
-    //    structure, and write it to the output path parameter.
-    //
-    // Tangent: We could also go for a sort of "on demand" approach, where we
-    // only attempt to fetch or build this metadata once we have encountered a
-    // relocation or symbol resolution we need to perform, or something like
-    // that.
+    // 2. Merge input objects into singular, generic output object.
+    // 3. Transform single, generic object into final binary format, updating addresses
+    //    and relocation and symbol byte offsets as necessary wrt layout.
+    // 4. Resolve required symbol references, perform relocations, etc. directly
+    //    within the final binary format, using the single object as reference.
 
     // I wonder if we should sort archives (.a files) to the back?
 
