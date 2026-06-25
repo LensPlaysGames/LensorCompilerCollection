@@ -108,6 +108,14 @@ void perform_relocation__rel32(
     memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
 }
 
+template <typename T>
+bool fits(auto v) {
+    return v <= std::numeric_limits<T>::max();
+}
+
+// TODO: Update API. We want to perform relocations on a binary blob,
+// using a generic object's symbol definitions and relocations as input/
+// reference.
 bool perform_relocation(
     lcc::Context& context,
     lcc::GenericObject& out,
@@ -115,10 +123,13 @@ bool perform_relocation(
     std::vector<std::string>& global_offset_table,
     std::optional<Layout> layout
 ) {
+#define CLINK_FAIL_RELOC_STR "clink: cannot perform relocation: "
     auto found_sym = out.find_symbol(relocation.symbol.name);
     if (not found_sym) {
         // NOTE: Not an undefined reference because we may have just not found
         // it *as of yet*.
+        if (context.has_option("verbose"))
+            fmt::print(CLINK_FAIL_RELOC_STR "didn't find symbol {}\n", relocation.symbol.name);
         return false;
     }
     auto& found = found_sym->get();
@@ -126,7 +137,11 @@ bool perform_relocation(
     // Wait for global symbol resolution pass...
     // Without the merged global object file, we can't perform relocations
     // across object files.
-    if (found.kind == lcc::Symbol::Kind::EXTERNAL) return false;
+    if (found.kind == lcc::Symbol::Kind::EXTERNAL) {
+        if (context.has_option("verbose"))
+            fmt::print(CLINK_FAIL_RELOC_STR "undefined symbol {}\n", found.print());
+        return false;
+    }
 
     // If symbol definition is in a different section, wait for global symbol
     // resolution pass...
@@ -136,16 +151,27 @@ bool perform_relocation(
     // address of this symbol (since we know the byte offset within the
     // section of the symbol definition, and the layout will tell us the
     // address of the section it is within).
-    if (not layout and found.section_name != relocation.symbol.section_name)
+    if (not layout and found.section_name != relocation.symbol.section_name) {
+        if (context.has_option("verbose"))
+            fmt::print(CLINK_FAIL_RELOC_STR "no layout, section mismatch: {}", found.print());
         return false;
-
+    }
     // This is the section we are going to perform the relocation within.
     auto& relevant_section = out.section(relocation.symbol.section_name);
+
+    if (not relevant_section.attribute(lcc::Section::Attribute::LOAD)) {
+        // relocations within unloaded sections don't _need_ to be performed :)
+        // if (context.has_option("verbose"))
+        //     fmt::print(CLINK_FAIL_RELOC_STR "within unloaded section (no-op): {}", found.print());
+        return true;
+    }
+
     { // Confidence
         if (relevant_section.is_fill) {
             fmt::print(
                 stderr,
-                "clink: relocation references symbol `{}` that resides in is_fill section (cannot relocate)\n",
+                CLINK_FAIL_RELOC_STR
+                "relocation references symbol `{}` that resides in is_fill section (cannot relocate)\n",
                 relocation.symbol.name
             );
             return false;
@@ -158,7 +184,8 @@ bool perform_relocation(
         ) {
             fmt::print(
                 stderr,
-                "clink: relocation offset {} for `{}` out-of-bounds of section `{}` contents (size:{})\n",
+                CLINK_FAIL_RELOC_STR
+                "relocation offset {} for `{}` out-of-bounds of section `{}` contents (size:{})\n",
                 relocation.symbol.byte_offset,
                 relocation.symbol.name,
                 relevant_section.name,
@@ -185,19 +212,20 @@ bool perform_relocation(
             auto base_address = layout
                                   ? layout->address(found.section_name)
                                   : 0;
-            if (base_address > std::numeric_limits<uint32_t>::max())
-                lcc::Diag::ICE("clink: oversized address {:x} for disp32 relocation of {}\n", base_address, found.name);
+            if (not fits<uint32_t>(base_address)) {
+                lcc::Diag::ICE(
+                    CLINK_FAIL_RELOC_STR
+                    "oversized address {:x} for disp32 relocation of {} within {}\n",
+                    base_address,
+                    found.name,
+                    relevant_section.name
+                );
+            }
             perform_relocation__abs32(relevant_section, relocation, found, (uint32_t) base_address);
         } break;
 
         case lcc::Relocation::Kind::DISPLACEMENT32_PCREL: {
             perform_relocation__rel32(relevant_section, relocation, found);
-            // fmt::print(
-            //     "Performed relocation in `{}` at offset {}, writing {:x}\n",
-            //     relevant_section.name,
-            //     relocation.symbol.byte_offset,
-            //     calculated_value
-            // );
         } break;
 
         case lcc::Relocation::Kind::DISPLACEMENT32_GOTPCREL: {
@@ -217,14 +245,18 @@ bool perform_relocation(
             //   Change 8b to 8d (Transforms mov to lea).
             // - Replace `ff 15 00 00 00 00` with `e8 00 00 00 00 90`
             //   Change ff 15 to e8 (Transforms indirect far call to direct relative call)
+            // TODO: When relaxing, we may? want to remove the entry from the global
+            // offset table entirely, if no other relocations reference it... We could
+            // just do that in a separate pass, though.
             if (
-                relocation.symbol.byte_offset >= 2
+                false
+                and context.target()->is_arch_x86_64()
+                and relocation.symbol.byte_offset >= 2
             ) {
-                // TODO: Only for x86_64
                 if (relevant_section.contents().at(relocation.symbol.byte_offset - 2) == 0x8b) {
                     relevant_section.contents().at(relocation.symbol.byte_offset - 2) = 0x8d;
                     perform_relocation__rel32(relevant_section, relocation, found);
-                    // fmt::print("Relaxed load from GOT of address of {} to lea\n", found->name);
+                    fmt::print("Relaxed load from GOT of address of {} to lea\n", found.name);
                     return true;
                 }
                 if (
@@ -245,7 +277,7 @@ bool perform_relocation(
                         and relevant_section.contents().at(relocation.symbol.byte_offset - 3) >= 0x40
                         and relevant_section.contents().at(relocation.symbol.byte_offset - 3) <= 0x4f
                     ) relevant_section.contents().at(relocation.symbol.byte_offset - 3) = 0x90;
-                    // fmt::print("Relaxed indirect call to {} to direct call + NOP\n", found->name);
+                    fmt::print("Relaxed indirect call to {} to direct call + NOP\n", found.name);
                     return true;
                 }
                 if (
@@ -264,19 +296,51 @@ bool perform_relocation(
                         and relevant_section.contents().at(relocation.symbol.byte_offset - 3) >= 0x40
                         and relevant_section.contents().at(relocation.symbol.byte_offset - 3) <= 0x4f
                     ) relevant_section.contents().at(relocation.symbol.byte_offset - 3) = 0x90;
-                    // fmt::print("Relaxed indirect jmp to {} to direct jmp + NOP\n", found->name);
+                    fmt::print("Relaxed indirect jmp to {} to direct jmp + NOP\n", found.name);
                     return true;
                 }
             }
 
-            // Ensure entry exists in GOT
-            if (not std::ranges::contains(global_offset_table, relocation.symbol.name))
-                global_offset_table.push_back(relocation.symbol.name);
+            if (layout) {
+                fmt::print("Laying out GOT for `{}`\n", relocation.symbol.name);
+                auto* relocation_position = relevant_section.contents().data() + relocation.symbol.byte_offset;
+                // RIP-relative between sections. Basically, we need to take the
+                // difference between the relevant section's memory addresses, and then
+                // add to that the difference between their byte offsets.
+
+                auto got_iterator = std::ranges::find(global_offset_table, relocation.symbol.name);
+                uint32_t got_slot_index = (uint32_t) std::distance(global_offset_table.begin(), got_iterator);
+                uint32_t got_slot_address = (uint32_t) layout->address(".got")
+                                          + got_slot_index * (uint32_t) context.target()->size_of_pointer;
+                uint32_t relocation_address = (uint32_t) layout->address(relevant_section.name)
+                                            + (uint32_t) relocation.symbol.byte_offset;
+
+                fmt::print("  .got at 0x{:08x}\n", layout->address(".got"));
+                fmt::print("  slot at 0x{:08x}\n", got_slot_address);
+                fmt::print("  relocation at 0x{:08x}\n", relocation_address);
+
+                uint32_t calculated_value = (uint32_t) ((got_slot_address
+                                                         + (lcc::usz) relocation.addend)
+                                                        - relocation_address);
+#ifdef BIG_ENDIAN
+                calculated_value = std::byteswap(calculated_value);
+#endif
+                memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
+                return true;
+            }
+
+            fmt::print(
+                "Not performing GOT relocation for `{}` {}({})\n",
+                relocation.symbol.name,
+                relocation.symbol.byte_offset,
+                relocation.symbol.section_name
+            );
 
             // Relocation not yet performed...
             return false;
-        } break;
+        }
     }
+#undef CLINK_FAIL_RELOC_STR
 
     return true;
 }
@@ -462,23 +526,13 @@ bool link(
     // just want to link libraries together.
     out.kind = lcc::GenericObject::Kind::EXECUTABLE;
 
-    // Handle Easy/Local Relocations (not across object files)
-    // This includes function calls within a single translation unit, for example.
+    // Collect GOT entries...
     for (auto& object : parsed_objects) {
-        std::erase_if(
-            object.relocations,
-            [&](const auto& relocation) {
-                return perform_relocation(context, out, relocation, global_offset_table, std::nullopt);
+        for (auto& relocation : object.relocations) {
+            if (relocation.kind == lcc::Relocation::Kind::DISPLACEMENT32_GOTPCREL) {
+                global_offset_table.emplace_back(relocation.symbol.name);
             }
-        );
-        // fmt::print(
-        //     "================================================================\n"
-        //     "Local Relocations Resolved ({} global relocations remain)\n"
-        //     "================================================================\n"
-        //     "{}\n",
-        //     object.relocations.size(),
-        //     object.print()
-        // );
+        }
     }
 
     // Merge alike sections, build global symbol table (out.symbols)
@@ -593,72 +647,108 @@ bool link(
             auto found = std::ranges::find_if(out.symbols, [&](const auto& s) {
                 return s.name == sym.name;
             });
+
+            // Deduplicate section symbols
+            if (out.find_section(sym.name)) {
+                // Only add once
+                if (not out.find_symbol(sym.name))
+                    out.symbols.emplace_back(sym);
+                continue;
+            }
+
             // New symbol, simply add it to global symbol table.
             if (found == out.symbols.end()) {
+                // Exclude file-local symbols from the global symbol table.
                 if (sym.kind != K::STATIC)
                     out.symbols.emplace_back(sym);
                 continue;
             }
-            // Existing symbol, still no definition
-            if (
-                (found->kind == K::EXTERNAL or found->kind == K::WEAK)
-                and (sym.kind == K::EXTERNAL or sym.kind == K::WEAK)
-            ) {
-                if (
-                    not found->section_name.empty()
-                    and not sym.section_name.empty()
-                    and found->section_name != sym.section_name
-                ) {
-                    fmt::print(
-                        stderr,
-                        "clink: duplicate definition of `{}`"
-                        " (section mismatch between externals, `{}` and `{}`)\n",
-                        sym.name,
-                        found->section_name,
-                        sym.section_name
-                    );
-                    return false;
-                }
-                continue;
+
+            // Already seen a symbol with this name, merge it or error.
+
+            // Do different things for each pair of existing and encountered symbol
+            // kinds.
+            switch (found->kind) {
+                case lcc::Symbol::Kind::NONE:
+                case lcc::Symbol::Kind::EXTERNAL:
+                case lcc::Symbol::Kind::WEAK: {
+                    if (
+                        sym.kind != K::WEAK // two weak symbols are totally fine
+                        and sym.section_name.size()
+                        and found->section_name.size()
+                        and sym.section_name != found->section_name
+                    ) {
+                        fmt::print(
+                            stderr,
+                            "clink: duplicate definition of `{}`"
+                            " (section mismatch, `{}` and `{}`)\n  old:{}  new:{}",
+                            sym.name,
+                            found->section_name,
+                            sym.section_name,
+                            found->print(),
+                            sym.print()
+                        );
+                        return false;
+                    }
+                    // Found undefined or weak-defined symbol, taking action based on
+                    // encountered symbol kind...
+                    switch (sym.kind) {
+                        // An undefined symbol does not overwrite or redefine an already undefined
+                        // or weak-defined symbol, given they are within the same section.
+                        case lcc::Symbol::Kind::NONE:
+                        case lcc::Symbol::Kind::EXTERNAL:
+                            break;
+
+                        // A weak-defined symbol overwrites an undefined symbol.
+                        case lcc::Symbol::Kind::WEAK:
+                            if (found->kind != K::WEAK)
+                                *found = sym;
+                            break;
+
+                        // A definition overwrites an undefined symbol.
+                        case lcc::Symbol::Kind::FUNCTION:
+                        case lcc::Symbol::Kind::STATIC:
+                        case lcc::Symbol::Kind::EXPORT:
+                            *found = sym;
+                            break;
+                    }
+                } break;
+
+                case lcc::Symbol::Kind::FUNCTION:
+                case lcc::Symbol::Kind::STATIC:
+                case lcc::Symbol::Kind::EXPORT: {
+                    // Found defined symbol, taking action based on encountered symbol kind...
+                    switch (sym.kind) {
+                        // An undefined or weak-defined symbol does not overwrite or redefine an
+                        // already defined symbol.
+                        case lcc::Symbol::Kind::NONE:
+                        case lcc::Symbol::Kind::EXTERNAL:
+                        case lcc::Symbol::Kind::WEAK:
+                            break;
+
+                        // A defined symbol redefines an already defined symbol.
+                        case lcc::Symbol::Kind::FUNCTION:
+                        case lcc::Symbol::Kind::STATIC:
+                        case lcc::Symbol::Kind::EXPORT: {
+                            fmt::print(stderr, "clink: duplicate definition of `{}`\n", sym.name);
+                            fmt::print(stderr, "  existing:    {}", found->print());
+                            fmt::print(stderr, "  encountered: {}", sym.print());
+                            // TODO: Would be nice to be able to print what files the symbols came from.
+                            return false;
+                        } break;
+                    }
+                } break;
             }
-            // Existing symbol, but first definition
-            else if (found->kind == K::EXTERNAL or found->kind == K::WEAK) {
-                if (
-                    not found->section_name.empty()
-                    and not sym.section_name.empty()
-                    and found->section_name != sym.section_name
-                ) {
-                    fmt::print(
-                        stderr,
-                        "clink: duplicate definition of `{}`"
-                        " (section mismatch between external and first definition, `{}` and `{}`)\n",
-                        sym.name,
-                        found->section_name,
-                        sym.section_name
-                    );
-                    return false;
-                }
-                // Overwrite previously external symbol with actual definition
-                *found = sym;
-            } else {
-                // Definition already found, this must be an external reference
-                if (sym.kind != K::EXTERNAL and sym.kind != K::WEAK) {
-                    fmt::print(stderr, "clink: duplicate definition of `{}`\n", sym.name);
-                    fmt::print(stderr, "  existing:    {}", found->print());
-                    fmt::print(stderr, "  encountered: {}", sym.print());
-                    // TODO: Would be nice to be able to print what files the symbols came from.
-                    return false;
-                }
-            }
-        }
+        } // for (object.symbols)
 
         // Collect Global Relocations
-        out.relocations.insert(
-            out.relocations.end(),
-            object.relocations.begin(),
-            object.relocations.end()
-        );
-        object.relocations.clear();
+        std::erase_if(object.relocations, [&](auto& r) {
+            if (r.symbol.kind != lcc::Symbol::Kind::STATIC) {
+                out.relocations.emplace_back(std::move(r));
+                return true;
+            }
+            return false;
+        });
     }
 
     // Create Global Offset Table section, if necessary (but we can't yet fill
@@ -682,62 +772,169 @@ bool link(
     // LAYOUT ENGINE
     // First, sort *loaded* sections by alike permissions, such that
     // executable code comes first, then readable, then writable.
-    std::ranges::sort(out.sections, [](const lcc::Section& a, const lcc::Section& b) -> bool {
-        using Attribute = lcc::Section::Attribute;
-        // Return true if ordered before
+    std::ranges::sort(
+        out.sections,
+        [](const lcc::Section& a, const lcc::Section& b) -> bool {
+            using Attribute = lcc::Section::Attribute;
+            // Return true if ordered before
 
-        // If A is loaded, and B is not, place A before B.
-        if (
-            a.attribute(Attribute::LOAD)
-            and not b.attribute(Attribute::LOAD)
-        ) return true;
+            // If A is loaded, and B is not, place A before B.
+            if (
+                a.attribute(Attribute::LOAD)
+                and not b.attribute(Attribute::LOAD)
+            ) return true;
 
-        // If A is executable, and B is not, place A before B.
-        if (
-            a.attribute(Attribute::EXECUTABLE)
-            and not b.attribute(Attribute::EXECUTABLE)
-        ) return true;
+            // If A is executable, and B is not, place A before B.
+            if (
+                a.attribute(Attribute::EXECUTABLE)
+                and not b.attribute(Attribute::EXECUTABLE)
+            ) return true;
 
-        // If A is not writable, and B is, place A before B.
-        if (
-            (not a.attribute(Attribute::WRITABLE))
-            and b.attribute(Attribute::WRITABLE)
-        ) return true;
+            // If A is not writable, and B is, place A before B.
+            if (
+                (not a.attribute(Attribute::WRITABLE))
+                and b.attribute(Attribute::WRITABLE)
+            ) return true;
 
-        // If A is not fill, and B is, place A before B.
-        if ((not a.is_fill) and b.is_fill)
-            return true;
+            // If A is not fill, and B is, place A before B.
+            if ((not a.is_fill) and b.is_fill)
+                return true;
 
-        return false;
-    });
-
+            return false;
+        }
+    );
     Layout memory_layout = layout(out);
 
+    // Linker-defined symbols
+    {
+        {
+            lcc::Symbol s{};
+            s.kind = lcc::Symbol::Kind::STATIC;
+            s.name = "_DYNAMIC";
+            if (auto section = out.find_section(".dynamic"))
+                s.byte_offset = memory_layout.address(section->get().name);
+            if (auto f = out.find_symbol(s.name))
+                f->get() = std::move(s);
+            else out.symbols.emplace_back(s);
+        }
+        {
+            lcc::Symbol start{};
+            start.kind = lcc::Symbol::Kind::STATIC;
+            start.name = "__init_array_start";
+
+            lcc::Symbol end{};
+            end.kind = lcc::Symbol::Kind::STATIC;
+            end.name = "__init_array_end";
+
+            if (auto section = out.find_section(".init_array")) {
+                start.byte_offset = memory_layout.address(section->get().name);
+                end.byte_offset = start.byte_offset + section->get().size();
+            }
+
+            if (auto f = out.find_symbol(start.name))
+                f->get() = std::move(start);
+            else out.symbols.emplace_back(start);
+            if (auto f = out.find_symbol(end.name))
+                f->get() = std::move(end);
+            else out.symbols.emplace_back(end);
+        }
+        {
+            lcc::Symbol start{};
+            start.kind = lcc::Symbol::Kind::STATIC;
+            start.name = "__fini_array_start";
+
+            lcc::Symbol end{};
+            end.kind = lcc::Symbol::Kind::STATIC;
+            end.name = "__fini_array_end";
+
+            if (auto section = out.find_section(".fini_array")) {
+                start.byte_offset = memory_layout.address(section->get().name);
+                end.byte_offset = start.byte_offset + section->get().size();
+            }
+
+            if (auto f = out.find_symbol(start.name))
+                f->get() = std::move(start);
+            else out.symbols.emplace_back(start);
+            if (auto f = out.find_symbol(end.name))
+                f->get() = std::move(end);
+            else out.symbols.emplace_back(end);
+        }
+    }
+
+    // TODO: Emit into final binary format, ensuring it adjusts relocation and
+    // symbol byte offsets as necessary (i.e. ELF altering addresses to match
+    // page offsets within the file...)
+    // This will require updating the API for the file generation backends, as
+    // they currently operate on `FILE*`, but we are going to need to jump
+    // around and edit the contents all over the place (and I don't feel like
+    // using fseek for allat). So, we'll likely pass a *mutable* generic
+    // object, *mutable* layout to the object format generator, recieving a
+    // binary blob that we should then be good to apply all remaining
+    // relocations to.
+    std::vector<char> binary_blob{};
+
+    // ================================
     // Resolve and Patch
+    // ================================
+
+    // Handle Local Relocations, within object files
+    // Basically, *static* symbols (and relocations that reference them) MUST
+    // NOT be resolved with anything outside the scope of their own object
+    // file. But, we need to do a global layout before knowing what addresses
+    // to apply, so, we keep the object's symbols and relocations separate, to
+    // ensure that no cross-references happen between object files wrt static
+    // symbols.
+    for (auto& object : parsed_objects) {
+        // relocate within sections of `out` generic object, using leftover
+        // relocations in `object` generic object (as the sections have been
+        // merged, byte offsets updated already).
+        std::erase_if(
+            object.relocations,
+            [&](const auto& relocation) {
+                return perform_relocation(context, out, relocation, global_offset_table, memory_layout);
+            }
+        );
+        // fmt::print(
+        //     "================================================================\n"
+        //     "Local Relocations Resolved ({} global relocations remain)\n"
+        //     "================================================================\n",
+        //     object.relocations.size()
+        // );
+    }
+
     // Iterate collected relocations, referencing the global symbol table to
     // properly calculate addresses and/or offsets.
     std::erase_if(
         out.relocations,
         [&](const auto& relocation) {
-            return perform_relocation(context, out, relocation, global_offset_table, memory_layout);
+            return perform_relocation(
+                context,
+                out,
+                relocation,
+                global_offset_table,
+                memory_layout
+            );
         }
     );
     // fmt::print(
     //     "================================================================\n"
     //     "Global Relocations Resolved ({} relocations remain)\n"
-    //     "================================================================\n"
-    //     "{}\n",
-    //     out.relocations.size(),
-    //     out.print()
+    //     "================================================================\n",
+    //     out.relocations.size()
     // );
 
+    lcc::usz limit{16};
     for (auto& r : out.relocations) {
         fmt::print(
             stderr,
-            "\nclink: Undefined reference to `{}`\n    {}",
+            "\nclink: Undefined reference to `{}`\n"
+            "    {}"
+            "    {}",
             r.symbol.name,
-            r.print()
+            r.print(),
+            r.symbol.print()
         );
+        if (not --limit) break;
     }
 
     FILE* outfile = fopen(executable.c_str(), "wb");

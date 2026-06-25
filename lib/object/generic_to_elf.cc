@@ -177,8 +177,15 @@ void GenericObject::as_elf(FILE* f, const clink::Layout& given_layout) const {
                 // if a == 42 and b == 108, we need to add (b - a) to A.
                 auto address_page_offset = shdr.sh_addr % shdr.sh_addralign;
                 auto offset_page_offset = shdr.sh_offset % shdr.sh_addralign;
-                if (address_page_offset != offset_page_offset)
+                if (address_page_offset != offset_page_offset) {
+                    fmt::print(
+                        "Generic2ELF: Fixing up section `{}` address (offset {} doesn't match address offset {})\n",
+                        s.name,
+                        offset_page_offset,
+                        address_page_offset
+                    );
                     shdr.sh_addr += offset_page_offset - address_page_offset;
+                }
             }
         }
 

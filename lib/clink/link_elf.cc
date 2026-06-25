@@ -68,13 +68,15 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
                 auto symbol_binding = ELF64_ST_BIND(elf_symbol.st_info);
 
                 lcc::Symbol symbol{};
-
                 symbol.byte_offset = elf_symbol.st_value;
+
+                // Get symbol's section name, if applicable
                 if (elf_symbol.st_shndx != SHN_UNDEF and elf_symbol.st_shndx < SHN_LORESERVE) {
                     auto* relevant_header = section_header_begin + elf_symbol.st_shndx;
                     symbol.section_name = section_names_begin + relevant_header->sh_name;
                 }
 
+                // Get symbol name
                 // Section symbols don't have st_name set.
                 if (symbol_type == STT_SECTION)
                     symbol.name = symbol.section_name;
@@ -83,11 +85,8 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
                 // Determine LCC Symbol kind
                 switch (symbol_binding) {
                     case STB_WEAK:
-                        // weak reference
-                        if (elf_symbol.st_shndx == SHN_UNDEF)
-                            symbol.kind = lcc::Symbol::Kind::EXTERNAL;
-                        // weak definition
-                        else symbol.kind = lcc::Symbol::Kind::WEAK;
+                        // weak reference or weak definition
+                        symbol.kind = lcc::Symbol::Kind::WEAK;
                         break;
                     case STB_LOCAL:
                         symbol.kind = lcc::Symbol::Kind::STATIC;

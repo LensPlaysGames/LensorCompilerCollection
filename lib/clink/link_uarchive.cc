@@ -132,6 +132,11 @@ auto collect_uarchive(
             if (std::ranges::contains(visited, symbol_header.identifier()))
                 continue;
 
+            // fmt::print(
+            //     "Extracted object file from archive: {}\n",
+            //     symbol_header.identifier()
+            // );
+
             // NOTE: May want to "canonicalize" this or whatever.
             visited.emplace_back(symbol_header.identifier());
 
