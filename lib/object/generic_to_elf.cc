@@ -117,6 +117,10 @@ auto GenericObject::as_elf(
     // Count Program Headers
     lcc::usz phdrs_count{};
     if (kind == Kind::EXECUTABLE) {
+        // TODO: only if (musl or not static-executable)
+        // PT_PHDR
+        ++phdrs_count;
+
         std::optional<decltype(Section::attributes)> current_attributes{};
         // PT_LOAD program headers (for loaded sections)
         for (auto& s : sections) {
@@ -152,8 +156,9 @@ auto GenericObject::as_elf(
     // This is where section data *actually* starts.
     // Adjust layout to reflect reality.
     // TODO: No magic numbers
+    constexpr uint64_t memory_base = 0x00400000ull;
     uint64_t dot = kind == Kind::EXECUTABLE
-                     ? 0x00400000ull
+                     ? memory_base
                      : 0ull;
     for (auto& s : layout.segments) {
         dot += data_offset;
@@ -537,6 +542,23 @@ auto GenericObject::as_elf(
     // with alike permissions...
     std::vector<elf64_phdr> phdrs{};
     if (kind == Kind::EXECUTABLE) {
+        // PT_PHDR program header (tricks kernel into populating auxv[AT_PHDR]
+        // with address, required by musl libc).
+        // TODO: if (musl or not static-executable)
+        {
+            elf64_phdr phdr{};
+            phdr.p_type = PT_PHDR;
+            phdr.p_offset = hdr.e_phoff;
+            phdr.p_vaddr = memory_base + hdr.e_phoff;
+            phdr.p_paddr = phdr.p_vaddr;
+            phdr.p_align = 8;
+            phdr.p_filesz = hdr.e_phnum * hdr.e_phentsize;
+            phdr.p_memsz = phdr.p_filesz;
+            phdr.p_flags = PF_R;
+
+            phdrs.emplace_back(phdr);
+        }
+
         // PT_LOAD program headers (for loaded sections)
         std::optional<decltype(elf64_shdr::sh_flags)> current_attributes{};
         elf64_phdr phdr{};
@@ -570,8 +592,6 @@ auto GenericObject::as_elf(
                 continue;
             }
 
-            current_attributes = s.sh_flags;
-
             phdr.p_type = PT_LOAD;
             // File and Memory Offsets
             phdr.p_offset = s.sh_offset;
@@ -587,6 +607,20 @@ auto GenericObject::as_elf(
             phdr.p_vaddr = s.sh_addr;
             phdr.p_paddr = phdr.p_vaddr;
             phdr.p_align = s.sh_addralign;
+
+            // First program header. If PT_PHDR present, we want this to include everything from the memory base including
+            if (not current_attributes.has_value()) {
+                // Include the entire beginning of the file.
+                phdr.p_offset = 0;
+                phdr.p_vaddr = memory_base;
+
+                phdr.p_filesz += s.sh_offset;
+
+                phdr.p_paddr = phdr.p_vaddr;
+                phdr.p_memsz = phdr.p_filesz;
+            }
+
+            current_attributes = s.sh_flags;
 
             if (phdr.p_align) {
                 LCC_ASSERT(
