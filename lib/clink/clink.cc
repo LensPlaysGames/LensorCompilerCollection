@@ -167,6 +167,8 @@ auto collect_objects(
                 "clink: given object path does not exist `{}`\n",
                 p.string()
             );
+            context.set_error();
+            return {};
             continue;
         }
 
@@ -205,6 +207,8 @@ bool link(
         }
     );
     auto parsed_objects = collect_objects(context, objects);
+    if (context.has_error())
+        return false;
 
     // Merge collected objects into global object.
     lcc::GenericObject out{};
