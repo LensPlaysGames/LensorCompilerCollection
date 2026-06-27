@@ -285,7 +285,6 @@ void do_link(
         }
 
         // TODO: If producing an executable vs object/shared
-        // TODO: allow user to change directory
 #ifndef LCC_CRT_DIRECTORY
 #    define LCC_CRT_DIRECTORY "/usr/x86_64-linux-musl/lib64/"
 #endif
@@ -295,6 +294,7 @@ void do_link(
             "crtn.o",
             "libc.a"
         };
+        // TODO: allow user to change directory (i.e. context option)
         for (auto& s : c_libraries)
             s = lcc::fs::path(LCC_CRT_DIRECTORY) / s;
         input_paths.insert(input_paths.begin(), c_libraries.begin(), c_libraries.end());

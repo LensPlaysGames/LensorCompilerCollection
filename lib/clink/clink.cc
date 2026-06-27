@@ -25,6 +25,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 namespace clink {
@@ -100,8 +101,8 @@ void collect_object(
             // Scan input object files, collect metadata about symbol definitions and
             // necessary relocations.
             // TODO: Too verbose
-            if (context.has_option("verbose"))
-                fmt::print("clink: Collecting ELF file at `{}`\n", path);
+            // if (context.has_option("verbose"))
+            //     fmt::print("clink: Collecting ELF file at `{}`\n", path);
             auto collected_object = collect_elf(blob);
             // fmt::print("{}\n", collected_object.print());
             collect_undefined(
@@ -530,7 +531,35 @@ bool link(
 
     FILE* outfile = fopen(executable.c_str(), "wb");
     fwrite(binary_blob.data(), 1, binary_blob.size(), outfile);
-    return 0 == fclose(outfile) and out.relocations.empty();
+    if (auto rc = fclose(outfile); rc != 0) {
+        fmt::print(stderr, "clink: Failed to write outfile to `{}` (fclose returned {})\n", executable, rc);
+        return false;
+    }
+
+    if (out.kind == lcc::GenericObject::Kind::EXECUTABLE) {
+        std::error_code ec{};
+        std::filesystem::permissions(
+            executable,
+            std::filesystem::perms::owner_exec
+                | std::filesystem::perms::group_exec
+                | std::filesystem::perms::others_exec,
+            std::filesystem::perm_options::add,
+            ec
+        );
+        if (ec) {
+            fmt::print(
+                stderr,
+                "clink: Could not set executable file permissions for `{}`: ({}) {}\n",
+                executable,
+                ec.value(),
+                ec.message()
+            );
+            /** (!) -- not a fatal error **/
+            // Do not set context error, nor return false.
+        }
+    }
+
+    return not context.has_error();
 }
 
 } // namespace clink
