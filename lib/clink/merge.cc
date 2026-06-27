@@ -156,36 +156,36 @@ bool merge(std::vector<lcc::GenericObject>& parsed_objects, lcc::GenericObject& 
                 case lcc::Symbol::Kind::NONE:
                 case lcc::Symbol::Kind::EXTERNAL:
                 case lcc::Symbol::Kind::WEAK: {
-                    if (
-                        sym.kind != K::WEAK // two weak symbols are totally fine
-                        and sym.section_name.size()
-                        and found->section_name.size()
-                        and sym.section_name != found->section_name
-                    ) {
-                        fmt::print(
-                            stderr,
-                            "clink: duplicate definition of `{}`"
-                            " (section mismatch, `{}` and `{}`)\n  old:{}  new:{}",
-                            sym.name,
-                            found->section_name,
-                            sym.section_name,
-                            found->print(),
-                            sym.print()
-                        );
-                        return false;
-                    }
                     // Found undefined or weak-defined symbol, taking action based on
                     // encountered symbol kind...
                     switch (sym.kind) {
                         // An undefined symbol does not overwrite or redefine an already undefined
                         // or weak-defined symbol, given they are within the same section.
                         case lcc::Symbol::Kind::NONE:
-                        case lcc::Symbol::Kind::EXTERNAL:
-                            break;
+                        case lcc::Symbol::Kind::EXTERNAL: {
+                            if (
+                                found->kind != K::WEAK // two weak symbols are totally fine
+                                and sym.section_name.size()
+                                and found->section_name.size()
+                                and sym.section_name != found->section_name
+                            ) {
+                                fmt::print(
+                                    stderr,
+                                    "clink: duplicate definition of `{}`"
+                                    " (section mismatch, `{}` and `{}`)\n  old:{}  new:{}",
+                                    sym.name,
+                                    found->section_name,
+                                    sym.section_name,
+                                    found->print(),
+                                    sym.print()
+                                );
+                                return false;
+                            }
+                        } break;
 
                         // A weak-defined symbol overwrites an undefined symbol.
                         case lcc::Symbol::Kind::WEAK:
-                            if (found->kind != K::WEAK)
+                            if (found->kind != K::WEAK) // out of none, external, or weak; not weak
                                 *found = sym;
                             break;
 

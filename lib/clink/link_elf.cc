@@ -15,8 +15,14 @@ namespace clink {
 lcc::GenericObject collect_elf(std::span<char> blob) {
     lcc::GenericObject out{};
 
-    if (blob.size() < sizeof(elf64_header))
+    if (blob.size() < sizeof(elf64_header)) {
+        fmt::print(
+            stderr,
+            "clink: invalid ELF blob: {} bytes is not big enough\n",
+            blob.size()
+        );
         return {};
+    }
 
     elf64_header hdr;
     memcpy(&hdr, blob.data(), sizeof(hdr));
@@ -29,8 +35,15 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
         );
     }
 
-    if (sizeof(elf64_header) != hdr.e_shentsize)
+    if (sizeof(elf64_shdr) != hdr.e_shentsize) {
+        fmt::print(
+            stderr,
+            "clink: ELF header has invalid section header entry size {} (expected {})\n",
+            hdr.e_shentsize,
+            sizeof(elf64_shdr)
+        );
         return {};
+    }
 
     const auto section_header_begin = reinterpret_cast<elf64_shdr*>(blob.data() + hdr.e_shoff);
     const auto section_header_end = section_header_begin + hdr.e_shnum;
@@ -127,8 +140,10 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
 
                 case STB_GLOBAL:
                     // external reference
-                    if (elf_symbol.st_shndx == SHN_UNDEF)
+                    if (elf_symbol.st_shndx == SHN_UNDEF) {
+                        // fmt::print("`{}`: global, no section index, must be external\n", symbol.name);
                         symbol.kind = lcc::Symbol::Kind::EXTERNAL;
+                    }
                     // global function definition
                     else if (symbol_type == STT_FUNC)
                         symbol.kind = lcc::Symbol::Kind::FUNCTION;
@@ -139,6 +154,9 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
                 default:
                     lcc::Diag::ICE("clink: unhandled ELF binding {}\n", symbol_binding);
             }
+
+            // TODO: if context very verbose or clink input symbol dump or something.
+            // fmt::print("  {}", symbol.print());
 
             out.symbols.emplace_back(symbol);
             indexed_symbols[i] = symbol;

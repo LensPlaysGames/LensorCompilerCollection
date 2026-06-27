@@ -14,11 +14,14 @@
 
 namespace lcc::elf {
 
-auto validate_header(const elf64_header& hdr) -> std::pair<bool, std::string> {
-    if (hdr.e_ident[EI_MAG0] != 0x7f
+auto validate_header(const elf64_header& hdr)
+    -> std::pair<bool, std::string> {
+    if (
+        hdr.e_ident[EI_MAG0] != 0x7f
         or hdr.e_ident[EI_MAG1] != 'E'
         or hdr.e_ident[EI_MAG2] != 'L'
-        or hdr.e_ident[EI_MAG3] != 'F') {
+        or hdr.e_ident[EI_MAG3] != 'F'
+    ) {
         return {
             false,
             fmt::format(

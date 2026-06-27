@@ -398,6 +398,9 @@ static void opcode_slash_r(
     );
 }
 
+// TODO: slash digit for /0, /5, etc instruction encodings (like add and
+// sub immediates)
+
 static void assemble_inst(
     GenericObject& gobj,
     MFunction& func,
@@ -1115,7 +1118,32 @@ static void assemble_inst(
             //       0x01 /r | ADD r32, r/m32 | MR
             // REX.W 0x01 /r | ADD r64, r/m64 | MR
             if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x00, text);
-            else Diag::ICE(
+            // GNU syntax (src, dst operands)
+            //   REX 0x80 /0 ib | ADD imm8, r/m8   | IM
+            //       0x81 /0 iw | ADD imm16, r/m16 | IM
+            //       0x81 /0 id | ADD imm32, r/m32 | IM
+            // REX.W 0x81 /0 id | ADD imm32, r/m64 | IM
+            else if (is_imm_reg(inst)) {
+                // Possible FIXME: I copy-and-pasted this from above after coming back
+                // over a year later (once removed); there *are* bugs.
+                auto [imm, reg] = extract_imm_reg(inst);
+
+                if (imm.size > 64)
+                    Diag::ICE("Over-large immediate size ({} bits)\n", imm.size);
+
+                u8 op = 0x81;
+                if (imm.size <= 8) op = 0x80;
+
+                u8 opcode_extension = 0;
+                u8 modrm = modrm_byte(0b11, opcode_extension, regbits(reg));
+
+                if (imm.size > 8 and imm.size <= 16)
+                    text += prefix16;
+                if (imm.size <= 8 or imm.size > 32 or reg_topbit(reg))
+                    text += rex_byte(imm.size > 32, reg_topbit(reg), false, false);
+                text += {op, modrm};
+                text += as_bytes_cap32(imm);
+            } else Diag::ICE(
                 "Sorry, unhandled form\n    {}\n",
                 PrintMInstImpl(inst, opcode_to_string)
             );

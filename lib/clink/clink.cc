@@ -73,8 +73,7 @@ struct ObjectCollectionContext {
     std::vector<lcc::GenericObject> parsed_objects{};
 
     // bookkeeping
-    // Contains names of objects that we have already visited, in an attempt
-    // to prevent processing duplicate object files.
+    // Contains names of objects that we have already visited.
     std::vector<std::string> visited{};
     // Contains all symbols currently defined.
     std::vector<std::string_view> defined{};
@@ -100,7 +99,9 @@ void collect_object(
             // Scan and Collect
             // Scan input object files, collect metadata about symbol definitions and
             // necessary relocations.
-            // fmt::print("Collecting ELF file at `{}`\n", path);
+            // TODO: Too verbose
+            if (context.has_option("verbose"))
+                fmt::print("clink: Collecting ELF file at `{}`\n", path);
             auto collected_object = collect_elf(blob);
             // fmt::print("{}\n", collected_object.print());
             collect_undefined(
@@ -125,16 +126,22 @@ void collect_object(
             // decoding it over and over.
             while (found_needed_symbols) {
                 // fmt::print("looking in archive at `{}`, undefined: {}\n", path, object_collection.undefined);
+                auto visited_size = (lcc::isz) object_collection.visited.size();
                 auto collected_object_blobs = collect_uarchive(
                     blob,
                     object_collection.undefined,
                     object_collection.visited
                 );
                 found_needed_symbols = collected_object_blobs.size();
-                // fmt::print("found_needed_symbols:{}\n", found_needed_symbols);
-                for (auto& collected_blob : collected_object_blobs)
-                    collect_object(context, path, collected_blob, object_collection);
-                // fmt::print("!!collected objects\n");
+                auto visited_it = object_collection.visited.begin() + visited_size;
+                for (auto& collected_blob : collected_object_blobs) {
+                    collect_object(
+                        context,
+                        fmt::format("{}({})", path, *visited_it++),
+                        collected_blob,
+                        object_collection
+                    );
+                }
             }
             return;
         }
@@ -248,26 +255,48 @@ bool link(
             // Return true if ordered before
 
             // If A is loaded, and B is not, place A before B.
+            // Alternatively, if A is not loaded, and B is, A must never be placed
+            // before B.
             if (
                 a.attribute(Attribute::LOAD)
                 and not b.attribute(Attribute::LOAD)
             ) return true;
+            if (
+                (not a.attribute(Attribute::LOAD))
+                and b.attribute(Attribute::LOAD)
+            ) return false;
 
             // If A is executable, and B is not, place A before B.
+            // Alternatively, if A is not executable, and B is, A must never be placed
+            // before B.
             if (
                 a.attribute(Attribute::EXECUTABLE)
                 and not b.attribute(Attribute::EXECUTABLE)
             ) return true;
+            if (
+                (not a.attribute(Attribute::EXECUTABLE))
+                and b.attribute(Attribute::EXECUTABLE)
+            ) return false;
 
             // If A is not writable, and B is, place A before B.
+            // Alternatively, if A is writable, and B is not, A must never be placed
+            // before B.
             if (
                 (not a.attribute(Attribute::WRITABLE))
                 and b.attribute(Attribute::WRITABLE)
             ) return true;
+            if (
+                a.attribute(Attribute::WRITABLE)
+                and not b.attribute(Attribute::WRITABLE)
+            ) return false;
 
             // If A is not fill, and B is, place A before B.
+            // Alternatively, if A is fill, and B is not, A must never be placed
+            // before B.
             if ((not a.is_fill) and b.is_fill)
                 return true;
+            if (a.is_fill and not b.is_fill)
+                return false;
 
             return false;
         }

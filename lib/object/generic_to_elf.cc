@@ -167,6 +167,24 @@ auto GenericObject::as_elf(
         dot = lcc::utils::AlignTo(dot, (decltype(dot)) 0x1000);
     }
 
+    // fmt::print("\nEXPECTED LAYOUT:\n");
+    // for (auto& s : layout.segments) {
+    //     fmt::print(
+    //         "SEGMENT: attributes={} size={} address=0x{:08x}\n",
+    //         s.attributes,
+    //         s.size(),
+    //         s.address
+    //     );
+    //     for (auto& section : s.sections) {
+    //         fmt::print(
+    //             "  SECTION: `{}` size={} address=0x{:08x}\n",
+    //             section.name,
+    //             section.size,
+    //             layout.address(section.name)
+    //         );
+    //     }
+    // }
+
     // Build section headers from sections in this generic object file.
     // NOTE: If you add other sections first or otherwise change the fact that
     // the ordering of sections in the generic object file matches exactly the
@@ -176,11 +194,14 @@ auto GenericObject::as_elf(
         std::optional<decltype(Section::attributes)> current_attributes{};
         for (auto& s : sections) {
             if (current_attributes.has_value() and s.attributes and s.attributes != current_attributes) {
-                auto address_page_offset = layout.address(s) % 0x1000;
-                auto offset_page_offset = data_offset % 0x1000;
-                const auto offset
-                    = std::max(offset_page_offset, address_page_offset)
-                    - std::min(offset_page_offset, address_page_offset);
+                constexpr usz page_size{0x1000};
+                auto address_page_offset = layout.address(s) % page_size;
+                auto offset_page_offset = data_offset % page_size;
+                if (address_page_offset < offset_page_offset)
+                    address_page_offset += page_size;
+                const auto offset = address_page_offset - offset_page_offset;
+                // fmt::print("v address_page_offset=0x{:08x}\n", address_page_offset);
+                // fmt::print("v offset_page_offset=0x{:08x}\n", offset_page_offset);
                 // fmt::print(
                 //     "advancing data offset from {} to {} ({} difference)\n",
                 //     data_offset,
@@ -222,6 +243,9 @@ auto GenericObject::as_elf(
                 // FIXME: align needed all the time? page size (of target)?
                 shdr.sh_addralign = 0x1000;
                 shdr.sh_addr = layout.address(s);
+
+                // fmt::print("Placed `{}` address=0x{:08x} offset=0x{:08x}\n", s.name, shdr.sh_addr, shdr.sh_offset);
+
                 // addr % align MUST equal offset % align
                 // A % x -> a
                 // B % x -> b
@@ -234,12 +258,12 @@ auto GenericObject::as_elf(
                     shdr.sh_type != SHT_NOBITS
                     and address_page_offset != offset_page_offset
                 ) {
-                    // absolute value of difference
-                    const auto offset
-                        = std::max(offset_page_offset, address_page_offset)
-                        - std::min(offset_page_offset, address_page_offset);
+                    if (address_page_offset < offset_page_offset)
+                        address_page_offset += shdr.sh_addralign;
+                    const auto offset = address_page_offset - offset_page_offset;
                     fmt::print(
-                        "Generic2ELF: Fixing up section `{}` address (offset {} doesn't match address offset {})\n",
+                        "Generic2ELF: Fixing up section `{}` address (offset {} doesn't match address offset {})\n"
+                        "  NOTE: If you are seeing this, linking is likely broken\n",
                         s.name,
                         offset_page_offset,
                         address_page_offset
@@ -693,11 +717,12 @@ auto GenericObject::as_elf(
                 // the *last* section header + it's size...
                 auto& last_shdr = shdrs.at((usz) i);
 
-                auto address_page_offset = layout.address(s) % 0x1000;
-                auto offset_page_offset = (last_shdr.sh_offset + last_shdr.sh_size) % 0x1000;
-                const auto offset
-                    = std::max(offset_page_offset, address_page_offset)
-                    - std::min(offset_page_offset, address_page_offset);
+                constexpr usz page_size{0x1000};
+                auto address_page_offset = layout.address(s) % page_size;
+                auto offset_page_offset = (last_shdr.sh_offset + last_shdr.sh_size) % page_size;
+                if (address_page_offset < offset_page_offset)
+                    address_page_offset += page_size;
+                const auto offset = address_page_offset - offset_page_offset;
                 // fmt::print(
                 //     "Permissions changed at section `{}`, emitting {} bytes of padding\n",
                 //     s.name,
