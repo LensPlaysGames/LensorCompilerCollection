@@ -278,7 +278,8 @@ void do_link(
     if (context.has_option("clink")) {
         if (context.format()->format() != lcc::Format::ELF_OBJECT) {
             lcc::Diag::Fatal(
-                "clink: Only ELF is supported for now, sorry. We plan to support COFF and MachO"
+                "clink: Only ELF is supported for now, sorry. We plan to support COFF and MachO\n"
+                "  try `-f elf`"
             );
             return;
         }
