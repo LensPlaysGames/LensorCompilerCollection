@@ -117,6 +117,8 @@ void collect_object(
         }
     }
 
+    // TODO: Other binary formats (COFF, MachO)
+
     constexpr std::array<char, 8> archive_magic_bytes{'!', '<', 'a', 'r', 'c', 'h', '>', '\n'};
     if (blob.size() > archive_magic_bytes.size()) {
         std::array<char, 8> first_bytes{};
@@ -148,7 +150,6 @@ void collect_object(
         }
     }
 
-    // TODO: Other binary formats (COFF, MachO)
     fmt::print(
         stderr,
         "clink: could not determine binary format of given object file `{}`\n",

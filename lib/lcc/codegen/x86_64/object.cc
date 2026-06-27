@@ -36,6 +36,7 @@ namespace lcc::x86_64 {
 //     field encodes the register operand of the instruction.
 
 namespace {
+[[nodiscard]]
 constexpr auto as_bytes(u16 value) -> std::vector<u8> {
     // 0xffff
     //   __    upper
@@ -44,10 +45,12 @@ constexpr auto as_bytes(u16 value) -> std::vector<u8> {
     const u8 lower = u8((value >> 0) & 0xff);
     return {lower, upper};
 }
+[[nodiscard]]
 constexpr auto as_bytes(i16 value) -> std::vector<u8> {
     return as_bytes(static_cast<u16>(value));
 }
 
+[[nodiscard]]
 constexpr auto as_bytes(u32 value) -> std::vector<u8> {
     // 0xffff.ffff
     // a ____
@@ -58,10 +61,12 @@ constexpr auto as_bytes(u32 value) -> std::vector<u8> {
     const u8 lower_b = u8((value >> 0) & 0xff);
     return {lower_b, upper_b, lower_a, upper_a};
 }
+[[nodiscard]]
 constexpr auto as_bytes(i32 value) -> std::vector<u8> {
     return as_bytes(static_cast<u32>(value));
 }
 
+[[nodiscard]]
 constexpr auto as_bytes(u64 value) -> std::vector<u8> {
     const u8 upper_a = u8((value >> 56) & 0xff);
     const u8 lower_a = u8((value >> 48) & 0xff);
@@ -82,10 +87,12 @@ constexpr auto as_bytes(u64 value) -> std::vector<u8> {
         upper_a
     };
 }
+[[nodiscard]]
 constexpr auto as_bytes(i64 value) -> std::vector<u8> {
     return as_bytes(static_cast<u64>(value));
 }
 
+[[nodiscard]]
 constexpr auto as_bytes(MOperandImmediate imm) -> std::vector<u8> {
     if (imm.size <= 8)
         return {u8(imm.value)};
@@ -98,6 +105,7 @@ constexpr auto as_bytes(MOperandImmediate imm) -> std::vector<u8> {
     LCC_UNREACHABLE();
 }
 
+[[nodiscard]]
 constexpr auto as_bytes_cap32(MOperandImmediate imm) -> std::vector<u8> {
     if (imm.size > 32) imm.size = 32;
     return as_bytes(imm);
@@ -341,10 +349,13 @@ static constexpr u8 prefix16 = 0x66;
 //     REX.W 0x89 /r
 // but where 0x88 and 0x89 are switched out with some other opcodes. MR vs
 // RM operand encoding handles it per opcode.
+// prefix_with_0f will put 0x0f byte before opcode, but after REX or 0x66
+// prefix.
 static void opcode_slash_r(
     GenericObject& gobj,
     MFunction& func,
     MInst& inst,
+    bool prefix_with_0f,
     u8 opcode,
     Section& text
 ) {
@@ -391,6 +402,8 @@ static void opcode_slash_r(
         if (src.size == 16) text += prefix16;
         if (src.size == 64 or reg_topbit(src) or reg_topbit(dst))
             text += rex_byte(src.size == 64, reg_topbit(src), false, reg_topbit(dst));
+        if (prefix_with_0f)
+            text += 0x0f;
         text += {op, modrm};
     } else Diag::ICE(
         "Sorry, unhandled form\n    {}\n",
@@ -398,8 +411,53 @@ static void opcode_slash_r(
     );
 }
 
-// TODO: slash digit for /0, /5, etc instruction encodings (like add and
-// sub immediates)
+// slash digit for /0, /5, etc opcode extension instruction encodings
+// (like add and sub immediates)
+static void opcode_slash_digit(
+    GenericObject& gobj,
+    MFunction& func,
+    MInst& inst,
+    u8 opcode,
+    u8 extension,
+    Section& text
+) {
+    // /digit where digit is:
+    //     ShiftLeft:            /4
+    //     ShiftRightArithmetic: /7
+    //
+    //       0xd2 /4  |  SAL %cl, r/m8   |  MC
+    // 0x66  0xd3 /4  |  SAL %cl, r/m16  |  MC
+    //       0xd3 /4  |  SAL %cl, r/m32  |  MC
+    // REX.W 0xd3 /4  |  SAL %cl, r/m64  |  MC
+    if (is_reg_reg(inst)) {
+        auto [src, dst] = extract_reg_reg(inst);
+
+        LCC_ASSERT(
+            (is_one_of<1, 8, 16, 32, 64>(src.size)),
+            "x86_64: Invalid register size: got {}",
+            src.size
+        );
+        LCC_ASSERT(
+            (is_one_of<1, 8, 16, 32, 64>(dst.size)),
+            "x86_64: Invalid register size: got {}",
+            dst.size
+        );
+
+        u8 op = opcode + 1;
+        if (dst.size == 1 or dst.size == 8)
+            op -= 1;
+
+        u8 modrm = modrm_byte(0b11, extension, regbits(dst));
+
+        if (dst.size == 16) text += prefix16;
+        if (src.size == 64 or dst.size == 64 or reg_topbit(src) or reg_topbit(dst))
+            text += rex_byte(src.size == 64 or dst.size == 64, reg_topbit(src), false, reg_topbit(dst));
+        text += {op, modrm};
+    } else Diag::ICE(
+        "Sorry, unhandled form\n    {}\n",
+        PrintMInstImpl(inst, opcode_to_string)
+    );
+}
 
 static void assemble_inst(
     GenericObject& gobj,
@@ -528,7 +586,7 @@ static void assemble_inst(
                 // OPT: Don't emit moves from a register into itself
                 auto [src, dst] = extract_reg_reg(inst);
                 if (src.value != dst.value)
-                    opcode_slash_r(gobj, func, inst, 0x88, text);
+                    opcode_slash_r(gobj, func, inst, false, 0x88, text);
             }
             // GNU syntax (src, dst operands)
             //        0xb0+rb ib | MOV imm8, r8   | OI
@@ -862,7 +920,7 @@ static void assemble_inst(
             // "MR" means that the source operand goes in reg field of modrm and the
             // destination operand goes in the r/m field.
             if (is_reg_reg(inst))
-                opcode_slash_r(gobj, func, inst, 0x38, text);
+                opcode_slash_r(gobj, func, inst, false, 0x38, text);
             else if (is_imm_reg(inst)) {
                 auto [imm, reg] = extract_imm_reg(inst);
                 // If reg == rax, use 0x3c/0x3d opcodes
@@ -928,7 +986,7 @@ static void assemble_inst(
             //       0x85 /r | TEST r8, r/m8 | MR
             // REX.W 0x85 /r | TEST r8, r/m8 | MR
             if (is_reg_reg(inst))
-                opcode_slash_r(gobj, func, inst, 0x84, text);
+                opcode_slash_r(gobj, func, inst, false, 0x84, text);
             else Diag::ICE(
                 "Sorry, unhandled form\n    {}\n",
                 PrintMInstImpl(inst, opcode_to_string)
@@ -1078,7 +1136,7 @@ static void assemble_inst(
             //       0x29 /r | SUB r32, r/m32 | MR
             // REX.W 0x29 /r | SUB r64, r/m64 | MR
             if (is_reg_reg(inst))
-                opcode_slash_r(gobj, func, inst, 0x28, text);
+                opcode_slash_r(gobj, func, inst, false, 0x28, text);
             // GNU syntax (src, dst operands)
             //   REX 0x80 /5 ib | SUB imm8, r/m8   | IM
             //       0x81 /5 iw | SUB imm16, r/m16 | IM
@@ -1116,7 +1174,8 @@ static void assemble_inst(
             //  0x66 0x01 /r | ADD r16, r/m16 | MR
             //       0x01 /r | ADD r32, r/m32 | MR
             // REX.W 0x01 /r | ADD r64, r/m64 | MR
-            if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x00, text);
+            if (is_reg_reg(inst))
+                opcode_slash_r(gobj, func, inst, false, 0x00, text);
             // GNU syntax (src, dst operands)
             //   REX 0x80 /0 ib | ADD imm8, r/m8   | IM
             //       0x81 /0 iw | ADD imm16, r/m16 | IM
@@ -1154,8 +1213,57 @@ static void assemble_inst(
             //  0x66 0x21 /r | AND r16, r/m16 | MR
             //       0x21 /r | AND r32, r/m32 | MR
             // REX.W 0x21 /r | AND r64, r/m64 | MR
-            if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x20, text);
+            if (is_reg_reg(inst))
+                opcode_slash_r(gobj, func, inst, false, 0x20, text);
             else Diag::ICE(
+                "Sorry, unhandled form\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
+        } break;
+
+        // imul
+        case Opcode::Multiply: {
+            if (is_imm_reg(inst)) {
+                auto [imm, reg] = extract_imm_reg(inst);
+                // GNU syntax (src, dst operands)
+                //  0x66 0x69 /r iw | IMUL r16, r/m16, imm16
+                //       0x69 /r id | IMUL r32, r/m32, imm32
+                // REX.W 0x69 /r id | IMUL r64, r/m64, imm32
+                if (imm.size > 64)
+                    Diag::ICE("Over-large immediate size for imul ({} bits)\n", imm.size);
+
+                u8 op = 0x69;
+                u8 modrm = modrm_byte(0b11, regbits(reg), regbits(reg));
+
+                if (reg.size == 16) text += prefix16;
+                if (reg.size == 64 or reg_topbit(reg) or reg_topbit(reg))
+                    text += rex_byte(reg.size == 64, reg_topbit(reg), false, reg_topbit(reg));
+                text += {op, modrm};
+                text += as_bytes_cap32(imm);
+            } else Diag::ICE(
+                "Sorry, unhandled form\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
+        } break;
+
+        case Opcode::MoveZeroExtended: {
+            // GNU syntax (src, dst operands)
+            //  0x66 0x0f 0xb6 /r | MOVZX r/m8, r16   | RM
+            //       0x0f 0xb6 /r | MOVZX r/m8, r32   | RM
+            // REX.W 0x0f 0xb6 /r | MOVZX r/m8, r64   | RM
+            //       0x0f 0xb7 /r | MOVZX r/m16, r32  | RM
+            // REX.W 0x0f 0xb7 /r | MOVZX r/m16, r64  | RM
+            //            0x8b /r | MOV r/m32, r32    | RM
+            // MOV zeroes high bits for 32-bit moves
+            if (is_reg_reg(inst)) {
+                auto [src, dst] = extract_reg_reg(inst);
+                // OPT: Don't emit moves from a register into itself
+                if (src.value != dst.value) {
+                    if (src.size == 32 and dst.size >= 32)
+                        opcode_slash_r(gobj, func, inst, false, 0x88, text);
+                    else opcode_slash_r(gobj, func, inst, true, 0xb6, text);
+                }
+            } else Diag::ICE(
                 "Sorry, unhandled form\n    {}\n",
                 PrintMInstImpl(inst, opcode_to_string)
             );
@@ -1164,9 +1272,7 @@ static void assemble_inst(
         case Opcode::Not:
         case Opcode::Negate:
         case Opcode::Or:
-        case Opcode::Multiply:
         case Opcode::MoveSignExtended:
-        case Opcode::MoveZeroExtended:
         case Opcode::ShiftRightLogical:
         case Opcode::SignedDivide:
         case Opcode::UnsignedDivide:
