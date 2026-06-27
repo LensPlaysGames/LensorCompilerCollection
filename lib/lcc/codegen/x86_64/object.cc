@@ -608,8 +608,7 @@ static void assemble_inst(
                 if (dst.size == 1 or dst.size == 8)
                     op = 0x88;
 
-                // TODO: Is 0b11 right here? Wouldn't that mean register to register move?
-                u8 modrm = modrm_byte(0b11, regbits(dst), regbits(src));
+                u8 modrm = modrm_byte(0b00, regbits(dst), regbits(src));
 
                 if (dst.size == 16) text += prefix16;
                 if (dst.size == 64 or reg_topbit(src) or reg_topbit(dst))
@@ -714,7 +713,7 @@ static void assemble_inst(
                 if (dst.size == 1 or dst.size == 8)
                     op = 0x8a;
 
-                u8 modrm = modrm_byte(0b11, regbits(dst), regbits(src));
+                u8 modrm = modrm_byte(0b00, regbits(dst), regbits(src));
 
                 if (dst.size == 16)
                     text += prefix16;
