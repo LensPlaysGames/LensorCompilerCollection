@@ -1,0 +1,16 @@
+* TODO NOW
+
+** Link ELF Static Binary
+
+- Current :: [2026-06-25 Thu 12:20]
+
+=generic_to_elf.cc=
+
+Problem: string table offset isn't valid, leading =readelf -t huh= to not show the proper section name strings (they are all offset by some fixed amount, it seems).
+
+The header is fine, the size of the file is fine, it just seems like something is off by a fixed amount. Maybe the data offset of the string table vs the actual file offset, maybe something else, I don't know.
+
+* 2026
+** C Frontend Maturity
+** Abstract =liblccbase= from =liblcc=
+Basically, =lcc::Context=, =lcc::File=, =lcc::Diag= are all very reusable and helpful across a lot of different libraries, so putting those into their own little play-pen, separate from the "actual compilation bits", should make linking less bloated.

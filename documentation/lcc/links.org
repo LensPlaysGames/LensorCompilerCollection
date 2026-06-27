@@ -1,0 +1,26 @@
+* ELF Handling For Thread-Local Storage
+https://www.akkadia.org/drepper/tls.pdf
+
+* ELF x86_64 ABI
+https://refspecs.linuxfoundation.org/elf/x86_64-abi-0.95.pdf
+
+* ELF Oracle Docs
+
+https://docs.oracle.com/cd/E19683-01/816-7529/6mdhf5r3h/index.html
+
+* ELF Xinuos
+
+https://gabi.xinuos.com/elf/07-pheader.html
+
+* C Standard 23
+
+https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3220.pdf
+
+* Blog Posts
+
+** Deep Dive into Startup of Statically Linked Programs on Linux
+Eli Bendersky, 2012
+
+https://eli.thegreenplace.net/2012/08/13/how-statically-linked-programs-run-on-linux
+
+
