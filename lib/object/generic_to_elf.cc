@@ -544,7 +544,7 @@ auto GenericObject::as_elf(
     if (kind == Kind::EXECUTABLE) {
         // PT_PHDR program header (tricks kernel into populating auxv[AT_PHDR]
         // with address, required by musl libc).
-        // TODO: if (musl or not static-executable)
+        // TODO: if (musl or (executable and not static))
         {
             elf64_phdr phdr{};
             phdr.p_type = PT_PHDR;
@@ -563,12 +563,17 @@ auto GenericObject::as_elf(
         std::optional<decltype(elf64_shdr::sh_flags)> current_attributes{};
         elf64_phdr phdr{};
         phdr.p_type = PT_NULL;
-        bool skip_null = true;
+        bool skip_null{true};
+        /** (!) -- This breaks (silently!) if the sections aren't sorted first
+         **  by permissions, and then by progbits/nobits within those permission
+         **  groups.
+         **/
         for (const auto& s : shdrs) {
             if (skip_null) {
                 skip_null = false;
                 continue;
             }
+
             // Detect change in attributes, boundary between permission spans.
             if (
                 phdr.p_type != PT_NULL
@@ -586,17 +591,22 @@ auto GenericObject::as_elf(
             // Skip empty sections
             if (s.sh_size == 0) continue;
 
-            if (current_attributes.has_value() and s.sh_flags == current_attributes.value()) {
-                phdr.p_filesz += s.sh_size;
+            if (
+                current_attributes.has_value()
+                and s.sh_flags == current_attributes.value()
+            ) {
                 phdr.p_memsz += s.sh_size;
+                if (s.sh_type == SHT_PROGBITS)
+                    phdr.p_filesz += s.sh_size;
                 continue;
             }
 
             phdr.p_type = PT_LOAD;
             // File and Memory Offsets
             phdr.p_offset = s.sh_offset;
-            phdr.p_filesz = s.sh_size;
-            phdr.p_memsz = phdr.p_filesz;
+            phdr.p_memsz = s.sh_size;
+            if (s.sh_type == SHT_PROGBITS)
+                phdr.p_filesz = phdr.p_memsz;
             // Flags
             phdr.p_flags = PF_R;
             if (s.sh_flags & SHF_WRITE)
