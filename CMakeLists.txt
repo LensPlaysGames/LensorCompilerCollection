@@ -43,6 +43,12 @@ set(
 )
 
 set(
+  TIME_TRACE FALSE
+  CACHE BOOL
+  "Whether or not to generate compile duration data via -ftime-trace."
+)
+
+set(
   USE_COLOUR TRUE
   CACHE BOOL
   "Whether or not to tell the compiler to use color for emitting
@@ -125,6 +131,15 @@ if (COVERAGE)
     add_link_options(--coverage)
   else()
     message(STATUS "COVERAGE: Compiler not supported")
+  endif()
+endif()
+
+if (TIME_TRACE)
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-ftime-trace)
+    add_link_options(-ftime-trace)
+  else()
+    message(STATUS "TIME_TRACE: Compiler not supported")
   endif()
 endif()
 
