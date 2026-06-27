@@ -285,13 +285,19 @@ void do_link(
         }
 
         // TODO: If producing an executable vs object/shared
-        std::array<std::string, 4> system_libraries{
-            "/usr/x86_64-linux-musl/lib64/crt1.o",
-            "/usr/x86_64-linux-musl/lib64/crti.o",
-            "/usr/x86_64-linux-musl/lib64/crtn.o",
-            "/usr/x86_64-linux-musl/lib64/libc.a"
+        // TODO: allow user to change directory
+#ifndef LCC_CRT_DIRECTORY
+#    define LCC_CRT_DIRECTORY "/usr/x86_64-linux-musl/lib64/"
+#endif
+        std::array<std::string, 4> c_libraries{
+            "crt1.o",
+            "crti.o",
+            "crtn.o",
+            "libc.a"
         };
-        input_paths.insert(input_paths.begin(), system_libraries.begin(), system_libraries.end());
+        for (auto& s : c_libraries)
+            s = lcc::fs::path(LCC_CRT_DIRECTORY) / s;
+        input_paths.insert(input_paths.begin(), c_libraries.begin(), c_libraries.end());
 
         if (context.has_option("verbose")) {
             fmt::print(
