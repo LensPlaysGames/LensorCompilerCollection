@@ -17,6 +17,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <functional>
 #include <limits>
@@ -600,10 +601,10 @@ bool link(
 
     // Sort archives (.a files) to the back, since only objects that define
     // *currently* undefined symbols are extracted from them.
-    std::ranges::sort(
+    std::ranges::stable_partition(
         objects,
-        [](const auto& a, const auto& b) -> bool {
-            return a.extension() != ".a";
+        [](const auto& p) -> bool {
+            return p.extension() != ".a";
         }
     );
     auto parsed_objects = collect_objects(context, objects);
