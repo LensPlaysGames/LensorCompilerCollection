@@ -56,6 +56,14 @@ auto block_name(const std::string& in) -> std::string {
     return fmt::format(".L{}", safe_name(in));
 }
 
+std::string gnu_mnemonic(Opcode opcode) {
+    if (
+        opcode == Opcode::MoveDereferenceLHS
+        or opcode == Opcode::MoveDereferenceRHS
+    ) return "mov";
+    return ToString(opcode);
+}
+
 } // namespace
 
 // FIXME: ToString is a bad name for this!
@@ -401,7 +409,7 @@ void emit_gnu_att_assembly(
                     };
                     LCC_ASSERT(dst.size % 8 == 0, "Invalid copied destination register size");
 
-                    auto mnemonic = std::string(ToString(Opcode(+x86_64::Opcode::Move)));
+                    auto mnemonic = gnu_mnemonic(Opcode(+x86_64::Opcode::Move));
                     if (src.value >= +x86_64::RegisterId::XMM0) {
                         if (src.size > 32)
                             mnemonic += "sd";
@@ -429,7 +437,7 @@ void emit_gnu_att_assembly(
                         instruction.all_operands().at(1)
                     );
                     LCC_ASSERT(r.size % 8 == 0, "Invalid spilled register size");
-                    auto mnemonic = std::string(ToString(Opcode(+x86_64::Opcode::MoveDereferenceRHS)));
+                    auto mnemonic = gnu_mnemonic(Opcode(+x86_64::Opcode::MoveDereferenceRHS));
                     // Append "sd" to mnemonic if saving scalar
                     // FIXME: is_scalar()
                     if (r.value >= +x86_64::RegisterId::XMM0 and r.value <= +x86_64::RegisterId::XMM15)
@@ -454,7 +462,7 @@ void emit_gnu_att_assembly(
                     );
                     // Append "sd" to mnemonic if saving scalar
                     // FIXME: is_scalar()
-                    auto mnemonic = std::string(ToString(Opcode(+x86_64::Opcode::MoveDereferenceLHS)));
+                    auto mnemonic = gnu_mnemonic(Opcode(+x86_64::Opcode::MoveDereferenceLHS));
                     if (instruction.reg() >= +x86_64::RegisterId::XMM0)
                         mnemonic += "sd";
 
@@ -555,7 +563,7 @@ void emit_gnu_att_assembly(
                 // INSTRUCTION MNEMONIC
                 // ================================
                 out += "    ";
-                out += ToString(Opcode(instruction.opcode()));
+                out += gnu_mnemonic(Opcode(instruction.opcode()));
 
                 // ================================
                 // CUSTOM INSTRUCTION SUFFIX HANDLING

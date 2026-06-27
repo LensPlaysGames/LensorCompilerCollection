@@ -164,8 +164,8 @@ static constexpr auto ToString(Opcode op) -> std::string {
         case Opcode::Return: return "ret";
         case Opcode::Jump: return "jmp";
         case Opcode::Call: return "call";
-        case Opcode::MoveDereferenceLHS:
-        case Opcode::MoveDereferenceRHS:
+        case Opcode::MoveDereferenceLHS: return "mov.dereflhs";
+        case Opcode::MoveDereferenceRHS: return "mov.derefrhs";
         case Opcode::Move: return "mov";
         case Opcode::MoveSignExtended: return "movsx";
         case Opcode::MoveZeroExtended: return "movzx";
