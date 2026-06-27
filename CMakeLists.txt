@@ -542,11 +542,13 @@ add_library(
   inc/clink/layout.hh
   inc/clink/link_elf.hh
   inc/clink/link_uarchive.hh
+  inc/clink/merge.hh
   inc/clink/relocate.hh
   lib/clink/clink.cc
   lib/clink/layout.cc
   lib/clink/link_elf.cc
   lib/clink/link_uarchive.cc
+  lib/clink/merge.cc
   lib/clink/relocate.cc
 )
 target_include_directories(libclink PUBLIC inc)
