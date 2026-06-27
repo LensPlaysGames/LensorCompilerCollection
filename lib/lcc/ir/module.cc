@@ -870,8 +870,7 @@ void Module::emit(std::filesystem::path output_file_path) {
                 comment_section += '\0';
                 gobj.sections.emplace_back(comment_section);
 
-                // TODO: if print requested...
-                fmt::print("{}\n", gobj.print());
+                // fmt::print("{}\n", gobj.print());
 
                 FILE* f = fopen(output_file_path.string().data(), "wb");
                 if (not f) {
@@ -883,11 +882,20 @@ void Module::emit(std::filesystem::path output_file_path) {
 
                 auto memory_layout = clink::layout(gobj);
 
+                std::vector<char> binary_blob{};
                 if (_ctx->format()->format() == Format::ELF_OBJECT)
-                    gobj.as_elf(f, memory_layout);
+                    binary_blob = gobj.as_elf(
+                        memory_layout,
+                        lcc::GenericObject::EmitRelocations::Yes
+                    );
                 else if (_ctx->format()->format() == Format::COFF_OBJECT)
-                    gobj.as_coff(f, memory_layout);
+                    binary_blob = gobj.as_coff(
+                        memory_layout,
+                        lcc::GenericObject::EmitRelocations::Yes
+                    );
                 else Diag::ICE("Unhandled generic object output format");
+
+                fwrite(binary_blob.data(), 1, binary_blob.size(), f);
 
                 fclose(f);
 

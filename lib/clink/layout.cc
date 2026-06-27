@@ -36,7 +36,7 @@ void Layout::address_assignment(uint64_t dot, uint32_t page_size) {
 
 auto Layout::address(std::string_view section_name) const
     -> decltype(MemorySegment::address) {
-    for (auto& segment : segments) {
+    for (const auto& segment : segments) {
         decltype(MemorySegment::address) base = segment.address;
         for (const auto& section : segment.sections) {
             if (section.name == section_name)
@@ -45,6 +45,29 @@ auto Layout::address(std::string_view section_name) const
         }
     }
     return (decltype(MemorySegment::address)) -1;
+}
+
+auto Layout::section_offset(std::string_view section_name, uint32_t new_offset) -> uint32_t {
+    for (auto& section : offsets) {
+        if (section.name == section_name) {
+            section.size = new_offset;
+            return new_offset;
+        }
+    }
+    offsets.emplace_back(section_name, new_offset);
+    return new_offset;
+}
+
+auto Layout::section_offset(std::string_view section_name) const -> uint32_t {
+    for (auto& section : offsets) {
+        if (section.name == section_name) {
+            return section.size;
+        }
+    }
+    lcc::Diag::ICE(
+        "Could not get offset of section `{}` (not found in memory layout)",
+        section_name
+    );
 }
 
 auto layout(const lcc::GenericObject& object) -> Layout {

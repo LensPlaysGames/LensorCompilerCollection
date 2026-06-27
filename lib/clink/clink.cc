@@ -42,69 +42,101 @@ bool link(
 namespace {
 
 void perform_relocation__abs64(
-    lcc::Section& relevant_section,
+    char* relocation_position,
     const lcc::Relocation& relocation,
     const lcc::Symbol& resolved_symbol,
     // base address of the section resolved_symbol is defined within
     uint64_t base
 ) {
-    auto* relocation_position = relevant_section.contents().data() + relocation.symbol.byte_offset;
     uint64_t calculated_value = base
                               + resolved_symbol.byte_offset
                               + (lcc::usz) relocation.addend;
-    // TODO: big vs little endian?
-#ifdef BIG_ENDIAN
-    calculated_value = std::byteswap(calculated_value);
-#endif
+    // Always write little endian
+    if constexpr (std::endian::native == std::endian::big)
+        calculated_value = std::byteswap(calculated_value);
     memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
 }
 
 void perform_relocation__abs32(
-    lcc::Section& relevant_section,
+    char* relocation_position,
     const lcc::Relocation& relocation,
     const lcc::Symbol& resolved_symbol,
     // base address of the section resolved_symbol is defined within
     uint32_t base
 ) {
-    auto* relocation_position = relevant_section.contents().data() + relocation.symbol.byte_offset;
     uint32_t calculated_value = base
                               + (uint32_t) resolved_symbol.byte_offset
                               + (uint32_t) relocation.addend;
-    // TODO: big vs little endian?
-#ifdef BIG_ENDIAN
-    calculated_value = std::byteswap(calculated_value);
-#endif
+    // Always write little endian
+    if constexpr (std::endian::native == std::endian::big)
+        calculated_value = std::byteswap(calculated_value);
     memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
 }
 
 void perform_relocation__rel64(
-    lcc::Section& relevant_section,
+    char* relocation_position,
     const lcc::Relocation& relocation,
-    const lcc::Symbol& resolved_symbol
+    const lcc::Symbol& resolved_symbol,
+    uint64_t symbol_section_offset,
+    uint64_t relocation_section_offset
 ) {
-    auto* relocation_position = relevant_section.contents().data() + relocation.symbol.byte_offset;
-    uint64_t calculated_value = (uint64_t) ((resolved_symbol.byte_offset
-                                             + (lcc::usz) relocation.addend)
-                                            - relocation.symbol.byte_offset);
-    // TODO: big vs little endian?
-#ifdef BIG_ENDIAN
-    calculated_value = std::byteswap(calculated_value);
-#endif
+    uint64_t S = symbol_section_offset
+               + (uint64_t) resolved_symbol.byte_offset;
+    uint64_t A = (uint64_t) relocation.addend;
+    uint64_t P = relocation_section_offset
+               + (uint64_t) relocation.symbol.byte_offset;
+
+    fmt::print(
+        "Performing DISP32_PCREL (S + A - P) `{}` ({} + {:+} - {})\n",
+        resolved_symbol.name,
+        S,
+        (int64_t) A,
+        P
+    );
+
+    uint64_t calculated_value = S + A - P;
+
+    // Always write little endian
+    if constexpr (std::endian::native == std::endian::big)
+        calculated_value = std::byteswap(calculated_value);
+
     memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
 }
 
 void perform_relocation__rel32(
-    lcc::Section& relevant_section,
+    char* relocation_position,
     const lcc::Relocation& relocation,
-    const lcc::Symbol& resolved_symbol
+    const lcc::Symbol& resolved_symbol,
+    // This is the virtual address of the *start* of the section where the
+    // resolved symbol is defined.
+    uint64_t symbol_section_address,
+    // This is the virtual address of the *start* of the section where the
+    // relocation is being performed.
+    uint64_t relocation_section_address
 ) {
-    auto* relocation_position = relevant_section.contents().data() + relocation.symbol.byte_offset;
-    uint32_t calculated_value = (uint32_t) ((resolved_symbol.byte_offset
-                                             + (lcc::usz) relocation.addend)
-                                            - relocation.symbol.byte_offset);
-#ifdef BIG_ENDIAN
-    calculated_value = std::byteswap(calculated_value);
-#endif
+    uint32_t S = (uint32_t) symbol_section_address
+               + (uint32_t) resolved_symbol.byte_offset;
+
+    uint32_t A = (uint32_t) relocation.addend;
+
+    uint32_t P = (uint32_t) relocation_section_address
+               + (uint32_t) relocation.symbol.byte_offset;
+
+    // fmt::print(
+    //     "Performing DISP32_PCREL (S + A - P) `{}` ({} + {:+} - {}) = {}\n",
+    //     resolved_symbol.name,
+    //     S,
+    //     (int32_t) A,
+    //     P,
+    //     S + A - P
+    // );
+
+    uint32_t calculated_value = S + A - P;
+
+    // Always write little endian
+    if constexpr (std::endian::native == std::endian::big)
+        calculated_value = std::byteswap(calculated_value);
+
     memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
 }
 
@@ -113,18 +145,16 @@ bool fits(auto v) {
     return v <= std::numeric_limits<T>::max();
 }
 
-// TODO: Update API. We want to perform relocations on a binary blob,
-// using a generic object's symbol definitions and relocations as input/
-// reference.
 bool perform_relocation(
     lcc::Context& context,
-    lcc::GenericObject& out,
+    std::vector<char>& blob,
+    const lcc::GenericObject& object,
     const lcc::Relocation& relocation,
     std::vector<std::string>& global_offset_table,
-    std::optional<Layout> layout
+    const Layout& layout
 ) {
 #define CLINK_FAIL_RELOC_STR "clink: cannot perform relocation: "
-    auto found_sym = out.find_symbol(relocation.symbol.name);
+    auto found_sym = object.find_symbol(relocation.symbol.name);
     if (not found_sym) {
         // NOTE: Not an undefined reference because we may have just not found
         // it *as of yet*.
@@ -143,28 +173,43 @@ bool perform_relocation(
         return false;
     }
 
-    // If symbol definition is in a different section, wait for global symbol
-    // resolution pass...
-    // Without the global memory layout of every section already in place, we
-    // can't perform relocations across sections.
-    // If we have been passed a memory layout, utilise it to resolve the
-    // address of this symbol (since we know the byte offset within the
-    // section of the symbol definition, and the layout will tell us the
-    // address of the section it is within).
-    if (not layout and found.section_name != relocation.symbol.section_name) {
-        if (context.has_option("verbose"))
-            fmt::print(CLINK_FAIL_RELOC_STR "no layout, section mismatch: {}", found.print());
+    // This is the section we are going to perform the relocation within.
+    auto& relevant_section = object.section(relocation.symbol.section_name);
+
+    // The offset of the section that we are performing the relocation within.
+    auto relocation_section_offset = layout.section_offset(
+        relocation.symbol.section_name
+    );
+    if (relocation_section_offset == 0) {
+        fmt::print(
+            stderr,
+            CLINK_FAIL_RELOC_STR
+            "relocation references symbol `{}` that resides in section `{}` with zero recorded section offset\n",
+            relocation.symbol.name,
+            relocation.symbol.section_name
+        );
         return false;
     }
-    // This is the section we are going to perform the relocation within.
-    auto& relevant_section = out.section(relocation.symbol.section_name);
+    auto relocation_position_offset
+        = relocation_section_offset + relocation.symbol.byte_offset;
+
+    auto* relocation_position
+        = blob.data() + relocation_position_offset;
 
     if (not relevant_section.attribute(lcc::Section::Attribute::LOAD)) {
         // relocations within unloaded sections don't _need_ to be performed :)
         // if (context.has_option("verbose"))
-        //     fmt::print(CLINK_FAIL_RELOC_STR "within unloaded section (no-op): {}", found.print());
+        //     fmt::print(CLINK_FAIL_RELOC_STR "ignoring relocation within unloaded section: {}", found.print());
         return true;
     }
+
+    // fmt::print("{}", relocation.print());
+    // fmt::print(
+    //     "  offset of section `{}` at {}\n",
+    //     relocation.symbol.section_name,
+    //     relocation_position_offset
+    // );
+    // fmt::print("  writing to offset at 0x{:08x}\n", relocation_position_offset);
 
     { // Confidence
         if (relevant_section.is_fill) {
@@ -178,21 +223,36 @@ bool perform_relocation(
         }
         // Ensure contents is big enough, or something
         // TODO: uint32_t will change based on machine/relocation kind pair.
-        if (
-            relevant_section.contents().size() < relocation.symbol.byte_offset + sizeof(uint32_t)
-            or relevant_section.contents().size() < relocation.symbol.byte_offset
-        ) {
+        if (relocation_position_offset + sizeof(uint32_t) > blob.size()) {
             fmt::print(
                 stderr,
                 CLINK_FAIL_RELOC_STR
                 "relocation offset {} for `{}` out-of-bounds of section `{}` contents (size:{})\n",
-                relocation.symbol.byte_offset,
+                relocation_position_offset,
                 relocation.symbol.name,
                 relevant_section.name,
-                relevant_section.contents().size()
+                relevant_section.size()
             );
             return false;
         }
+    }
+
+    uint64_t relocation_section_address = layout.address(
+        relocation.symbol.section_name
+    );
+
+    uint64_t symbol_definition_section_address{};
+    if (found.section_name.size()) {
+        symbol_definition_section_address = layout.address(
+            found.section_name
+        );
+    } else {
+        // TODO: linker defined symbols end up here.
+        // fmt::print(
+        //     stderr,
+        //     "clink: suspicious symbol `{}`: not within any section...\n",
+        //     found.name
+        // );
     }
 
     switch (relocation.kind) {
@@ -201,17 +261,15 @@ bool perform_relocation(
 
         case lcc::Relocation::Kind::DISPLACEMENT64: {
             perform_relocation__abs64(
-                relevant_section,
+                relocation_position,
                 relocation,
                 found,
-                layout ? layout->address(found.section_name) : 0
+                layout.address(found.section_name)
             );
         } break;
 
         case lcc::Relocation::Kind::DISPLACEMENT32: {
-            auto base_address = layout
-                                  ? layout->address(found.section_name)
-                                  : 0;
+            auto base_address = layout.address(found.section_name);
             if (not fits<uint32_t>(base_address)) {
                 lcc::Diag::ICE(
                     CLINK_FAIL_RELOC_STR
@@ -221,11 +279,11 @@ bool perform_relocation(
                     relevant_section.name
                 );
             }
-            perform_relocation__abs32(relevant_section, relocation, found, (uint32_t) base_address);
+            perform_relocation__abs32(relocation_position, relocation, found, (uint32_t) base_address);
         } break;
 
         case lcc::Relocation::Kind::DISPLACEMENT32_PCREL: {
-            perform_relocation__rel32(relevant_section, relocation, found);
+            perform_relocation__rel32(relocation_position, relocation, found, symbol_definition_section_address, relocation_section_address);
         } break;
 
         case lcc::Relocation::Kind::DISPLACEMENT32_GOTPCREL: {
@@ -249,95 +307,129 @@ bool perform_relocation(
             // offset table entirely, if no other relocations reference it... We could
             // just do that in a separate pass, though.
             if (
-                false
+                context.has_option("clink-relax")
                 and context.target()->is_arch_x86_64()
                 and relocation.symbol.byte_offset >= 2
             ) {
-                if (relevant_section.contents().at(relocation.symbol.byte_offset - 2) == 0x8b) {
-                    relevant_section.contents().at(relocation.symbol.byte_offset - 2) = 0x8d;
-                    perform_relocation__rel32(relevant_section, relocation, found);
-                    fmt::print("Relaxed load from GOT of address of {} to lea\n", found.name);
+                if (*(relocation_position - 2) == (char) 0x8b) {
+                    // Update opcode
+                    *(relocation_position - 2) = (char) 0x8d;
+
+                    perform_relocation__rel32(
+                        relocation_position,
+                        relocation,
+                        found,
+                        symbol_definition_section_address,
+                        relocation_section_address
+                    );
+
+                    fmt::print(
+                        "clink: Relaxed load from GOT of address of {} to lea\n",
+                        found.name
+                    );
+
                     return true;
                 }
                 if (
-                    relevant_section.contents().at(relocation.symbol.byte_offset - 2) == 0xff
-                    and relevant_section.contents().at(relocation.symbol.byte_offset - 1) == 0x15 // indirect call
+                    *(relocation_position - 2) == (char) 0xff
+                    and *(relocation_position - 1) == (char) 0x15 // indirect call
                 ) {
                     // ff 15 -> e8  moves address over by one
-                    relevant_section.contents().at(relocation.symbol.byte_offset - 2) = 0xe8; // relative call
-                    relevant_section.contents().at(relocation.symbol.byte_offset + 3) = 0x90; // NOP
+                    *(relocation_position - 2) = (char) 0xe8; // relative call
+                    *(relocation_position + 3) = (char) 0x90; // NOP
+
                     auto adjusted_relocation = relocation;
                     --adjusted_relocation.symbol.byte_offset;
-                    perform_relocation__rel32(relevant_section, adjusted_relocation, found);
+                    perform_relocation__rel32(
+                        relocation_position,
+                        adjusted_relocation,
+                        found,
+                        symbol_definition_section_address,
+                        relocation_section_address
+                    );
+
                     // If there was a REX prefix, we have to get rid of it. There should never
                     // be one, no modern compiler would ever emit this, but, it's technically
                     // possible.
                     if (
                         relocation.symbol.byte_offset >= 3
-                        and relevant_section.contents().at(relocation.symbol.byte_offset - 3) >= 0x40
-                        and relevant_section.contents().at(relocation.symbol.byte_offset - 3) <= 0x4f
-                    ) relevant_section.contents().at(relocation.symbol.byte_offset - 3) = 0x90;
-                    fmt::print("Relaxed indirect call to {} to direct call + NOP\n", found.name);
+                        and *(relocation_position - 3) >= (char) 0x40
+                        and *(relocation_position - 3) <= (char) 0x4f
+                    ) *(relocation_position - 3) = (char) 0x90;
+
+                    fmt::print(
+                        "clink: Relaxed indirect call to {} to direct call + NOP\n",
+                        found.name,
+                        symbol_definition_section_address,
+                        relocation_section_address
+                    );
                     return true;
                 }
                 if (
-                    relevant_section.contents().at(relocation.symbol.byte_offset - 2) == 0xff
-                    and relevant_section.contents().at(relocation.symbol.byte_offset - 1) == 0x25 // indirect jmp
+                    *(relocation_position - 2) == (char) 0xff
+                    and *(relocation_position - 1) == (char) 0x25 // indirect jmp
                 ) {
                     // ff 25 -> e9  moves address over by one
-                    relevant_section.contents().at(relocation.symbol.byte_offset - 2) = 0xe9; // direct jmp
-                    relevant_section.contents().at(relocation.symbol.byte_offset + 3) = 0x90; // NOP
+                    *(relocation_position - 2) = (char) 0xe9; // direct jmp
+                    *(relocation_position + 3) = (char) 0x90; // NOP
+
                     auto adjusted_relocation = relocation;
                     --adjusted_relocation.symbol.byte_offset;
-                    perform_relocation__rel32(relevant_section, adjusted_relocation, found);
+
+                    perform_relocation__rel32(
+                        relocation_position,
+                        adjusted_relocation,
+                        found,
+                        symbol_definition_section_address,
+                        relocation_section_address
+                    );
+
                     // If there was a REX prefix, we have to get rid of it.
                     if (
                         relocation.symbol.byte_offset >= 3
-                        and relevant_section.contents().at(relocation.symbol.byte_offset - 3) >= 0x40
-                        and relevant_section.contents().at(relocation.symbol.byte_offset - 3) <= 0x4f
-                    ) relevant_section.contents().at(relocation.symbol.byte_offset - 3) = 0x90;
-                    fmt::print("Relaxed indirect jmp to {} to direct jmp + NOP\n", found.name);
+                        and *(relocation_position - 3) >= (char) 0x40
+                        and *(relocation_position - 3) <= (char) 0x4f
+                    ) *(relocation_position - 3) = (char) 0x90;
+
+                    fmt::print(
+                        "clink: Relaxed indirect jmp to {} to direct jmp + NOP\n",
+                        found.name
+                    );
+
                     return true;
                 }
             }
 
-            if (layout) {
-                fmt::print("Laying out GOT for `{}`\n", relocation.symbol.name);
-                auto* relocation_position = relevant_section.contents().data() + relocation.symbol.byte_offset;
-                // RIP-relative between sections. Basically, we need to take the
-                // difference between the relevant section's memory addresses, and then
-                // add to that the difference between their byte offsets.
+            // fmt::print("Laying out GOT for `{}`\n", relocation.symbol.name);
 
-                auto got_iterator = std::ranges::find(global_offset_table, relocation.symbol.name);
-                uint32_t got_slot_index = (uint32_t) std::distance(global_offset_table.begin(), got_iterator);
-                uint32_t got_slot_address = (uint32_t) layout->address(".got")
-                                          + got_slot_index * (uint32_t) context.target()->size_of_pointer;
-                uint32_t relocation_address = (uint32_t) layout->address(relevant_section.name)
-                                            + (uint32_t) relocation.symbol.byte_offset;
+            // RIP-relative between sections. Basically, we need to take the
+            // difference between the relevant section's memory addresses, and then
+            // add to that the difference between their byte offsets.
 
-                fmt::print("  .got at 0x{:08x}\n", layout->address(".got"));
-                fmt::print("  slot at 0x{:08x}\n", got_slot_address);
-                fmt::print("  relocation at 0x{:08x}\n", relocation_address);
+            auto got_iterator = std::ranges::find(global_offset_table, relocation.symbol.name);
+            uint32_t got_slot_index = (uint32_t) std::distance(global_offset_table.begin(), got_iterator);
+            uint32_t got_slot_address
+                = (uint32_t) layout.address(".got")
+                + got_slot_index
+                      * ((uint32_t) context.target()->size_of_pointer
+                         / (uint32_t) context.target()->ffi.size_of_char);
+            uint32_t relocation_address = (uint32_t) layout.address(relevant_section.name)
+                                        + (uint32_t) relocation.symbol.byte_offset;
 
-                uint32_t calculated_value = (uint32_t) ((got_slot_address
-                                                         + (lcc::usz) relocation.addend)
-                                                        - relocation_address);
-#ifdef BIG_ENDIAN
+            // fmt::print("  .got at 0x{:08x}\n", layout.address(".got"));
+            // fmt::print("  slot at 0x{:08x}\n", got_slot_address);
+            // fmt::print("  relocation at 0x{:08x}\n", relocation_address);
+
+            uint32_t calculated_value = (uint32_t) ((got_slot_address
+                                                     + (lcc::usz) relocation.addend)
+                                                    - relocation_address);
+
+            // Always write little endian bytes
+            if constexpr (std::endian::native == std::endian::big)
                 calculated_value = std::byteswap(calculated_value);
-#endif
-                memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
-                return true;
-            }
 
-            fmt::print(
-                "Not performing GOT relocation for `{}` {}({})\n",
-                relocation.symbol.name,
-                relocation.symbol.byte_offset,
-                relocation.symbol.section_name
-            );
-
-            // Relocation not yet performed...
-            return false;
+            memcpy(relocation_position, &calculated_value, sizeof(calculated_value));
+            return true;
         }
     }
 #undef CLINK_FAIL_RELOC_STR
@@ -506,8 +598,14 @@ bool link(
     // 4. Resolve required symbol references, perform relocations, etc. directly
     //    within the final binary format, using the single object as reference.
 
-    // I wonder if we should sort archives (.a files) to the back?
-
+    // Sort archives (.a files) to the back, since only objects that define
+    // *currently* undefined symbols are extracted from them.
+    std::ranges::sort(
+        objects,
+        [](const auto& a, const auto& b) -> bool {
+            return a.extension() != ".a";
+        }
+    );
     auto parsed_objects = collect_objects(context, objects);
 
     // Merge collected objects into global object.
@@ -804,9 +902,19 @@ bool link(
         {
             lcc::Symbol s{};
             s.kind = lcc::Symbol::Kind::STATIC;
+            s.name = "_GLOBAL_OFFSET_TABLE_";
+            if (auto section = out.find_section(".got"))
+                s.byte_offset = memory_layout.address(".got");
+            if (auto f = out.find_symbol(s.name))
+                f->get() = std::move(s);
+            else out.symbols.emplace_back(s);
+        }
+        {
+            lcc::Symbol s{};
+            s.kind = lcc::Symbol::Kind::STATIC;
             s.name = "_DYNAMIC";
             if (auto section = out.find_section(".dynamic"))
-                s.byte_offset = memory_layout.address(section->get().name);
+                s.byte_offset = memory_layout.address(".dynamic");
             if (auto f = out.find_symbol(s.name))
                 f->get() = std::move(s);
             else out.symbols.emplace_back(s);
@@ -855,17 +963,83 @@ bool link(
         }
     }
 
-    // TODO: Emit into final binary format, ensuring it adjusts relocation and
+    // Emit into final binary format, ensuring it adjusts relocation and
     // symbol byte offsets as necessary (i.e. ELF altering addresses to match
     // page offsets within the file...)
-    // This will require updating the API for the file generation backends, as
-    // they currently operate on `FILE*`, but we are going to need to jump
-    // around and edit the contents all over the place (and I don't feel like
-    // using fseek for allat). So, we'll likely pass a *mutable* generic
-    // object, *mutable* layout to the object format generator, recieving a
-    // binary blob that we should then be good to apply all remaining
-    // relocations to.
     std::vector<char> binary_blob{};
+    switch (context.format()->format()) {
+        case lcc::Format::INVALID:
+        case lcc::Format::LCC_IR:
+        case lcc::Format::LCC_SSA_IR:
+        case lcc::Format::LLVM_TEXTUAL_IR:
+        case lcc::Format::WASM_TEXTUAL:
+        case lcc::Format::GNU_AS_ATT_ASSEMBLY:
+            lcc::Diag::ICE("clink: output format is not supported");
+
+        case lcc::Format::ELF_OBJECT:
+            binary_blob = out.as_elf(
+                memory_layout,
+                lcc::GenericObject::EmitRelocations::No
+            );
+            break;
+        case lcc::Format::COFF_OBJECT:
+            binary_blob = out.as_coff(
+                memory_layout,
+                lcc::GenericObject::EmitRelocations::No
+            );
+            break;
+    }
+
+    for (auto [i, got_symbol] : std::ranges::views::enumerate(global_offset_table)) {
+        auto found = out.find_symbol(got_symbol);
+        if (not found) continue;
+        auto symbol = found->get();
+        // fmt::print("`{}` address: 0x{:016x}\n", symbol.section_name, memory_layout.address(symbol.section_name));
+        uint64_t address
+            = memory_layout.address(symbol.section_name)
+            + symbol.byte_offset;
+        const auto size_of_pointer_bytes
+            = context.target()->size_of_pointer
+            / context.target()->ffi.size_of_char;
+        auto got_slot = binary_blob.data()
+                      + memory_layout.section_offset(".got")
+                      + (unsigned) i * size_of_pointer_bytes;
+        // fmt::print(
+        //     "Address of GOT symbol `{}`:0x{:016x}\n",
+        //     symbol.name,
+        //     address
+        // );
+        memcpy(
+            got_slot,
+            &address,
+            std::min(
+                size_of_pointer_bytes,
+                sizeof(address)
+            )
+        );
+    }
+
+    // Update addresses of linker-defined symbols, if needed.
+    {
+        if (auto f = out.find_symbol("_GLOBAL_OFFSET_TABLE_"))
+            f->get().byte_offset = memory_layout.address(".got");
+        if (auto f = out.find_symbol("_DYNAMIC")) {
+            if (auto section = out.find_section(".dynamic"))
+                f->get().byte_offset = memory_layout.address(".dynamic");
+        }
+        if (auto section = out.find_section(".init_array")) {
+            if (auto start = out.find_symbol("__init_array_start"))
+                start->get().byte_offset = memory_layout.address(".init_array");
+            if (auto end = out.find_symbol("__init_array_end"))
+                end->get().byte_offset = memory_layout.address(".init_array") + section->get().size();
+        }
+        if (auto section = out.find_section(".fini_array")) {
+            if (auto start = out.find_symbol("__fini_array_start"))
+                start->get().byte_offset = memory_layout.address(".fini_array");
+            if (auto end = out.find_symbol("__fini_array_end"))
+                end->get().byte_offset = memory_layout.address(".fini_array") + section->get().size();
+        }
+    }
 
     // ================================
     // Resolve and Patch
@@ -885,15 +1059,28 @@ bool link(
         std::erase_if(
             object.relocations,
             [&](const auto& relocation) {
-                return perform_relocation(context, out, relocation, global_offset_table, memory_layout);
+                return perform_relocation(
+                    context,
+                    binary_blob,
+                    object,
+                    relocation,
+                    global_offset_table,
+                    memory_layout
+                );
             }
         );
-        // fmt::print(
-        //     "================================================================\n"
-        //     "Local Relocations Resolved ({} global relocations remain)\n"
-        //     "================================================================\n",
-        //     object.relocations.size()
-        // );
+        for (auto& r : object.relocations) {
+            auto referenced_symbol = object.find_symbol(r.symbol.name);
+            fmt::print(
+                stderr,
+                "\nclink: Undefined local reference to `{}`\n"
+                "    {}"
+                "    {}",
+                r.symbol.name,
+                r.print(),
+                referenced_symbol ? referenced_symbol->get().print() : r.symbol.print()
+            );
+        }
     }
 
     // Iterate collected relocations, referencing the global symbol table to
@@ -903,6 +1090,7 @@ bool link(
         [&](const auto& relocation) {
             return perform_relocation(
                 context,
+                binary_blob,
                 out,
                 relocation,
                 global_offset_table,
@@ -932,23 +1120,7 @@ bool link(
     }
 
     FILE* outfile = fopen(executable.c_str(), "wb");
-    switch (context.format()->format()) {
-        case lcc::Format::INVALID:
-        case lcc::Format::LCC_IR:
-        case lcc::Format::LCC_SSA_IR:
-        case lcc::Format::LLVM_TEXTUAL_IR:
-        case lcc::Format::WASM_TEXTUAL:
-        case lcc::Format::GNU_AS_ATT_ASSEMBLY:
-            lcc::Diag::ICE("clink: output format is not supported");
-
-        case lcc::Format::ELF_OBJECT:
-            out.as_elf(outfile, memory_layout);
-            break;
-        case lcc::Format::COFF_OBJECT:
-            out.as_coff(outfile, memory_layout);
-            break;
-    }
-    out.as_elf(outfile, memory_layout);
+    fwrite(binary_blob.data(), 1, binary_blob.size(), outfile);
     return 0 == fclose(outfile) and out.relocations.empty();
 }
 

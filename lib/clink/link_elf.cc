@@ -37,6 +37,10 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
 
     auto section_name_header = section_header_begin + hdr.e_shstrndx;
     const char* section_names_begin = blob.data() + section_name_header->sh_offset;
+    if (section_name_header->sh_offset + section_name_header->sh_size > blob.size()) {
+        fmt::print(stderr, "clink: error in ELF file: section name section out-of-bounds of file\n");
+        section_names_begin = nullptr;
+    }
 
     std::unordered_map<ptrdiff_t, lcc::Symbol> indexed_symbols{};
 
@@ -47,71 +51,99 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
         ++section_header_iter
     ) {
         const auto& section_header = *section_header_iter;
-        if (section_header.sh_type == SHT_SYMTAB) {
-            const auto symbol_count = section_header.sh_size / section_header.sh_entsize;
-            const auto* const symbol_begin
-                = reinterpret_cast<elf64_sym*>(blob.data() + section_header.sh_offset);
+        // We are only interested in the symbol table.
+        if (section_header.sh_type != SHT_SYMTAB)
+            continue;
 
-            // I don't like copying for no reason, but, we get the following error,
-            // otherwise...
-            // `reference binding to misaligned address 0x... for type 'const struct
-            //  elf64_sym', which requires 8 byte alignment`
-            std::vector<elf64_sym> symbols;
-            symbols.resize(symbol_count);
-            memcpy(symbols.data(), symbol_begin, symbol_count * sizeof(*symbol_begin));
-
-            auto* string_table_header = section_header_begin + section_header.sh_link;
-            const char* string_table = blob.data() + string_table_header->sh_offset;
-
-            for (auto [i, elf_symbol] : std::ranges::views::enumerate(symbols)) {
-                auto symbol_type = ELF64_ST_TYPE(elf_symbol.st_info);
-                auto symbol_binding = ELF64_ST_BIND(elf_symbol.st_info);
-
-                lcc::Symbol symbol{};
-                symbol.byte_offset = elf_symbol.st_value;
-
-                // Get symbol's section name, if applicable
-                if (elf_symbol.st_shndx != SHN_UNDEF and elf_symbol.st_shndx < SHN_LORESERVE) {
-                    auto* relevant_header = section_header_begin + elf_symbol.st_shndx;
-                    symbol.section_name = section_names_begin + relevant_header->sh_name;
-                }
-
-                // Get symbol name
-                // Section symbols don't have st_name set.
-                if (symbol_type == STT_SECTION)
-                    symbol.name = symbol.section_name;
-                else symbol.name = string_table + elf_symbol.st_name;
-
-                // Determine LCC Symbol kind
-                switch (symbol_binding) {
-                    case STB_WEAK:
-                        // weak reference or weak definition
-                        symbol.kind = lcc::Symbol::Kind::WEAK;
-                        break;
-                    case STB_LOCAL:
-                        symbol.kind = lcc::Symbol::Kind::STATIC;
-                        break;
-
-                    case STB_GLOBAL:
-                        // external reference
-                        if (elf_symbol.st_shndx == SHN_UNDEF)
-                            symbol.kind = lcc::Symbol::Kind::EXTERNAL;
-                        // global function definition
-                        else if (symbol_type == STT_FUNC)
-                            symbol.kind = lcc::Symbol::Kind::FUNCTION;
-                        // global variable
-                        else symbol.kind = lcc::Symbol::Kind::EXPORT;
-                        break;
-
-                    default:
-                        lcc::Diag::ICE("clink: unhandled ELF binding {}\n", symbol_binding);
-                }
-
-                out.symbols.emplace_back(symbol);
-                indexed_symbols[i] = symbol;
-            }
-            break;
+        const auto symbol_count = section_header.sh_size / section_header.sh_entsize;
+        if (
+            section_header.sh_offset
+                + symbol_count * sizeof(elf64_sym)
+            >= blob.size()
+        ) {
+            fmt::print(
+                stderr,
+                "clink: error in ELF file: symbol table section header offset larger than file size ({} > {})\n",
+                section_header.sh_offset,
+                blob.size()
+            );
+            continue;
         }
+        const auto* const symbol_begin
+            = reinterpret_cast<elf64_sym*>(blob.data() + section_header.sh_offset);
+
+        // I don't like copying for no reason, but, we get the following error,
+        // otherwise...
+        // `reference binding to misaligned address 0x... for type 'const struct
+        //  elf64_sym', which requires 8 byte alignment`
+        std::vector<elf64_sym> symbols;
+        symbols.resize(symbol_count);
+        memcpy(symbols.data(), symbol_begin, symbol_count * sizeof(*symbol_begin));
+
+        auto* string_table_header = section_header_begin + section_header.sh_link;
+        const char* string_table = blob.data() + string_table_header->sh_offset;
+        if (string_table_header->sh_offset + string_table_header->sh_size > blob.size()) {
+            fmt::print(stderr, "clink: error in ELF file: string table out-of-bounds of file\n");
+
+            string_table = nullptr;
+        }
+
+        for (auto [i, elf_symbol] : std::ranges::views::enumerate(symbols)) {
+            auto symbol_type = ELF64_ST_TYPE(elf_symbol.st_info);
+            auto symbol_binding = ELF64_ST_BIND(elf_symbol.st_info);
+
+            lcc::Symbol symbol{};
+            symbol.byte_offset = elf_symbol.st_value;
+
+            // Get symbol's section name, if applicable
+            if (elf_symbol.st_shndx != SHN_UNDEF and elf_symbol.st_shndx < SHN_LORESERVE) {
+                auto* relevant_header = section_header_begin + elf_symbol.st_shndx;
+                if (section_names_begin) {
+                    symbol.section_name = std::string{
+                        section_names_begin + relevant_header->sh_name
+                    };
+                }
+            }
+
+            // Get symbol name
+            // Section symbols don't have st_name set.
+            if (symbol_type == STT_SECTION)
+                symbol.name = symbol.section_name;
+            else {
+                if (string_table)
+                    symbol.name = string_table + elf_symbol.st_name;
+                else symbol.name = "<nostrings>";
+            }
+
+            // Determine LCC Symbol kind
+            switch (symbol_binding) {
+                case STB_WEAK:
+                    // weak reference or weak definition
+                    symbol.kind = lcc::Symbol::Kind::WEAK;
+                    break;
+                case STB_LOCAL:
+                    symbol.kind = lcc::Symbol::Kind::STATIC;
+                    break;
+
+                case STB_GLOBAL:
+                    // external reference
+                    if (elf_symbol.st_shndx == SHN_UNDEF)
+                        symbol.kind = lcc::Symbol::Kind::EXTERNAL;
+                    // global function definition
+                    else if (symbol_type == STT_FUNC)
+                        symbol.kind = lcc::Symbol::Kind::FUNCTION;
+                    // global variable
+                    else symbol.kind = lcc::Symbol::Kind::EXPORT;
+                    break;
+
+                default:
+                    lcc::Diag::ICE("clink: unhandled ELF binding {}\n", symbol_binding);
+            }
+
+            out.symbols.emplace_back(symbol);
+            indexed_symbols[i] = symbol;
+        }
+        break;
     }
 
     // fmt::print("collected indexed symbols:");
@@ -135,8 +167,29 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
             or section_header.sh_type == SHT_STRTAB
         ) continue;
 
+        if (section_header.sh_offset >= blob.size_bytes()) {
+            fmt::print(
+                stderr,
+                "clink: section header has offset greater than file size ({} > {})\n",
+                section_header.sh_offset,
+                blob.size_bytes()
+            );
+        }
+        if (section_header.sh_offset + section_header.sh_size >= blob.size_bytes()) {
+            fmt::print(
+                stderr,
+                "clink: section header has bounds that exceed file size ({} > {})\n",
+                section_header.sh_offset + section_header.sh_size,
+                blob.size_bytes()
+            );
+        }
+
         lcc::Section section{};
-        section.name = section_names_begin + section_header.sh_name;
+        if (section_names_begin) {
+            section.name = std::string{
+                section_names_begin + section_header.sh_name
+            };
+        }
         section.attribute(
             lcc::Section::Attribute::WRITABLE,
             section_header.sh_flags & SHF_WRITE
@@ -154,11 +207,13 @@ lcc::GenericObject collect_elf(std::span<char> blob) {
             section.is_fill = true;
             section.length() = (lcc::u32) section_header.sh_size;
         } else {
-            const auto* content_begin = blob.data() + section_header.sh_offset;
-            section.contents() = {
-                content_begin,
-                content_begin + section_header.sh_size
-            };
+            if (section_header.sh_offset + section_header.sh_size < blob.size()) {
+                const auto* content_begin = blob.data() + section_header.sh_offset;
+                section.contents() = {
+                    content_begin,
+                    content_begin + section_header.sh_size
+                };
+            }
         }
 
         // RELocations (with Addend)

@@ -468,11 +468,16 @@ struct GenericObject {
         return out;
     }
 
+    enum class EmitRelocations : bool {
+        No,
+        Yes
+    };
+
     // Write this generic object file in ELF format into the given file.
-    void as_elf(FILE* f, const clink::Layout&) const;
+    auto as_elf(clink::Layout&, EmitRelocations) -> std::vector<char>;
 
     // Write this generic object file in COFF format into the given file.
-    void as_coff(FILE* f, const clink::Layout&) const;
+    auto as_coff(clink::Layout&, EmitRelocations) -> std::vector<char>;
 };
 
 } // namespace lcc

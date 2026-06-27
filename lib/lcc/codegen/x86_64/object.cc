@@ -1160,7 +1160,66 @@ static void assemble_inst(
 }
 
 static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
-    // TODO: Stack frame kinds.
+    bool only_external{true};
+    for (const auto& n : func.names()) {
+        if (IsExportedLinkage(n.linkage)) {
+            only_external = false;
+            break;
+        }
+    }
+    LCC_ASSERT(
+        (not only_external) and func.blocks().size(),
+        "Assembling function `{}` that is not defined...",
+        vws::transform(func.names(), [](const auto& n) { return n.name; })
+    );
+
+    // Calculate stack frame size; this is the sum of the size of all locals
+    // and the size of all spilled registers.
+
+    // Sums all locals' sizes
+    usz stack_frame_size = rgs::fold_left(
+        vws::transform(func.locals(), [](AllocaInst* l) {
+            return l->allocated_type()->bytes();
+        }),
+        0,
+        std::plus{}
+    );
+
+    // Sum spilled registers' sizes, keeping track of their frame offsets.
+    // TODO: These lists are so small, vectors would improve performance
+    // simply due to cache locality and memory footprint.
+    std::unordered_map<usz, usz> spill_offsets{};
+    std::unordered_map<usz, MOperandRegister> spill_id_to_register{};
+    for (auto& block : func.blocks()) {
+        for (auto& instruction : block.instructions()) {
+            if (instruction.opcode() == +MInst::Kind::Spill) {
+                auto& r = std::get<MOperandRegister>(
+                    instruction.all_operands().at(0)
+                );
+                auto i = std::get<MOperandImmediate>(
+                    instruction.all_operands().at(1)
+                );
+
+                // Unique spills only
+                if (spill_offsets.contains(i.value))
+                    continue;
+
+                LCC_ASSERT(
+                    r.size % 8 == 0,
+                    "Invalid spilled register size"
+                );
+                stack_frame_size += r.size / 8;
+                spill_offsets[i.value] = stack_frame_size;
+
+                spill_id_to_register[i.value] = r;
+            }
+        }
+    }
+
+    // TODO: Stack frame kinds (i.e. stack_frame_size of zero means inherit
+    // parent stack frame, unless context has no-omit-stackframes option, or
+    // whatever).
+
     // GNU syntax (src, dst operands)
     // push %rbp
     // mov %rsp, %rbp
@@ -1172,14 +1231,6 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
     assemble_inst(gobj, func, push_rbp, text);
     assemble_inst(gobj, func, mov_rsp_into_rbp, text);
 
-    // TODO: Spilled register slots
-    usz stack_frame_size = rgs::fold_left(
-        vws::transform(func.locals(), [](AllocaInst* l) {
-            return l->allocated_type()->bytes();
-        }),
-        0,
-        std::plus{}
-    );
     if (stack_frame_size) {
         constexpr usz alignment = 16;
         stack_frame_size = utils::AlignTo(stack_frame_size, alignment);
@@ -1244,6 +1295,7 @@ auto emit_mcode_gobj(
         out.symbols_from_global(var.get());
 
     for (auto& func : mir) {
+        bool defined{false}; // aka not imported
         for (auto n : func.names()) {
             const bool imported = IsImportedLinkage(n.linkage);
             // const bool exported = IsLinkageExported(n.linkage);
@@ -1254,6 +1306,7 @@ auto emit_mcode_gobj(
                 sym.name = n.name;
                 out.symbols.emplace_back(sym);
             } else {
+                defined = true;
                 Symbol sym{};
                 sym.kind = Symbol::Kind::FUNCTION;
                 sym.name = n.name;
@@ -1263,11 +1316,10 @@ auto emit_mcode_gobj(
             }
         }
 
-        // Assemble function into machine code.
-        assemble(out, func, text);
+        // Assemble defined functions into machine code.
+        if (defined)
+            assemble(out, func, text);
     }
-
-    // TODO: Resolve local label ".Lxxxx" relocations.
 
     return out;
 }

@@ -32,6 +32,7 @@ struct MemorySegment {
 
 struct Layout {
     std::vector<MemorySegment> segments{};
+    std::vector<SectionDescription> offsets{};
 
     void place_section(const lcc::Section&);
     // Once no more sections are going to be added to any segments, we can
@@ -45,6 +46,9 @@ struct Layout {
     auto address(const lcc::Section& section) const -> decltype(MemorySegment::address) {
         return address(section.name);
     }
+
+    auto section_offset(std::string_view section_name, uint32_t new_offset) -> uint32_t;
+    auto section_offset(std::string_view section_name) const -> uint32_t;
 };
 
 auto layout(const lcc::GenericObject&) -> Layout;

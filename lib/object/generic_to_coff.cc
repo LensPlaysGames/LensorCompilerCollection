@@ -27,30 +27,14 @@ constexpr auto default_header() -> coff_header {
     return hdr;
 }
 
-auto write_symbol_entry(
-    const coff_symbol_entry& sym,
-    FILE* f
-) -> void {
-    fwrite(&sym.name, sizeof(sym.name), 1, f);
-    fwrite(&sym.value, sizeof(sym.value), 1, f);
-    fwrite(&sym.section, sizeof(sym.section), 1, f);
-    fwrite(&sym.type, sizeof(sym.type), 1, f);
-    fwrite(&sym.storage_class, sizeof(sym.storage_class), 1, f);
-    fwrite(&sym.auxiliary_count, sizeof(sym.auxiliary_count), 1, f);
-}
-
-auto write_relocation_entry(
-    const coff_relocation_entry& reloc,
-    FILE* f
-) -> void {
-    fwrite(&reloc.reference_address, sizeof(reloc.reference_address), 1, f);
-    fwrite(&reloc.symbol_index, sizeof(reloc.symbol_index), 1, f);
-    fwrite(&reloc.type, sizeof(reloc.type), 1, f);
-}
-
 } // namespace
 
-void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
+auto GenericObject::as_coff(
+    clink::Layout& layout,
+    EmitRelocations _emit_relocations
+) -> std::vector<char> {
+    const bool emit_relocations = +_emit_relocations;
+
     auto coff_header = default_header();
 
     std::vector<std::string> strings{};
@@ -298,49 +282,51 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
         int16_t,
         std::vector<coff_relocation_entry>>
         coff_relocations{};
-    for (auto r : relocations) {
-        coff_relocation_entry coff_relocation{};
-        switch (r.kind) {
-            case Relocation::Kind::NONE:
-                LCC_UNREACHABLE();
+    if (emit_relocations) {
+        for (auto r : relocations) {
+            coff_relocation_entry coff_relocation{};
+            switch (r.kind) {
+                case Relocation::Kind::NONE:
+                    LCC_UNREACHABLE();
 
-            case Relocation::Kind::DISPLACEMENT64:
-                coff_relocation.type = IMAGE_REL_AMD64_ADDR64;
-                break;
-            case Relocation::Kind::DISPLACEMENT32:
-                coff_relocation.type = IMAGE_REL_AMD64_ADDR32;
-                break;
-            case Relocation::Kind::DISPLACEMENT32_PCREL:
-                coff_relocation.type = IMAGE_REL_AMD64_REL32;
-                break;
-            case Relocation::Kind::DISPLACEMENT32_GOTPCREL:
-                Diag::ICE("Unhandled relocation type in COFF output format (related to Global Offset Table)");
-                break;
-        }
-
-        // Find symbol with matching name.
-        auto found = std::ranges::find_if(
-            symbols,
-            [&](const auto& sym) {
-                return sym.name == r.symbol.name;
+                case Relocation::Kind::DISPLACEMENT64:
+                    coff_relocation.type = IMAGE_REL_AMD64_ADDR64;
+                    break;
+                case Relocation::Kind::DISPLACEMENT32:
+                    coff_relocation.type = IMAGE_REL_AMD64_ADDR32;
+                    break;
+                case Relocation::Kind::DISPLACEMENT32_PCREL:
+                    coff_relocation.type = IMAGE_REL_AMD64_REL32;
+                    break;
+                case Relocation::Kind::DISPLACEMENT32_GOTPCREL:
+                    Diag::ICE("Unhandled relocation type in COFF output format (related to Global Offset Table)");
+                    break;
             }
-        );
-        if (found == symbols.end()) {
-            Diag::ICE(
-                "Could not find symbol {} referenced by relocation",
-                r.symbol.name
+
+            // Find symbol with matching name.
+            auto found = std::ranges::find_if(
+                symbols,
+                [&](const auto& sym) {
+                    return sym.name == r.symbol.name;
+                }
             );
+            if (found == symbols.end()) {
+                Diag::ICE(
+                    "Could not find symbol {} referenced by relocation",
+                    r.symbol.name
+                );
+            }
+            auto sym_index = found - symbols.begin();
+            coff_relocation.reference_address
+                = (int32_t) ((isz) r.symbol.byte_offset + r.addend);
+            coff_relocation.symbol_index = (uint32_t) sym_index;
+
+            // Find section symbol is defined in.
+            int16_t symbol_section_position
+                = section_position_by_name(r.symbol.section_name);
+
+            coff_relocations[symbol_section_position].emplace_back(coff_relocation);
         }
-        auto sym_index = found - symbols.begin();
-        coff_relocation.reference_address
-            = (int32_t) ((isz) r.symbol.byte_offset + r.addend);
-        coff_relocation.symbol_index = (uint32_t) sym_index;
-
-        // Find section symbol is defined in.
-        int16_t symbol_section_position
-            = section_position_by_name(r.symbol.section_name);
-
-        coff_relocations[symbol_section_position].emplace_back(coff_relocation);
     }
 
     uint32_t string_table_size = (uint32_t) std::ranges::fold_left(
@@ -351,20 +337,23 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
         4, // empty COFF string table is 4 bytes long...
         std::plus{}
     );
-    // 18 -> sizeof coff_symbol_entry (without padding)
-    auto relocation_offset = coff_header.symbol_table_offset
-                           + (18 * coff_header.number_of_symbols)
-                           + string_table_size;
-    for (auto [i, s] : vws::enumerate(section_headers)) {
-        int16_t s_position = (int16_t) i + 1;
-        if (not coff_relocations.contains(s_position))
-            continue;
 
-        auto& this_sections_coff_relocations = coff_relocations.at(s_position);
-        s.relocation_table_offset = relocation_offset;
-        s.number_of_relocation_entries = (uint16_t) this_sections_coff_relocations.size();
-        // 10 -> sizeof coff_relocation_entry (without padding)
-        relocation_offset += 10 * s.number_of_relocation_entries;
+    if (emit_relocations) {
+        // 18 -> sizeof coff_symbol_entry (without padding)
+        auto relocation_offset = coff_header.symbol_table_offset
+                               + (18 * coff_header.number_of_symbols)
+                               + string_table_size;
+        for (auto [i, s] : vws::enumerate(section_headers)) {
+            int16_t s_position = (int16_t) i + 1;
+            if (not coff_relocations.contains(s_position))
+                continue;
+
+            auto& this_sections_coff_relocations = coff_relocations.at(s_position);
+            s.relocation_table_offset = relocation_offset;
+            s.number_of_relocation_entries = (uint16_t) this_sections_coff_relocations.size();
+            // 10 -> sizeof coff_relocation_entry (without padding)
+            relocation_offset += 10 * s.number_of_relocation_entries;
+        }
     }
 
     // TODO: If executable, MS-DOS stub
@@ -372,8 +361,36 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
         fmt::print(stderr, "Generic2Coff: TODO: emit MS-DOS stub for PE32+ executable file\n");
     }
 
+    std::vector<char> out{};
+    const auto write_bytes = [&](auto& v) {
+        const auto* start = reinterpret_cast<const uint8_t*>(&v);
+        out.reserve(out.size() + sizeof(v));
+        std::copy(start, start + sizeof(v), std::back_inserter(out));
+    };
+    const auto write_range = [&](auto& r) {
+        const auto* start = reinterpret_cast<const uint8_t*>(r.data());
+        out.reserve(out.size() + r.size() * sizeof(*r.data()));
+        std::copy(start, start + r.size(), std::back_inserter(out));
+    };
+
+    // Ah, struct padding :<
+    const auto write_symbol_entry = [&](const coff_symbol_entry& sym) {
+        write_bytes(sym.name);
+        write_bytes(sym.value);
+        write_bytes(sym.section);
+        write_bytes(sym.type);
+        write_bytes(sym.storage_class);
+        write_bytes(sym.auxiliary_count);
+    };
+
+    const auto write_relocation_entry = [&](const coff_relocation_entry& reloc) {
+        write_bytes(reloc.reference_address);
+        write_bytes(reloc.symbol_index);
+        write_bytes(reloc.type);
+    };
+
     // Header
-    fwrite(&coff_header, sizeof(coff_header), 1, f);
+    write_bytes(coff_header);
 
     // TODO: If executable, optional headers...
     if (kind == Kind::EXECUTABLE) {
@@ -381,37 +398,41 @@ void GenericObject::as_coff(FILE* f, const clink::Layout& layout) const {
     }
 
     // Section Table (Section Headers)
+    static_assert(sizeof(coff_section_header) == 40);
     for (const auto& s : section_headers)
-        fwrite(&s, sizeof(s), 1, f);
+        write_bytes(s);
 
     // Section data
     for (const auto& s : sections) {
         if (s.is_fill) continue;
-        fwrite(s.contents().data(), 1, s.contents().size(), f);
+        write_range(s.contents());
     }
 
     // Symbol table
     for (const auto& sym : coff_symbols)
-        write_symbol_entry(sym, f);
+        write_symbol_entry(sym);
 
     // String table
-    fwrite(&string_table_size, sizeof(string_table_size), 1, f);
+    write_bytes(string_table_size);
     for (const auto& s : strings) {
-        fwrite(s.data(), 1, s.size(), f);
+        write_range(s);
         constexpr auto null_terminator = '\0';
-        fwrite(&null_terminator, sizeof(null_terminator), 1, f);
+        write_bytes(null_terminator);
     }
 
     // Section relocation tables
-    for (auto [i, s] : vws::enumerate(section_headers)) {
-        int16_t s_position = (int16_t) i + 1;
-        if (not coff_relocations.contains(s_position))
-            continue;
+    if (emit_relocations) {
+        for (auto [i, s] : vws::enumerate(section_headers)) {
+            int16_t s_position = (int16_t) i + 1;
+            if (not coff_relocations.contains(s_position))
+                continue;
 
-        auto& this_sections_coff_relocations = coff_relocations.at(s_position);
-        for (const auto& r : this_sections_coff_relocations)
-            write_relocation_entry(r, f);
+            auto& this_sections_coff_relocations = coff_relocations.at(s_position);
+            for (const auto& r : this_sections_coff_relocations)
+                write_relocation_entry(r);
+        }
     }
+    return out;
 }
 
 } // namespace lcc
