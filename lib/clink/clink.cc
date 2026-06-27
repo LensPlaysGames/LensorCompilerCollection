@@ -169,7 +169,6 @@ auto collect_objects(
             );
             context.set_error();
             return {};
-            continue;
         }
 
         auto object_contents = lcc::File::Read(p);
