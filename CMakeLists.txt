@@ -138,6 +138,9 @@ if (TIME_TRACE)
   if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-ftime-trace)
     add_link_options(-ftime-trace)
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-ftime-report -fmem-report)
+    add_link_options(-ftime-report -fmem-report)
   else()
     message(STATUS "TIME_TRACE: Compiler not supported")
   endif()
@@ -186,6 +189,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
   target_compile_options(options INTERFACE
     # Warnings.
     -Wall -Wextra     # Enable ‘all’ warnings.
+    -Wpedantic
     -Wundef           # Invalid #undef or undefined macro in #if.
     -Wcast-align      # Casting that changes alignment.
     -Wconversion      # Implicit conversions.
@@ -367,7 +371,7 @@ endif()
 
 # Generic object library (convertible to ELF and COFF, currently)
 add_library(
-  object STATIC
+  object
   inc/object/coff.h
   inc/object/elf.h
   inc/object/elf.hh
@@ -382,7 +386,7 @@ target_link_libraries(object PRIVATE options)
 
 # Add the main lcc library.
 add_library(
-  liblcc STATIC
+  liblcc
   inc/lcc/assert.hh
   inc/lcc/calling_convention.hh
   inc/lcc/calling_conventions/ms_x64.hh
@@ -472,7 +476,7 @@ target_link_libraries(liblcc PRIVATE options)
 
 # C language library
 add_library(
-  languagec STATIC
+  languagec
   inc/language_c/ast.hh
   inc/language_c/driver.hh
   inc/language_c/irgen.hh
@@ -493,7 +497,7 @@ target_link_libraries(languagec PRIVATE options)
 
 # Glint language library
 add_library(
-  glint STATIC
+  glint
   inc/glint/ast.hh
   inc/glint/ast_eval.hh
   inc/glint/driver.hh
@@ -528,7 +532,7 @@ target_link_libraries(glint PRIVATE liblcc)
 
 # Simple JSON Library
 add_library(
-  liblccjson STATIC
+  liblccjson
   inc/lccjson/lccjson.hh
   lib/lccjson/lccjson.cc
 )
@@ -537,7 +541,7 @@ target_link_libraries(liblccjson PRIVATE options)
 
 # Custom Linker Library
 add_library(
-  libclink STATIC
+  libclink
   inc/clink/clink.hh
   inc/clink/layout.hh
   inc/clink/link_elf.hh
