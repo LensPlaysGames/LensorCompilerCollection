@@ -28,6 +28,7 @@ struct Options {
 
     std::vector<std::string> input_files{};
     std::vector<std::string> include_directories{};
+    std::string crt_directory{};
     std::vector<std::string> frontend_options{};
     std::string output_filepath{};
     int optimisation{0};

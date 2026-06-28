@@ -294,9 +294,9 @@ void do_link(
             "crtn.o",
             "libc.a"
         };
-        // TODO: allow user to change directory (i.e. context option)
+
         for (auto& s : c_libraries)
-            s = lcc::fs::path(LCC_CRT_DIRECTORY) / s;
+            s = lcc::fs::path(context.crt_directory()) / s;
         input_paths.insert(input_paths.begin(), c_libraries.begin(), c_libraries.end());
 
         if (context.has_option("verbose")) {
@@ -558,6 +558,11 @@ auto main(int argc, const char** argv) -> int {
 
     if (options.verbose)
         context.add_option("verbose");
+
+    if (not options.crt_directory.empty())
+        context.set_crt_directory(options.crt_directory);
+    else
+        context.set_crt_directory(LCC_CRT_DIRECTORY);
 
     context.add_include_directory(".");
     for (const auto& directory : options.include_directories) {
