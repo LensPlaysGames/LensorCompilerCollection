@@ -720,7 +720,7 @@ void Lexer::NextToken() {
                         PASSTHROUGH_ESCAPE('r', '\r');
                         PASSTHROUGH_ESCAPE('n', '\n');
                         PASSTHROUGH_ESCAPE('t', '\t');
-                        PASSTHROUGH_ESCAPE('e', '\e');
+                        PASSTHROUGH_ESCAPE('e', 0x1b);
                         PASSTHROUGH_ESCAPE('f', '\f');
                         PASSTHROUGH_ESCAPE('b', '\b');
                         PASSTHROUGH_ESCAPE('a', '\a');
