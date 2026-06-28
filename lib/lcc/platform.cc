@@ -84,8 +84,10 @@ void lcc::platform::PrintBacktrace() {
     // GROSS LLVM USAGE
     else if constexpr (backtrace_llvm_symbolizer) {
         /// Symboliser path.
-        std::string sym = std::getenv("SYMBOLIZER_PATH") ?: "";
-        if (sym.empty()) sym = "llvm-symbolizer";
+        auto symboliser_path = std::getenv("SYMBOLIZER_PATH");
+        std::string sym{};
+        if (symboliser_path) sym = symboliser_path;
+        else sym = "llvm-symbolizer";
 
         std::span<void*> trace_view{&trace[skip_value], &trace[n]};
         /// Use llvm-symbolizer to print the backtrace.
