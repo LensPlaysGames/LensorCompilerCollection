@@ -71,6 +71,7 @@ void help() {
     fmt::print("OPTIONS:\n");
     fmt::print("{}", TwoColumnLayoutHelper{{
         {"  -I", "Add a directory to the include search paths\n"},
+        {"  --crt-directory", "Set a C runtime directory for internal Clink linker\n"},
         {"  -o", "Path to the output filepath where target code will be stored\n"},
         {"  -O", "Set optimisation level (default 0)\n"},
         {"", "    0, 1, 2, 3\n"},
@@ -230,6 +231,9 @@ auto parse(int argc, const char** argv) -> Options {
                 std::exit(1);
             }
             o.format = format;
+        } else if (arg == "--crt-directory") { // TODO: short flag
+            auto crt_directory = next_arg();
+            o.crt_directory = crt_directory;
         } else if (arg.starts_with("---")) {
             o.frontend_options.emplace_back(
                 arg.substr(3)

@@ -98,6 +98,7 @@ private:
     const Format* _format{};
 
     std::vector<std::string> _include_directories{};
+    std::string _crt_directory{};
 
     // User Options
     // (conventionally with prefixed triple dash `---`)
@@ -252,6 +253,14 @@ public:
 
     void add_include_directory(std::string dir) {
         _include_directories.push_back(std::move(dir));
+    }
+
+    auto crt_directory() const -> const decltype(_crt_directory)& {
+        return _crt_directory;
+    }
+
+    void set_crt_directory(std::string dir) {
+        _crt_directory = std::move(dir);
     }
 
     auto frontend_options() const -> const decltype(__options)& {
