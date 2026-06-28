@@ -3,3 +3,12 @@
 ** Abstract =liblccbase= from =liblcc=
 Basically, =lcc::Context=, =lcc::File=, =lcc::Diag= are all very reusable and helpful across a lot of different libraries, so putting those into their own little play-pen, separate from the "actual compilation bits", should make linking less bloated.
 ** Glint Standard Library and Semantic Maturity
+
+* [2026-06-27 Sat 03:24]
+
+gdb error/warning
+#+begin_example
+Section .debug_aranges in /home/lens_r/Programming/play/LensorCompilerCollection/test has duplicate debug_info_offset 0x0, ignoring .debug_aranges.
+#+end_example
+
+It'd be nice if we didn't bork debug information in the process of linking...

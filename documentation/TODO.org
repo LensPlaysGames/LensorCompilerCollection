@@ -19,6 +19,13 @@
   On Testing Instruction Selection.
   To test instruction selection, we will provide some input gMIR (or possibly produce some gMIR from some input LCC IR), and expect exact and specific MIR instructions in the output. The idea would be to write at least one test per pattern per architecture...
 
+- [Meta]: Improve =isel.cc= and =module_mir.cc= build times
+  Reaching two minutes...
+
+  =module_mir.cc= is just a monstrous function with lambdas that needs broken up, probably into a helper struct (=MIRBuildContext= or smth).
+
+  =isel.cc= isn't bad since it's not changed a lot and it's goal is to be efficient...
+
 - [Meta]: Move IR optimisations to their own library
   I want =libopt= to be a library LCC uses that operates on LCC IR; that way, other programs may be able to re-use the optimisations if they choose to target LCC IR (without having to use our driver).
 - [Meta]: Move LCC IR to it's own library (in it's own folder under =lib/=)
