@@ -126,11 +126,14 @@ auto GenericObject::as_coff(
 
                 // Function definition aux entry
                 coff_symbol_aux_function_definition_entry coff_aux{};
+                static_assert(sizeof(coff_aux) == sizeof(coff_symbol_entry));
                 // TODO: Symbol index of `.bf` (begin function) entry
                 coff_aux.tag_index = 0;
                 // TODO: Size of assembled code for function
                 coff_aux.total_size = 0;
-                // TODO: Record aux entry
+                // Record aux entry
+                memcpy(&coff_sym, &coff_aux, sizeof(coff_sym));
+                coff_symbols.emplace_back(coff_sym);
             } break;
 
             case Symbol::Kind::STATIC: {
@@ -169,12 +172,14 @@ auto GenericObject::as_coff(
 
                 coff_symbols.emplace_back(coff_sym);
 
-                // TODO: Record aux symbol entry somewhere...
-                // coff_symbol_aux_weak_external_entry coff_aux{};
+                // Record aux symbol entry for weak external...
+                coff_symbol_aux_weak_external_entry coff_aux{};
 
                 // TODO: This needs to point to the definition of the symbol that will be
                 // used if this symbol doesn't get defined strongly.
                 // coff_aux.tag_index = 0;
+                static_assert(sizeof(coff_aux) == sizeof(coff_sym));
+                memcpy(&coff_sym, &coff_aux, sizeof(coff_sym));
 
                 LCC_TODO(
                     "Generic2COFF: Handle weak symbol\n"
