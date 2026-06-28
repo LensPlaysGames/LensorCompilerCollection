@@ -331,10 +331,9 @@ typedef struct coff_symbol_aux_weak_external_entry {
 #define IMAGE_SYM_CLASS_WEAK_EXTERNAL 105 // (global, may be overridden)
 
 typedef struct coff_string_entry {
-    union {
+    union coff_string_entry_union {
         char name[8];
-        struct
-        {
+        struct coff_string_entry_data {
             uint32_t zeroes;
             uint32_t offset;
         };
