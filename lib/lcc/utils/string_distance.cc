@@ -18,7 +18,7 @@ auto optimal_string_alignment_distance(
     size_t* d = (decltype(d))
         calloc(
             (m + 1) * (n + 1),
-            sizeof(std::remove_reference<decltype(*d)>::type)
+            sizeof(*d)
         );
 
     auto ref = [d, n](size_t i, size_t j) -> size_t& {
