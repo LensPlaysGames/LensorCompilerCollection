@@ -1,12 +1,13 @@
-#include <lcc/utils/string_distance.hh>
+#include <lcc/string_distance.hh>
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdlib>
-#include <string>
 #include <string_view>
+#include <vector>
 
-namespace lcc::utils {
+namespace lcc {
+
 auto optimal_string_alignment_distance(
     std::string_view s,
     std::string_view t
@@ -15,14 +16,11 @@ auto optimal_string_alignment_distance(
     auto n = t.size();
     // Allocate 2d array
     // d :: [uint (m + 1) * (n + 1)]; <- equivalent in Glint
-    size_t* d = (decltype(d))
-        calloc(
-            (m + 1) * (n + 1),
-            sizeof(*d)
-        );
+    const auto stride = (n + 1);
+    auto d = std::vector<size_t>((m + 1) * stride, 0);
 
-    auto ref = [d, n](size_t i, size_t j) -> size_t& {
-        return d[(i * n) + j];
+    auto ref = [&d, stride](size_t i, size_t j) -> size_t& {
+        return d[(i * stride) + j];
     };
 
     for (size_t i = 0; i <= m; ++i) ref(i, 0) = i;
@@ -56,8 +54,7 @@ auto optimal_string_alignment_distance(
         }
     }
     size_t out = ref(m, n);
-    free(d);
     return out;
 }
 
-} // namespace lcc::utils
+} // namespace lcc

@@ -3,11 +3,10 @@
 
 #include <lcc/core.hh>
 #include <lcc/diags.hh>
+#include <lcc/fractionals.hh>
 #include <lcc/stringmap.hh>
 #include <lcc/syntax/token.hh>
-#include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
-#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/result.hh>
 
 #include <glint/eval.hh>

@@ -2,12 +2,13 @@
 #define LCC_IR_CORE_HH
 
 #include <lcc/core.hh>
+#include <lcc/enum_to_underlying.hh>
 #include <lcc/forward.hh>
+#include <lcc/fractionals.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/location.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
-#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/generator.hh>
 #include <lcc/utils/iterator.hh>
 #include <lcc/utils/rtti.hh>

@@ -1,8 +1,8 @@
 #include <lcc/core.hh>
+#include <lcc/fractionals.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
-#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/ir_printer.hh>
 
 #include <fmt/format.h>

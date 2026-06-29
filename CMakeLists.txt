@@ -387,6 +387,7 @@ target_link_libraries(object PRIVATE options)
 # Add the main lcc library.
 add_library(
   liblcc
+  inc/lcc/always_false.hh
   inc/lcc/assert.hh
   inc/lcc/calling_convention.hh
   inc/lcc/calling_conventions/ms_x64.hh
@@ -403,9 +404,11 @@ add_library(
   inc/lcc/context.hh
   inc/lcc/core.hh
   inc/lcc/diags.hh
+  inc/lcc/enum_to_underlying.hh
   inc/lcc/file.hh
   inc/lcc/format.hh
   inc/lcc/forward.hh
+  inc/lcc/fractionals.hh
   inc/lcc/ir/core.hh
   inc/lcc/ir/domtree.hh
   inc/lcc/ir/module.hh
@@ -413,6 +416,7 @@ add_library(
   inc/lcc/lcc-c.h
   inc/lcc/location.hh
   inc/lcc/opt.hh
+  inc/lcc/string_distance.hh
   inc/lcc/stringmap.hh
   inc/lcc/syntax/lexer.hh
   inc/lcc/syntax/token.hh
@@ -422,7 +426,6 @@ add_library(
   inc/lcc/utils/aint.hh
   inc/lcc/utils/ast_printer.hh
   inc/lcc/utils/dependency_graph.hh
-  inc/lcc/utils/fractionals.hh
   inc/lcc/utils/generator.hh
   inc/lcc/utils/ir_printer.hh
   inc/lcc/utils/iterator.hh
@@ -430,7 +433,6 @@ add_library(
   inc/lcc/utils/platform.hh
   inc/lcc/utils/result.hh
   inc/lcc/utils/rtti.hh
-  inc/lcc/utils/string_distance.hh
   inc/lcc/utils/twocolumnlayouthelper.hh
   lib/lcc/assert.cc
   lib/lcc/calling_convention.cc
@@ -445,6 +447,7 @@ add_library(
   lib/lcc/context.cc
   lib/lcc/diags.cc
   lib/lcc/file.cc
+  lib/lcc/fractionals.cc
   lib/lcc/init.cc
   lib/lcc/ir/core.cc
   lib/lcc/ir/domtree.cc
@@ -457,9 +460,8 @@ add_library(
   lib/lcc/location.cc
   lib/lcc/opt.cc
   lib/lcc/platform.cc
+  lib/lcc/string_distance.cc
   lib/lcc/utils.cc
-  lib/lcc/utils/fractionals.cc
-  lib/lcc/utils/string_distance.cc
 )
 target_include_directories(liblcc PUBLIC inc)
 set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)

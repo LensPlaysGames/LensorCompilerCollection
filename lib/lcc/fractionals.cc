@@ -1,4 +1,4 @@
-#include <lcc/utils/fractionals.hh>
+#include <lcc/fractionals.hh>
 
 namespace lcc {
 u64 whole_to_fractional(DecimalFraction decimal_fraction) {

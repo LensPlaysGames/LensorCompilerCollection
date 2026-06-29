@@ -1,11 +1,14 @@
 #ifndef LCC_RTTI_HH
 #define LCC_RTTI_HH
 
-#include <lcc/utils.hh>
-
 #include <type_traits>
 
+#include <lcc/always_false.hh>
+#include <lcc/assert.hh>
+
+// Implementation
 namespace lcc::detail {
+
 // Check that an object is a pointer to a class type.
 template <typename Type>
 concept ClassPointer = std::is_pointer_v<std::remove_reference_t<Type>>
@@ -81,6 +84,7 @@ auto cast_impl(Value&& value) {
 }
 } // namespace lcc::detail
 
+// API
 namespace lcc {
 /// \brief Cast a value to a target type.
 ///
@@ -138,6 +142,7 @@ auto as(Object&& value) { return detail::cast_impl<true, Target>(value); }
 /// \see cast()
 template <typename... Types, detail::ClassPointer Object>
 bool is(Object&& value) { return (bool(detail::cast_impl<false, Types>(value)) or ...); }
+
 } // namespace lcc
 
 #endif // LCC_RTTI_HH

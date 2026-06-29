@@ -3,8 +3,8 @@
 
 #include <lcc/core.hh>
 #include <lcc/diags.hh>
+#include <lcc/fractionals.hh>
 #include <lcc/utils.hh>
-#include <lcc/utils/fractionals.hh>
 
 namespace lcc::syntax {
 

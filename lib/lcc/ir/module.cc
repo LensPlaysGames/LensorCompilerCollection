@@ -1,5 +1,8 @@
-#include <fmt/format.h>
-#include <fmt/ranges.h>
+#include <lcc/ir/module.hh>
+
+#include <object/generic.hh>
+
+#include <clink/layout.hh>
 
 #include <lcc/calling_convention.hh>
 #include <lcc/calling_conventions/ms_x64.hh>
@@ -13,24 +16,22 @@
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/format.hh>
+#include <lcc/fractionals.hh>
 #include <lcc/ir/core.hh>
-#include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
-#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/version.hh>
 
-#include <object/generic.hh>
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 
-#include <clink/layout.hh>
-
-#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 

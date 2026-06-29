@@ -3,11 +3,11 @@
 #include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/diags.hh>
+#include <lcc/fractionals.hh>
 #include <lcc/ir/domtree.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/utils.hh>
-#include <lcc/utils/fractionals.hh>
 #include <lcc/utils/generator.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/utils/rtti.hh>

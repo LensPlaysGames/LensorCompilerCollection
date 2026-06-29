@@ -1,5 +1,7 @@
 #include <lcc/opt.hh>
 
+#include <lcc/always_false.hh>
+#include <lcc/assert.hh>
 #include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/domtree.hh>
@@ -1195,7 +1197,10 @@ private:
         } else if constexpr (std::derived_from<Pass, ModuleRewritePass>) {
             changed = RunPassOnModule<Pass>();
         } else {
-            static_assert(always_false<Pass>, "Pass must be an InstructionRewritePass or ModuleRewritePass");
+            static_assert(
+                always_false<Pass>,
+                "Pass must be an InstructionRewritePass or ModuleRewritePass"
+            );
         }
 
         // Emit IR after each optimisation pass that changes the output, if requested.

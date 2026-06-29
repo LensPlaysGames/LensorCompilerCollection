@@ -1,10 +1,4 @@
-#include <lcc/assert.hh>
-#include <lcc/context.hh>
-#include <lcc/core.hh>
-#include <lcc/stringmap.hh>
-#include <lcc/utils.hh>
-#include <lcc/utils/macros.hh>
-#include <lcc/utils/string_distance.hh>
+#include <glint/sema.hh>
 
 #include <object/elf.h>
 #include <object/elf.hh>
@@ -13,7 +7,14 @@
 #include <glint/error_ids.hh>
 #include <glint/module_description.hh>
 #include <glint/parser.hh>
-#include <glint/sema.hh>
+
+#include <lcc/assert.hh>
+#include <lcc/context.hh>
+#include <lcc/core.hh>
+#include <lcc/string_distance.hh>
+#include <lcc/stringmap.hh>
+#include <lcc/utils.hh>
+#include <lcc/utils/macros.hh>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -5279,7 +5280,7 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
         Decl* least_distance_decl = nullptr;
         size_t least_distance{size_t(-1)};
         for (auto* decl : scope->all_symbols_recursive()) {
-            auto distance = utils::optimal_string_alignment_distance(expr->name(), decl->name());
+            auto distance = lcc::optimal_string_alignment_distance(expr->name(), decl->name());
             LCC_ASSERT(
                 distance,
                 "If distance from '{}' to '{}' was zero, then symbol would have been found."

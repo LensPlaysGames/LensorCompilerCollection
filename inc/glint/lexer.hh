@@ -2,9 +2,9 @@
 #define GLINT_LEXER_HH
 
 #include <lcc/context.hh>
+#include <lcc/enum_to_underlying.hh>
 #include <lcc/stringmap.hh>
 #include <lcc/syntax/lexer.hh>
-#include <lcc/utils.hh>
 
 #include <glint/ast.hh>
 #include <glint/error_ids.hh>

@@ -3,6 +3,8 @@
 
 #include <glint/ast.hh>
 
+#include <lcc/enum_to_underlying.hh>
+
 namespace lcc {
 namespace glint {
 /// For serialisation purposes.

@@ -2,8 +2,8 @@
 
 #include <lcc/assert.hh>
 #include <lcc/context.hh>
+#include <lcc/string_distance.hh>
 #include <lcc/utils/platform.hh>
-#include <lcc/utils/string_distance.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
 #include <lcc/version.hh>
 
@@ -250,7 +250,7 @@ auto parse(int argc, const char** argv) -> Options {
             std::string_view least_distance_argument{""};
             size_t least_distance{size_t(-1)};
             for (auto& good_argument : known_arguments) {
-                auto distance = lcc::utils::optimal_string_alignment_distance(arg, good_argument);
+                auto distance = lcc::optimal_string_alignment_distance(arg, good_argument);
                 LCC_ASSERT(
                     distance,
                     "If distance from '{}' to '{}' was zero, then argument would have been found."

@@ -1,16 +1,15 @@
-#include <algorithm>
 #include <language_c/ast.hh>
 
 #include <language_c/parser.hh>
 
 #include <lcc/diags.hh>
+#include <lcc/enum_to_underlying.hh>
 #include <lcc/location.hh>
 
 #include <fmt/base.h>
 #include <fmt/format.h>
 
 #include <ranges>
-#include <string>
 #include <string_view>
 #include <type_traits>
 #include <vector>

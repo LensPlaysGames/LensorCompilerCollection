@@ -1,7 +1,7 @@
 #ifndef LCC_GLINT_ERROR_IDS_HH
 #define LCC_GLINT_ERROR_IDS_HH
 
-#include <lcc/utils.hh>
+#include <lcc/enum_to_underlying.hh>
 
 #include <array>
 #include <utility>

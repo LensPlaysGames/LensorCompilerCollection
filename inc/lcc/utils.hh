@@ -33,19 +33,6 @@
 #include <utility>
 #include <vector>
 
-namespace lcc {
-
-template <typename>
-concept always_false = false;
-
-/// Helper to cast an enum to its underlying type.
-template <typename t>
-requires std::is_enum_v<t>
-constexpr std::underlying_type_t<t> operator+(t e) {
-    return static_cast<std::underlying_type_t<t>>(e);
-}
-} // namespace lcc
-
 /// Internal stuff.
 namespace lcc::detail {
 
