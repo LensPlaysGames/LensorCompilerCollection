@@ -54,6 +54,22 @@ struct TempsetStage1 {
 
 } // namespace lcc::detail
 
+// __COUNTER__ is not standard until C29, that is late 2029
+// https://isocpp.org/files/papers/P3384R0.html#rationale-for-standardization
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wc2y-extensions"
+#endif
+
+// https://github.com/google/benchmark/blob/c19cfee61e136effb05a7fc8a037b0db3b13bd4c/include/benchmark/benchmark.h#L1531-L1538
+// Check that __COUNTER__ is defined and that __COUNTER__ increases by 1
+// every time it is expanded. X + 1 == X + 0 is used in case X is defined to be
+// empty. If X is empty the expression becomes (+1 == +0).
+#if defined(__COUNTER__) && (__COUNTER__ + 1 == __COUNTER__ + 0)
+#define LCC_PRIVATE_UNIQUE_ID __COUNTER__
+#else
+#define LCC_PRIVATE_UNIQUE_ID __LINE__
+#endif
+
 /// \brief Defer execution of a lambda until the end of the scope.
 ///
 /// Example:
@@ -61,7 +77,7 @@ struct TempsetStage1 {
 ///     auto file = std::fopen(...);
 ///     defer { if (file) std::fclose(file); };
 /// \endcode
-#define defer auto LCC_CAT(_lcc_defer_, __COUNTER__) = ::lcc::detail::DeferStage1{}->*[&]
+#define defer auto LCC_CAT(_lcc_defer_, LCC_PRIVATE_UNIQUE_ID) = ::lcc::detail::DeferStage1{}->*[&]
 
 /// \brief Temporarily set a variable to a value.
 ///
@@ -71,6 +87,6 @@ struct TempsetStage1 {
 ///     tempset x = 1;
 ///     /// x is reset to `0` at end of scope.
 /// \endcode
-#define tempset auto LCC_CAT(_lcc_tempset_, __COUNTER__) = ::lcc::detail::TempsetStage1{}->*
+#define tempset auto LCC_CAT(_lcc_tempset_, LCC_PRIVATE_UNIQUE_ID) = ::lcc::detail::TempsetStage1{}->*
 
 #endif // LCC_DETAIL_DEFER_HH
