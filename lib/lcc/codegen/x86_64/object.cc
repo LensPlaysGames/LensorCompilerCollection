@@ -2,7 +2,7 @@
 #include <lcc/codegen/mir_utils.hh>
 #include <lcc/codegen/x86_64/object.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/core.hh>
 #include <lcc/utils.hh>
 #include <object/generic.hh>

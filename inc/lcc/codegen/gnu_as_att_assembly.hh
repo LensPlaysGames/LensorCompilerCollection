@@ -1,7 +1,7 @@
 #ifndef LCC_GNU_AS_ATT_ASSEMBLY_HH
 #define LCC_GNU_AS_ATT_ASSEMBLY_HH
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/ir.hh>
 

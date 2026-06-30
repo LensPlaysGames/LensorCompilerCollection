@@ -5,23 +5,23 @@
 
 #include <clink/clink.hh>
 
-#include <lcc/assert.hh>
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
+#include <glint/driver.hh>
+#include <language_c/driver.hh>
+
 #include <lcc/format.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/lcc-c.h>
 #include <lcc/opt.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
-#include <lcc/utils/platform.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
 #include <lcc/version.hh>
 
-#include <glint/driver.hh>
-#include <language_c/driver.hh>
+#include <lccbase/assert.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
+#include <lccbase/platform.hh>
 
-#include <algorithm>
 #include <cstdio>  // fopen and friends
 #include <cstdlib> // system
 #include <cstring> // strerror

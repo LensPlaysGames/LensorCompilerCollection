@@ -1,19 +1,18 @@
 #include <sarif.hh>
 
-#include <lccjson/lccjson.hh>
-
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
-#include <lcc/utils.hh>
 #include <lcc/version.hh>
+
+#include <lccbase/assert.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
+
+#include <lccjson/lccjson.hh>
 
 #include <fmt/format.h>
 
 #include <filesystem>
-#include <ranges>
 #include <string>
 #include <string_view>
-#include <vector>
 
 std::string as_sarif(lcc::Context& ctx, std::string_view command_line) {
     const auto escape = [](std::string_view s) {

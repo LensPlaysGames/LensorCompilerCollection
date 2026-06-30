@@ -1,8 +1,8 @@
 #include <lcc/ir/core.hh>
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/core.hh>
-#include <lcc/diags.hh>
+#include <lccbase/diags.hh>
 #include <lcc/fractionals.hh>
 #include <lcc/ir/domtree.hh>
 #include <lcc/ir/module.hh>

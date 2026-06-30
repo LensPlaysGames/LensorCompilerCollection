@@ -3,7 +3,7 @@
 
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
-#include <lcc/location.hh>
+#include <lccbase/location.hh>
 #include <lcc/utils.hh>
 
 #include <memory>

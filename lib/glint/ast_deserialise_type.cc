@@ -2,7 +2,7 @@
 #include <glint/module_description.hh>
 #include <glint/sema.hh>
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/utils.hh>
 
 #include <array>

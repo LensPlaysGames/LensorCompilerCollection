@@ -6,7 +6,7 @@
 #include <lcc/forward.hh>
 #include <lcc/fractionals.hh>
 #include <lcc/ir/type.hh>
-#include <lcc/location.hh>
+#include <lccbase/location.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
 #include <lcc/utils/generator.hh>

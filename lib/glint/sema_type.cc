@@ -2,7 +2,7 @@
 #include <glint/ast.hh>
 #include <glint/sema.hh>
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 
 bool lcc::glint::Sema::AnalyseType(Context* ctx, Module& m, Type** type_ptr) {
     LCC_ASSERT(ctx);

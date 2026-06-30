@@ -2,7 +2,6 @@
 #define GLINT_AST_HH
 
 #include <lcc/core.hh>
-#include <lcc/diags.hh>
 #include <lcc/fractionals.hh>
 #include <lcc/stringmap.hh>
 #include <lcc/syntax/token.hh>
@@ -10,6 +9,9 @@
 #include <lcc/utils/result.hh>
 
 #include <glint/eval.hh>
+
+#include <lccbase/diags.hh>
+#include <lccbase/file.hh>
 
 #include <string>
 #include <string_view>

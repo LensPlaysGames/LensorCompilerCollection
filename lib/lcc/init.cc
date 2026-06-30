@@ -1,4 +1,4 @@
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
 

@@ -1,8 +1,8 @@
 #ifndef LCC_SYNTAX_LEXER_HH
 #define LCC_SYNTAX_LEXER_HH
 
-#include <lcc/diags.hh>
-#include <lcc/file.hh>
+#include <lccbase/diags.hh>
+#include <lccbase/file.hh>
 #include <lcc/utils.hh>
 
 #include <string_view>

@@ -1,8 +1,8 @@
 #include <glint/ir_gen.hh>
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/core.hh>
-#include <lcc/diags.hh>
+#include <lccbase/diags.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>

@@ -121,6 +121,15 @@ auto Sema::type_of(const Node* n) -> Result<Type*> {
                 case TokenKind::KwReturn:
                 case TokenKind::KwSizeof:
                 case TokenKind::KwAlignof:
+                case TokenKind::KwConst:
+                case TokenKind::KwVolatile:
+                case TokenKind::KwRestrict:
+                case TokenKind::KwAtomic:
+                case TokenKind::KwConstexpr:
+                case TokenKind::KwAuto:
+                case TokenKind::KwExtern:
+                case TokenKind::KwRegister:
+                case TokenKind::KwStatic:
                 case TokenKind::LeftParenthesis:
                 case TokenKind::RightParenthesis:
                 case TokenKind::RightSquareBracket:
@@ -205,6 +214,15 @@ auto Sema::type_of(const Node* n) -> Result<Type*> {
                 case TokenKind::KwReturn:
                 case TokenKind::KwSizeof:
                 case TokenKind::KwAlignof:
+                case TokenKind::KwConst:
+                case TokenKind::KwVolatile:
+                case TokenKind::KwRestrict:
+                case TokenKind::KwAtomic:
+                case TokenKind::KwConstexpr:
+                case TokenKind::KwAuto:
+                case TokenKind::KwExtern:
+                case TokenKind::KwRegister:
+                case TokenKind::KwStatic:
                 case TokenKind::OpEqual:
                 case TokenKind::OpLessThan:
                 case TokenKind::OpGreaterThan:
@@ -448,6 +466,15 @@ Result<void> Sema::analyse_binary(BinaryOperation*& b) {
         case TokenKind::KwReturn:
         case TokenKind::KwSizeof:
         case TokenKind::KwAlignof:
+        case TokenKind::KwConst:
+        case TokenKind::KwVolatile:
+        case TokenKind::KwRestrict:
+        case TokenKind::KwAtomic:
+        case TokenKind::KwConstexpr:
+        case TokenKind::KwAuto:
+        case TokenKind::KwExtern:
+        case TokenKind::KwRegister:
+        case TokenKind::KwStatic:
         case TokenKind::OpPlusPlus:
         case TokenKind::OpMinusMinus:
         case TokenKind::OpComma:
@@ -553,6 +580,15 @@ Result<void> Sema::analyse_unary(UnaryOperation*& u) {
         case TokenKind::KwReturn:
         case TokenKind::KwSizeof:
         case TokenKind::KwAlignof:
+        case TokenKind::KwConst:
+        case TokenKind::KwVolatile:
+        case TokenKind::KwRestrict:
+        case TokenKind::KwAtomic:
+        case TokenKind::KwConstexpr:
+        case TokenKind::KwAuto:
+        case TokenKind::KwExtern:
+        case TokenKind::KwRegister:
+        case TokenKind::KwStatic:
         case TokenKind::OpEqual:
         case TokenKind::OpLessThan:
         case TokenKind::OpGreaterThan:

@@ -2,9 +2,9 @@
 
 #include <language_c/parser.hh>
 
-#include <lcc/diags.hh>
+#include <lccbase/diags.hh>
 #include <lcc/enum_to_underlying.hh>
-#include <lcc/location.hh>
+#include <lccbase/location.hh>
 
 #include <fmt/base.h>
 #include <fmt/format.h>
@@ -302,6 +302,15 @@ auto Node::name() const -> std::string_view {
                 case TokenKind::KwReturn:
                 case TokenKind::KwSizeof:
                 case TokenKind::KwAlignof:
+                case TokenKind::KwConst:
+                case TokenKind::KwVolatile:
+                case TokenKind::KwRestrict:
+                case TokenKind::KwAtomic:
+                case TokenKind::KwConstexpr:
+                case TokenKind::KwAuto:
+                case TokenKind::KwExtern:
+                case TokenKind::KwRegister:
+                case TokenKind::KwStatic:
                 case TokenKind::OpComma:
                 case TokenKind::LeftParenthesis:
                 case TokenKind::RightParenthesis:
@@ -367,6 +376,15 @@ auto Node::name() const -> std::string_view {
                 case TokenKind::KwReturn:
                 case TokenKind::KwSizeof:
                 case TokenKind::KwAlignof:
+                case TokenKind::KwConst:
+                case TokenKind::KwVolatile:
+                case TokenKind::KwRestrict:
+                case TokenKind::KwAtomic:
+                case TokenKind::KwConstexpr:
+                case TokenKind::KwAuto:
+                case TokenKind::KwExtern:
+                case TokenKind::KwRegister:
+                case TokenKind::KwStatic:
                 case TokenKind::OpPlusPlus:
                 case TokenKind::OpMinusMinus:
                 case TokenKind::OpComma:

@@ -1,8 +1,8 @@
 #ifndef GLINT_PARSER_HH
 #define GLINT_PARSER_HH
 
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 #include <lcc/syntax/lexer.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/result.hh>

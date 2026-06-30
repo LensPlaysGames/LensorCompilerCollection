@@ -4,7 +4,7 @@
 #include <type_traits>
 
 #include <lcc/always_false.hh>
-#include <lcc/assert.hh>
+#include <lccbase/assert.hh>
 
 // Implementation
 namespace lcc::detail {

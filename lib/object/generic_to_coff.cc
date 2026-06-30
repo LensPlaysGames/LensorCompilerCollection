@@ -1,7 +1,7 @@
 #include <object/coff.h>
 #include <object/generic.hh>
 
-#include <lcc/assert.hh>
+#include <lccbase/assert.hh>
 
 #include <algorithm>
 #include <array>

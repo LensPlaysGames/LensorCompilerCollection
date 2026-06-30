@@ -1,7 +1,7 @@
 #include <object/elf.h>
 #include <object/generic.hh>
 
-#include <lcc/assert.hh>
+#include <lccbase/assert.hh>
 
 #include <clink/layout.hh>
 

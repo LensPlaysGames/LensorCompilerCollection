@@ -3,7 +3,7 @@
 #include <language_c/ast.hh>
 #include <language_c/type.hh>
 
-#include <lcc/diags.hh>
+#include <lccbase/diags.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
 
@@ -36,6 +36,15 @@ std::string_view ToString(TokenKind k) {
         case TokenKind::KwReturn: return "return";
         case TokenKind::KwSizeof: return "sizeof";
         case TokenKind::KwAlignof: return "_Alignof";
+        case TokenKind::KwConst: return "const";
+        case TokenKind::KwVolatile: return "volatile";
+        case TokenKind::KwRestrict: return "restrict";
+        case TokenKind::KwAtomic: return "_Atomic";
+        case TokenKind::KwConstexpr: return "constexpr";
+        case TokenKind::KwAuto: return "auto";
+        case TokenKind::KwExtern: return "extern";
+        case TokenKind::KwRegister: return "register";
+        case TokenKind::KwStatic: return "static";
         case TokenKind::OpEqual: return "=";
         case TokenKind::OpLessThan: return "<";
         case TokenKind::OpGreaterThan: return ">";
@@ -113,6 +122,15 @@ Result<std::string> ToSource(Token& t) {
         case TokenKind::KwReturn:
         case TokenKind::KwSizeof:
         case TokenKind::KwAlignof:
+        case TokenKind::KwConst:
+        case TokenKind::KwVolatile:
+        case TokenKind::KwRestrict:
+        case TokenKind::KwAtomic:
+        case TokenKind::KwConstexpr:
+        case TokenKind::KwAuto:
+        case TokenKind::KwExtern:
+        case TokenKind::KwRegister:
+        case TokenKind::KwStatic:
         case TokenKind::OpEqual:
         case TokenKind::OpLessThan:
         case TokenKind::OpGreaterThan:
@@ -850,6 +868,15 @@ constexpr size_t unary_precedence(TokenKind kind) {
         case TokenKind::KwInt:
         case TokenKind::KwLong:
         case TokenKind::KwReturn:
+        case TokenKind::KwConst:
+        case TokenKind::KwVolatile:
+        case TokenKind::KwRestrict:
+        case TokenKind::KwAtomic:
+        case TokenKind::KwConstexpr:
+        case TokenKind::KwAuto:
+        case TokenKind::KwExtern:
+        case TokenKind::KwRegister:
+        case TokenKind::KwStatic:
         case TokenKind::OpEqual:
         case TokenKind::OpLessThan:
         case TokenKind::OpGreaterThan:
@@ -970,6 +997,15 @@ constexpr size_t binary_precedence(TokenKind kind) {
         case TokenKind::KwReturn:
         case TokenKind::KwSizeof:
         case TokenKind::KwAlignof:
+        case TokenKind::KwConst:
+        case TokenKind::KwVolatile:
+        case TokenKind::KwRestrict:
+        case TokenKind::KwAtomic:
+        case TokenKind::KwConstexpr:
+        case TokenKind::KwAuto:
+        case TokenKind::KwExtern:
+        case TokenKind::KwRegister:
+        case TokenKind::KwStatic:
         case TokenKind::OpPlusPlus:
         case TokenKind::OpMinusMinus:
         case TokenKind::OpTilde:
@@ -1261,6 +1297,17 @@ auto Parser::ParseBaseType() -> Result<Type*> {
             else return new (tu) LongType(true, tok.location);
         }
 
+        case TokenKind::KwConst:
+        case TokenKind::KwVolatile:
+        case TokenKind::KwRestrict:
+        case TokenKind::KwAtomic:
+        case TokenKind::KwConstexpr:
+        case TokenKind::KwAuto:
+        case TokenKind::KwExtern:
+        case TokenKind::KwRegister:
+        case TokenKind::KwStatic:
+            LCC_TODO("Collect qualifier");
+
         case TokenKind::Invalid:
         case TokenKind::Integer:
         case TokenKind::Fractional:
@@ -1380,6 +1427,15 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             } else lhs = new (tu) Return(nullptr, start_location);
         } break;
 
+        case TokenKind::KwConst:
+        case TokenKind::KwVolatile:
+        case TokenKind::KwRestrict:
+        case TokenKind::KwAtomic: // _Atomic
+        case TokenKind::KwConstexpr:
+        case TokenKind::KwAuto:
+        case TokenKind::KwExtern:
+        case TokenKind::KwRegister:
+        case TokenKind::KwStatic:
         case TokenKind::KwVoid:
         case TokenKind::KwBool:
         case TokenKind::KwChar:
@@ -1639,6 +1695,15 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             case TokenKind::KwInt:
             case TokenKind::KwLong:
             case TokenKind::KwReturn:
+            case TokenKind::KwConst:
+            case TokenKind::KwVolatile:
+            case TokenKind::KwRestrict:
+            case TokenKind::KwAtomic:
+            case TokenKind::KwConstexpr:
+            case TokenKind::KwAuto:
+            case TokenKind::KwExtern:
+            case TokenKind::KwRegister:
+            case TokenKind::KwStatic:
             case TokenKind::RightParenthesis:
             case TokenKind::RightSquareBracket:
             case TokenKind::LeftCurlyBrace:

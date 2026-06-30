@@ -1,12 +1,12 @@
 #include <lcc/opt.hh>
 
 #include <lcc/always_false.hh>
-#include <lcc/assert.hh>
-#include <lcc/context.hh>
+#include <lccbase/assert.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/domtree.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils.hh>
+#include <lccbase/context.hh>
 
 #include <algorithm>
 #include <concepts>
@@ -1167,14 +1167,16 @@ struct Optimiser {
                 " Non-exhaustive list of available passes: {}",
                 s,
                 fmt::join(
-                    {SROAPass::abbreviation,
-                     StoreForwardingPass::abbreviation,
-                     InstCombinePass::abbreviation,
-                     DCEPass::abbreviation,
-                     FunctionDCEPass::abbreviation,
-                     SSAConstructionPass::abbreviation,
-                     CFGSimplePass::abbreviation,
-                     PrintDOMTreePass::abbreviation},
+                    std::array{
+                        SROAPass::abbreviation,
+                        StoreForwardingPass::abbreviation,
+                        InstCombinePass::abbreviation,
+                        DCEPass::abbreviation,
+                        FunctionDCEPass::abbreviation,
+                        SSAConstructionPass::abbreviation,
+                        CFGSimplePass::abbreviation,
+                        PrintDOMTreePass::abbreviation
+                    },
                     ","
                 )
             );

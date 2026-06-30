@@ -1,10 +1,11 @@
 #ifndef LCC_CONTEXT_HH
 #define LCC_CONTEXT_HH
 
-#include <lcc/forward.hh>
-#include <lcc/location.hh>
 #include <lccbase/diags.hh>
 #include <lccbase/file.hh>
+#include <lccbase/location.hh>
+
+#include <lcc/forward.hh>
 
 #include <algorithm>
 #include <filesystem>

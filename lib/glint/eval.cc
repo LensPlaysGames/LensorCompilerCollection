@@ -1,8 +1,8 @@
 #include <glint/ast.hh>
 #include <glint/eval.hh>
 
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 #include <lcc/utils.hh>
 
 auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) -> bool {

@@ -13,8 +13,8 @@
 #include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/codegen/x86_64/object.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 #include <lcc/format.hh>
 #include <lcc/fractionals.hh>
 #include <lcc/ir/core.hh>

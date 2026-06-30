@@ -4,7 +4,7 @@
 
 #include <object/generic.hh>
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/target.hh>
 #include <lcc/typedefs.hh>
 

@@ -5,8 +5,8 @@
 // like "misc", "utils", etc. It should be it's own library, or it should
 // have it's own file in the LCC library, if it's worth implementing.
 
-#include <lcc/assert.hh>
 #include <lcc/typedefs.hh>
+#include <lccbase/assert.hh>
 
 #include <fmt/color.h>
 #include <fmt/compile.h>

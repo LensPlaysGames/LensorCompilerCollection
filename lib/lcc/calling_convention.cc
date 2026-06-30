@@ -4,8 +4,8 @@
 #include <lcc/calling_conventions/sysv_x86_64.hh>
 #include <lcc/codegen/register_allocation.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 #include <lcc/target.hh>
 
 #include <algorithm>

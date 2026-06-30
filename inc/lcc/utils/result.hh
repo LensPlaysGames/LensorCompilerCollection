@@ -1,7 +1,7 @@
 #ifndef LCC_RESULT_HH
 #define LCC_RESULT_HH
 
-#include <lcc/diags.hh>
+#include <lccbase/diags.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/rtti.hh>
 

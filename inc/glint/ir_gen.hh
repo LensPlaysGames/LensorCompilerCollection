@@ -2,7 +2,7 @@
 #define GLINT_IR_GEN_HH
 
 #include <glint/ast.hh>
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils/rtti.hh>

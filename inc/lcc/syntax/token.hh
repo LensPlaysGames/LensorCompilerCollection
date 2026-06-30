@@ -2,7 +2,7 @@
 #define LCC_SYNTAX_TOKEN_HH
 
 #include <lcc/core.hh>
-#include <lcc/diags.hh>
+#include <lccbase/diags.hh>
 #include <lcc/fractionals.hh>
 #include <lcc/utils.hh>
 

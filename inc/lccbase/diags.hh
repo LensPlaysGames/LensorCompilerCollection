@@ -1,8 +1,9 @@
 #ifndef LCC_DIAGS_HH
 #define LCC_DIAGS_HH
 
-#include <lcc/forward.hh>
-#include <lcc/location.hh>
+#include <lccbase/location.hh>
+
+#include <fmt/format.h>
 
 #include <exception>
 #include <string>

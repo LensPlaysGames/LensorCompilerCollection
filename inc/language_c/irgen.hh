@@ -1,7 +1,7 @@
 #ifndef LANGUAGE_C_IRGEN_HH
 #define LANGUAGE_C_IRGEN_HH
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>

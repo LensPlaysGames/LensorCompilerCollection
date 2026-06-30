@@ -3,8 +3,8 @@
 
 #include <language_c/ast.hh>
 
-#include <lcc/context.hh>
-#include <lcc/file.hh>
+#include <lccbase/context.hh>
+#include <lccbase/file.hh>
 #include <lcc/syntax/lexer.hh>
 #include <lcc/syntax/token.hh>
 #include <lcc/utils/result.hh>
@@ -36,6 +36,19 @@ enum class TokenKind : unsigned int {
     KwReturn,
     KwSizeof,
     KwAlignof,
+
+    // Type Qualifiers
+    KwConst,
+    KwVolatile,
+    KwRestrict,
+    KwAtomic,
+    KwConstexpr,
+
+    // Storage Class Specifiers
+    KwAuto,
+    KwExtern,
+    KwRegister,
+    KwStatic,
 
     OpEqual,
     Assign = OpEqual,

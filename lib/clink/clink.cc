@@ -10,9 +10,9 @@
 #include <object/elf.hh>
 #include <object/generic.hh>
 
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
-#include <lcc/file.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
+#include <lccbase/file.hh>
 #include <lcc/format.hh>
 #include <lcc/target.hh>
 #include <lcc/typedefs.hh>

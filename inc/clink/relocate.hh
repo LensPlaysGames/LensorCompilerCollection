@@ -5,7 +5,7 @@
 
 #include <object/generic.hh>
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 
 #include <string>
 #include <vector>

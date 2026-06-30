@@ -1,7 +1,7 @@
 #ifndef GLINT_LEXER_HH
 #define GLINT_LEXER_HH
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/enum_to_underlying.hh>
 #include <lcc/stringmap.hh>
 #include <lcc/syntax/lexer.hh>

@@ -4,7 +4,7 @@
 #include <lcc/calling_conventions/sysv_x86_64.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>

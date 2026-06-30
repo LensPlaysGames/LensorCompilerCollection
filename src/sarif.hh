@@ -1,7 +1,7 @@
 #ifndef LCC_DRIVER_SARIF_HH
 #define LCC_DRIVER_SARIF_HH
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 
 #include <lccjson/lccjson.hh>
 

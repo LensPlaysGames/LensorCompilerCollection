@@ -1,8 +1,8 @@
 #include <language_c/ast.hh>
 
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
-#include <lcc/location.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
+#include <lccbase/location.hh>
 #include <lcc/utils/result.hh>
 
 #include <fmt/base.h>

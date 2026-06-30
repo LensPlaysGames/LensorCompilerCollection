@@ -1,7 +1,7 @@
 #ifndef LCC_UTILS_IR_PRINTER_HH
 #define LCC_UTILS_IR_PRINTER_HH
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils.hh>

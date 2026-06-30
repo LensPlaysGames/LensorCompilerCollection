@@ -1,6 +1,6 @@
 #include <glint/ast.hh>
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/core.hh>
 #include <lcc/enum_to_underlying.hh>
 #include <lcc/target.hh>

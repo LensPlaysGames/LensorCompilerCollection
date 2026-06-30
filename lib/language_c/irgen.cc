@@ -4,9 +4,9 @@
 #include <language_c/ast.hh>
 #include <language_c/parser.hh>
 
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/core.hh>
-#include <lcc/diags.hh>
+#include <lccbase/diags.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
@@ -373,6 +373,15 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::KwReturn:
                 case TokenKind::KwSizeof:
                 case TokenKind::KwAlignof:
+                case TokenKind::KwConst:
+                case TokenKind::KwVolatile:
+                case TokenKind::KwRestrict:
+                case TokenKind::KwAtomic:
+                case TokenKind::KwConstexpr:
+                case TokenKind::KwAuto:
+                case TokenKind::KwExtern:
+                case TokenKind::KwRegister:
+                case TokenKind::KwStatic:
                 case TokenKind::OpEqual:
                 case TokenKind::OpLessThan:
                 case TokenKind::OpGreaterThan:
@@ -476,6 +485,15 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::KwInt:
                 case TokenKind::KwLong:
                 case TokenKind::KwReturn:
+                case TokenKind::KwConst:
+                case TokenKind::KwVolatile:
+                case TokenKind::KwRestrict:
+                case TokenKind::KwAtomic:
+                case TokenKind::KwConstexpr:
+                case TokenKind::KwAuto:
+                case TokenKind::KwExtern:
+                case TokenKind::KwRegister:
+                case TokenKind::KwStatic:
                 case TokenKind::OpPlusPlus:
                 case TokenKind::OpMinusMinus:
                 case TokenKind::OpComma:

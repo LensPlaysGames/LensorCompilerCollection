@@ -8,8 +8,8 @@
 #include <glint/module_description.hh>
 #include <glint/parser.hh>
 
-#include <lcc/assert.hh>
-#include <lcc/context.hh>
+#include <lccbase/assert.hh>
+#include <lccbase/context.hh>
 #include <lcc/core.hh>
 #include <lcc/string_distance.hh>
 #include <lcc/stringmap.hh>

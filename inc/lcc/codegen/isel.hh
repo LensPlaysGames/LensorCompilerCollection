@@ -2,8 +2,8 @@
 #define LCC_CODEGEN_INSTRUCTION_SELECTION_HH
 
 #include <lcc/codegen/mir.hh>
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>

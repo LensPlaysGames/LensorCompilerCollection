@@ -4,7 +4,7 @@
 #include <lcc/codegen/mir_utils.hh>
 #include <lcc/codegen/register_allocation.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
 #include <lcc/core.hh>
 #include <lcc/enum_to_underlying.hh>
 #include <lcc/fractionals.hh>

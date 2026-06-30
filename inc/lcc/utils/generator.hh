@@ -1,7 +1,7 @@
 #ifndef LCC_GENERATOR_HH
 #define LCC_GENERATOR_HH
 
-#include <lcc/diags.hh>
+#include <lccbase/diags.hh>
 
 #include <coroutine>
 #include <iterator>

@@ -1,7 +1,7 @@
 #include <glint/driver.hh>
 
-#include <lcc/context.hh>
-#include <lcc/file.hh>
+#include <lccbase/context.hh>
+#include <lccbase/file.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
 

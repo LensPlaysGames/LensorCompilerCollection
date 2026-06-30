@@ -2,7 +2,7 @@
 #define LCC_MODULE_MIR_HH
 
 #include <lcc/codegen/mir.hh>
-#include <lcc/diags.hh>
+#include <lccbase/diags.hh>
 #include <lcc/forward.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/utils/result.hh>

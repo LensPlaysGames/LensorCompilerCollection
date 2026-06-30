@@ -1,6 +1,6 @@
 #include <language_c/type.hh>
 
-#include <lcc/diags.hh>
+#include <lccbase/diags.hh>
 #include <lcc/target.hh>
 #include <lcc/utils/result.hh>
 

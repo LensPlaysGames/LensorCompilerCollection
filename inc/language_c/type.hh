@@ -3,7 +3,7 @@
 
 #include <language_c/translation_unit.hh>
 
-#include <lcc/location.hh>
+#include <lccbase/location.hh>
 #include <lcc/target.hh>
 #include <lcc/utils/result.hh>
 

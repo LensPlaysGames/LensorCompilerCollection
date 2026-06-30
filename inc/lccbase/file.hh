@@ -1,14 +1,15 @@
 #ifndef LCC_FILE_HH
 #define LCC_FILE_HH
 
-#include <lcc/forward.hh>
-#include <lcc/utils.hh>
+#include <lcc/typedefs.hh>
 
 #include <filesystem>
 #include <string_view>
 #include <vector>
 
 namespace lcc {
+
+class Context;
 
 /// A file in the context.
 class File {
