@@ -219,6 +219,7 @@ if (VERIFY_COMPILERS)
   set(
     COMMON_DEFINES
     -DUSE_LTO=OFF
+     -G ${CMAKE_GENERATOR} # pass through generator
   )
 
   add_custom_target(
