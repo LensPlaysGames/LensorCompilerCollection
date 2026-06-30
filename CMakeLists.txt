@@ -285,6 +285,8 @@ endif()
 # Debug/Release flags.
 if (NOT MSVC)
   if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # backtrace/backtrace_symbols needs this to print function names instead
+    # of addresses.
     target_compile_options(options INTERFACE $<$<CONFIG:DEBUG>:-rdynamic>)
   else()
     target_compile_options(options INTERFACE -Wno-unused-private-field)
@@ -560,6 +562,9 @@ add_library(
 target_include_directories(libclink PUBLIC inc)
 target_link_libraries(libclink PRIVATE options)
 
+# lcc::Module::emit() needs memory layout stuff...
+target_link_libraries(liblcc PUBLIC libclink)
+
 # Add the driver.
 add_executable(
   lcc
@@ -585,9 +590,6 @@ target_include_directories(lcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 # Link lcc driver with simple json library.
 target_link_libraries(lcc PRIVATE liblccjson)
-
-# Link lcc driver with custom linker library.
-target_link_libraries(lcc PRIVATE libclink)
 
 # Link lcc driver with main lcc library.
 target_link_libraries(lcc PRIVATE liblcc)
