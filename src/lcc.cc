@@ -296,7 +296,7 @@ void do_link(
         };
 
         for (auto& s : c_libraries)
-            s = lcc::fs::path(context.crt_directory()) / s;
+            s = (lcc::fs::path(context.crt_directory()) / s).string();
         input_paths.insert(input_paths.begin(), c_libraries.begin(), c_libraries.end());
 
         if (context.has_option("verbose")) {

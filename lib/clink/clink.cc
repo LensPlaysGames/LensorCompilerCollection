@@ -530,13 +530,14 @@ bool link(
         if (not --limit) break;
     }
 
-    FILE* outfile = fopen(executable.c_str(), "wb");
-    fwrite(binary_blob.data(), 1, binary_blob.size(), outfile);
-    if (auto rc = fclose(outfile); rc != 0) {
-        fmt::print(stderr, "clink: Failed to write outfile to `{}` (fclose returned {})\n", executable, rc);
-        return false;
-    }
+    // Write output file.
+    lcc::File::WriteOrTerminate(
+        binary_blob.data(),
+        binary_blob.size(),
+        executable
+    );
 
+    // Adjust file permissions, if necessary.
     if (out.kind == lcc::GenericObject::Kind::EXECUTABLE) {
         std::error_code ec{};
         std::filesystem::permissions(
