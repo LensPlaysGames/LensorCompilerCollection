@@ -1,9 +1,11 @@
-#include <lcc/assert.hh>
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
-#include <lcc/utils.hh>
+#include <lccbase/diags.hh>
+
+#include <lccbase/assert.hh>
+#include <lccbase/context.hh>
+#include <lccbase/platform.hh>
+
+#include <lcc/utils/colours.hh>
 #include <lcc/utils/macros.hh>
-#include <lcc/utils/platform.hh>
 
 #include <algorithm>
 #include <cstdlib>
@@ -19,10 +21,41 @@
 using Kind = lcc::Diag::Kind;
 
 namespace {
+// "foo\nbar" -> "foo\nbar"
+// "foo\r\n\r\rbar" -> "foo\r\n\r\rbar"
+// "foo\r\n\r\r" -> "foo"
+// "foo\r\n\r\n" -> "foo"
+// "foo\n\n\n" -> "foo"
+constexpr auto RemoveTrailingNewlinesFrom(std::string& s) {
+    while (s.size() and (s.back() == '\n' or s.back() == '\r'))
+        s.pop_back();
+}
+
+void ReplaceAllWithin(
+    std::string& str,
+    std::string_view from,
+    std::string_view to
+) {
+    if (from.empty()) return;
+    for (lcc::usz i = 0; i = str.find(from, i), i != std::string::npos; i += to.length())
+        str.replace(i, from.length(), to);
+}
+
+constexpr auto NumberWidth(
+    lcc::usz number,
+    lcc::usz base = 10
+) -> lcc::usz {
+    return number == 0
+             ? 1
+             : lcc::usz(
+                   std::log(number) / std::log(base) + 1
+               );
+}
+
 /// Get the colour of a diagnostic.
-constexpr auto Colour(lcc::Diag::Kind kind) -> lcc::utils::Colour {
+constexpr auto Colour(lcc::Diag::Kind kind) -> lcc::Colour {
     switch (kind) {
-        using enum lcc::utils::Colour;
+        using enum lcc::Colour;
         case Kind::ICError: return Magenta;
         case Kind::Warning: return Yellow;
         case Kind::Note: return Green;
@@ -67,8 +100,8 @@ void lcc::Diag::HandleFatalErrors() {
 
 /// Print a diagnostic with no (valid) location info.
 void lcc::Diag::PrintDiagWithoutLocation() {
-    using enum utils::Colour;
-    utils::Colours C(ShouldUseColour());
+    using enum Colour;
+    Colours C(ShouldUseColour());
 
     /// Print the message.
     fmt::print(
@@ -95,11 +128,11 @@ lcc::Diag::Diag(
     std::string id_,
     std::string message_
 )
-    : kind(kind_),
-      context(context_),
-      where(where_),
-      id(std::move(id_)),
-      message(std::move(message_)) {
+    : kind(kind_)
+    , context(context_)
+    , where(where_)
+    , id(std::move(id_))
+    , message(std::move(message_)) {
     LCC_ASSERT(context);
     // Keep track of diagnostic.
     context_->report_diagnostic(*this);
@@ -148,20 +181,20 @@ auto LocationLineRange(const Context& context, Location where) -> LineRanges {
 
     // Replace tabs with spaces. We need to do this *after* splitting because
     // this invalidates the offsets.
-    utils::ReplaceAll(before, "\t", "    ");
-    utils::ReplaceAll(range, "\t", "    ");
-    utils::ReplaceAll(after, "\t", "    ");
+    ReplaceAllWithin(before, "\t", "    ");
+    ReplaceAllWithin(range, "\t", "    ");
+    ReplaceAllWithin(after, "\t", "    ");
 
     // If diagnostic points to the end of a line, insert a space to highlight.
     if (range.back() == '\n') range.back() = ' ';
-    lcc::utils::remove_trailing_newlines_from(after);
+    RemoveTrailingNewlinesFrom(after);
 
     return LineRanges{before, range, after};
 };
 } // namespace lcc::detail
 
 void lcc::Diag::print() {
-    using enum utils::Colour;
+    using enum Colour;
 
     // If this diagnostic is suppressed, do nothing.
     if (kind == Kind::None)
@@ -206,7 +239,7 @@ void lcc::Diag::print() {
     // If the location is invalid, either because the specified file does not
     // exist, its position is out of bounds or 0, or its length is 0, then we
     // skip printing the location.
-    utils::Colours C(ShouldUseColour());
+    Colours C(ShouldUseColour());
     const auto& fs = context->files();
     if (not where.seekable(context)) {
         // Even if the location is invalid, print the file name if we can.
@@ -300,7 +333,7 @@ void lcc::Diag::print() {
     fmt::print(stderr, "{}\n", after);
 
     // Determine the number of digits in the line number.
-    const auto digits = utils::NumberWidth(line);
+    const auto digits = NumberWidth(line);
 
     // Underline the range.
     // TODO: Multiline location underline calculation
@@ -340,7 +373,7 @@ void lcc::Diag::print() {
                     // Print the line up to the start of the location, the range in the right
                     // colour, and the rest of the line.
                     fmt::print(stderr, " {} | {}", replace_line, replace_before);
-                    fmt::print(stderr, "{}{}{}", C(utils::Colour::BoldRed), replace_range, C(Reset));
+                    fmt::print(stderr, "{}{}{}", C(Colour::BoldRed), replace_range, C(Reset));
                     fmt::print(stderr, "{}\n", replace_after);
 
                     // Print the replacement text.
@@ -351,7 +384,7 @@ void lcc::Diag::print() {
                         fmt::print(stderr, " ");
 
                     // Finally, print the replacement text itself.
-                    fmt::print(stderr, "{}{}{}\n", C(utils::Colour::BoldGreen), fix.text, C(Reset));
+                    fmt::print(stderr, "{}{}{}\n", C(Colour::BoldGreen), fix.text, C(Reset));
                 } break;
                 // foo.g:1:0:
                 //  1 | return 69; (; in green)

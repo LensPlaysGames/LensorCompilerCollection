@@ -1,7 +1,8 @@
-#include <lcc/context.hh>
-#include <lcc/diags.hh>
-#include <lcc/file.hh>
+#include <lccbase/diags.hh>
+#include <lccbase/file.hh>
 #include <lcc/utils/macros.hh>
+
+#include <lccbase/context.hh>
 
 #ifndef _WIN32
 #    include <fcntl.h>
@@ -15,12 +16,14 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <random>
 #include <ranges>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 auto lcc::File::TempPath(std::string_view extension) -> fs::path {
@@ -84,7 +87,9 @@ void lcc::File::WriteOrTerminate(const void* data, usz size, const fs::path& fil
 }
 
 lcc::File::File(Context& context, fs::path name, std::vector<char>&& contents)
-    : _context(context), _file_path(std::move(name)), _contents(std::move(contents)) {}
+    : _context(context)
+    , _file_path(std::move(name))
+    , _contents(std::move(contents)) {}
 
 auto lcc::File::Read(const fs::path& path) -> std::vector<char> {
     return LoadFileData(path);
@@ -120,8 +125,12 @@ auto lcc::File::LoadFileData(const fs::path& path) -> std::vector<char> {
 
 #else
     /// Read the file manually.
-    std::unique_ptr<FILE, decltype(&std::fclose)> f{std::fopen(path.string().c_str(), "rb"), std::fclose};
-    if (not f) Diag::Fatal("Could not open file \"{}\": {}", path.string(), strerror(errno));
+    std::unique_ptr<FILE, decltype(&std::fclose)> f{
+        std::fopen(path.string().c_str(), "rb"),
+        std::fclose
+    };
+    if (not f)
+        Diag::Fatal("Could not open file \"{}\": {}", path.string(), strerror(errno));
 
     /// Get the file size.
     std::fseek(f.get(), 0, SEEK_END);
@@ -135,7 +144,8 @@ auto lcc::File::LoadFileData(const fs::path& path) -> std::vector<char> {
     while (n_read < sz) {
         errno = 0;
         auto n = std::fread(ret.data() + n_read, 1, sz - n_read, f.get());
-        if (errno) Diag::Fatal("Error reading file \"{}\": {}", path.string(), strerror(errno));
+        if (errno)
+            Diag::Fatal("Error reading file \"{}\": {}", path.string(), strerror(errno));
         if (n == 0) break;
         n_read += n;
     }

@@ -1,19 +1,20 @@
 #ifndef LCC_CONTEXT_HH
 #define LCC_CONTEXT_HH
 
-#include <lcc/diags.hh>
-#include <lcc/file.hh>
 #include <lcc/forward.hh>
 #include <lcc/location.hh>
-#include <lcc/utils.hh>
+#include <lccbase/diags.hh>
+#include <lccbase/file.hh>
 
 #include <algorithm>
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
+// TODO: This should probably go in platform.hh or something...
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 #    define LCC_PLATFORM_WINDOWS 1
 #endif

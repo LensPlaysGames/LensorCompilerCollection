@@ -1,15 +1,18 @@
-#include <lcc/utils.hh>
-#include <lcc/utils/platform.hh>
+#include <lccbase/platform.hh>
+
+#include <lcc/typedefs.hh>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
-#include <cstdio>
+#include <cstdint>
+#include <cstdlib>
 #include <filesystem>
-#include <iostream>
-#include <memory>
+#include <ranges>
 #include <span>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #ifdef _WIN32
 #    ifndef NOMINMAX
@@ -78,7 +81,7 @@ void lcc::platform::PrintBacktrace() {
         std::string command = fmt::format(
             "addr2line {} -e {} {}",
             backtrace_addr2line_options,
-            lcc::fs::canonical("/proc/self/exe").native(),
+            std::filesystem::canonical("/proc/self/exe").native(),
             fmt::join(trace_view, " ")
         );
         std::system(command.data());

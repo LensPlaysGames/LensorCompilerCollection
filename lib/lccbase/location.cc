@@ -1,5 +1,5 @@
-#include <lcc/context.hh>
-#include <lcc/location.hh>
+#include <lccbase/context.hh>
+#include <lccbase/location.hh>
 #include <lcc/utils.hh>
 
 bool lcc::Location::seekable(const lcc::Context* ctx) const {

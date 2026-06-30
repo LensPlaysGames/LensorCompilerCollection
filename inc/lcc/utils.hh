@@ -17,10 +17,9 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdio>
+#include <concepts>
 #include <cstring>
 #include <deque>
-#include <functional>
 #include <iterator>
 #include <memory>
 #include <ranges>
@@ -314,14 +313,14 @@ constexpr usz MaxBitValue(usz bits) {
 }
 
 /// Determine the width of a number.
-auto NumberWidth(usz number, usz base = 10) -> usz;
+// auto NumberWidth(usz number, usz base = 10) -> usz;
 
 /// Replace all occurrences of `from` with `to` in `str`.
-void ReplaceAll(
-    std::string& str,
-    std::string_view from,
-    std::string_view to
-);
+// void ReplaceAll(
+//     std::string& str,
+//     std::string_view from,
+//     std::string_view to
+// );
 
 /// Invoke a templated lambda or class w/ a templated operator().
 ///
@@ -359,16 +358,6 @@ auto from_bytes(std::array<lcc::u8, sizeof(T)> bytes) -> T {
     T out{};
     std::memcpy(&out, bytes.data(), sizeof(T));
     return out;
-}
-
-// "foo\nbar" -> "foo\nbar"
-// "foo\r\n\r\rbar" -> "foo\r\n\r\rbar"
-// "foo\r\n\r\r" -> "foo"
-// "foo\r\n\r\n" -> "foo"
-// "foo\n\n\n" -> "foo"
-constexpr auto remove_trailing_newlines_from(std::string& s) {
-    while (s.size() and (s.back() == '\n' or s.back() == '\r'))
-        s.pop_back();
 }
 
 } // namespace lcc::utils

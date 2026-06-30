@@ -3,7 +3,6 @@
 
 #include <lcc/forward.hh>
 #include <lcc/location.hh>
-#include <lcc/utils.hh>
 
 #include <exception>
 #include <string>

@@ -1,17 +1,21 @@
-#include <lcc/context.hh>
+#include <lccbase/context.hh>
+
 #include <lcc/ir/type.hh>
 
+#include <filesystem>
 #include <limits>
 #include <mutex>
 #include <utility>
+#include <vector>
 
 lcc::Context::Context(
     const Target* target,
     const Format* format,
     const lcc::Context::Options& options
-) : _options(options),
-    _target(target),
-    _format(format) {
+)
+    : _options(options)
+    , _target(target)
+    , _format(format) {
     static std::once_flag once;
     std::call_once(once, InitialiseLCCData);
 

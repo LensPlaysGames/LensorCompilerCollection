@@ -371,6 +371,24 @@ endif()
 # default, and I don't take kindly to those not willing to put in the
 # effort ơ_ơ.
 
+add_library(
+  liblccbase
+  inc/lccbase/assert.hh
+  inc/lccbase/context.hh
+  inc/lccbase/diags.hh
+  inc/lccbase/file.hh
+  inc/lccbase/location.hh
+  inc/lccbase/platform.hh
+  lib/lccbase/assert.cc
+  lib/lccbase/context.cc
+  lib/lccbase/diags.cc
+  lib/lccbase/file.cc
+  lib/lccbase/location.cc
+  lib/lccbase/platform.cc
+)
+target_include_directories(liblccbase PUBLIC inc)
+target_link_libraries(liblccbase PRIVATE options)
+
 # Generic object library (convertible to ELF and COFF, currently)
 add_library(
   object
@@ -390,7 +408,6 @@ target_link_libraries(object PRIVATE options)
 add_library(
   liblcc
   inc/lcc/always_false.hh
-  inc/lcc/assert.hh
   inc/lcc/calling_convention.hh
   inc/lcc/calling_conventions/ms_x64.hh
   inc/lcc/calling_conventions/sysv_x86_64.hh
@@ -403,11 +420,8 @@ add_library(
   inc/lcc/codegen/x86_64/isel_patterns.hh
   inc/lcc/codegen/x86_64/object.hh
   inc/lcc/codegen/x86_64/x86_64.hh
-  inc/lcc/context.hh
   inc/lcc/core.hh
-  inc/lcc/diags.hh
   inc/lcc/enum_to_underlying.hh
-  inc/lcc/file.hh
   inc/lcc/format.hh
   inc/lcc/forward.hh
   inc/lcc/fractionals.hh
@@ -416,7 +430,6 @@ add_library(
   inc/lcc/ir/module.hh
   inc/lcc/ir/type.hh
   inc/lcc/lcc-c.h
-  inc/lcc/location.hh
   inc/lcc/opt.hh
   inc/lcc/string_distance.hh
   inc/lcc/stringmap.hh
@@ -432,11 +445,9 @@ add_library(
   inc/lcc/utils/ir_printer.hh
   inc/lcc/utils/iterator.hh
   inc/lcc/utils/macros.hh
-  inc/lcc/utils/platform.hh
   inc/lcc/utils/result.hh
   inc/lcc/utils/rtti.hh
   inc/lcc/utils/twocolumnlayouthelper.hh
-  lib/lcc/assert.cc
   lib/lcc/calling_convention.cc
   lib/lcc/calling_conventions/ms_x64.cc
   lib/lcc/calling_conventions/sysv_x86_64.cc
@@ -446,9 +457,6 @@ add_library(
   lib/lcc/codegen/x86_64/assembly.cc
   lib/lcc/codegen/x86_64/object.cc
   lib/lcc/codegen/x86_64/x86_64.cc
-  lib/lcc/context.cc
-  lib/lcc/diags.cc
-  lib/lcc/file.cc
   lib/lcc/fractionals.cc
   lib/lcc/init.cc
   lib/lcc/ir/core.cc
@@ -459,14 +467,13 @@ add_library(
   lib/lcc/ir/module_wat.cc
   lib/lcc/ir/parser.cc
   lib/lcc/lcc-c.cc
-  lib/lcc/location.cc
   lib/lcc/opt.cc
-  lib/lcc/platform.cc
   lib/lcc/string_distance.cc
   lib/lcc/utils.cc
 )
 target_include_directories(liblcc PUBLIC inc)
 set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
+target_link_libraries(liblcc PUBLIC liblccbase)
 
 if(LCC_USE_DEBUG_ITERATORS)
   target_compile_definitions(liblcc PRIVATE LCC_DEBUG_ITERATORS)

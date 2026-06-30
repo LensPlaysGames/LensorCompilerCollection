@@ -1,7 +1,7 @@
 #ifndef LCC_LOCATION_HH
 #define LCC_LOCATION_HH
 
-#include <lcc/utils.hh>
+#include <lcc/typedefs.hh>
 
 #include <algorithm>
 
@@ -34,7 +34,9 @@ struct Location {
 
     Location() = default;
     Location(u32 position, u16 length, u16 file_id_)
-        : pos(position), len(length), file_id(file_id_) {}
+        : pos(position)
+        , len(length)
+        , file_id(file_id_) {}
 
     /// Create a new location that spans two locations.
     Location(Location a, Location b) {

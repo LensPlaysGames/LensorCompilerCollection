@@ -1,7 +1,14 @@
 #ifndef LCC_DETAIL_DEFER_HH
 #define LCC_DETAIL_DEFER_HH
 
-#include <lcc/utils.hh>
+#include <concepts>
+#include <utility>
+
+#define LCC_STR_(X) #X
+#define LCC_STR(X)  LCC_STR_(X)
+
+#define LCC_CAT_(X, Y) X##Y
+#define LCC_CAT(X, Y)  LCC_CAT_(X, Y)
 
 namespace lcc::detail {
 template <typename Callable>

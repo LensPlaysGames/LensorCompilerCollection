@@ -1,16 +1,12 @@
-#include <string>
+#include <lcc/utils/macros.hh>
 
 #include <fmt/format.h>
+
+#include <string>
 
 namespace lcc::detail {
 [[noreturn]] void AssertFail(std::string&& msg);
 }
-
-#define LCC_STR_(X) #X
-#define LCC_STR(X)  LCC_STR_(X)
-
-#define LCC_CAT_(X, Y) X##Y
-#define LCC_CAT(X, Y)  LCC_CAT_(X, Y)
 
 // clang-format off
 #define LCC_ASSERT(cond, ...) (cond ? void(0) :                \

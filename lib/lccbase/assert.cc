@@ -1,5 +1,6 @@
-#include <lcc/assert.hh>
-#include <lcc/diags.hh>
+#include <lccbase/assert.hh>
+
+#include <lccbase/diags.hh>
 
 #include <string>
 #include <utility>
