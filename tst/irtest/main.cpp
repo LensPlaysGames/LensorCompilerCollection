@@ -2,21 +2,24 @@
 
 #include <fmt/format.h>
 
-#include <lcc/context.hh>
 #include <lcc/core.hh>
-#include <lcc/file.hh>
 #include <lcc/format.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/opt.hh>
 #include <lcc/target.hh>
-#include <lcc/utils.hh>
+#include <lcc/utils/colours.hh>
 
 #include <lccjson/lccjson.hh>
+
+#include <lccbase/context.hh>
+#include <lccbase/file.hh>
 
 #include <cctype>
 #include <filesystem>
 #include <iterator>
+#include <string_view>
+#include <vector>
 
 const lcc::Target* default_target =
 #if defined(LCC_PLATFORM_WINDOWS)
@@ -30,7 +33,7 @@ const lcc::Target* default_target =
 /// Default format
 const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
 
-static lcc::utils::Colours C{true};
+static lcc::Colours C{true};
 
 struct TestNameAndResult {
     std::string_view name{};
@@ -333,9 +336,13 @@ auto print_test_passedfailed(const TestNameAndResult& result) -> std::string {
         "  {} {}: {}\n",
         fmt::format(
             "{}{}{}",
-            result.passed ? C(lcc::utils::Colour::BoldGreen) : C(lcc::utils::Colour::BoldRed),
-            result.passed ? 'O' : 'X',
-            C(lcc::utils::Colour::Reset)
+            result.passed
+                ? C(lcc::Colour::BoldGreen)
+                : C(lcc::Colour::BoldRed),
+            result.passed
+                ? 'O'
+                : 'X',
+            C(lcc::Colour::Reset)
         ),
         result.name,
         result.passed ? "PASSED" : "FAILED"
@@ -356,18 +363,18 @@ auto print_passedfailed(const std::vector<TestNameAndResult>& results) -> std::s
     fmt::format_to(
         std::back_inserter(out),
         "  {}PASSED:  {}/{}{}\n",
-        C(lcc::utils::Colour::Green),
+        C(lcc::Colour::Green),
         count_passed,
         results.size(),
-        C(lcc::utils::Colour::Reset)
+        C(lcc::Colour::Reset)
     );
     if (count_failed) {
         fmt::format_to(
             std::back_inserter(out),
             "  {}FAILED:  {}{}\n",
-            C(lcc::utils::Colour::Red),
+            C(lcc::Colour::Red),
             count_failed,
-            C(lcc::utils::Colour::Reset)
+            C(lcc::Colour::Reset)
         );
     }
 
@@ -400,7 +407,10 @@ void visit_directory(
                 fmt::print("{}", print_test_passedfailed(results.back()));
             };
 
-            auto& got_f = out.context.create_file(fmt::format("got.{}", t.name), lcc::utils::to_vec(t.input));
+            auto& got_f = out.context.create_file(
+                fmt::format("got.{}", t.name),
+                lcc::utils::to_vec(t.input)
+            );
             auto got = lcc::Module::Parse(&out.context, got_f);
             if (not got) {
                 testpassfail(t.name, false);
@@ -410,7 +420,10 @@ void visit_directory(
             if (t.optimise)
                 lcc::opt::Optimise(got.get(), t.optimise);
 
-            auto& expected_f = out.context.create_file(fmt::format("expected.{}", t.name), lcc::utils::to_vec(t.expected));
+            auto& expected_f = out.context.create_file(
+                fmt::format("expected.{}", t.name),
+                lcc::utils::to_vec(t.expected)
+            );
             auto expected = lcc::Module::Parse(&out.context, expected_f);
             if (not expected) {
                 lcc::Diag::Error("Test `{}` has malformed expected IR", t.name);
