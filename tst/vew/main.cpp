@@ -3,7 +3,7 @@
 
 #include <lccjson/lccjson.hh>
 
-#include <lcc/file.hh>
+#include <lccbase/file.hh>
 
 #include <fmt/format.h>
 
@@ -125,12 +125,12 @@ struct TextualResultsDisplay {
                 "\033[31;1m",
                 "\033[0m"
             );
-            for (const auto& r : std::ranges::views::transform(
-                     failures,
-                     [](auto x) { return *x; }
-                 )) {
-                fmt::format_to(it, "  {}\n", display_result(r));
-            }
+            for (
+                const auto& r : std::ranges::views::transform(
+                    failures,
+                    [](auto x) { return *x; }
+                )
+            ) fmt::format_to(it, "  {}\n", display_result(r));
         }
 
         return out;
