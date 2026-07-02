@@ -78,6 +78,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Use `ccache` if it is installed in system's PATH.
 find_program(CCACHE_PROGRAM ccache)
 if (CCACHE_PROGRAM)
+  message(STATUS "Using ccache")
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 endif()
 
@@ -94,9 +95,11 @@ endif()
 
 if (USE_LTO)
   # Do link time optimisation
+  # TODO Simple warning for debug builds
   # NOTE: We must ensure the linker matches the compiler toolchain for LTO
   # to work properly.
   if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # TODO If gcc >= 15, use -flto-incremental=<gnu-cache-directory>
     add_compile_options(-flto)
     add_link_options(-flto -fuse-ld=bfd)
   elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -112,6 +115,7 @@ else()
   # If we aren't doing LTO, we might as well try to use a faster linker.
   find_program(MOLD_LINKER "mold")
   if (MOLD_LINKER)
+    message(STATUS "Using mold linker")
     set(CMAKE_EXE_LINKER ${MOLD_LINKER})
   endif()
 endif()
