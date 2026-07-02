@@ -4,7 +4,6 @@
 #include <language_c/parser.hh>
 #include <language_c/sema.hh>
 
-#include <lcc/context.hh>
 #include <lcc/format.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
@@ -13,11 +12,13 @@
 
 #include <lccjson/lccjson.hh>
 
+#include <lccbase/context.hh>
+
 #include <algorithm>
 #include <filesystem>
 #include <string>
 #include <string_view>
-#include <unordered_map>
+#include <utility>
 #include <vector>
 
 static lcc::utils::Colours C{true};
