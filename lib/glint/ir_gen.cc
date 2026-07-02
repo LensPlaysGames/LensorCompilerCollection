@@ -8,7 +8,6 @@
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
-#include <lcc/utils.hh>
 #include <lcc/utils/rtti.hh>
 
 #include <lccbase/context.hh>
