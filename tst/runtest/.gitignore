@@ -1,2 +1,4 @@
 # Glint Metadata Binary Files (BMIs)
 *.gmeta
+# Test Result Database
+runtest.sqlite
