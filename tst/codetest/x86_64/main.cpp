@@ -5,7 +5,6 @@
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/format.hh>
 #include <lcc/ir/core.hh>
@@ -16,9 +15,14 @@
 
 #include <lccjson/lccjson.hh>
 
+#include <lccbase/context.hh>
+
+#include <cstdlib>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
