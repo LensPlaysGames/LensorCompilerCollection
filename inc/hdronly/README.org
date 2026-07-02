@@ -1,0 +1,5 @@
+* =hdronly=
+
+In C++, there are certain headers that have no corresponding implementation files, and are entirely self-contained; using them *does not require linking* with any library, since there is no outside code that the header relies on.
+
+Those go in a subdirectory, here.

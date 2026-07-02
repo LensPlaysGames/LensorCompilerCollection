@@ -1,4 +1,8 @@
 #include <lcc/codegen/mir.hh>
+
+#include <hdronly/lcc/fixcompilers.hh>
+#include <hdronly/lcc/typedefs.hh>
+
 #include <lcc/core.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>

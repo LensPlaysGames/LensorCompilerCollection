@@ -1,10 +1,12 @@
 #include <lcc/codegen/x86_64/assembly.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+#include <hdronly/lcc/typedefs.hh>
+
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/mir_utils.hh>
 #include <lcc/codegen/register_allocation.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lccbase/context.hh>
 #include <lcc/core.hh>
 #include <lcc/enum_to_underlying.hh>
 #include <lcc/fractionals.hh>
@@ -12,6 +14,8 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/version.hh>
+
+#include <lccbase/context.hh>
 
 #include <object/coff.h>
 

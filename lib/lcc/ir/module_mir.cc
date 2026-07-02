@@ -1,15 +1,17 @@
 #include <lcc/ir/module_mir.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+
 #include <lcc/calling_conventions/ms_x64.hh>
 #include <lcc/calling_conventions/sysv_x86_64.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lccbase/context.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
-#include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
+
+#include <lccbase/context.hh>
 
 #include <algorithm>
 #include <unordered_map>

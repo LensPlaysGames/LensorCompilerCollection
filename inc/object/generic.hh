@@ -1,10 +1,9 @@
 #ifndef LCC_GENERIC_OBJECT_HH
 #define LCC_GENERIC_OBJECT_HH
 
+#include <hdronly/lcc/typedefs.hh>
 #include <lcc/ir/core.hh>
-#include <lcc/typedefs.hh>
-#include <lcc/utils.hh>
-
+#
 #include <fmt/format.h>
 
 #include <climits>

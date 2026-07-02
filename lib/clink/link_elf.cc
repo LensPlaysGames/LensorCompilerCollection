@@ -1,5 +1,7 @@
 #include <clink/link_elf.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+
 #include <object/elf.h>
 #include <object/elf.hh>
 #include <object/generic.hh>

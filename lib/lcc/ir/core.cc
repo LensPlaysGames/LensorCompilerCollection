@@ -1,8 +1,8 @@
 #include <lcc/ir/core.hh>
 
-#include <lccbase/context.hh>
+#include <hdronly/lcc/fixcompilers.hh>
+
 #include <lcc/core.hh>
-#include <lccbase/diags.hh>
 #include <lcc/fractionals.hh>
 #include <lcc/ir/domtree.hh>
 #include <lcc/ir/module.hh>
@@ -11,6 +11,9 @@
 #include <lcc/utils/generator.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/utils/rtti.hh>
+
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>

@@ -1,12 +1,13 @@
 #include <clink/relocate.hh>
 
+#include <hdronly/lcc/typedefs.hh>
+
 #include <clink/layout.hh>
 
 #include <object/generic.hh>
 
-#include <lccbase/context.hh>
 #include <lcc/target.hh>
-#include <lcc/typedefs.hh>
+#include <lccbase/context.hh>
 
 #include <algorithm>
 #include <bit>

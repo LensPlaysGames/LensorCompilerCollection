@@ -1,5 +1,8 @@
 #include <lcc/ir/domtree.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+#include <hdronly/lcc/typedefs.hh>
+
 #include <string>
 #include <unordered_map>
 #include <utility>

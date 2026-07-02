@@ -1,6 +1,8 @@
 #include <object/coff.h>
 #include <object/generic.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+
 #include <lccbase/assert.hh>
 
 #include <algorithm>

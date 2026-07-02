@@ -1,11 +1,14 @@
 #include <lcc/opt.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+
 #include <lcc/always_false.hh>
-#include <lccbase/assert.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/domtree.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils.hh>
+
+#include <lccbase/assert.hh>
 #include <lccbase/context.hh>
 
 #include <algorithm>

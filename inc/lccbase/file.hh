@@ -1,7 +1,7 @@
 #ifndef LCC_FILE_HH
 #define LCC_FILE_HH
 
-#include <lcc/typedefs.hh>
+#include <hdronly/lcc/typedefs.hh>
 
 #include <filesystem>
 #include <string_view>

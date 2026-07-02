@@ -5,7 +5,7 @@
 #include <lccbase/file.hh>
 #include <lccbase/location.hh>
 
-#include <lcc/forward.hh>
+#include <hdronly/lcc/forward.hh>
 
 #include <algorithm>
 #include <filesystem>

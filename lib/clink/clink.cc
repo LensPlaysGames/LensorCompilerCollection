@@ -1,5 +1,8 @@
 #include <clink/clink.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+#include <hdronly/lcc/typedefs.hh>
+
 #include <clink/layout.hh>
 #include <clink/link_elf.hh>
 #include <clink/link_uarchive.hh>
@@ -10,12 +13,11 @@
 #include <object/elf.hh>
 #include <object/generic.hh>
 
+#include <lcc/format.hh>
+#include <lcc/target.hh>
 #include <lccbase/context.hh>
 #include <lccbase/diags.hh>
 #include <lccbase/file.hh>
-#include <lcc/format.hh>
-#include <lcc/target.hh>
-#include <lcc/typedefs.hh>
 
 #include <fmt/format.h>
 

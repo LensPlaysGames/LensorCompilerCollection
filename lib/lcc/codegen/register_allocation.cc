@@ -1,15 +1,20 @@
 #include <lcc/codegen/register_allocation.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+#include <hdronly/lcc/typedefs.hh>
+
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/ir/module.hh>
-#include <lcc/typedefs.hh>
 #include <lcc/utils.hh>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <iterator>
 #include <memory>
 #include <memory_resource>
 #include <ranges>

@@ -1,15 +1,16 @@
-#include <lccbase/assert.hh>
-#include <lccbase/diags.hh>
-#include <lccbase/location.hh>
+#include <glint/ast.hh>
+#include <glint/error_ids.hh>
+#include <glint/parser.hh>
+
 #include <lcc/stringmap.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
 
-#include <glint/ast.hh>
-#include <glint/error_ids.hh>
-#include <glint/parser.hh>
+#include <lccbase/assert.hh>
+#include <lccbase/diags.hh>
+#include <lccbase/location.hh>
 
 #include <memory>
 #include <string>

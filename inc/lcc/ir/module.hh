@@ -1,12 +1,15 @@
 #ifndef LCC_MODULE_HH
 #define LCC_MODULE_HH
 
-#include <lccbase/diags.hh>
-#include <lcc/forward.hh>
+#include <hdronly/lcc/forward.hh>
+
 #include <lcc/ir/core.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/result.hh>
+
 #include <object/generic.hh>
+
+#include <lccbase/diags.hh>
 
 #include <algorithm>
 #include <memory>

@@ -5,7 +5,8 @@
 // like "misc", "utils", etc. It should be it's own library, or it should
 // have it's own file in the LCC library, if it's worth implementing.
 
-#include <lcc/typedefs.hh>
+#include <hdronly/lcc/typedefs.hh>
+
 #include <lccbase/assert.hh>
 
 #include <fmt/color.h>
@@ -372,16 +373,5 @@ struct fmt::formatter<T> {
         return fmt::format_to(ctx.out(), "{}", StringifyEnum(t));
     }
 };
-
-#ifndef __cpp_lib_ranges_enumerate
-// #    warning "LCC providing implementation of std::ranges::views::enumerate()"
-namespace std::ranges::views {
-template <typename T>
-auto enumerate(T&& v) {
-    return std::views::zip(std::views::iota(0), v);
-};
-}
-
-#endif // __cpp_lib_ranges_enumerate
 
 #endif // LCC_UTILS_HH

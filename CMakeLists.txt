@@ -407,6 +407,9 @@ target_link_libraries(object PRIVATE options)
 # Add the main lcc library.
 add_library(
   liblcc
+  inc/hdronly/lcc/fixcompilers.hh
+  inc/hdronly/lcc/forward.hh
+  inc/hdronly/lcc/typedefs.hh
   inc/lcc/always_false.hh
   inc/lcc/calling_convention.hh
   inc/lcc/calling_conventions/ms_x64.hh
@@ -423,7 +426,6 @@ add_library(
   inc/lcc/core.hh
   inc/lcc/enum_to_underlying.hh
   inc/lcc/format.hh
-  inc/lcc/forward.hh
   inc/lcc/fractionals.hh
   inc/lcc/ir/core.hh
   inc/lcc/ir/domtree.hh
@@ -436,7 +438,6 @@ add_library(
   inc/lcc/syntax/lexer.hh
   inc/lcc/syntax/token.hh
   inc/lcc/target.hh
-  inc/lcc/typedefs.hh
   inc/lcc/utils.hh
   inc/lcc/utils/aint.hh
   inc/lcc/utils/ast_printer.hh

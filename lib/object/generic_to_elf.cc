@@ -1,12 +1,13 @@
 #include <object/elf.h>
 #include <object/generic.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+
 #include <lccbase/assert.hh>
 
 #include <clink/layout.hh>
 
 #include <algorithm>
-#include <cstdio>
 #include <cstring>
 #include <iterator>
 #include <ranges>

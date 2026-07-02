@@ -1,9 +1,9 @@
 #include <language_c/ast.hh>
-
 #include <language_c/parser.hh>
 
-#include <lccbase/diags.hh>
 #include <lcc/enum_to_underlying.hh>
+
+#include <lccbase/diags.hh>
 #include <lccbase/location.hh>
 
 #include <fmt/base.h>

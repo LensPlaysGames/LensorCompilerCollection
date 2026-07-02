@@ -1,10 +1,12 @@
 #ifndef LCC_UTILS_IR_PRINTER_HH
 #define LCC_UTILS_IR_PRINTER_HH
 
-#include <lccbase/context.hh>
+#include <hdronly/lcc/fixcompilers.hh>
+
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
-#include <lcc/utils.hh>
+
+#include <lccbase/context.hh>
 
 #include <iterator>
 #include <string>

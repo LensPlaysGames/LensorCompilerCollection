@@ -1,7 +1,8 @@
 #ifndef LCC_IR_TYPE_HH
 #define LCC_IR_TYPE_HH
 
-#include <lcc/forward.hh>
+#include <hdronly/lcc/forward.hh>
+
 #include <lcc/utils.hh>
 
 #include <string>

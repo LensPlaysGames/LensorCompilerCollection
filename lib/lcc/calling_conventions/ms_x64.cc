@@ -1,4 +1,8 @@
 #include <lcc/calling_conventions/ms_x64.hh>
+
+#include <hdronly/lcc/fixcompilers.hh>
+#include <hdronly/lcc/typedefs.hh>
+
 #include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/ir/type.hh>
 

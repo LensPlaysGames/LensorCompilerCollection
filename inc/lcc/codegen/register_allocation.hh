@@ -1,7 +1,7 @@
 #ifndef LCC_REGISTER_ALLOCATION_HH
 #define LCC_REGISTER_ALLOCATION_HH
 
-#include <lcc/forward.hh>
+#include <hdronly/lcc/forward.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/result.hh>
 

@@ -1,7 +1,7 @@
 #ifndef LCC_LOCATION_HH
 #define LCC_LOCATION_HH
 
-#include <lcc/typedefs.hh>
+#include <hdronly/lcc/typedefs.hh>
 
 #include <algorithm>
 

@@ -2,7 +2,7 @@
 #define LCC_CALLING_CONVENTION_MS_X64_HH
 
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lcc/typedefs.hh>
+#include <hdronly/lcc/typedefs.hh>
 
 #include <array>
 #include <vector>

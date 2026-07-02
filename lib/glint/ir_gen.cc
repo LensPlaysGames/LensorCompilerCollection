@@ -1,14 +1,18 @@
 #include <glint/ir_gen.hh>
 
-#include <lccbase/context.hh>
+#include <hdronly/lcc/fixcompilers.hh>
+#include <hdronly/lcc/typedefs.hh>
+
 #include <lcc/core.hh>
-#include <lccbase/diags.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/rtti.hh>
+
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 
 #include <glint/ast.hh>
 

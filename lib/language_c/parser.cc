@@ -1,11 +1,14 @@
 #include <language_c/parser.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+
 #include <language_c/ast.hh>
 #include <language_c/type.hh>
 
-#include <lccbase/diags.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
+
+#include <lccbase/diags.hh>
 
 #include <fmt/format.h>
 #include <fmt/std.h>
@@ -1302,10 +1305,10 @@ auto Parser::ParseBaseType() -> Result<Type*> {
         case TokenKind::KwRestrict:
         case TokenKind::KwAtomic:
         case TokenKind::KwConstexpr:
-        case TokenKind::KwAuto:
         case TokenKind::KwExtern:
         case TokenKind::KwRegister:
         case TokenKind::KwStatic:
+        case TokenKind::KwAuto:
             LCC_TODO("Collect qualifier");
 
         case TokenKind::Invalid:
