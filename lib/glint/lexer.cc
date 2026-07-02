@@ -1,17 +1,19 @@
-#include <lccbase/assert.hh>
-#include <lccbase/diags.hh>
+#include <glint/lexer.hh>
+
+#include <glint/ast.hh>
+#include <glint/error_ids.hh>
+#include <glint/parser.hh>
+
 #include <lcc/stringmap.hh>
 #include <lcc/utf8.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
 
-#include <fmt/format.h>
+#include <lccbase/assert.hh>
+#include <lccbase/diags.hh>
 
-#include <glint/ast.hh>
-#include <glint/error_ids.hh>
-#include <glint/lexer.hh>
-#include <glint/parser.hh>
+#include <fmt/format.h>
 
 #include <concepts>
 #include <cstdlib>
@@ -695,7 +697,8 @@ void lcc::glint::Lexer::NextIdentifier() {
     // instead of appending character by character, DON’T. There is a REASON
     // why NextChar() exists. Character != byte in the source file.
     do {
-        if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in identifier");
+        if (lastc > 0xff)
+            LCC_TODO("Handle unicode codepoint in identifier");
         tok.text += char(lastc);
         NextChar();
     } while (IsIdentContinue(lastc));
@@ -710,7 +713,9 @@ void lcc::glint::Lexer::HandleIdentifier() {
 
     auto macro = rgs::find_if(
         macros,
-        [&](const auto& m) { return m.name == tok.text; }
+        [&](const auto& m) {
+            return m.name == tok.text;
+        }
     );
 
     if (macro != macros.end()) {
@@ -718,16 +723,21 @@ void lcc::glint::Lexer::HandleIdentifier() {
         return;
     }
 
-    if (auto kw = keywords.find(tok.text); kw != keywords.end()) {
+    if (
+        auto kw = keywords.find(tok.text);
+        kw != keywords.end()
+    ) {
         tok.kind = kw->second;
         return;
     }
 
     /// Try and parse a number just after encountering `s` or `u` at the
     /// beginning of an identifier.
-    if (tok.text.size() > 1
+    if (
+        tok.text.size() > 1
         and (tok.text[0] == 's' or tok.text[0] == 'i' or tok.text[0] == 'u')
-        and IsDecimalDigit(u32(tok.text[1]))) {
+        and IsDecimalDigit(u32(tok.text[1]))
+    ) {
         const char* cstr = tok.text.c_str();
 
         /// Convert the number.
@@ -833,14 +843,19 @@ void lcc::glint::Lexer::NextNumber() {
     );
 
     // Helper that actually parses the number.
-    const auto ParseNumber = [&](std::string_view name, auto&& IsValidDigit, int base) {
+    const auto ParseNumber = [&](
+                                 std::string_view name,
+                                 auto&& IsValidDigit,
+                                 int base
+                             ) {
         // Yeet prefix.
         if (base != 10) NextChar();
 
         // Lex digits (and maybe digit separators).
         while (IsValidDigit(lastc) or lastc == DigitSeparator) {
             if (lastc != DigitSeparator) {
-                if (lastc > 0xff) LCC_TODO("Handle unicode codepoint in number literal");
+                if (lastc > 0xff)
+                    LCC_TODO("Handle unicode codepoint in number literal");
                 tok.text += char(lastc);
             }
             NextChar();
