@@ -29,7 +29,7 @@ int const x;
 (block (declaration))
 
 ================
-int const Declaration
+Extra Trailing const
 :syntax_error
 ================
 

@@ -1,8 +1,8 @@
 #include <language_c/type.hh>
 
-#include <lccbase/diags.hh>
 #include <lcc/target.hh>
 #include <lcc/utils/result.hh>
+#include <lccbase/diags.hh>
 
 #include <fmt/base.h>
 #include <fmt/format.h>
@@ -42,6 +42,30 @@ auto fmt::formatter<lcc::language_c::Type>::format(
     const lcc::language_c::Type& t,
     format_context& ctx
 ) const -> format_context::iterator {
+    using Flag = lcc::language_c::Type::Flag;
+
+    static_assert(
+        (unsigned int) Flag::Count == 8,
+        "Exhaustive handling of C type flags"
+    );
+    if (t.flag(Flag::Constexpr))
+        fmt::format_to(ctx.out(), "constexpr ");
+    else if (t.flag(Flag::Const))
+        fmt::format_to(ctx.out(), "const ");
+
+    if (t.flag(Flag::Atomic))
+        fmt::format_to(ctx.out(), "_Atomic ");
+    if (t.flag(Flag::Extern))
+        fmt::format_to(ctx.out(), "extern ");
+    if (t.flag(Flag::Register))
+        fmt::format_to(ctx.out(), "register ");
+    if (t.flag(Flag::Restrict))
+        fmt::format_to(ctx.out(), "restrict ");
+    if (t.flag(Flag::Volatile))
+        fmt::format_to(ctx.out(), "volatile ");
+    if (t.flag(Flag::Static))
+        fmt::format_to(ctx.out(), "static ");
+
     switch (t.kind()) {
         case lcc::language_c::TypeKind::Bool:
             return fmt::format_to(ctx.out(), "bool");
@@ -58,8 +82,10 @@ auto fmt::formatter<lcc::language_c::Type>::format(
 
         case lcc::language_c::TypeKind::Void:
             return fmt::format_to(ctx.out(), "void");
-        case lcc::language_c::TypeKind::Pointer:
-            return fmt::format_to(ctx.out(), "pointer");
+        case lcc::language_c::TypeKind::Pointer: {
+            const lcc::language_c::PointerType& p{*(const lcc::language_c::PointerType*) &t};
+            return fmt::format_to(ctx.out(), "pointer to {}", *p.element_type());
+        }
         case lcc::language_c::TypeKind::Function: {
             const lcc::language_c::FunctionType& f{*(const lcc::language_c::FunctionType*) &t};
             return fmt::format_to(ctx.out(), "{}({})", *f.return_type(), fmt::join(f.parameters(), ", "));

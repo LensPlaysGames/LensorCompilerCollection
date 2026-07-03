@@ -25,10 +25,11 @@ namespace lcc::language_c {
 
 namespace {
 
+[[nodiscard]]
 Type::flag_t flag_from_keyword(TokenKind k) {
     switch (k) {
         case TokenKind::KwConst:
-            return Type::flag_value(Type::Flag::Static);
+            return Type::flag_value(Type::Flag::Const);
         case TokenKind::KwVolatile:
             return Type::flag_value(Type::Flag::Volatile);
         case TokenKind::KwRestrict:
@@ -36,7 +37,8 @@ Type::flag_t flag_from_keyword(TokenKind k) {
         case TokenKind::KwAtomic:
             return Type::flag_value(Type::Flag::Atomic);
         case TokenKind::KwConstexpr:
-            return Type::flag_value(Type::Flag::Constexpr);
+            return Type::flag_value(Type::Flag::Constexpr)
+                 | Type::flag_value(Type::Flag::Const);
         case TokenKind::KwExtern:
             return Type::flag_value(Type::Flag::Extern);
         case TokenKind::KwRegister:
@@ -296,6 +298,15 @@ StringMap<TokenKind> keywords{
     {"_Alignof", TokenKind::KwAlignof},
     {"long", TokenKind::KwLong},
     {"short", TokenKind::KwShort},
+    {"const", TokenKind::KwConst},
+    {"volatile", TokenKind::KwVolatile},
+    {"restrict", TokenKind::KwRestrict},
+    {"_Atomic", TokenKind::KwAtomic},
+    {"constexpr", TokenKind::KwConstexpr},
+    {"auto", TokenKind::KwAuto},
+    {"extern", TokenKind::KwExtern},
+    {"register", TokenKind::KwRegister},
+    {"static", TokenKind::KwStatic},
 };
 
 bool IsSpace(uint32_t c) {
@@ -1166,6 +1177,7 @@ auto Parser::ParseDeclarators(Type* type_specifier)
             and tok.kind != TokenKind::Eof
             and tok.kind != TokenKind::OpComma and tok.kind != TokenKind::Semicolon
             and tok.kind != TokenKind::LeftParenthesis and tok.kind != TokenKind::LeftSquareBracket
+            and tok.kind != TokenKind::OpEqual
         ) {
             switch (tok.kind) {
                 default:
@@ -1180,15 +1192,32 @@ auto Parser::ParseDeclarators(Type* type_specifier)
                     }
 
                     current_declarator_name = tok.text;
+                    NextToken();
                     break;
 
                 case TokenKind::OpAsterisk:
                     auto location = Location{current_declarator_type->location(), tok.location};
                     NextToken();
                     current_declarator_type = new (tu) PointerType(current_declarator_type, location);
+                    // const pointer syntax
+                    if (tok.kind == TokenKind::KwConst) {
+                        current_declarator_type->flag(Type::Flag::Const, true);
+                        NextToken();
+                    }
+                    if (tok.kind == TokenKind::KwVolatile) {
+                        current_declarator_type->flag(Type::Flag::Volatile, true);
+                        NextToken();
+                    }
+                    if (tok.kind == TokenKind::KwAtomic) {
+                        current_declarator_type->flag(Type::Flag::Atomic, true);
+                        NextToken();
+                    }
+                    if (tok.kind == TokenKind::KwRestrict) {
+                        current_declarator_type->flag(Type::Flag::Restrict, true);
+                        NextToken();
+                    }
                     break;
             }
-            NextToken();
         }
 
         if (current_declarator_name.empty()) {
@@ -1360,104 +1389,155 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
 
 auto Parser::ParseBaseType(Type::flag_t flags) -> Result<Type*> {
     Type* out{};
-    switch (tok.kind) {
-        case TokenKind::Identifier: {
-            Diag::ICE("TODO: Is identifier declared type?");
+
+#define out_already                           \
+    if (out) return Error(                    \
+        "c/expected",                         \
+        "Unexpected `{}` while parsing type", \
+        ToString(tok.kind)                    \
+    )
+
+    do {
+        switch (tok.kind) {
+            case TokenKind::Identifier:
+                if (_declared_types.contains(tok.text)) {
+                    out_already;
+                    out = _declared_types.at(tok.text);
+                    NextToken();
+                }
+                break;
+
+            case TokenKind::KwVoid: {
+                out_already;
+                out = new (tu) VoidType(tok.location);
+                NextToken();
+            }
+                continue;
+
+            case TokenKind::KwBool: {
+                out_already;
+                out = new (tu) BoolType(tok.location);
+                NextToken();
+            }
+                continue;
+
+            case TokenKind::KwChar: {
+                out_already;
+                out = new (tu) CharType(true, tok.location);
+                NextToken();
+            }
+                continue;
+
+            case TokenKind::KwShort: {
+                out_already;
+                out = new (tu) ShortType(true, tok.location);
+                NextToken();
+            }
+                continue;
+
+            case TokenKind::KwInt: {
+                out_already;
+                out = new (tu) IntType(true, tok.location);
+                NextToken();
+            }
+                continue;
+
+            case TokenKind::KwLong: {
+                out_already;
+                auto location = tok.location;
+                NextToken();
+                if (tok.kind == TokenKind::KwLong) {
+                    out = new (tu) LongLongType(true, {location, tok.location});
+                    NextToken();
+                } else out = new (tu) LongType(true, location);
+            }
+                continue;
+
+            case TokenKind::KwConst:
+            case TokenKind::KwVolatile:
+            case TokenKind::KwRestrict:
+            case TokenKind::KwAtomic:
+            case TokenKind::KwConstexpr:
+            case TokenKind::KwExtern:
+            case TokenKind::KwRegister:
+            case TokenKind::KwStatic: {
+#ifdef LCC_C_EXTENSIONS
+                if (out) {
+                    Warning(
+                        "lcc/declaration-inner-ordering",
+                        "Storage class specifier or type qualifier `{}` appears _after_ base type",
+                        ToString(tok.kind)
+                    );
+                }
+#endif
+                flags |= flag_from_keyword(tok.kind);
+                NextToken();
+            }
+                continue;
+
+            case TokenKind::KwAuto:
+                /** (!) -- No-op */
+                NextToken();
+                continue;
+
+            case TokenKind::Invalid:
+            case TokenKind::Integer:
+            case TokenKind::Fractional:
+            case TokenKind::String:
+            case TokenKind::KwReturn:
+            case TokenKind::KwSizeof:
+            case TokenKind::KwAlignof:
+            case TokenKind::OpEqual:
+            case TokenKind::OpLessThan:
+            case TokenKind::OpGreaterThan:
+            case TokenKind::OpDoublePipe:
+            case TokenKind::OpDoubleAmpersand:
+            case TokenKind::OpExclamation:
+            case TokenKind::OpPlus:
+            case TokenKind::OpMinus:
+            case TokenKind::OpAsterisk:
+            case TokenKind::OpSlash:
+            case TokenKind::OpPercent:
+            case TokenKind::OpComma:
+            case TokenKind::OpDot:
+            case TokenKind::OpArrow:
+            case TokenKind::OpPlusPlus:
+            case TokenKind::OpMinusMinus:
+            case TokenKind::OpCaret:
+            case TokenKind::OpPipe:
+            case TokenKind::OpAmpersand:
+            case TokenKind::OpTilde:
+            case TokenKind::OpShiftLeft:
+            case TokenKind::OpShiftRight:
+            case TokenKind::OpDoubleEqual:
+            case TokenKind::OpLessThanEqual:
+            case TokenKind::OpGreaterThanEqual:
+            case TokenKind::OpExclamationEqual:
+            case TokenKind::OpPlusEqual:
+            case TokenKind::OpMinusEqual:
+            case TokenKind::OpAsteriskEqual:
+            case TokenKind::OpSlashEqual:
+            case TokenKind::OpPercentEqual:
+            case TokenKind::OpCaretEqual:
+            case TokenKind::OpPipeEqual:
+            case TokenKind::OpAmpersandEqual:
+            case TokenKind::OpShiftLeftEqual:
+            case TokenKind::OpShiftRightEqual:
+            case TokenKind::LeftParenthesis:
+            case TokenKind::RightParenthesis:
+            case TokenKind::LeftSquareBracket:
+            case TokenKind::RightSquareBracket:
+            case TokenKind::LeftCurlyBrace:
+            case TokenKind::RightCurlyBrace:
+            case TokenKind::Semicolon:
+            case TokenKind::Eof:
+            case TokenKind::Count:
+                break;
         }
 
-        case TokenKind::KwVoid: {
-            NextToken();
-            out = new (tu) VoidType(tok.location);
-        } break;
-        case TokenKind::KwBool: {
-            NextToken();
-            out = new (tu) BoolType(tok.location);
-        } break;
-        case TokenKind::KwChar: {
-            NextToken();
-            out = new (tu) CharType(true, tok.location);
-        } break;
-        case TokenKind::KwShort: {
-            NextToken();
-            out = new (tu) ShortType(true, tok.location);
-        } break;
-        case TokenKind::KwInt: {
-            NextToken();
-            out = new (tu) IntType(true, tok.location);
-        } break;
-        case TokenKind::KwLong: {
-            NextToken();
-            if (tok.kind == TokenKind::KwLong) {
-                NextToken();
-                out = new (tu) LongLongType(true, tok.location);
-            } else out = new (tu) LongType(true, tok.location);
-        } break;
+        break;
 
-        case TokenKind::KwConst:
-        case TokenKind::KwVolatile:
-        case TokenKind::KwRestrict:
-        case TokenKind::KwAtomic:
-        case TokenKind::KwConstexpr:
-        case TokenKind::KwExtern:
-        case TokenKind::KwRegister:
-        case TokenKind::KwStatic:
-        case TokenKind::KwAuto:
-            LCC_TODO("Collect qualifier");
-
-        case TokenKind::Invalid:
-        case TokenKind::Integer:
-        case TokenKind::Fractional:
-        case TokenKind::String:
-        case TokenKind::KwReturn:
-        case TokenKind::KwSizeof:
-        case TokenKind::KwAlignof:
-        case TokenKind::OpEqual:
-        case TokenKind::OpLessThan:
-        case TokenKind::OpGreaterThan:
-        case TokenKind::OpDoublePipe:
-        case TokenKind::OpDoubleAmpersand:
-        case TokenKind::OpExclamation:
-        case TokenKind::OpPlus:
-        case TokenKind::OpMinus:
-        case TokenKind::OpAsterisk:
-        case TokenKind::OpSlash:
-        case TokenKind::OpPercent:
-        case TokenKind::OpComma:
-        case TokenKind::OpDot:
-        case TokenKind::OpArrow:
-        case TokenKind::OpPlusPlus:
-        case TokenKind::OpMinusMinus:
-        case TokenKind::OpCaret:
-        case TokenKind::OpPipe:
-        case TokenKind::OpAmpersand:
-        case TokenKind::OpTilde:
-        case TokenKind::OpShiftLeft:
-        case TokenKind::OpShiftRight:
-        case TokenKind::OpDoubleEqual:
-        case TokenKind::OpLessThanEqual:
-        case TokenKind::OpGreaterThanEqual:
-        case TokenKind::OpExclamationEqual:
-        case TokenKind::OpPlusEqual:
-        case TokenKind::OpMinusEqual:
-        case TokenKind::OpAsteriskEqual:
-        case TokenKind::OpSlashEqual:
-        case TokenKind::OpPercentEqual:
-        case TokenKind::OpCaretEqual:
-        case TokenKind::OpPipeEqual:
-        case TokenKind::OpAmpersandEqual:
-        case TokenKind::OpShiftLeftEqual:
-        case TokenKind::OpShiftRightEqual:
-        case TokenKind::LeftParenthesis:
-        case TokenKind::RightParenthesis:
-        case TokenKind::LeftSquareBracket:
-        case TokenKind::RightSquareBracket:
-        case TokenKind::LeftCurlyBrace:
-        case TokenKind::RightCurlyBrace:
-        case TokenKind::Semicolon:
-        case TokenKind::Eof:
-        case TokenKind::Count:
-            break;
-    }
+    } while (true);
 
     if (not out)
         return Error("c/expected", "Expected type, got {}", tok.kind);
@@ -1465,6 +1545,8 @@ auto Parser::ParseBaseType(Type::flag_t flags) -> Result<Type*> {
     out->_flags = flags;
 
     return out;
+
+#undef out_already
 };
 
 auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {

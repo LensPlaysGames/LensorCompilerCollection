@@ -28,13 +28,15 @@ auto Sema::type_of(const Node* n) -> Result<Type*> {
     switch (n->kind()) {
         case NodeKind::BinaryOperation: {
             auto* b = (BinaryOperation*) n;
+
+            auto lhs_type = type_of(b->lhs());
+            if (not lhs_type) return lhs_type.diag();
+            auto rhs_type = type_of(b->lhs());
+            if (not rhs_type) return rhs_type.diag();
+
             // TODO: usual arithmetic conversions | C23 § 6.3.1.8 (promotion)
             switch (b->binary_operator()) {
                 case TokenKind::OpPlus: {
-                    auto lhs_type = type_of(b->lhs());
-                    if (not lhs_type) return lhs_type.diag();
-                    auto rhs_type = type_of(b->lhs());
-                    if (not rhs_type) return rhs_type.diag();
                     // If one of the operands is a pointer, the other operand must be of
                     // integer type. Otherwise, both operands must be of arithmetic type.
                     if (
@@ -67,14 +69,16 @@ auto Sema::type_of(const Node* n) -> Result<Type*> {
                 case TokenKind::OpSlash:
                 case TokenKind::OpPercent: {
                     // FIXME: Type promotion, or something.
-                    out = type_of(b->lhs());
-                    break;
-                }
+                    out = *lhs_type;
+                } break;
+
+                case TokenKind::OpEqual: {
+                    out = *lhs_type;
+                } break;
 
                 case TokenKind::LeftSquareBracket:
                     Diag::ICE("sema::type_of subscript");
 
-                case TokenKind::OpEqual:
                 case TokenKind::OpLessThan:
                 case TokenKind::OpGreaterThan:
                 case TokenKind::OpDoublePipe:
@@ -410,9 +414,33 @@ Result<void> Sema::analyse_binary(BinaryOperation*& b) {
         case TokenKind::OpDoubleEqual:
             Diag::ICE("Handle binary logical operator `{}` (sema)", b->binary_operator());
 
-        case TokenKind::OpEqual:
+        case TokenKind::OpEqual: {
             // TODO: Error if lhs isn't lvalue
+
+            // Error if type of lhs is const
+            if (type_of(b->lhs())->flag(Type::Flag::Const)) {
+                auto e = Error(
+                    b->location(),
+                    "c/constness",
+                    "Assignment to an object marked as const"
+                );
+                // TODO: If we can find the declaration where it was marked as const,
+                // attach that as a Note diagnostic.
+                return e;
+            }
+
             // TODO: Error if type of rhs isn't convertible to type of lhs
+            // TODO: Better convertible check...
+            if (type_of(b->lhs())->kind() != type_of(b->rhs())->kind()) {
+                return Error(
+                    b->location(),
+                    "c/type-mismatch",
+                    "Type of rhs of assignment, {}, is not convertible to type of lhs of assignment, {}",
+                    **type_of(b->lhs()),
+                    **type_of(b->rhs())
+                );
+            }
+        } break;
 
         case TokenKind::OpDot:
             // TODO: Error if lhs isn't a structure

@@ -141,6 +141,8 @@ class Parser : Lexer {
     std::vector<Scope*> _scopes{};
     Scope* _current_scope{};
 
+    StringMap<Type*> _declared_types{};
+
     bool IsFunctionDefinition(Node*);
 
     Result<std::vector<Node*>> ParseDeclarators(Type* type_specifier);
@@ -166,6 +168,10 @@ public:
 
     auto scopes() const { return _scopes; }
     auto current_scope() const { return _current_scope; }
+
+    auto declared_types() const -> const decltype(_declared_types)& {
+        return _declared_types;
+    }
 
     static auto Parse(Context*, File&) -> TranslationUnit;
 };

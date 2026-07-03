@@ -81,7 +81,7 @@ public:
     auto kind() const { return _kind; }
     auto location() { return _location; }
 
-    bool flag(Flag f) {
+    bool flag(Flag f) const {
         return _flags & flag_value(f);
     }
     void flag(Flag f, bool new_value) {
