@@ -1,0 +1,14 @@
+================
+Simple Const Disallow Assign
+:sema_error
+================
+
+int main() {
+    const int a = 0;
+    a = 1;
+    return a;
+}
+
+---
+
+()

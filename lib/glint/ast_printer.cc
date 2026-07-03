@@ -1,6 +1,7 @@
 // This file implements the print-out used by `--ast`, more or less.
 
 #include <lcc/utils/ast_printer.hh>
+#include <lcc/utils/colours.hh>
 #include <lcc/utils/rtti.hh>
 
 #include <glint/ast.hh>
@@ -18,7 +19,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, lcc::glint::Expr, lcc::gl
     // static constexpr lcc::utils::Colour name_colour{Green};
 
     // Used to highlight key details, like binary/unary operators, integer literal values, etc.
-    static constexpr lcc::utils::Colour key_detail_colour{Red};
+    static constexpr lcc::Colour key_detail_colour{Red};
 
     std::unordered_set<const lcc::glint::FuncDecl*> printed_functions{};
     bool print_children_of_children = true;
@@ -414,10 +415,10 @@ void lcc::glint::Expr::print(bool use_colour) const {
 }
 
 auto lcc::glint::Type::string(bool use_colours) const -> std::string {
-    static constexpr lcc::utils::Colour type_colour{lcc::utils::Colour::Cyan};
+    static constexpr lcc::Colour type_colour{lcc::Colour::Cyan};
 
-    lcc::utils::Colours C{use_colours};
-    using enum lcc::utils::Colour;
+    lcc::Colours C{use_colours};
+    using enum lcc::Colour;
 
     switch (kind()) {
         case Kind::Named:

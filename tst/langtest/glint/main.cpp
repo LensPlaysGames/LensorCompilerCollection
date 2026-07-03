@@ -9,6 +9,7 @@
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
+#include <lcc/utils/colours.hh>
 
 #include <lccjson/lccjson.hh>
 
@@ -22,8 +23,8 @@
 #include <utility>
 #include <vector>
 
-static lcc::utils::Colours C{true};
-using lcc::utils::Colour;
+static lcc::Colours C{true};
+using lcc::Colour;
 
 /// Default target.
 const lcc::Target* default_target =
@@ -183,7 +184,7 @@ struct GlintTest : langtest::Test {
                 // Turn the text back to regular where the expected and got text last
                 // differ.
                 // We do this first so that we don't invalidate the diff begin offset.
-                auto reset_color = C(lcc::utils::Colour::Reset);
+                auto reset_color = C(lcc::Colour::Reset);
                 expected.insert(
                     std::max(
                         expected.end() - lcc::isz(diff_end),
@@ -193,7 +194,7 @@ struct GlintTest : langtest::Test {
                     reset_color.end()
                 );
                 // Turn the text green where the expected and got text first differ.
-                auto expected_color = C(lcc::utils::Colour::Green);
+                auto expected_color = C(lcc::Colour::Green);
                 expected.insert(
                     expected.begin() + lcc::isz(diff_begin),
                     expected_color.begin(),
@@ -211,7 +212,7 @@ struct GlintTest : langtest::Test {
                     reset_color.end()
                 );
                 // Turn the text red where the expected and got text first differ.
-                auto got_color = C(lcc::utils::Colour::Red);
+                auto got_color = C(lcc::Colour::Red);
                 got.insert(
                     got.begin() + lcc::isz(diff_begin),
                     got_color.begin(),
@@ -314,17 +315,17 @@ void visit_directory(langtest::TestContext& out, std::filesystem::path directory
             if (option_count) {
                 fmt::print(
                     "  {}PASSED:  {}/{}{}\n",
-                    C(lcc::utils::Colour::Green),
+                    C(lcc::Colour::Green),
                     count.count_passed(),
                     count.count(),
-                    C(lcc::utils::Colour::Reset)
+                    C(lcc::Colour::Reset)
                 );
                 if (count.count_failed()) {
                     fmt::print(
                         "  {}FAILED:  {}{}\n",
-                        C(lcc::utils::Colour::Red),
+                        C(lcc::Colour::Red),
                         count.count_failed(),
-                        C(lcc::utils::Colour::Reset)
+                        C(lcc::Colour::Reset)
                     );
                 }
             }
@@ -540,22 +541,22 @@ int main(int argc, const char** argv) {
             "  {}PASSED:  {}{}\n"
             "  {}FAILED:  {}{}\n",
             out.count(),
-            C(lcc::utils::Colour::Green),
+            C(lcc::Colour::Green),
             out.count_passed(),
-            C(lcc::utils::Colour::Reset),
-            C(lcc::utils::Colour::Red),
+            C(lcc::Colour::Reset),
+            C(lcc::Colour::Red),
             out.count_failed(),
-            C(lcc::utils::Colour::Reset)
+            C(lcc::Colour::Reset)
         );
     } else {
         fmt::print(
             "~~~~~~~~~~~~~~~~~~~~~~~~\n"
             "{}    ALL TESTS PASSED: {}/{}{}\n"
             "~~~~~~~~~~~~~~~~~~~~~~~~\n",
-            C(lcc::utils::Colour::Green),
+            C(lcc::Colour::Green),
             out.count(),
             out.count(),
-            C(lcc::utils::Colour::Reset)
+            C(lcc::Colour::Reset)
         );
     }
 

@@ -445,6 +445,7 @@ add_library(
   inc/lcc/utils.hh
   inc/lcc/utils/aint.hh
   inc/lcc/utils/ast_printer.hh
+  inc/lcc/utils/colours.hh
   inc/lcc/utils/dependency_graph.hh
   inc/lcc/utils/generator.hh
   inc/lcc/utils/ir_printer.hh

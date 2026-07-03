@@ -1,0 +1,40 @@
+================
+int Declaration
+================
+
+int x;
+
+---
+
+(block (declaration))
+
+================
+const int Declaration
+================
+
+const int x;
+
+---
+
+(block (declaration))
+
+================
+int const Declaration
+================
+
+int const x;
+
+---
+
+(block (declaration))
+
+================
+int const Declaration
+:syntax_error
+================
+
+int const x const;
+
+---
+
+()

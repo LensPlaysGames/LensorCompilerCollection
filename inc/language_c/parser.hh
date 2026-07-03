@@ -3,11 +3,11 @@
 
 #include <language_c/ast.hh>
 
-#include <lccbase/context.hh>
-#include <lccbase/file.hh>
 #include <lcc/syntax/lexer.hh>
 #include <lcc/syntax/token.hh>
 #include <lcc/utils/result.hh>
+#include <lccbase/context.hh>
+#include <lccbase/file.hh>
 
 #include <fmt/base.h>
 
@@ -106,7 +106,9 @@ enum class TokenKind : unsigned int {
     Eof,
     Count,
 };
+
 using Token = syntax::Token<TokenKind>;
+
 class Lexer : public syntax::Lexer<Token> {
     std::list<Token> _next_tokens{};
     std::list<std::vector<char>> _including{};
@@ -143,7 +145,7 @@ class Parser : Lexer {
 
     Result<std::vector<Node*>> ParseDeclarators(Type* type_specifier);
     Result<Node*> ParseDeclarations(Type* type_specifier);
-    Result<Type*> ParseBaseType();
+    Result<Type*> ParseBaseType(Type::flag_t flags);
     Result<Node*> ParseExpression(size_t precedence);
     Result<std::vector<Node*>> ParseExpressions(TokenKind until);
 

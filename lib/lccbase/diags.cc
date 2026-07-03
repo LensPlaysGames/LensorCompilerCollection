@@ -1,11 +1,11 @@
 #include <lccbase/diags.hh>
 
+#include <lcc/utils/colours.hh>
+#include <lcc/utils/macros.hh>
+
 #include <lccbase/assert.hh>
 #include <lccbase/context.hh>
 #include <lccbase/platform.hh>
-
-#include <lcc/utils/colours.hh>
-#include <lcc/utils/macros.hh>
 
 #include <algorithm>
 #include <cstdlib>
@@ -53,7 +53,7 @@ constexpr auto NumberWidth(
 }
 
 /// Get the colour of a diagnostic.
-constexpr auto Colour(lcc::Diag::Kind kind) -> lcc::Colour {
+constexpr auto KindColour(lcc::Diag::Kind kind) -> lcc::Colour {
     switch (kind) {
         using enum lcc::Colour;
         case Kind::ICError: return Magenta;
@@ -100,7 +100,7 @@ void lcc::Diag::HandleFatalErrors() {
 
 /// Print a diagnostic with no (valid) location info.
 void lcc::Diag::PrintDiagWithoutLocation() {
-    using enum Colour;
+    using enum lcc::Colour;
     Colours C(ShouldUseColour());
 
     /// Print the message.
@@ -108,7 +108,7 @@ void lcc::Diag::PrintDiagWithoutLocation() {
         stderr,
         "{}{}{}: {}",
         C(Bold),
-        C(Colour(kind)),
+        C(KindColour(kind)),
         Name(kind),
         C(Reset)
     );
@@ -282,7 +282,7 @@ void lcc::Diag::print() {
 
     if (not message_newline_offsets.empty()) {
         // Print message prefix
-        fmt::print(stderr, "{}{}:{} ", C(Colour(kind)), Name(kind), C(Reset));
+        fmt::print(stderr, "{}{}:{} ", C(KindColour(kind)), Name(kind), C(Reset));
 
         usz printed_offset = 0;
         for (auto newline_offset : message_newline_offsets) {
@@ -316,11 +316,11 @@ void lcc::Diag::print() {
         fmt::print(
             stderr,
             "{}{}: {}{} [{}{}{}]\n",
-            C(Colour(kind)),
+            C(KindColour(kind)),
             Name(kind),
             C(Reset),
             message,
-            C(Colour(kind)),
+            C(KindColour(kind)),
             id,
             C(Reset)
         );
@@ -329,7 +329,7 @@ void lcc::Diag::print() {
     // Print the line up to the start of the location, the range in the right
     // colour, and the rest of the line.
     fmt::print(stderr, " {} | {}", line, before);
-    fmt::print(stderr, "{}{}{}{}", C(Bold), C(Colour(kind)), range, C(Reset));
+    fmt::print(stderr, "{}{}{}{}", C(Bold), C(KindColour(kind)), range, C(Reset));
     fmt::print(stderr, "{}\n", after);
 
     // Determine the number of digits in the line number.
@@ -344,7 +344,7 @@ void lcc::Diag::print() {
             fmt::print(stderr, " ");
 
         // Finally, print the underline itself.
-        fmt::print(stderr, "{}{}", C(Bold), C(Colour(kind)));
+        fmt::print(stderr, "{}{}", C(Bold), C(KindColour(kind)));
         for (usz i = 0; i < range.size(); ++i) fmt::print(stderr, "~");
         fmt::print(stderr, "{}\n", C(Reset));
     }

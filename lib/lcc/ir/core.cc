@@ -189,7 +189,7 @@ usz Type::align_bytes() const {
 
 auto Type::string(bool use_colour) const -> std::string {
     using P = lcc::IRColourPalette;
-    utils::Colours C{use_colour};
+    Colours C{use_colour};
     switch (kind) {
         case Kind::Unknown: return fmt::format("{}<?>{}", C(P::Type), C(P::Reset));
         case Kind::Pointer: return fmt::format("{}ptr{}", C(P::Type), C(P::Reset));
@@ -1614,7 +1614,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         return fmt::format(
             "{}{}",
             p.Output(),
-            lcc::utils::Colours{use_colour}(lcc::utils::Colour::Reset)
+            lcc::Colours{use_colour}(lcc::Colour::Reset)
         );
     }
 };
@@ -1624,7 +1624,7 @@ auto Module::as_lcc_ir(bool use_colour) -> std::string {
     return fmt::format(
         "{}{}",
         LCCIRPrinter::Print(this, use_colour),
-        lcc::utils::Colours{use_colour}(lcc::utils::Colour::Reset)
+        lcc::Colours{use_colour}(lcc::Colour::Reset)
     );
 }
 

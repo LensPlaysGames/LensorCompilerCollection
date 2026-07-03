@@ -11,7 +11,7 @@
 #include <lcc/ir/module.hh>
 #include <lcc/opt.hh>
 #include <lcc/target.hh>
-#include <lcc/utils.hh>
+#include <lcc/utils/colours.hh>
 
 #include <lccjson/lccjson.hh>
 
@@ -1118,7 +1118,7 @@ void to_sarif(const CodeTestContext& context, std::string command_line) {
 }
 
 int main(int argc, char** argv) {
-    lcc::utils::Colours C{true};
+    lcc::Colours C{true};
     CodeTestContext context{};
     {
         // Read all files in corpus/
@@ -1149,13 +1149,13 @@ int main(int argc, char** argv) {
                         if (passed) {
                             fmt::print(
                                 "{}PASSED{}\n",
-                                C(lcc::utils::Colour::BoldGreen),
-                                C(lcc::utils::Colour::Reset)
+                                C(lcc::Colour::BoldGreen),
+                                C(lcc::Colour::Reset)
                             );
                         } else fmt::print(
                             "{}FAILED{}\n",
-                            C(lcc::utils::Colour::BoldRed),
-                            C(lcc::utils::Colour::Reset)
+                            C(lcc::Colour::BoldRed),
+                            C(lcc::Colour::Reset)
                         );
                     }
                 }

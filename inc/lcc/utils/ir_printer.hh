@@ -5,6 +5,7 @@
 
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
+#include <lcc/utils/colours.hh>
 
 #include <lccbase/context.hh>
 
@@ -16,7 +17,7 @@
 namespace lcc {
 // Colour Palette
 struct IRColourPalette {
-    using enum utils::Colour;
+    using enum Colour;
     // A color to use to write filler syntax, "unimportant" symbols, etc.
     static constexpr auto Filler = NormalWhite;
     // A color to use to write comments (beginning with ';')
@@ -59,7 +60,7 @@ protected:
     using P = IRColourPalette;
 
     bool _use_colour;
-    utils::Colours C{_use_colour};
+    Colours C{_use_colour};
 
     /// Get the index of a block.
     auto Index(Block* b) const -> isz {

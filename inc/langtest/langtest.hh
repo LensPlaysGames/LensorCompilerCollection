@@ -1,9 +1,10 @@
-#include <lccbase/context.hh>
 #include <lcc/format.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
-#include <lcc/utils.hh>
+#include <lcc/utils/colours.hh>
+
+#include <lccbase/context.hh>
 
 #include <fmt/format.h>
 
@@ -299,7 +300,7 @@ bool perform_ir_match_block(
     lcc::Block* expected_block,
     std::unordered_map<lcc::Inst*, lcc::Inst*>& expected_to_got
 ) {
-    lcc::utils::Colours C{
+    lcc::Colours C{
         got.context() and got.context()->option_use_colour()
     };
 

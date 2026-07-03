@@ -1,11 +1,14 @@
 #ifndef LANGUAGE_C_TYPE_HH
 #define LANGUAGE_C_TYPE_HH
 
+#include <hdronly/language_c/forward.hh>
+
 #include <language_c/translation_unit.hh>
 
-#include <lccbase/location.hh>
 #include <lcc/target.hh>
 #include <lcc/utils/result.hh>
+
+#include <lccbase/location.hh>
 
 #include <fmt/base.h>
 
@@ -32,12 +35,28 @@ enum class TypeKind {
     Count
 };
 
-struct Node;
-
 struct Type {
+    friend Parser;
+
+    using flag_t = uint16_t;
+
+    enum class Flag {
+        Const,
+        Volatile,
+        Restrict,
+        Atomic,
+        Constexpr,
+        Extern,
+        Register,
+        Static,
+        Count
+    };
+
 private:
     TypeKind _kind{TypeKind::Invalid};
     Location _location{};
+
+    flag_t _flags{};
 
 public:
     Type(TypeKind kind, Location location)
@@ -61,6 +80,19 @@ public:
 
     auto kind() const { return _kind; }
     auto location() { return _location; }
+
+    bool flag(Flag f) {
+        return _flags & flag_value(f);
+    }
+    void flag(Flag f, bool new_value) {
+        if (new_value)
+            _flags |= (flag_t) flag_value(f);
+        else _flags &= (flag_t) ~flag_value(f);
+    }
+
+    static constexpr flag_t flag_value(Flag f) {
+        return (flag_t) (1 << (unsigned int) f);
+    }
 };
 
 class IntegralType : public Type {

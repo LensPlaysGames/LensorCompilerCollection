@@ -1,15 +1,13 @@
 #ifndef LCC_LANGUAGE_C_TRANSLATION_UNIT_HH
 #define LCC_LANGUAGE_C_TRANSLATION_UNIT_HH
 
+#include <hdronly/language_c/forward.hh>
+
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace lcc::language_c {
-struct Node;
-struct Declaration;
-struct Scope;
-struct Type;
 
 struct TranslationUnit {
     // Produced by the parser.
