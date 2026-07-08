@@ -1,4 +1,4 @@
-#include <fmt/format.h>
+#include <hdronly/lcc/typedefs.hh>
 
 #include <lcc/calling_convention.hh>
 #include <lcc/codegen/isel.hh>
@@ -16,6 +16,8 @@
 #include <lccjson/lccjson.hh>
 
 #include <lccbase/context.hh>
+
+#include <fmt/format.h>
 
 #include <cstdlib>
 #include <filesystem>
@@ -685,7 +687,7 @@ MIRInstructionMatcher parse_instruction_matcher(
                 bitwidth_string
             );
 
-            imm.size = (uint) bitwidth_value;
+            imm.size = (lcc::uint) bitwidth_value;
 
             out.operands.emplace_back(imm);
         } else if (operand.size()) {
