@@ -1,8 +1,8 @@
 * 2026
 ** C Frontend Maturity
-** Abstract =liblccbase= from =liblcc=
-Basically, =lcc::Context=, =lcc::File=, =lcc::Diag= are all very reusable and helpful across a lot of different libraries, so putting those into their own little play-pen, separate from the "actual compilation bits", should make linking less bloated.
 ** Glint Standard Library and Semantic Maturity
+*** Conversion between fixed arrays, dynamic arrays, and views
+Including string literals.
 
 * [2026-06-27 Sat 03:24]
 
