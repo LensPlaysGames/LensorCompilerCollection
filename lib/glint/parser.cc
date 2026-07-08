@@ -2031,7 +2031,13 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     if (IsError(cond, then, else_))
         return GetDiag(cond, then, else_).diag();
 
-    return new (*mod) IfExpr(cond.value(), then.value(), else_.value(), sc.scope, loc);
+    return new (*mod) IfExpr(
+        cond.value(),
+        then.value(),
+        else_.value(),
+        sc.scope,
+        loc
+    );
 }
 
 auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module>> {
