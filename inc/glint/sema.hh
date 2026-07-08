@@ -15,6 +15,9 @@ class Sema {
     Context* context;
     Module& mod;
 
+    // If a new declaration were to happen, it'd be declared in this scope.
+    Scope* _decl_scope{};
+
     struct SemaTemplate {
         std::string name{};
         TemplateExpr* template_expr{};
@@ -56,6 +59,7 @@ class Sema {
     Sema(Context* ctx, Module& module, bool use_colours)
         : context(ctx)
         , mod(module)
+        , _decl_scope(mod.top_level_scope())
         , curr_func(mod.top_level_function())
         , _use_colours(use_colours) {}
 

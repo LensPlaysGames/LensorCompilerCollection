@@ -1,8 +1,6 @@
 #include <glint/ast.hh>
 #include <glint/module_description.hh>
 
-#include <lcc/utils.hh>
-
 #include <algorithm>
 #include <limits>
 #include <unordered_map>

@@ -3,11 +3,9 @@
 #include <glint/sema.hh>
 
 #include <lccbase/context.hh>
-#include <lcc/utils.hh>
 
 #include <array>
 #include <cstring>
-#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -94,13 +92,15 @@ void lcc::glint::Module::scope_walk(
             // scope.
             auto block_scope = new (*this) Scope(current_scope);
             // fmt::print("Created scope for `block`: {}\n", scope_string(block_scope));
-            for (auto c : as<BlockExpr>(e)->children())
+            auto* b = as<BlockExpr>(e);
+            b->created_scope() = block_scope;
+            for (auto c : b->children())
                 recurse(c, block_scope);
         } break;
 
         case Expr::Kind::Template: {
             // A template defines a new scope, and declares it's parameters in that scope.
-            auto template_scope = new (*this) Scope(current_scope);
+            // auto template_scope = new (*this) Scope(current_scope);
             // fmt::print("Created scope for `template`: {}\n", scope_string(template_scope));
 
             // Declare parameters in template's scope.
@@ -125,13 +125,17 @@ void lcc::glint::Module::scope_walk(
             }
 
             // Walk body.
-            recurse(e_template->body(), template_scope);
+            recurse(e_template->body(), current_scope);
         } break;
 
         case Expr::Kind::While: {
             // A while defines a new scope, and all child expressions are within that
             // scope.
             auto while_scope = new (*this) Scope(current_scope);
+
+            auto* w = as<WhileExpr>(e);
+            w->created_scope() = while_scope;
+
             // fmt::print("Created scope for `while`: {}\n", scope_string(while_scope));
             recurse(as<WhileExpr>(e)->condition(), while_scope);
             recurse(as<WhileExpr>(e)->body(), while_scope);
@@ -140,7 +144,10 @@ void lcc::glint::Module::scope_walk(
         case Expr::Kind::For: {
             auto for_scope = new (*this) Scope(current_scope);
             // fmt::print("Created scope for `for`: {}\n", scope_string(for_scope));
+
             auto f = as<ForExpr>(e);
+            f->created_scope() = for_scope;
+
             recurse(f->init(), for_scope);
             recurse(f->condition(), for_scope);
             recurse(f->increment(), for_scope);
@@ -150,7 +157,10 @@ void lcc::glint::Module::scope_walk(
         case Expr::Kind::If: {
             auto if_scope = new (*this) Scope(current_scope);
             // fmt::print("Created scope for `if`: {}\n", scope_string(if_scope));
+
             auto i = as<IfExpr>(e);
+            i->created_scope() = if_scope;
+
             recurse(i->condition(), if_scope);
             recurse(i->then(), if_scope);
             if (i->otherwise())
@@ -581,6 +591,7 @@ auto lcc::glint::Module::deserialise(
                         condition,
                         then,
                         otherwise,
+                        nullptr,
                         {}
                     );
                     exprs.insert(exprs.begin() + expr_index, i);
@@ -598,6 +609,7 @@ auto lcc::glint::Module::deserialise(
                     auto w = new (*this) WhileExpr(
                         condition,
                         body,
+                        nullptr,
                         {}
                     );
                     exprs.insert(exprs.begin() + expr_index, w);
@@ -623,6 +635,7 @@ auto lcc::glint::Module::deserialise(
                         condition,
                         increment,
                         body,
+                        nullptr,
                         {}
                     );
                     exprs.insert(exprs.begin() + expr_index, f);
@@ -685,6 +698,7 @@ auto lcc::glint::Module::deserialise(
                     }
                     auto b = new (*this) BlockExpr(
                         children,
+                        nullptr,
                         {}
                     );
                     exprs.insert(exprs.begin() + expr_index, b);

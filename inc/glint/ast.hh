@@ -1660,11 +1660,12 @@ public:
 /// \brief Base class for expression syntax nodes.
 class Expr : public SemaNode {
 protected:
-    static auto CloneImpl(
+    static auto CloneIntoImpl(
         Module& mod,
         Context* context,
         Expr* expr,
-        std::unordered_map<Scope*, Scope*>& scope_fixups
+        std::unordered_map<Scope*, Scope*>& scope_fixups,
+        Scope* current_scope
     ) -> Expr*;
 
 public:
@@ -1788,15 +1789,38 @@ public:
     };
 
     [[nodiscard]]
-    static auto Clone(
+    static auto CloneInto(
+        Module& mod,
+        Context* context,
+        Expr* expr,
+        Scope* scope
+    ) -> Expr*;
+
+    /// Deep copy a vector of expressions.
+    [[nodiscard]]
+    static auto CloneInto(
+        Module& mod,
+        Context* context,
+        Scope* scope,
+        std::vector<Expr*> exprs
+    ) -> std::vector<Expr*> {
+        std::vector<Expr*> out{};
+        out.reserve(exprs.size());
+        for (auto e : exprs)
+            out.emplace_back(CloneInto(mod, context, e, scope));
+
+        return out;
+    }
+
+    [[nodiscard]]
+    static auto FullClone(
         Module& mod,
         Context* context,
         Expr* expr
     ) -> Expr*;
 
-    /// Deep copy a vector of expressions.
     [[nodiscard]]
-    static auto Clone(
+    static auto FullClone(
         Module& mod,
         Context* context,
         std::vector<Expr*> exprs
@@ -1804,7 +1828,7 @@ public:
         std::vector<Expr*> out{};
         out.reserve(exprs.size());
         for (auto e : exprs)
-            out.emplace_back(Clone(mod, context, e));
+            out.emplace_back(FullClone(mod, context, e));
 
         return out;
     }
@@ -2369,14 +2393,16 @@ public:
 class IfExpr : public TypedExpr {
     Expr* _condition;
     Expr* _then;
-    Expr* _otherwise{};
+    Expr* _otherwise;
+    Scope* _scope;
 
 public:
-    IfExpr(Expr* condition, Expr* then, Expr* otherwise, Location location)
+    IfExpr(Expr* condition, Expr* then, Expr* otherwise, Scope* scope, Location location)
         : TypedExpr(Kind::If, location)
         , _condition(condition)
         , _then(then)
-        , _otherwise(otherwise) {}
+        , _otherwise(otherwise)
+        , _scope(scope) {}
 
     [[nodiscard]]
     auto condition() -> Expr*& { return _condition; }
@@ -2392,6 +2418,11 @@ public:
     auto otherwise() -> Expr*& { return _otherwise; }
     [[nodiscard]]
     auto otherwise() const { return _otherwise; }
+
+    [[nodiscard]]
+    auto created_scope() -> Scope*& { return _scope; }
+    [[nodiscard]]
+    auto created_scope() const -> Scope* { return _scope; }
 
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool {
@@ -2522,9 +2553,17 @@ public:
 };
 
 class WhileExpr : public Loop {
+    Scope* _scope;
+
 public:
-    WhileExpr(Expr* condition, Expr* body, Location location)
-        : Loop(Kind::While, condition, body, location) {}
+    WhileExpr(Expr* condition, Expr* body, Scope* scope, Location location)
+        : Loop(Kind::While, condition, body, location)
+        , _scope(scope) {}
+
+    [[nodiscard]]
+    auto created_scope() -> Scope*& { return _scope; }
+    [[nodiscard]]
+    auto created_scope() const -> Scope* { return _scope; }
 
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::While; }
@@ -2533,12 +2572,14 @@ public:
 class ForExpr : public Loop {
     Expr* _init{};
     Expr* _increment{};
+    Scope* _scope{};
 
 public:
-    ForExpr(Expr* init, Expr* condition, Expr* increment, Expr* body, Location location)
+    ForExpr(Expr* init, Expr* condition, Expr* increment, Expr* body, Scope* scope, Location location)
         : Loop(Kind::For, condition, body, location)
         , _init(init)
-        , _increment(increment) {}
+        , _increment(increment)
+        , _scope(scope) {}
 
     [[nodiscard]]
     auto init() -> Expr*& { return _init; }
@@ -2551,16 +2592,24 @@ public:
     auto increment() const { return _increment; }
 
     [[nodiscard]]
+    auto created_scope() -> Scope*& { return _scope; }
+    [[nodiscard]]
+    auto created_scope() const -> Scope* { return _scope; }
+
+    [[nodiscard]]
     static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::For; }
 };
 
 class BlockExpr : public TypedExpr {
     std::vector<Expr*> _children;
+    // This is the scope that the children expressions were parsed within.
+    Scope* _scope;
 
 public:
-    BlockExpr(std::vector<Expr*> children, Location location)
+    BlockExpr(std::vector<Expr*> children, Scope* scope, Location location)
         : TypedExpr(Kind::Block, location)
-        , _children(std::move(children)) {}
+        , _children(std::move(children))
+        , _scope(scope) {}
 
     /// Add an expression to this block.
     void add(Expr* expr) { _children.push_back(expr); }
@@ -2583,6 +2632,11 @@ public:
 
         return last;
     }
+
+    [[nodiscard]]
+    auto created_scope() -> Scope*& { return _scope; }
+    [[nodiscard]]
+    auto created_scope() const -> Scope* { return _scope; }
 
     [[nodiscard]]
     static auto classof(const Expr* expr) -> bool { return expr->kind() == Kind::Block; }

@@ -1,13 +1,13 @@
 #include <glint/ast.hh>
 
-#include <lccbase/context.hh>
 #include <lcc/core.hh>
 #include <lcc/enum_to_underlying.hh>
 #include <lcc/target.hh>
-#include <lcc/utils.hh>
 #include <lcc/utils/ast_printer.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
+
+#include <lccbase/context.hh>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -584,11 +584,12 @@ auto lcc::glint::CallExpr::callee_type() const -> FuncType* {
     return as<FuncType>(ty);
 }
 
-auto lcc::glint::Expr::CloneImpl(
+auto lcc::glint::Expr::CloneIntoImpl(
     Module& mod,
     Context* context,
     Expr* expr,
-    std::unordered_map<Scope*, Scope*>& scope_fixups
+    std::unordered_map<Scope*, Scope*>& scope_fixups,
+    Scope* current_scope
 ) -> Expr* {
     LCC_ASSERT(context);
 
@@ -596,7 +597,7 @@ auto lcc::glint::Expr::CloneImpl(
     if (not expr) return nullptr;
 
     const auto Clone = [&](Expr* e) {
-        return Expr::CloneImpl(mod, context, e, scope_fixups);
+        return Expr::CloneIntoImpl(mod, context, e, scope_fixups, current_scope);
     };
 
     const auto CloneAll = [&](std::vector<Expr*> exprs) -> std::vector<Expr*> {
@@ -648,14 +649,23 @@ auto lcc::glint::Expr::CloneImpl(
         }
         case Kind::While: {
             auto w = as<WhileExpr>(expr);
+
+            current_scope = new (mod) Scope(current_scope);
+            scope_fixups.emplace(w->created_scope(), current_scope);
+
             return new (mod) WhileExpr(
                 Clone(w->condition()),
                 Clone(w->body()),
+                scope_fixups.at(w->created_scope()),
                 w->location()
             );
         }
         case Kind::For: {
             auto f = as<ForExpr>(expr);
+
+            current_scope = new (mod) Scope(current_scope);
+            scope_fixups.emplace(f->created_scope(), current_scope);
+
             // Ensure we clone init before the rest, so that declarations get fixed up
             // properly...
             auto clone_init = Clone(f->init());
@@ -664,15 +674,21 @@ auto lcc::glint::Expr::CloneImpl(
                 Clone(f->condition()),
                 Clone(f->increment()),
                 Clone(f->body()),
+                scope_fixups.at(f->created_scope()),
                 f->location()
             );
         }
         case Kind::If: {
             auto i = as<IfExpr>(expr);
+
+            current_scope = new (mod) Scope(current_scope);
+            scope_fixups.emplace(i->created_scope(), current_scope);
+
             return new (mod) IfExpr(
                 Clone(i->condition()),
                 Clone(i->then()),
                 Clone(i->otherwise()),
+                scope_fixups.at(i->created_scope()),
                 i->location()
             );
         }
@@ -781,8 +797,13 @@ auto lcc::glint::Expr::CloneImpl(
 
         case Kind::Block: {
             auto b = as<BlockExpr>(expr);
+
+            current_scope = new (mod) Scope(current_scope);
+            scope_fixups.emplace(b->created_scope(), current_scope);
+
             return new (mod) BlockExpr(
                 CloneAll(b->children()),
+                scope_fixups.at(b->created_scope()),
                 b->location()
             );
         }
@@ -886,8 +907,14 @@ auto lcc::glint::Expr::CloneImpl(
                 v->name()
             );
 
-            // Declare declaration in fixed up scope.
-            auto fixed_scope = fixup_scope(mod, scope_fixups, scope);
+            // Declare declaration in fixed up scope (current_scope is always a "fixed
+            // up" scope, i.e. one we can declare in rather than one from the source
+            // tree).
+            Scope* fixed_scope = current_scope;
+            // fallback to looking up scope or creating a new one
+            if (not fixed_scope)
+                fixed_scope = fixup_scope(mod, scope_fixups, scope);
+
             LCC_ASSERT(fixed_scope);
 
             auto clone = new (mod) VarDecl(
@@ -898,6 +925,7 @@ auto lcc::glint::Expr::CloneImpl(
                 v->linkage(),
                 v->location()
             );
+
             auto cloned_decl
                 = fixed_scope->declare(context, std::string{v->name()}, clone);
             LCC_ASSERT(cloned_decl);
@@ -919,11 +947,15 @@ auto lcc::glint::Expr::CloneImpl(
 
         case Kind::FuncDecl: {
             auto f = as<FuncDecl>(expr);
+
+            current_scope = new (mod) Scope(current_scope);
+            scope_fixups.emplace(f->scope(), current_scope);
+
             return new (mod) FuncDecl(
                 f->name(),
                 f->function_type(),
                 Clone(f->body()),
-                f->scope(),
+                scope_fixups.at(f->scope()),
                 f->module(),
                 f->linkage(),
                 f->location()
@@ -932,11 +964,15 @@ auto lcc::glint::Expr::CloneImpl(
 
         case Kind::TemplatedFuncDecl: {
             auto f = as<TemplatedFuncDecl>(expr);
+
+            current_scope = new (mod) Scope(current_scope);
+            scope_fixups.emplace(f->scope(), current_scope);
+
             return new (mod) TemplatedFuncDecl(
                 f->name(),
                 f->function_type(),
                 Clone(f->body()),
-                f->scope(),
+                scope_fixups.at(f->scope()),
                 f->module(),
                 f->linkage(),
                 f->location()
@@ -1046,7 +1082,12 @@ auto lcc::glint::Expr::CloneImpl(
     LCC_UNREACHABLE();
 }
 
-auto lcc::glint::Expr::Clone(Module& mod, Context* context, Expr* expr) -> Expr* {
+auto lcc::glint::Expr::CloneInto(
+    Module& mod,
+    Context* context,
+    Expr* expr,
+    Scope* current_scope
+) -> Expr* {
     LCC_ASSERT(context);
     // Don't pass me nullptr, I won't return it.
     if (not expr) return {};
@@ -1054,11 +1095,24 @@ auto lcc::glint::Expr::Clone(Module& mod, Context* context, Expr* expr) -> Expr*
     // If we encounter a declaration, we create a new scope, and map the
     // scope it was originally declared in into a new scope Clone() creates.
     std::unordered_map<Scope*, Scope*> scope_fixups{};
-
-    return CloneImpl(mod, context, expr, scope_fixups);
+    return CloneIntoImpl(mod, context, expr, scope_fixups, current_scope);
 }
 
-auto lcc::glint::Module::function(std::string_view name) -> std::vector<lcc::glint::FuncDecl*> {
+auto lcc::glint::Expr::FullClone(
+    Module& mod,
+    Context* context,
+    Expr* expr
+) -> Expr* {
+    return CloneInto(
+        mod,
+        context,
+        expr,
+        new (mod) Scope(nullptr)
+    );
+}
+
+auto lcc::glint::Module::function(std::string_view name)
+    -> std::vector<lcc::glint::FuncDecl*> {
     std::vector<FuncDecl*> out{};
     for (auto* foo : _functions) {
         if (foo->name() == name) out.emplace_back(foo);
@@ -1066,7 +1120,8 @@ auto lcc::glint::Module::function(std::string_view name) -> std::vector<lcc::gli
     return out;
 }
 
-auto lcc::glint::Expr::children_ref() -> std::vector<lcc::glint::Expr**> {
+auto lcc::glint::Expr::children_ref()
+    -> std::vector<lcc::glint::Expr**> {
     switch (kind()) {
         // These expressions never have children
         case Kind::OverloadSet:
@@ -2710,11 +2765,12 @@ auto lcc::glint::TemplatedFuncDecl::make_instantiation(
     std::unordered_map<Scope*, Scope*> scope_fixups{
         {scope(), new (mod) Scope{scope()->parent()}}
     };
-    auto expanded_body = Expr::CloneImpl(
+    auto expanded_body = Expr::CloneIntoImpl(
         mod,
         &context,
         body(),
-        scope_fixups
+        scope_fixups,
+        nullptr
     );
     LCC_ASSERT(expanded_body);
 

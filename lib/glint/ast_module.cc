@@ -1,15 +1,15 @@
-#include <lccbase/file.hh>
-#include <lcc/utils.hh>
-
 #include <glint/ast.hh>
 #include <glint/module_description.hh>
 #include <glint/sema.hh>
 
+#include <lccbase/file.hh>
+
 #include <algorithm>
-#include <cstring>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -64,7 +64,7 @@ lcc::glint::Module::Module(
         = new (*this) FuncDecl{
             is_logical_module ? InitFunctionName(name()) : "main",
             ty,
-            new (*this) BlockExpr{{}, {}},
+            new (*this) BlockExpr{{}, nullptr, {}},
             nullptr,
             this,
             Linkage::Exported,

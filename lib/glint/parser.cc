@@ -4,7 +4,6 @@
 
 #include <lcc/stringmap.hh>
 #include <lcc/target.hh>
-#include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
 
@@ -446,7 +445,11 @@ auto lcc::glint::Parser::ParseBlock(
 
     loc = {loc, tok.location};
 
-    return new (*mod) BlockExpr(std::move(*exprs), loc);
+    return new (*mod) BlockExpr(
+        std::move(*exprs),
+        sc.scope,
+        loc
+    );
 }
 
 /// Parse an object or type declaration.
@@ -535,7 +538,7 @@ auto lcc::glint::Parser::ParseDeclRest(
             /// If the type is a function type, then this is
             /// a function declaration.
             if (auto type = cast<FuncType>(*ty))
-                return ParseFuncDecl(std::move(ident), type, is_external);
+                return ParseFuncDecl(std::move(ident), location, type, is_external);
 
             /// Otherwise, it is a variable declaration. Parse
             /// the initialiser if there is one.
@@ -783,7 +786,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             if (tok.eval_once)
                 lhs = tok.expression;
             else
-                lhs = Expr::Clone(*mod, context, tok.expression);
+                lhs = Expr::CloneInto(*mod, context, tok.expression, DeclScope());
 
             NextToken();
             break;
@@ -1250,7 +1253,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 );
             }
 
-            lhs = ParseFuncDecl("", func_ty, false);
+            lhs = ParseFuncDecl("", loc, func_ty, false);
             lhs->location({loc, lhs->location()});
         } break;
 
@@ -1570,7 +1573,14 @@ auto lcc::glint::Parser::ParseForExpr() -> Result<ForExpr*> {
     if (not body) return body.diag();
 
     /// Check for errors and create the expression.
-    return new (*mod) ForExpr(*init, *cond, *increment, *body, loc);
+    return new (*mod) ForExpr(
+        *init,
+        *cond,
+        *increment,
+        *body,
+        sc.scope,
+        loc
+    );
 }
 
 auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
@@ -1715,6 +1725,7 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
 
     auto block_body = new (*mod) BlockExpr(
         {*loop_var_decl, *body},
+        decl_scope,
         loc
     );
 
@@ -1723,6 +1734,7 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
         cond,
         increment,
         block_body,
+        sc.scope,
         loc
     );
 }
@@ -1760,7 +1772,8 @@ auto lcc::glint::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
     }
 }
 
-auto lcc::glint::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Expr*, Scope*>> {
+auto lcc::glint::Parser::ParseFuncBody(bool is_external)
+    -> Result<std::pair<Expr*, Scope*>> {
     /// If the declaration is external, but there still seems to be
     /// a function body, warn the the user that they might be trying
     /// to do something that doesn’t make sense.
@@ -1799,7 +1812,12 @@ auto lcc::glint::Parser::ParseFuncBody(bool is_external) -> Result<std::pair<Exp
     /// Function body is in a new scope. Note that the scope of a function
     /// is a child of the global scope if we’re at the top level rather than
     /// of the top level scope.
-    ScopeRAII sc{this, CurrScope() == TopLevelScope() ? GlobalScope() : CurrScope()};
+    ScopeRAII sc{
+        this,
+        CurrScope() == TopLevelScope()
+            ? GlobalScope()
+            : CurrScope()
+    };
     sc.scope->set_function_scope();
 
     auto scope = sc.scope;
@@ -1870,6 +1888,8 @@ auto lcc::glint::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
         Consume(Tk::Comma);
     }
 
+    auto rightmost_location = tok.location;
+
     /// Yeet ')'.
     if (not Consume(Tk::RParen)) {
         return Error(
@@ -1882,12 +1902,14 @@ auto lcc::glint::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
     auto attrs = ParseFuncAttrs();
     if (not attrs) return attrs.diag();
 
+    // FIXME: rightmost_location should be updated if there are attributes...
+
     /// Create the function type.
     return new (*mod) FuncType(
         std::move(parameters),
         return_type,
         std::move(*attrs),
-        Location{tok.location, tok.location}
+        Location{return_type->location(), rightmost_location}
     );
 }
 
@@ -1926,6 +1948,8 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     /// Yeet "if".
     LCC_ASSERT(Consume(Tk::If), "ParseIf called while not at 'if'");
 
+    ScopeRAII sc{this};
+
     /// Parse condition, then, and else.
     auto cond = ParseExpr();
 
@@ -1953,7 +1977,7 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
         }
     }
 
-    auto then = ParseExprInNewScope();
+    auto then = ParseExpr();
 
     // The following case makes the grammar ambiguous, since "if condition,
     // then;" is a valid ifexpr, but so is "if condition, then; else ...;".
@@ -2007,7 +2031,7 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     if (IsError(cond, then, else_))
         return GetDiag(cond, then, else_).diag();
 
-    return new (*mod) IfExpr(cond.value(), then.value(), else_.value(), loc);
+    return new (*mod) IfExpr(cond.value(), then.value(), else_.value(), sc.scope, loc);
 }
 
 auto lcc::glint::Parser::ParsePreamble(File* f) -> Result<std::unique_ptr<Module>> {
@@ -2305,7 +2329,7 @@ auto lcc::glint::Parser::ParseSumType() -> Result<SumType*> {
         );
     }
 
-    /// Parse the struct body.
+    /// Parse the sum type body.
     ScopeRAII sc{this};
     std::vector<SumType::Member> members;
     while (not At(Tk::RBrace)) {
@@ -2640,10 +2664,11 @@ auto lcc::glint::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
     LCC_ASSERT(Consume(Tk::While), "ParseWhile called while not at 'while'");
 
     /// Parse condition and body.
+    ScopeRAII sc{this};
     auto cond = ParseExpr();
-    auto body = ParseExprInNewScope();
+    auto body = ParseExpr();
     if (IsError(cond, body)) return GetDiag(cond, body).diag();
-    return new (*mod) WhileExpr(cond.value(), body.value(), loc);
+    return new (*mod) WhileExpr(cond.value(), body.value(), sc.scope, loc);
 }
 
 void lcc::glint::Parser::Synchronise() {
@@ -2660,19 +2685,24 @@ void lcc::glint::Parser::Synchronise() {
 /// \return The decl or an error.
 auto lcc::glint::Parser::ParseFuncDecl(
     std::string name,
+    Location name_location,
     FuncType* type,
     bool is_external
 ) -> Result<FuncDecl*> {
     // Parse attributes and the function body.
-    auto body = ParseFuncBody(is_external);
-    if (not body) return body.diag();
+    auto maybe_body = ParseFuncBody(is_external);
+    if (not maybe_body) return maybe_body.diag();
+
+    auto& body = maybe_body->first;
+    auto& scope = maybe_body->second;
 
     // External implies no mangling.
     if (is_external) type->set_attr(FuncAttr::NoMangle);
 
     // Create the function.
-    Linkage linkage
-        = is_external ? Linkage::Imported : Linkage::Internal;
+    Linkage linkage = is_external
+                        ? Linkage::Imported
+                        : Linkage::Internal;
 
     // If the function type contains the "auto" anywhere within it, we
     // create a Templated Function Declaration.
@@ -2681,22 +2711,22 @@ auto lcc::glint::Parser::ParseFuncDecl(
         func = new (*mod) TemplatedFuncDecl(
             name,
             type,
-            (*body).first,
-            (*body).second,
+            body,
+            scope,
             mod,
             linkage,
-            type->location()
+            {name_location, body->location()}
         );
         if (name.empty()) return func;
     } else {
         func = new (*mod) FuncDecl(
             name,
             type,
-            (*body).first,
-            (*body).second,
+            body,
+            scope,
             mod,
             linkage,
-            type->location()
+            {name_location, body->location()}
         );
     }
 
@@ -2726,6 +2756,7 @@ void lcc::glint::Parser::ParseTopLevel() {
     scope_stack.push_back(global);
     scope_stack.push_back(top_level);
     curr_func->scope(TopLevelScope());
+    as<BlockExpr>(curr_func->body())->created_scope() = TopLevelScope();
 
     /// Parse the file.
     for (;;) {

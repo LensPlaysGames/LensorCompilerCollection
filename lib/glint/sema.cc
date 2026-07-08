@@ -8,13 +8,13 @@
 #include <glint/module_description.hh>
 #include <glint/parser.hh>
 
-#include <lccbase/assert.hh>
-#include <lccbase/context.hh>
 #include <lcc/core.hh>
 #include <lcc/string_distance.hh>
 #include <lcc/stringmap.hh>
-#include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
+
+#include <lccbase/assert.hh>
+#include <lccbase/context.hh>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -809,7 +809,7 @@ void lcc::glint::Sema::AnalyseModule() {
             mod,
             context,
             f,
-            new (mod) Scope(mod.top_level_scope())
+            mod.global_scope()
         );
         if (not templates_m) {
             if (templates_m.is_diag())
@@ -956,6 +956,33 @@ void lcc::glint::Sema::AnalyseModule() {
         }
     }
 
+    std::vector<std::string_view> duplicate_functions{};
+    for (const auto& func : mod.functions()) {
+        // Don't duplicate errors for duplicate functions.
+        if (std::ranges::contains(duplicate_functions, func->name()))
+            continue;
+
+        for (const auto& candidate : mod.functions()) {
+            if (
+                &func == &candidate // skip same
+                or func->name() != candidate->name()
+                or (not Type::Equal(func->function_type(), candidate->function_type()))
+            ) continue;
+
+            duplicate_functions.emplace_back(func->name());
+
+            auto e = Error(
+                func->location(),
+                "Duplicate function"
+            );
+            e.attach(Note(
+                func->function_type()->location(),
+                "If trying to declare an overload, the function types must not be equal"
+            ));
+            e.attach(Note(candidate->location(), "Duplicate function"));
+        }
+    }
+
     // Analyse the signatures of all functions. This must be done
     // before analysing bodies since, in order to perform overload
     // resolution properly, we first need to apply decltype decay
@@ -982,7 +1009,6 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     // );
 
     tempset curr_func = decl;
-    auto* ty = decl->function_type();
 
     // If the function has no body, then we're done.
     if (not decl->body()) return;
@@ -990,6 +1016,10 @@ void lcc::glint::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     // If the function is templated, then we're done (unexpanded body is not
     // checked).
     if (is<TemplatedFuncDecl>(decl)) return;
+
+    tempset _decl_scope = decl->scope();
+
+    auto* ty = decl->function_type();
 
     // Create variable declarations for the parameters.
     bool params_failed{false};
@@ -1325,7 +1355,7 @@ auto lcc::glint::Sema::DefaultInitializeImpl(Expr* accessor, ZeroInitializeOptio
             // Don't create a needless block expression.
             if (exprs.size() == 1) return exprs.at(0);
 
-            return new (mod) BlockExpr(exprs, {});
+            return new (mod) GroupExpr(exprs, {});
         };
 
         case Type::Kind::Reference:
@@ -1604,6 +1634,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         case Expr::Kind::For: {
             auto* f = as<ForExpr>(expr);
 
+            LCC_ASSERT(f->created_scope());
+            tempset _decl_scope = f->created_scope();
+
             within_loops.emplace_back(f);
 
             if (not AnalyseAndDiscard(&f->init())) {
@@ -1623,7 +1656,11 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         case Expr::Kind::While: {
             within_loops.emplace_back(expr);
 
-            if (not AnalyseLoop(as<Loop>(expr)))
+            auto* w = as<WhileExpr>(expr);
+            LCC_ASSERT(w->created_scope());
+            tempset _decl_scope = w->created_scope();
+
+            if (not AnalyseLoop(w))
                 return false;
 
             within_loops.pop_back();
@@ -1912,6 +1949,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     cond_expr,
                     then_expr,
                     otherwise_expr,
+                    // NOTE: Not ideal, but we *know* nothing will be declared anywhere in
+                    // this if.
+                    new (mod) Scope(_decl_scope),
                     match->location()
                 );
                 if (not Analyse(&if_expr)) {
@@ -2027,6 +2067,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     cond_expr,
                     then_expr,
                     otherwise_expr,
+                    // NOTE: Not ideal, but we *know* nothing will be declared anywhere in
+                    // this if.
+                    new (mod) Scope(_decl_scope),
                     sw->location()
                 );
                 if (not Analyse(&if_expr)) {
@@ -2084,6 +2127,10 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         /// its type is the common type of the two branches.
         case Expr::Kind::If: {
             auto* i = as<IfExpr>(expr);
+
+            LCC_ASSERT(i->created_scope());
+            tempset _decl_scope = i->created_scope();
+
             if (not Analyse(&i->condition())) {
                 expr->set_sema_errored();
                 return false;
@@ -2176,6 +2223,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
         /// inference is only used for the last expression in the block.
         case Expr::Kind::Block: {
             auto* block = as<BlockExpr>(expr);
+            LCC_ASSERT(block->created_scope());
+            tempset _decl_scope = block->created_scope();
+
             if (block->children().empty()) {
                 block->type(Type::Void);
                 break;
@@ -2428,7 +2478,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                         v->location()
                     ));
 
-                    *expr_ptr = new (mod) BlockExpr(replacement, v->location());
+                    *expr_ptr = new (mod) GroupExpr(replacement, v->location());
 
                     // Perform conversions (like lvalue to rvalue).
                     (void) Analyse(expr_ptr);
@@ -3544,9 +3594,17 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 auto exit_ref = new (mod) NameRefExpr("exit", mod.global_scope(), {});
                 auto status_literal = new (mod) IntegerLiteral(1, {});
                 auto then = new (mod) CallExpr(exit_ref, {status_literal}, {});
-                auto if_ = new (mod) IfExpr(condition, then, nullptr, {});
+                auto if_ = new (mod) IfExpr(
+                    condition,
+                    then,
+                    nullptr,
+                    // NOTE: Not ideal, but we *know* nothing will be declared anywhere in
+                    // this if.
+                    new (mod) Scope(_decl_scope),
+                    {}
+                );
 
-                auto block = new (mod) BlockExpr({if_, subscript}, {});
+                auto block = new (mod) GroupExpr({if_, subscript}, {});
 
                 *expr_ptr = block;
                 (void) Analyse(expr_ptr);
@@ -4009,7 +4067,11 @@ void lcc::glint::Sema::AnalyseCall_Type(Expr** expr_ptr, CallExpr* expr) {
 }
 
 namespace lcc::glint::detail {
-auto expand_template_parameter_references_type(const TemplateExpr* t, const std::vector<Expr*> args, Type** current_type) -> void {
+auto expand_template_parameter_references_type(
+    const TemplateExpr* t,
+    const std::vector<Expr*> args,
+    Type** current_type
+) -> void {
     // Update members of structs and such for type expressions.
     if (auto t_name = cast<NamedType>(*current_type)) {
         // The current type is the argument
@@ -4029,7 +4091,11 @@ auto expand_template_parameter_references_type(const TemplateExpr* t, const std:
             expand_template_parameter_references_type(t, args, t_child);
     }
 };
-auto expand_template_parameter_references(const TemplateExpr* t, const std::vector<Expr*> args, Expr** current_expr) -> void {
+auto expand_template_parameter_references(
+    const TemplateExpr* t,
+    const std::vector<Expr*> args,
+    Expr** current_expr
+) -> void {
     // Fixup expression's type, if necessary.
     if (auto e = cast<TypedExpr>(*current_expr)) {
         expand_template_parameter_references_type(t, args, e->type_ref());
@@ -4148,10 +4214,25 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
     }
 
     // Clone template body...
-    auto body = Expr::Clone(mod, context, t->body());
+    // We don't want a *full* clone... Like, we want any declarations
+    // that happen to be within the current scope, like right now, but we want
+    // any new scopes (i.e. from block expressions) to be duplicated... It's
+    // like we need a "clone under" or something.
+    LCC_ASSERT(_decl_scope, "Sema needs to keep track of the current declaration scope");
+    auto body = Expr::CloneInto(mod, context, t->body(), _decl_scope);
 
     // Replace template parameters with template arguments.
     detail::expand_template_parameter_references(t, expr->args(), &body);
+
+    // for (auto* s : mod.scopes) {
+    //     fmt::print("{}", s->chain_string());
+    //     for (auto sym : s->all_symbols()) {
+    //         fmt::print(", {}", sym->name());
+    //     }
+    //     fmt::print("\n");
+    // }
+
+    // TODO: ffs, we have issues with declarations *again*.
 
     // Now that the body has been expanded, it's location is actually the
     // location of the call expression that it expanded from (not the template
@@ -4690,6 +4771,9 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                             eq_condition,
                             print_call,
                             otherwise,
+                            // NOTE: Not ideal, but we *know* nothing will be declared anywhere in
+                            // this if.
+                            new (mod) Scope(_decl_scope),
                             {}
                         );
 
@@ -4757,7 +4841,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                 exprs.emplace_back(unary);
             }
 
-            *expr_ptr = new (mod) BlockExpr(exprs, expr->location());
+            *expr_ptr = new (mod) BlockExpr(exprs, name->scope(), expr->location());
             (void) Analyse(expr_ptr);
             return;
         }
@@ -5339,23 +5423,6 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
                 "Searched this scope ({})... {}",
                 fmt::ptr(s),
                 fmt::join(symbol_names, ", ")
-            ));
-        }
-
-        // TODO: What is this note, what does it mean, and why is it here? How
-        // might one trigger it? To me, the top level scope is always, well, at
-        // the top level, above every other scope. So, it should be searched for
-        // every scope within a module. I guess this might make sense if you have
-        // a top level variable in another module and want it to be global, but...
-        // just import the module??? I have no idea what this means or why it is
-        // here.
-        // If there is a declaration of this variable in the top-level scope, tell
-        // the user that they may have forgotten to make it static.
-        auto top_level = mod.top_level_scope()->find(expr->name());
-        if (not top_level.empty()) {
-            err.attach(Note(
-                top_level.at(0)->location(),
-                "FIXME I HAVE NO IDEA WHAT THIS ERROR MEANS OR WHY ITS HERE SORRY ABOUT THAT!"
             ));
         }
 

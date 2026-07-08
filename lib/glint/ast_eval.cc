@@ -1,5 +1,3 @@
-#include <lcc/utils.hh>
-
 #include <glint/ast.hh>
 #include <glint/ast_eval.hh>
 

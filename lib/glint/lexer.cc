@@ -6,7 +6,6 @@
 
 #include <lcc/stringmap.hh>
 #include <lcc/utf8.hh>
-#include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
 

@@ -1,7 +1,7 @@
-#include <lccbase/context.hh>
 #include <lcc/core.hh>
-#include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
+
+#include <lccbase/context.hh>
 
 #include <glint/ast.hh>
 #include <glint/error_ids.hh>

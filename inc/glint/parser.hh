@@ -1,11 +1,11 @@
 #ifndef GLINT_PARSER_HH
 #define GLINT_PARSER_HH
 
-#include <lccbase/context.hh>
-#include <lccbase/diags.hh>
 #include <lcc/syntax/lexer.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/result.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 
 #include <glint/ast.hh>
 #include <glint/lexer.hh>
@@ -82,7 +82,10 @@ private:
         Scope* scope;
 
         explicit ScopeRAII(Parser* parser_, Scope* parent = nullptr)
-            : parser(parser_), scope(new (*parser->mod) Scope(parent ? parent : parser->CurrScope())) {
+            : parser(parser_)
+            , scope(new (*parser->mod) Scope(
+                  parent ? parent : parser->CurrScope()
+              )) {
             LCC_ASSERT(parser);
             LCC_ASSERT(scope);
             parser->scope_stack.push_back(scope);
@@ -93,7 +96,8 @@ private:
         auto operator=(const ScopeRAII&) -> ScopeRAII = delete;
 
         ScopeRAII(ScopeRAII&& other) noexcept
-            : parser(other.parser), scope(other.scope) {
+            : parser(other.parser)
+            , scope(other.scope) {
             other.scope = nullptr;
         }
 
@@ -114,8 +118,10 @@ private:
         }
     };
 
-    Parser(Context* ctx, File* file) : Lexer(ctx, file) {}
-    Parser(Context* ctx, std::string_view source) : Lexer(ctx, source) {}
+    Parser(Context* ctx, File* file)
+        : Lexer(ctx, file) {}
+    Parser(Context* ctx, std::string_view source)
+        : Lexer(ctx, source) {}
 
     /// Check if we’re at one of a set of tokens.
     [[nodiscard]]
@@ -224,27 +230,40 @@ private:
     auto ParseBlock() -> Result<BlockExpr*>;
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
     auto ParseDecl() -> Result<Decl*>;
-    auto ParseDeclRest(std::string ident, Location location, bool is_extern) -> Result<Decl*>;
+    auto ParseDeclRest(
+        std::string ident,
+        Location location,
+        bool is_extern
+    ) -> Result<Decl*>;
     auto ParseExpr(isz current_precedence = 0) -> ExprResult;
     auto ParseExprInNewScope() -> ExprResult;
     auto ParseForExpr() -> Result<ForExpr*>;
     auto ParseRangedForExpr() -> Result<ForExpr*>;
     auto ParseFuncAttrs() -> Result<FuncType::Attributes>;
-    auto ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scope*>>;
-    auto ParseFuncDecl(std::string name, FuncType* type, bool is_extern) -> Result<FuncDecl*>;
+    auto ParseFuncBody(bool is_extern)
+        -> Result<std::pair<Expr*, Scope*>>;
+    auto ParseFuncDecl(
+        std::string name,
+        Location name_location,
+        FuncType* type,
+        bool is_extern
+    ) -> Result<FuncDecl*>;
     auto ParseFuncSig(Type* return_type) -> Result<FuncType*>;
     auto ParseIdentExpr() -> Result<Expr*>;
     auto ParseIfExpr() -> Result<IfExpr*>;
     auto ParsePreamble(File* f) -> Result<std::unique_ptr<Module>>;
-    auto ParseStructType() -> Result<std::variant<StructType*, TemplatedStructType*>>;
-    auto ParseStructMembers() -> Result<std::vector<StructType::Member>>;
+    auto ParseStructType()
+        -> Result<std::variant<StructType*, TemplatedStructType*>>;
+    auto ParseStructMembers()
+        -> Result<std::vector<StructType::Member>>;
     auto ParseEnumType() -> Result<EnumType*>;
     auto ParseUnionType() -> Result<UnionType*>;
     auto ParseSumType() -> Result<SumType*>;
     void ParseTopLevel();
     auto ParseType(isz current_precedence = 0) -> Result<Type*>;
     auto ParseWhileExpr() -> Result<WhileExpr*>;
-    auto ParseTemplateParameters() -> Result<std::vector<TemplateExpr::Param>>;
+    auto ParseTemplateParameters()
+        -> Result<std::vector<TemplateExpr::Param>>;
 
     // Synchronise is normally used when a syntax error occurs, and attempts
     // to get to a position that is known to be a good enough place to start

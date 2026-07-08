@@ -3,7 +3,6 @@
 
 #include <lccbase/context.hh>
 #include <lccbase/diags.hh>
-#include <lcc/utils.hh>
 
 auto lcc::glint::Expr::evaluate(Context* ctx, EvalResult& out, bool required) -> bool {
     LCC_ASSERT(
