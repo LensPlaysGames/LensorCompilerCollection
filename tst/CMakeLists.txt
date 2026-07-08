@@ -216,18 +216,13 @@ add_custom_target(
 )
 
 if (VERIFY_COMPILERS)
+  include(ExternalProject)
+
   set(
     COMMON_CONFIG
+    -DVERIFY_COMPILERS=OFF
     -DUSE_LTO=OFF
     -G ${CMAKE_GENERATOR} # pass through generator
-  )
-  # NOTE: Ideally we could "pass through" the parallel jobs, but there is
-  # some configure-time/build-time issues there. For now, limit parallel
-  # jobs so that build systems like Ninja don't swamp the host.
-  # FIXME: We should probably make this a user option.
-  set(
-    COMMON_BUILD
-    --parallel 3
   )
 
   add_custom_target(verify_compilers)
@@ -235,15 +230,19 @@ if (VERIFY_COMPILERS)
   find_program(GCC_PROGRAM gcc)
   find_program(GXX_PROGRAM g++)
   if (GCC_PROGRAM AND GXX_PROGRAM)
-    add_custom_target(
+    ExternalProject_Add(
       gnu_build
-      COMMAND
-      ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B fullgnu -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc ${COMMON_CONFIG}
-      COMMAND
-      ${CMAKE_COMMAND} --build fullgnu --target lcc ${COMMON_BUILD}
-      VERBATIM
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+      BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thegnubuild
+      DOWNLOAD_COMMAND ""
+      UPDATE_COMMAND ""
+      INSTALL_COMMAND ""
+      CMAKE_ARGS
+      -DCMAKE_C_COMPILER=gcc
+      -DCMAKE_CXX_COMPILER=g++
+      ${COMMON_CONFIG}
     )
-    add_dependencies(verify_compilers llvm_build gnu_build)
+    add_dependencies(verify_compilers gnu_build)
   else()
     message(STATUS "VERIFY_COMPILERS: gcc compiler verification is not available")
   endif()
@@ -251,21 +250,32 @@ if (VERIFY_COMPILERS)
   find_program(CLANG_PROGRAM clang)
   find_program(CLANGXX_PROGRAM clang++)
   if (CLANG_PROGRAM AND CLANGXX_PROGRAM)
-    add_custom_target(
+    ExternalProject_Add(
       llvm_build
-      COMMAND
-      ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B fullllvm -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libc++" ${COMMON_CONFIG}
-      COMMAND
-      ${CMAKE_COMMAND} --build fullllvm --target lcc ${COMMON_BUILD}
-      VERBATIM
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+      BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thellvmbuild
+      DOWNLOAD_COMMAND ""
+      UPDATE_COMMAND ""
+      INSTALL_COMMAND ""
+      CMAKE_ARGS
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_CXX_FLAGS="-stdlib=libc++"
+      ${COMMON_CONFIG}
     )
-    add_custom_target(
+    # LLVM Compiler, GNU Standard Library
+    ExternalProject_Add(
       llvmgnu_build
-      COMMAND
-      ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B llvmgnu -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_FLAGS="-stdlib=libstdc++" ${COMMON_CONFIG}
-      COMMAND
-      ${CMAKE_COMMAND} --build llvmgnu --target lcc ${COMMON_BUILD}
-      VERBATIM
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+      BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thellvmgnubuild
+      DOWNLOAD_COMMAND ""
+      UPDATE_COMMAND ""
+      INSTALL_COMMAND ""
+      CMAKE_ARGS
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_CXX_FLAGS="-stdlib=libstdc++"
+      ${COMMON_CONFIG}
     )
     add_dependencies(verify_compilers llvm_build llvmgnu_build)
   else()
@@ -275,16 +285,17 @@ if (VERIFY_COMPILERS)
 
   find_program(MINGW_CXX NAMES ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++)
   if (MINGW_CXX)
-    add_custom_target(
+    ExternalProject_Add(
       mingw_build
-      COMMAND
-      ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_LIST_DIR} -B mingw
-      -DCMAKE_CXX_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+      BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/themingwbuild
+      DOWNLOAD_COMMAND ""
+      UPDATE_COMMAND ""
+      INSTALL_COMMAND ""
+      CMAKE_ARGS
       -DCMAKE_C_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-gcc
+      -DCMAKE_CXX_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++
       ${COMMON_CONFIG}
-      COMMAND
-      ${CMAKE_COMMAND} --build mingw --target lcc ${COMMON_BUILD}
-      VERBATIM
     )
     add_dependencies(verify_compilers mingw_build)
   else()
