@@ -2,13 +2,13 @@
 
 #+NAME: source
 #+begin_src glint
-import foo_dynarray_bytefun
+  import foo_dynarray_bytefun
 
-bar :: foo;
+  bar :: foo;
 
-print bar;
+  print bar;
 
--bar;
+  -bar;
 #+end_src
 
 #+NAME: source
