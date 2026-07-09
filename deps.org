@@ -1,0 +1,32 @@
+* Dependencies
+
+For a particular system, there is some set of software that is required in order to build the Lensor Compiler Collection. This file provides, per system, the command(s) to fetch that software.
+
+* Fedora
+
+NOTE: We don't install =development-tools= group because it includes subversion, systemtap, and a few other things we don't actually use or need. The idea here is to provide the minimal list that is required, not just provide a command that makes it work. If that were the goal, installing every package available from your package manager would be a viable solution...
+
+Base:
+#+begin_src shell
+  sudo dnf install \
+       cmake \
+       gcc \
+       gcc-c++ \
+       git \
+       libstdc++-devel \
+       make
+#+end_src
+
+Test:
+#+begin_src shell
+  sudo dnf install \
+       emacs \
+       libcxx \
+       libcxx-devel \
+       libcxxabi \
+       libcxxabi-devel \
+       mingw64-gcc \
+       mingw64-libstdc++ \
+       ucrt64-gcc \
+       ucrt64-libstdc++
+#+end_src
