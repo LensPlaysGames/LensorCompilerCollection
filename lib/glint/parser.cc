@@ -2695,6 +2695,8 @@ auto lcc::glint::Parser::ParseFuncDecl(
     FuncType* type,
     bool is_external
 ) -> Result<FuncDecl*> {
+    LCC_ASSERT(type);
+
     // Parse attributes and the function body.
     auto maybe_body = ParseFuncBody(is_external);
     if (not maybe_body) return maybe_body.diag();
@@ -2704,6 +2706,9 @@ auto lcc::glint::Parser::ParseFuncDecl(
 
     // External implies no mangling.
     if (is_external) type->set_attr(FuncAttr::NoMangle);
+
+    auto loc = Location{name_location, type->location()};
+    if (body) loc = {loc, body->location()};
 
     // Create the function.
     Linkage linkage = is_external
@@ -2721,7 +2726,7 @@ auto lcc::glint::Parser::ParseFuncDecl(
             scope,
             mod,
             linkage,
-            {name_location, body->location()}
+            loc
         );
         if (name.empty()) return func;
     } else {
@@ -2732,7 +2737,7 @@ auto lcc::glint::Parser::ParseFuncDecl(
             scope,
             mod,
             linkage,
-            {name_location, body->location()}
+            loc
         );
     }
 
