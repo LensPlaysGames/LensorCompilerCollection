@@ -220,7 +220,6 @@ if (VERIFY_COMPILERS)
 
   set(
     COMMON_CONFIG
-    -DVERIFY_COMPILERS=OFF
     -DUSE_LTO=OFF
     -G ${CMAKE_GENERATOR} # pass through generator
   )
@@ -232,7 +231,7 @@ if (VERIFY_COMPILERS)
   if (GCC_PROGRAM AND GXX_PROGRAM)
     ExternalProject_Add(
       gnu_build
-      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
       BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thegnubuild
       DOWNLOAD_COMMAND ""
       UPDATE_COMMAND ""
@@ -243,6 +242,9 @@ if (VERIFY_COMPILERS)
       ${COMMON_CONFIG}
     )
     add_dependencies(verify_compilers gnu_build)
+    set_property(DIRECTORY APPEND PROPERTY
+      ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/thegnubuild"
+    )
   else()
     message(STATUS "VERIFY_COMPILERS: gcc compiler verification is not available")
   endif()
@@ -252,7 +254,7 @@ if (VERIFY_COMPILERS)
   if (CLANG_PROGRAM AND CLANGXX_PROGRAM)
     ExternalProject_Add(
       llvm_build
-      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
       BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thellvmbuild
       DOWNLOAD_COMMAND ""
       UPDATE_COMMAND ""
@@ -263,10 +265,14 @@ if (VERIFY_COMPILERS)
       -DCMAKE_CXX_FLAGS="-stdlib=libc++"
       ${COMMON_CONFIG}
     )
+    add_dependencies(verify_compilers llvm_build)
+    set_property(DIRECTORY APPEND PROPERTY
+      ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/thellvmbuild"
+    )
     # LLVM Compiler, GNU Standard Library
     ExternalProject_Add(
       llvmgnu_build
-      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
       BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thellvmgnubuild
       DOWNLOAD_COMMAND ""
       UPDATE_COMMAND ""
@@ -277,7 +283,10 @@ if (VERIFY_COMPILERS)
       -DCMAKE_CXX_FLAGS="-stdlib=libstdc++"
       ${COMMON_CONFIG}
     )
-    add_dependencies(verify_compilers llvm_build llvmgnu_build)
+    add_dependencies(verify_compilers llvmgnu_build)
+    set_property(DIRECTORY APPEND PROPERTY
+      ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/thellvmgnubuild"
+    )
   else()
     message(STATUS "VERIFY_COMPILERS: clang compiler verification is not available")
   endif()
@@ -287,7 +296,7 @@ if (VERIFY_COMPILERS)
   if (MINGW_CXX)
     ExternalProject_Add(
       mingw_build
-      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
       BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/themingwbuild
       DOWNLOAD_COMMAND ""
       UPDATE_COMMAND ""
@@ -298,7 +307,32 @@ if (VERIFY_COMPILERS)
       ${COMMON_CONFIG}
     )
     add_dependencies(verify_compilers mingw_build)
+    set_property(DIRECTORY APPEND PROPERTY
+      ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/themingwbuild"
+    )
   else()
     message(STATUS "VERIFY_COMPILERS: mingw compiler verificaiton is not available")
+  endif()
+
+  find_program(UCRT_CXX NAMES ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++)
+  if (UCRT_CXX)
+    ExternalProject_Add(
+      ucrt_build
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
+      BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/theucrtbuild
+      DOWNLOAD_COMMAND ""
+      UPDATE_COMMAND ""
+      INSTALL_COMMAND ""
+      CMAKE_ARGS
+      -DCMAKE_C_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-gcc
+      -DCMAKE_CXX_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++
+      ${COMMON_CONFIG}
+    )
+    add_dependencies(verify_compilers ucrt_build)
+    set_property(DIRECTORY APPEND PROPERTY
+      ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/theucrtbuild"
+    )
+  else()
+    message(STATUS "VERIFY_COMPILERS: ucrt compiler verificaiton is not available")
   endif()
 endif()
