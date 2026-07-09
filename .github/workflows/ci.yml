@@ -20,7 +20,7 @@ jobs:
       - name: CMake build
         run: cmake --build bld -j $(nproc)
       - name: Setup Test suite dependencies
-        run: sudo dnf install -y emacs libcxx libcxx-devel libcxxabi libcxxabi-devel mingw64-gcc mingw64-libstdc++ ucrt64-gcc ucrt64-libstdc++
+        run: sudo dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel mingw64-gcc mingw64-libstdc++ ucrt64-gcc ucrt64-libstdc++
       - name: Configure Test suite using CMake
         working-directory: ./tst
         run: cmake -G Ninja -B bld
