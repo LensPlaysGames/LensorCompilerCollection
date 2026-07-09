@@ -10,4 +10,4 @@ jobs:
       - name: CMake configure
         run: cmake -B bld
       - name: CMake build
-        run: cmake --build bld $(nproc)
+        run: cmake --build bld -j $(nproc)
