@@ -16,7 +16,7 @@ jobs:
       - name: CMake build
         run: cmake --build bld -j $(nproc)
       - name: Setup Test suite dependencies
-        run: sudo apt-get install -y emacs-nox llvm clang libc++-dev
+        run: sudo apt-get install -y emacs-nox llvm-22 clang-22 libc++-22-dev
       - name: Configure Test suite using CMake
         working-directory: ./tst
         run: cmake -G Ninja -B bld
