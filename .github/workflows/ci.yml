@@ -17,6 +17,7 @@ jobs:
         run: cmake --build bld -j $(nproc)
   build-windows:
     runs-on: windows-latest
+    steps:
       - uses: actions/checkout@v7
       - name: Add clang path to $PATH env
         run: echo "PATH=$PATH:C:\msys64\mingw64\bin" >> $GITHUB_ENV
