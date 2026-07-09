@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: CMake configure
-        run: cmake -B bld
+        run: cmake -G Ninja -B bld
       - name: CMake build
         run: cmake --build bld -j $(nproc)
   build-windows:
@@ -22,6 +22,6 @@ jobs:
       - name: Add clang path to $PATH env
         run: echo "PATH=$PATH:C:\msys64\mingw64\bin" >> $GITHUB_ENV
       - name: CMake configure
-        run: cmake -B bld -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+        run: cmake -G Ninja -B bld -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
       - name: CMake build
         run: cmake --build bld -j $(nproc)
