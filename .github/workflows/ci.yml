@@ -2,11 +2,22 @@ name: CI build and test
 
 on: [push, pull_request]
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
+  strategy:
+    matrix:
+      os: [ubuntu-latest, windows-latest]
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Add clang path to $PATH env
+        shell: bash
+        if: runner.os == 'Windows'
+        run: echo "PATH=$PATH:C:\msys64\mingw64\bin" >> $GITHUB_ENV
       - name: CMake configure
         run: cmake -B bld
       - name: CMake build
