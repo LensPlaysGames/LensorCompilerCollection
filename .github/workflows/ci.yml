@@ -16,14 +16,14 @@ jobs:
       - name: Install dependencies
         run: sudo dnf install -y cmake gcc gcc-c++ git libstdc++-devel make ninja
       - name: CMake configure
-        run: cmake -G Ninja -B bld
+        run: cmake -G Ninja -B bld -DUSE_LTO=OFF
       - name: CMake build
         run: cmake --build bld -j $(nproc)
       - name: Setup Test suite dependencies
         run: sudo dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel mingw64-gcc mingw64-libstdc++ ucrt64-gcc ucrt64-libstdc++
       - name: Configure Test suite using CMake
         working-directory: ./tst
-        run: cmake -G Ninja -B bld
+        run: cmake -G Ninja -B bld -DUSE_LTO=OFF
       - name: Build Test suite
         working-directory: ./tst
         run: cmake --build bld
@@ -38,6 +38,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: CMake configure
-        run: cmake -G Ninja -B bld -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DFMT_MODULE=OFF
+        run: cmake -G Ninja -B bld -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DFMT_MODULE=OFF -DUSE_LTO=OFF
       - name: CMake build
         run: cmake --build bld -j $(nproc)
