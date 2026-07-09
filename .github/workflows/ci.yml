@@ -7,17 +7,20 @@ defaults:
     shell: bash
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  build-linux:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Add clang path to $PATH env
-        if: runner.os == 'Windows'
-        run: echo "PATH=$PATH:C:\msys64\mingw64\bin" >> $GITHUB_ENV
       - name: CMake configure
         run: cmake -B bld
+      - name: CMake build
+        run: cmake --build bld -j $(nproc)
+  build-windows:
+    runs-on: windows-latest
+      - uses: actions/checkout@v7
+      - name: Add clang path to $PATH env
+        run: echo "PATH=$PATH:C:\msys64\mingw64\bin" >> $GITHUB_ENV
+      - name: CMake configure
+        run: cmake -B bld -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
       - name: CMake build
         run: cmake --build bld -j $(nproc)
