@@ -9,14 +9,18 @@ defaults:
 jobs:
   build-linux:
     runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
     steps:
       - uses: actions/checkout@v7
+      - name: Install dependencies
+        run: sudo dnf install cmake gcc gcc-c++ git libstdc++-devel make
       - name: CMake configure
         run: cmake -G Ninja -B bld
       - name: CMake build
         run: cmake --build bld -j $(nproc)
       - name: Setup Test suite dependencies
-        run: sudo apt-get install -y emacs-nox llvm-22 clang-22 libc++-22-dev
+        run: sudo dnf install emacs libcxx libcxx-devel libcxxabi libcxxabi-devel mingw64-gcc mingw64-libstdc++ ucrt64-gcc ucrt64-libstdc++
       - name: Configure Test suite using CMake
         working-directory: ./tst
         run: cmake -G Ninja -B bld
