@@ -1,0 +1,13 @@
+name: CI build and test
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: CMake configure
+        run: cmake -B bld
+      - name: CMake build
+        run: cmake --build bld $(nproc)
