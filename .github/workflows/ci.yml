@@ -23,6 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: CMake configure
-        run: cmake -G Ninja -B bld -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+        run: cmake -G Ninja -B bld -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
       - name: CMake build
         run: cmake --build bld -j $(nproc)
