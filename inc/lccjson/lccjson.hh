@@ -2,13 +2,14 @@
 #define LCCJSON_HH
 
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
-struct JSONProperty; /** (!) forward declaration **/
-struct JSONObject;   /** (!) forward declaration **/
-struct JSONArray;    /** (!) forward declaration **/
-struct JSONItem;     /** (!) forward declaration **/
+struct JSONProperty; /** (!) Forward Declarations **/
+struct JSONObject;
+struct JSONArray;
+struct JSONItem;
 
 struct JSONObject {
     std::vector<JSONProperty> properties;
