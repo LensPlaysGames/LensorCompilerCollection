@@ -1181,7 +1181,9 @@ int main(int argc, char** argv) {
         break;
     }
 
-    // if (any_failed)
-    //     return 1;
+#ifdef LCC_TEST_NON_ZERO_EXIT_ON_FAILURE
+    if (any_failed)
+        return 1;
+#endif
     return 0;
 }

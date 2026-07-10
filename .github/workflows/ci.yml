@@ -23,7 +23,7 @@ jobs:
         run: sudo dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel mingw64-gcc mingw64-libstdc++ ucrt64-gcc ucrt64-libstdc++
       - name: Configure Test suite using CMake
         working-directory: ./tst
-        run: cmake -G Ninja -B bld -DUSE_LTO=OFF
+        run: cmake -G Ninja -B bld -DUSE_LTO=OFF -DLCC_TEST_NON_ZERO_EXIT_ON_FAILURE=ON
       - name: Build Test suite
         working-directory: ./tst
         run: cmake --build bld

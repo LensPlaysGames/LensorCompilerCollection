@@ -53,6 +53,10 @@ if (USE_LTO)
   endif()
 endif()
 
+if (LCC_TEST_NON_ZERO_EXIT_ON_FAILURE)
+  add_compile_definitions(LCC_TEST_NON_ZERO_EXIT_ON_FAILURE)
+endif()
+
 add_subdirectory("./vew/" "vew" EXCLUDE_FROM_ALL)
 
 # LangTest

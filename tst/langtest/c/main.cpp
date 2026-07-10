@@ -561,7 +561,9 @@ int main(int argc, const char** argv) {
         );
     }
 
-    // if (out.count_failed())
-    //     return 1;
+#ifdef LCC_TEST_NON_ZERO_EXIT_ON_FAILURE
+    if (out.count_failed())
+        return 1;
+#endif
     return 0;
 }
