@@ -26,7 +26,7 @@
 #include <vector>
 
 namespace lcc {
-class Parameter;
+class Function;
 class PhiInst;
 
 namespace parser {
@@ -605,6 +605,34 @@ public:
     static auto classof(const Value* v) -> bool { return v->kind() == Kind::Block; }
 };
 
+/// A parameter reference.
+class Parameter : public UseTrackingValue {
+    /// Only the Function class should be able to create these.
+    friend Function;
+    // NOTE: For lowering
+    friend Module;
+
+    /// The parameter index.
+    u32 i{};
+
+    Parameter(Type* ty, u32 idx)
+        : UseTrackingValue(Kind::Parameter, ty)
+        , i(idx) {}
+
+public:
+    /// Get the parameter index.
+    [[nodiscard]]
+    auto index() const -> u32 { return i; }
+
+    /// NOTE: For lowering
+    [[nodiscard]]
+    auto index() -> u32& { return i; }
+
+    /// RTTI.
+    [[nodiscard]]
+    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Parameter; }
+};
+
 /// An IR function.
 class Function : public UseTrackingValue {
 private:
@@ -741,34 +769,6 @@ public:
     /// RTTI.
     [[nodiscard]]
     static auto classof(const Value* v) -> bool { return v->kind() == Kind::Function; }
-};
-
-/// A parameter reference.
-class Parameter : public UseTrackingValue {
-    /// Only the Function class should be able to create these.
-    friend Function;
-    // NOTE: For lowering
-    friend Module;
-
-    /// The parameter index.
-    u32 i{};
-
-    Parameter(Type* ty, u32 idx)
-        : UseTrackingValue(Kind::Parameter, ty)
-        , i(idx) {}
-
-public:
-    /// Get the parameter index.
-    [[nodiscard]]
-    auto index() const -> u32 { return i; }
-
-    /// NOTE: For lowering
-    [[nodiscard]]
-    auto index() -> u32& { return i; }
-
-    /// RTTI.
-    [[nodiscard]]
-    static auto classof(const Value* v) -> bool { return v->kind() == Kind::Parameter; }
 };
 
 /// ============================================================================
