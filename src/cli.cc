@@ -143,7 +143,7 @@ auto parse(int argc, const char** argv) -> Options {
         else if (arg == "--stopat-ir")
             o.stopat_ir = true;
         else if (arg == "--mir")
-            o.mir = lcc::Context::PrintMIR;
+            o.mir = lcc::Context::PrintMachineIR;
         else if (arg == "--stopat-mir")
             o.stopat_mir = lcc::Context::StopatMIR;
         else if (arg == "--stats")

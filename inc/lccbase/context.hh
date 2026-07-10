@@ -45,9 +45,9 @@ public:
         StopatSema = true,
     };
 
-    enum OptionPrintMIR : bool {
-        DoNotPrintMIR,
-        PrintMIR = true,
+    enum OptionPrintMachineIR : bool {
+        DoNotPrintMachineIR,
+        PrintMachineIR = true,
     };
     enum OptionStopatMIR : bool {
         DoNotStopatMIR,
@@ -74,7 +74,7 @@ public:
         OptionStopatSyntax _stopat_syntax{};
         OptionStopatSema _stopat_sema{};
 
-        OptionPrintMIR _should_print_mir{};
+        OptionPrintMachineIR _should_print_mir{};
         OptionStopatMIR _stopat_mir{};
     };
 
