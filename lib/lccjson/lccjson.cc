@@ -4,6 +4,7 @@
 #include <fmt/ranges.h>
 
 #include <cctype>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
