@@ -561,5 +561,7 @@ int main(int argc, const char** argv) {
         );
     }
 
+    // if (out.count_failed())
+    //     return 1;
     return 0;
 }

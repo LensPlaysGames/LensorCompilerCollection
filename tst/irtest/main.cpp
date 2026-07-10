@@ -476,11 +476,16 @@ int main(int argc, char** argv) {
         print_passedfailed(test_context.results)
     );
 
+    bool any_failed{false};
     for (auto result : test_context.results) {
         if (result.passed)
             continue;
+
+        any_failed = true;
         fmt::print("{}", print_test_passedfailed(result));
     }
 
+    // if (any_failed)
+    //     return 1;
     return 0;
 }

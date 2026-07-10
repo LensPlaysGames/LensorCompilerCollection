@@ -599,26 +599,35 @@ strings were stored to."
     (sqlite-execute db "CREATE TABLE tests (path TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, passed INTEGER NOT NULL, language TEXT NOT NULL);")
     (sqlite-close db))
 
-  ;; Turn off file backups (becomes a mess with all of the I/O that tests
-  ;; require)
-  (let ((backup-inhibited t))
-    ;; Run the tests...
-    (run-test--ir-tests)
-    (run-test--glint-tests)
-    (run-test--c-tests)
+  (let ((rc 0))
+    ;; Turn off file backups (becomes a mess with all of the I/O that tests
+    ;; require)
+    (let ((backup-inhibited t))
+      ;; Run the tests...
+      (run-test--ir-tests)
+      (run-test--glint-tests)
+      (run-test--c-tests)
 
-    ;; Emit Results in SARIF
-    (run-test--sarif-file)
+      ;; Emit Results in SARIF
+      (run-test--sarif-file)
 
-    ;; Print test overview (what happened)
-    (let ((db (sqlite-open run-test--test-database-path)))
-      (let ((results (sqlite-select db "SELECT * FROM tests;"))
-            (passing-results (sqlite-select db "SELECT * FROM tests WHERE passed > 0;")))
-        (message "Ran %s Total Tests: %s Passed"
-             (length results)
-             (length passing-results))
-        (sqlite-close db)))
-    ))
+      ;; Print test overview (what happened)
+      (let ((db (sqlite-open run-test--test-database-path)))
+        (let ((results (sqlite-select db "SELECT * FROM tests;"))
+              (passing-results (sqlite-select db "SELECT * FROM tests WHERE passed > 0;")))
+          (message "Ran %s Total Tests: %s Passed"
+                   (length results)
+                   (length passing-results))
+
+          ;; Set failing return code, if necessary
+          ;; (when (not (= (length results) (length passing-results)))
+          ;;   (setf rc 1))
+          )
+
+        (sqlite-close db))
+      )
+
+    (kill-emacs rc)))
 
 (provide 'runtest)
 
