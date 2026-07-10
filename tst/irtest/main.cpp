@@ -453,7 +453,7 @@ int main(int argc, char** argv) {
             lcc::Context::DoNotStopatLex,
             lcc::Context::DoNotStopatSyntax,
             lcc::Context::DoNotStopatSema,
-            lcc::Context::DoNotPrintMIR,
+            lcc::Context::DoNotPrintMachineIR,
             lcc::Context::DoNotStopatMIR
         }
     };

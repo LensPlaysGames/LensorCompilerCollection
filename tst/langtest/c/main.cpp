@@ -90,7 +90,7 @@ struct CLanguageTest : langtest::Test {
                 lcc::Context::DoNotStopatLex,
                 lcc::Context::DoNotStopatSyntax,
                 lcc::Context::DoNotStopatSema,
-                lcc::Context::DoNotPrintMIR,
+                lcc::Context::DoNotPrintMachineIR,
                 lcc::Context::DoNotStopatMIR
             }
         };
@@ -241,7 +241,7 @@ void output_ast(std::filesystem::path p) {
             lcc::Context::DoNotStopatLex,
             lcc::Context::DoNotStopatSyntax,
             lcc::Context::DoNotStopatSema,
-            lcc::Context::DoNotPrintMIR,
+            lcc::Context::DoNotPrintMachineIR,
             lcc::Context::DoNotStopatMIR //
         } //
     };
