@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.28)
 project(LCC VERSION 4.20.0 LANGUAGES C CXX)
 
 # User Option(s)
@@ -150,6 +150,20 @@ if (TIME_TRACE)
   endif()
 endif()
 
+# Enable AddressSanitizer if requested
+if (USE_ASAN)
+  add_compile_options(-fsanitize=address)
+  add_link_options(-fsanitize=address)
+  add_compile_definitions(-DUSE_ASAN=1)
+endif()
+
+# Enable UndefinedBehaviourSanitizer if requested
+if (USE_UBSAN)
+  add_compile_options(-fsanitize=undefined)
+  add_link_options(-fsanitize=undefined)
+  add_compile_definitions(-DUSE_UBSAN=1)
+endif()
+
 # Output HTML as well as JS if compiling with emscripten (for wasm)
 if (EMSCRIPTEN)
   # Disable "native" optimisation.
@@ -188,9 +202,43 @@ endif()
 # ============================================================================
 add_library(options INTERFACE)
 
-# Flags for Clang and GCC.
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  target_compile_options(options INTERFACE
+# Compiler Command Line Identification
+set(
+  CXX_COMPILER_IS_GNULIKE OFF
+  CACHE BOOL
+  "Whether or not the compiler accepts GNU-like command line"
+)
+if(
+    CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    OR (
+      CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+      AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU"
+    )
+  )
+  set(CXX_COMPILER_IS_GNULIKE ON)
+endif()
+
+set(
+  CXX_COMPILER_IS_MSVCLIKE
+  CACHE BOOL
+  "Whether or not the compiler accepts MSVC-like command line"
+  OFF
+)
+if(
+    MSVC
+    OR CMAKE_CXX_COMPILER_ID STREQUAL "MSVC"
+    OR (
+      CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+      AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"
+    )
+  )
+  set(CXX_COMPILER_IS_MSVCLIKE ON)
+endif()
+
+# GNU-like Flags
+if(CXX_COMPILER_IS_GNULIKE)
+  target_compile_options(
+    options INTERFACE
     # Warnings.
     -Wall -Wextra     # Enable ‘all’ warnings.
     -Wpedantic
@@ -238,10 +286,13 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
     target_compile_options(options INTERFACE
       $<$<CONFIG:RELEASE>:-march=native>
     )
+    target_link_options(options INTERFACE
+      $<$<CONFIG:RELEASE>:-march=native>
+    )
   endif()
 endif()
 
-# Additional flags for GCC.
+# Additional flags for GCC (not just GNU-like compilers, GCC only).
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(options INTERFACE
     -Wlogical-op      # Duplicate or unintended logical operators.
@@ -257,6 +308,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   target_compile_options(options INTERFACE
     -Werror=dangling
     -Werror=return-stack-address
+    -Wno-unused-private-field
   )
 endif()
 
@@ -286,52 +338,20 @@ if (WIN32)
   )
 endif()
 
-# Debug/Release flags.
-if (NOT MSVC)
+# backtrace/backtrace_symbols needs this to print function names instead
+# of addresses.
+if (CXX_COMPILER_IS_GNULIKE)
+  # clang spits out "unused argument -rdynamic" when compiling object files
   if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    # backtrace/backtrace_symbols needs this to print function names instead
-    # of addresses.
-    target_compile_options(options INTERFACE $<$<CONFIG:DEBUG>:-rdynamic>)
-  else()
-    target_compile_options(options INTERFACE -Wno-unused-private-field)
-  endif()
-
-  target_compile_options(options INTERFACE
-    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
-    $<$<CONFIG:RELEASE>:-O3>
-  )
-  target_link_options(options INTERFACE
-    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
-    $<$<CONFIG:RELEASE>:-O3>
-  )
-
-  if (NATIVE_OPT)
-    target_compile_options(options INTERFACE
-      $<$<CONFIG:RELEASE>:-march=native>
-    )
-    target_link_options(options INTERFACE
-      $<$<CONFIG:RELEASE>:-march=native>
+    target_compile_options(
+      options INTERFACE
+      $<$<CONFIG:DEBUG>:-rdynamic>
     )
   endif()
-else()
-  target_compile_options(options INTERFACE
-    $<$<CONFIG:DEBUG>:/Od>
-    $<$<CONFIG:RELEASE>:/O2>
+  target_link_options(
+    options INTERFACE
+    $<$<CONFIG:DEBUG>:-rdynamic>
   )
-endif()
-
-# Enable AddressSanitizer if requested
-if (USE_ASAN)
-  target_compile_options(options INTERFACE -fsanitize=address)
-  target_link_options(options INTERFACE -fsanitize=address)
-  target_compile_definitions(options INTERFACE -DUSE_ASAN=1)
-endif()
-
-# Enable UndefinedBehaviourSanitizer if requested
-if (USE_UBSAN)
-  target_compile_options(options INTERFACE -fsanitize=undefined)
-  target_link_options(options INTERFACE -fsanitize=undefined)
-  target_compile_definitions(options INTERFACE -DUSE_UBSAN=1)
 endif()
 
 # ============================================================================
@@ -350,17 +370,18 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
   GIT_TAG 12.2.0
   SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
+  EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(fmtlib)
 target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
 
 # Link against libfmt.
-target_link_libraries(options INTERFACE fmt)
+target_link_libraries(options INTERFACE fmt::fmt)
 
-# Add ‘include’ as an include dir.
+# Add top level include directory.
 target_include_directories(options INTERFACE inc)
 
-# Do not link with libm (math) when target is windows executable.
+# Link with libm (math), if necessary.
 if (NOT WIN32)
   target_link_libraries(options INTERFACE m)
 endif()
@@ -375,6 +396,16 @@ endif()
 # default, and I don't take kindly to those not willing to put in the
 # effort ơ_ơ.
 
+# Simple JSON Library (freestanding)
+add_library(
+  liblccjson
+  inc/lccjson/lccjson.hh
+  lib/lccjson/lccjson.cc
+)
+target_include_directories(liblccjson PUBLIC inc)
+target_link_libraries(liblccjson PRIVATE options)
+
+# LCC Base Library (freestanding)
 add_library(
   liblccbase
   inc/lccbase/assert.hh
@@ -406,7 +437,10 @@ add_library(
   lib/object/generic_to_elf.cc
 )
 target_include_directories(object PUBLIC inc)
-target_link_libraries(object PRIVATE options)
+target_link_libraries(
+  object PRIVATE
+  options liblccbase
+)
 
 # Add the main lcc library.
 add_library(
@@ -479,17 +513,20 @@ add_library(
 )
 target_include_directories(liblcc PUBLIC inc)
 set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
-target_link_libraries(liblcc PUBLIC liblccbase)
 
 if(LCC_USE_DEBUG_ITERATORS)
   target_compile_definitions(liblcc PRIVATE LCC_DEBUG_ITERATORS)
 endif()
 
-# Link main lcc library with generic object library.
-target_link_libraries(liblcc PUBLIC object)
-
 # Apply options to main lcc library
 target_link_libraries(liblcc PRIVATE options)
+
+# Link main lcc library with base lcc library
+# Link main lcc library with generic object library.
+target_link_libraries(
+  liblcc PUBLIC
+  liblccbase object
+)
 
 # C language library
 add_library(
@@ -543,18 +580,10 @@ add_library(
   lib/glint/sema_type.cc
 )
 target_include_directories(glint PUBLIC inc)
-target_link_libraries(glint PRIVATE options)
-target_link_libraries(glint PRIVATE object)
-target_link_libraries(glint PRIVATE liblcc)
-
-# Simple JSON Library
-add_library(
-  liblccjson
-  inc/lccjson/lccjson.hh
-  lib/lccjson/lccjson.cc
+target_link_libraries(
+  glint PRIVATE
+  options object liblcc
 )
-target_include_directories(liblccjson PUBLIC inc)
-target_link_libraries(liblccjson PRIVATE options)
 
 # Custom Linker Library
 add_library(
@@ -575,7 +604,7 @@ add_library(
 target_include_directories(libclink PUBLIC inc)
 target_link_libraries(libclink PRIVATE options)
 
-# lcc::Module::emit() needs memory layout stuff...
+# link main lcc library with custom linker library
 target_link_libraries(liblcc PUBLIC libclink)
 
 # Add the driver.
@@ -586,8 +615,6 @@ add_executable(
   src/sarif.cc
 )
 target_include_directories(lcc PUBLIC src)
-
-# Apply options to driver.
 target_link_libraries(lcc PRIVATE options liblcc)
 
 # Make project version accessible from source code
