@@ -219,10 +219,9 @@ if(
 endif()
 
 set(
-  CXX_COMPILER_IS_MSVCLIKE
+  CXX_COMPILER_IS_MSVCLIKE OFF
   CACHE BOOL
   "Whether or not the compiler accepts MSVC-like command line"
-  OFF
 )
 if(
     MSVC
