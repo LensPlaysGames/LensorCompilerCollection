@@ -103,6 +103,7 @@ if (USE_LTO)
     add_compile_options(-flto)
     add_link_options(-flto -fuse-ld=bfd)
   elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # FIXME: Untested wrt clang-cl; may need MSVC check first or smth.
     add_compile_options(-flto)
     add_link_options(-flto -fuse-ld=lld)
   elseif (MSVC)
@@ -142,7 +143,7 @@ if (TIME_TRACE)
   if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-ftime-trace)
     add_link_options(-ftime-trace)
-  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-ftime-report -fmem-report)
     add_link_options(-ftime-report -fmem-report)
   else()
@@ -208,40 +209,84 @@ set(
   CACHE BOOL
   "Whether or not the compiler accepts GNU-like command line"
 )
-if(
-    CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
-    OR (
-      CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
-      AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU"
-    )
-  )
-  set(CXX_COMPILER_IS_GNULIKE ON)
-endif()
-
 set(
-  CXX_COMPILER_IS_MSVCLIKE
+  CXX_COMPILER_IS_MSVCLIKE OFF
   CACHE BOOL
   "Whether or not the compiler accepts MSVC-like command line"
-  OFF
 )
 if(
-    MSVC
-    OR CMAKE_CXX_COMPILER_ID STREQUAL "MSVC"
-    OR (
-      CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
-      AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"
-    )
+    CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU"
   )
-  set(CXX_COMPILER_IS_MSVCLIKE ON)
+  set(CXX_COMPILER_IS_GNULIKE ON FORCE)
+  message(STATUS "Compiler is GNU-like on command-line")
+elseif(
+    CMAKE_CXX_COMPILER_ID STREQUAL "MSVC"
+    OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"
+  )
+  set(CXX_COMPILER_IS_MSVCLIKE ON FORCE)
+  message(STATUS "Compiler is MSVC-like on command-line")
 endif()
 
 # GNU-like Flags
-if(CXX_COMPILER_IS_GNULIKE)
+if (CXX_COMPILER_IS_GNULIKE)
+  # -Wall on MSVC-like causes MAJOR issues, as it is "equivalent" to
+  # -Weverything in GNU land.
   target_compile_options(
     options INTERFACE
-    # Warnings.
-    -Wall -Wextra     # Enable ‘all’ warnings.
-    -Wpedantic
+    -Wall -Wextra -Wpedantic
+  )
+
+  # -march=native only makes sense when compiling for the compiled system.
+  if (NATIVE_OPT)
+    target_compile_options(options INTERFACE
+      $<$<CONFIG:RELEASE>:-march=native>
+    )
+    target_link_options(options INTERFACE
+      $<$<CONFIG:RELEASE>:-march=native>
+    )
+  endif()
+
+  # backtrace/backtrace_symbols needs -rdynamic to print function names
+  # instead of addresses.
+  # NOTE: clang spits out "unused argument -rdynamic" when compiling object
+  # files
+  if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(
+      options INTERFACE
+      $<$<CONFIG:DEBUG>:-rdynamic>
+    )
+  endif()
+  target_link_options(
+    options INTERFACE
+    $<$<CONFIG:DEBUG>:-rdynamic>
+  )
+endif()
+
+# Flags for MSVC/clang-cl.
+if(CXX_COMPILER_IS_MSVCLIKE)
+  target_compile_options(options INTERFACE
+    # Enable a lot of warnings.
+    /W4
+
+    # Source character set is UTF-8
+    /utf-8
+
+    # Allow unnamed structs/unions.
+    /wd4201
+
+    # Don't warn about unused functions.
+    /wd4505
+  )
+endif()
+
+# Additional flags for GCC and Clang (GNU-like or MSVC-like)
+if (
+    CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+  )
+  target_compile_options(
+    options INTERFACE
     -Wundef           # Invalid #undef or undefined macro in #if.
     -Wcast-align      # Casting that changes alignment.
     -Wconversion      # Implicit conversions.
@@ -253,7 +298,6 @@ if(CXX_COMPILER_IS_GNULIKE)
     -Wno-unused-function
     -Wno-unused-local-typedefs
     -Wno-unused-parameter
-
 
     # NULL Errors.
     -Werror=nonnull # Passing NULL to nonnull parameter.
@@ -280,16 +324,6 @@ if(CXX_COMPILER_IS_GNULIKE)
     -Werror=non-virtual-dtor
     -Werror=pessimizing-move
   )
-
-  # -march=native only makes sense when compiling for the compiled system.
-  if (NATIVE_OPT)
-    target_compile_options(options INTERFACE
-      $<$<CONFIG:RELEASE>:-march=native>
-    )
-    target_link_options(options INTERFACE
-      $<$<CONFIG:RELEASE>:-march=native>
-    )
-  endif()
 endif()
 
 # Additional flags for GCC (not just GNU-like compilers, GCC only).
@@ -312,45 +346,13 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   )
 endif()
 
-# Flags for MSVC/clang-cl.
-if (MSVC)
-  target_compile_options(options INTERFACE
-    # Enable ‘all’ warnings.
-    /W4
-
-    # Source character set is UTF-8
-    /utf-8
-
-    # Allow unnamed structs/unions.
-    /wd4201
-
-    # Don't warn about unused functions.
-    /wd4505
-  )
-endif()
-
-# On Windows, don’t suggest the _s nonsense functions.
+# When targeting Windows, don’t suggest the _s nonsense functions.
 if (WIN32)
-  target_compile_definitions(options INTERFACE
+  target_compile_definitions(
+    options INTERFACE
     _CRT_SECURE_NO_WARNINGS
     _CRT_SECURE_NO_WARNINGS_GLOBALS
     _CRT_NONSTDC_NO_WARNINGS
-  )
-endif()
-
-# backtrace/backtrace_symbols needs this to print function names instead
-# of addresses.
-if (CXX_COMPILER_IS_GNULIKE)
-  # clang spits out "unused argument -rdynamic" when compiling object files
-  if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(
-      options INTERFACE
-      $<$<CONFIG:DEBUG>:-rdynamic>
-    )
-  endif()
-  target_link_options(
-    options INTERFACE
-    $<$<CONFIG:DEBUG>:-rdynamic>
   )
 endif()
 
