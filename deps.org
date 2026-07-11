@@ -33,6 +33,8 @@ Test:
 
 * Debian
 
+NOTE: it is possible to build LCC on Ubuntu (and maybe other Debian-based distros), but be aware, that =g{cc,++}-mingw-w64-ucrt64= aren't available there
+
 Base:
 #+begin_src shell
   sudo apt install \
