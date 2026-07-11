@@ -8,7 +8,7 @@ defaults:
 
 jobs:
   build-linux:
-    if: ${{ !contains(github.event.head_commit.message, "[skip-ci]") }}
+    if: ${{ !contains(github.event.head_commit.message, '[skip-ci]') }}
     runs-on: ubuntu-latest
     container:
       image: fedora:latest
@@ -23,19 +23,19 @@ jobs:
       - name: Setup Test suite dependencies
         run: sudo dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel mingw64-gcc mingw64-libstdc++ ucrt64-gcc ucrt64-libstdc++
       - name: Configure Test suite using CMake
-        if: ${{ !contains(github.event.head_commit.message, "[ci-skip-test-driver]") }}
+        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
         working-directory: ./tst
         run: cmake -G Ninja -B bld -DUSE_LTO=OFF -DLCC_TEST_NON_ZERO_EXIT_ON_FAILURE=ON
       - name: Build Test suite
-        if: ${{ !contains(github.event.head_commit.message, "[ci-skip-test-driver]") }}
+        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
         working-directory: ./tst
         run: cmake --build bld
       - name: Test
-        if: ${{ !contains(github.event.head_commit.message, "[ci-skip-tests]") }}
+        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-tests]') }}
         working-directory: ./tst
         run: cmake --build bld -t test
   build-windows:
-    if: ${{ !contains(github.event.head_commit.message, "skip-ci") }}
+    if: ${{ !contains(github.event.head_commit.message, '[skip-ci]') }}
     runs-on: windows-latest
     defaults:
       run:
