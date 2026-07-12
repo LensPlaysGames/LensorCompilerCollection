@@ -30,3 +30,62 @@ Test:
        ucrt64-gcc \
        ucrt64-libstdc++
 #+end_src
+
+* Debian
+
+NOTE: it is possible to build LCC on Ubuntu (and maybe other Debian-based distros)
+
+Base:
+#+begin_src shell
+  sudo apt install \
+       cmake \
+       gcc \
+       g++ \
+       git \
+       make
+#+end_src
+
+NOTE: testing UCRT toolchains is not available on Ubuntu due to lack of corresponding packages
+
+Test:
+#+begin_src shell
+  sudo apt install \
+       emacs-nox \
+       llvm \
+       clang \
+       libc++-dev \
+       libc++-dev \
+       gcc-mingw-w64 \
+       g++-mingw-w64 \
+       gcc-mingw-w64-ucrt64 \
+       g++-mingw-w64-ucrt64
+#+end_src
+
+* Void Linux
+
+** glibc
+
+Base:
+#+begin_src shell
+  sudo xbps-install \
+       cmake \
+       gcc \
+       git \
+       make
+#+end_src
+
+Test:
+#+begin_src shell
+  sudo xbps-install \
+       emacs \
+       llvm \
+       clang \
+       libcxx-devel \
+       libcxxabi-devel \
+       cross-x86_64-w64-mingw32ucrt \
+       cross-x86_64-w64-mingw32
+#+end_src
+
+** musl
+
+not supported
