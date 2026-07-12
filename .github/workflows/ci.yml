@@ -1,0 +1,48 @@
+name: CI build and test
+
+on: [push, pull_request]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-linux:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-ci]') }}
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install dependencies
+        run: sudo dnf install -y cmake gcc gcc-c++ git libstdc++-devel make ninja
+      - name: CMake configure
+        run: cmake -G Ninja -B bld -DUSE_LTO=OFF
+      - name: CMake build
+        run: cmake --build bld -j $(nproc)
+      - name: Setup Test suite dependencies
+        run: sudo dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel mingw64-gcc mingw64-libstdc++ ucrt64-gcc ucrt64-libstdc++
+      - name: Configure Test suite using CMake
+        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
+        working-directory: ./tst
+        run: cmake -G Ninja -B bld -DUSE_LTO=OFF -DLCC_TEST_NON_ZERO_EXIT_ON_FAILURE=ON
+      - name: Build Test suite
+        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
+        working-directory: ./tst
+        run: cmake --build bld
+      - name: Test
+        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') && contains(github.event.head_commit.message, '[ci-run-tests]') }}
+        working-directory: ./tst
+        run: cmake --build bld -t test
+  build-windows:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-ci]') }}
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+      - name: CMake configure
+        run: cmake -G Ninja -B bld -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DFMT_MODULE=OFF -DUSE_LTO=OFF
+      - name: CMake build
+        run: cmake --build bld -j $(nproc)

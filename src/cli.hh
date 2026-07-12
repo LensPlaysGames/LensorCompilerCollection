@@ -19,7 +19,7 @@ struct Options {
 
     lcc::Context::OptionPrintStats print_stats{false};
     lcc::Context::OptionPrintAST ast{false};
-    lcc::Context::OptionPrintMIR mir{false};
+    lcc::Context::OptionPrintMachineIR mir{false};
     lcc::Context::OptionStopatLex stopat_lex{false};
     lcc::Context::OptionStopatSyntax stopat_syntax{false};
     lcc::Context::OptionStopatSema stopat_sema{false};

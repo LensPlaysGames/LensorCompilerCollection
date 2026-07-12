@@ -90,7 +90,7 @@ struct CLanguageTest : langtest::Test {
                 lcc::Context::DoNotStopatLex,
                 lcc::Context::DoNotStopatSyntax,
                 lcc::Context::DoNotStopatSema,
-                lcc::Context::DoNotPrintMIR,
+                lcc::Context::DoNotPrintMachineIR,
                 lcc::Context::DoNotStopatMIR
             }
         };
@@ -241,7 +241,7 @@ void output_ast(std::filesystem::path p) {
             lcc::Context::DoNotStopatLex,
             lcc::Context::DoNotStopatSyntax,
             lcc::Context::DoNotStopatSema,
-            lcc::Context::DoNotPrintMIR,
+            lcc::Context::DoNotPrintMachineIR,
             lcc::Context::DoNotStopatMIR //
         } //
     };
@@ -561,7 +561,9 @@ int main(int argc, const char** argv) {
         );
     }
 
-    // if (out.count_failed())
-    //     return 1;
+#ifdef LCC_TEST_NON_ZERO_EXIT_ON_FAILURE
+    if (out.count_failed())
+        return 1;
+#endif
     return 0;
 }

@@ -453,7 +453,7 @@ int main(int argc, char** argv) {
             lcc::Context::DoNotStopatLex,
             lcc::Context::DoNotStopatSyntax,
             lcc::Context::DoNotStopatSema,
-            lcc::Context::DoNotPrintMIR,
+            lcc::Context::DoNotPrintMachineIR,
             lcc::Context::DoNotStopatMIR
         }
     };
@@ -485,7 +485,9 @@ int main(int argc, char** argv) {
         fmt::print("{}", print_test_passedfailed(result));
     }
 
-    // if (any_failed)
-    //     return 1;
+#ifdef LCC_TEST_NON_ZERO_EXIT_ON_FAILURE
+    if (any_failed)
+        return 1;
+#endif
     return 0;
 }
