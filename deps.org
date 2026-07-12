@@ -33,7 +33,7 @@ Test:
 
 * Debian
 
-NOTE: it is possible to build LCC on Ubuntu (and maybe other Debian-based distros), but be aware, that =g{cc,++}-mingw-w64-ucrt64= aren't available there
+NOTE: it is possible to build LCC on Ubuntu (and maybe other Debian-based distros)
 
 Base:
 #+begin_src shell
@@ -44,6 +44,8 @@ Base:
        git \
        make
 #+end_src
+
+NOTE: testing UCRT toolchains is not available on Ubuntu due to lack of corresponding packages
 
 Test:
 #+begin_src shell
