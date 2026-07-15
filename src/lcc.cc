@@ -35,16 +35,18 @@
 #endif
 
 void aluminium_handler() {
+#define link "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 #if defined(LCC_PLATFORM_WINDOWS)
     // Windows
-    std::system("start https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    std::system("start " link);
 #elif defined(__APPLE__)
     // Apple
-    std::system("open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    std::system("open " link);
 #elif defined(__linux__) || defined(__unix__)
     // Linux-ish
-    std::system("xdg-open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    std::system("xdg-open " link);
 #endif
+#undef link
 }
 
 /// Default target.
