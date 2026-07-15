@@ -12,6 +12,10 @@ https://docs.oracle.com/cd/E19683-01/816-7529/6mdhf5r3h/index.html
 
 https://gabi.xinuos.com/elf/07-pheader.html
 
+* COFF/PE32+ Dive Into PE Format
+
+https://0xrick.github.io/win-internals/pe3/
+
 * C Standard 23
 
 https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3220.pdf
