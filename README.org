@@ -22,7 +22,7 @@ The driver, by default, uses file extension to determine which language to treat
 
 ** Building
 
-Dependencies:
+Dependencies ([[file:deps.org][see here]]):
 
 - [[https://cmake.org/][CMake >= 3.20]]
 
