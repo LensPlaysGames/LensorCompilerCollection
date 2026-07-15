@@ -326,7 +326,7 @@ if (
   )
 endif()
 
-# Additional flags for GCC (not just GNU-like compilers, GCC only).
+# Additional flags for GCC (not GNU-like compilers, GCC only).
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(options INTERFACE
     -Wlogical-op      # Duplicate or unintended logical operators.

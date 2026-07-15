@@ -229,6 +229,7 @@ if (VERIFY_COMPILERS)
   )
 
   add_custom_target(verify_compilers)
+  add_dependencies(test verify_compilers)
 
   find_program(GCC_PROGRAM gcc)
   find_program(GXX_PROGRAM g++)
@@ -294,7 +295,6 @@ if (VERIFY_COMPILERS)
   else()
     message(STATUS "VERIFY_COMPILERS: clang compiler verification is not available")
   endif()
-  add_dependencies(test verify_compilers)
 
   find_program(MINGW_CXX NAMES ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++)
   if (MINGW_CXX)

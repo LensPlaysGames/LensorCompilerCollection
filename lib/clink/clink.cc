@@ -15,6 +15,7 @@
 
 #include <lcc/format.hh>
 #include <lcc/target.hh>
+
 #include <lccbase/context.hh>
 #include <lccbase/diags.hh>
 #include <lccbase/file.hh>
