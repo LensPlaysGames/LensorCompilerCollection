@@ -251,7 +251,7 @@ if (VERIFY_COMPILERS)
       ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/thegnubuild"
     )
   else()
-    message(STATUS "VERIFY_COMPILERS: gcc compiler verification is not available")
+    message(STATUS "VERIFY_COMPILERS: GNU compiler verification is not available; gcc, g++ not found")
   endif()
 
   find_program(CLANG_PROGRAM clang)
@@ -293,7 +293,7 @@ if (VERIFY_COMPILERS)
       ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/thellvmgnubuild"
     )
   else()
-    message(STATUS "VERIFY_COMPILERS: clang compiler verification is not available")
+    message(STATUS "VERIFY_COMPILERS: LLVM compiler verification is not available; clang, clang++ not found")
   endif()
 
   find_program(MINGW_CXX NAMES ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++)
@@ -315,7 +315,7 @@ if (VERIFY_COMPILERS)
       ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/themingwbuild"
     )
   else()
-    message(STATUS "VERIFY_COMPILERS: mingw compiler verificaiton is not available")
+    message(STATUS "VERIFY_COMPILERS: mingw compiler verificaiton is not available; ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++ not found")
   endif()
 
   find_program(UCRT_CXX NAMES ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++)
@@ -337,6 +337,6 @@ if (VERIFY_COMPILERS)
       ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/theucrtbuild"
     )
   else()
-    message(STATUS "VERIFY_COMPILERS: ucrt compiler verificaiton is not available")
+    message(STATUS "VERIFY_COMPILERS: ucrt compiler verificaiton is not available; ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++ not found")
   endif()
 endif()
