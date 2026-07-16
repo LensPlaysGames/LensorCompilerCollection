@@ -26,8 +26,10 @@ Test:
        libcxxabi \
        libcxxabi-devel \
        mingw64-gcc \
+       mingw64-gcc-c++ \
        mingw64-libstdc++ \
        ucrt64-gcc \
+       ucrt64-gcc-c++ \
        ucrt64-libstdc++
 #+end_src
 
@@ -89,3 +91,21 @@ Test:
 ** musl
 
 not supported
+
+* Alpine Linux
+
+Base:
+#+begin_src shell
+  apk add build-base cmake git
+#+end_src
+
+Test:
+#+begin_src shell
+  apk add \
+      clang \
+      emacs-nox \
+      libc++ \
+      libc++-dev \
+      lld \
+      llvm
+#+end_src
