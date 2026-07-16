@@ -315,7 +315,7 @@ if (VERIFY_COMPILERS)
       ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/themingwbuild"
     )
   else()
-    message(STATUS "VERIFY_COMPILERS: mingw compiler verificaiton is not available; ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++ not found")
+    message(STATUS "VERIFY_COMPILERS: mingw compiler verification is not available; ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++ not found")
   endif()
 
   find_program(UCRT_CXX NAMES ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++)
@@ -337,6 +337,6 @@ if (VERIFY_COMPILERS)
       ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/theucrtbuild"
     )
   else()
-    message(STATUS "VERIFY_COMPILERS: ucrt compiler verificaiton is not available; ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++ not found")
+    message(STATUS "VERIFY_COMPILERS: ucrt compiler verification is not available; ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++ not found")
   endif()
 endif()
