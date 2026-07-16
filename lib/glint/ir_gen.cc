@@ -421,15 +421,32 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         generate_expression(init_expr);
                         init = generated_ir[init_expr];
                     }
-                    auto* global = new (*ir_module) GlobalVariable(
-                        ir_module,
-                        Convert(ctx, decl->type()),
-                        decl->name(),
-                        decl->linkage(),
-                        init
-                    );
+                    if (not is<ArrayConstant, IntegerConstant>(init)) {
+                        auto* global = new (*ir_module) GlobalVariable(
+                            ir_module,
+                            Convert(ctx, decl->type()),
+                            decl->name(),
+                            decl->linkage(),
+                            nullptr
+                        );
+                        generated_ir[expr] = global;
 
-                    generated_ir[expr] = global;
+                        auto store = new (*ir_module) StoreInst(
+                            init,
+                            global,
+                            decl->location()
+                        );
+                        insert(store);
+                    } else {
+                        auto* global = new (*ir_module) GlobalVariable(
+                            ir_module,
+                            Convert(ctx, decl->type()),
+                            decl->name(),
+                            decl->linkage(),
+                            init
+                        );
+                        generated_ir[expr] = global;
+                    }
                 } break;
             }
 
