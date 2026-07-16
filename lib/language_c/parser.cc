@@ -787,7 +787,10 @@ void Lexer::NextToken() {
                         return;
                     }
 
-                    while (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid)) {
+                    while (not (
+                        tok.kind == TokenKind::Eof
+                        or tok.kind == TokenKind::Invalid
+                    )) {
                         Warning("c/preprocessor", "Junk following path of #include directive `{}`", tok.kind);
                         NextToken();
                     }
