@@ -38,7 +38,8 @@ lcc::glint::StringLiteral::StringLiteral(
           new (mod) ReferenceType(
               new (mod) ArrayType(
                   BuiltinType::Byte(mod),
-                  new (mod) IntegerLiteral(value.size() + 1, location),
+                  // NOTE: Technically, there is size() + 1, including null terminator.
+                  new (mod) IntegerLiteral(value.size(), location),
                   location
               ),
               location
