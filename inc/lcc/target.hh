@@ -3,6 +3,8 @@
 
 #include <lcc/utils.hh>
 
+#include <hdronly/lcc/platform.hh>
+
 namespace lcc {
 class Context;
 

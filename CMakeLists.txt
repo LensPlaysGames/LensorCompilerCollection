@@ -449,6 +449,7 @@ add_library(
   liblcc
   inc/hdronly/lcc/fixcompilers.hh
   inc/hdronly/lcc/forward.hh
+  inc/hdronly/lcc/platform.hh
   inc/hdronly/lcc/typedefs.hh
   inc/lcc/always_false.hh
   inc/lcc/calling_convention.hh
@@ -464,6 +465,7 @@ add_library(
   inc/lcc/codegen/x86_64/object.hh
   inc/lcc/codegen/x86_64/x86_64.hh
   inc/lcc/core.hh
+  inc/lcc/defaults.hh
   inc/lcc/enum_to_underlying.hh
   inc/lcc/format.hh
   inc/lcc/fractionals.hh

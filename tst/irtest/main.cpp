@@ -3,6 +3,7 @@
 #include <fmt/format.h>
 
 #include <lcc/core.hh>
+#include <lcc/defaults.hh>
 #include <lcc/format.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
@@ -20,18 +21,6 @@
 #include <iterator>
 #include <string_view>
 #include <vector>
-
-const lcc::Target* default_target =
-#if defined(LCC_PLATFORM_WINDOWS)
-    lcc::Target::x86_64_windows;
-#elif defined(__APPLE__) or defined(__linux__)
-    lcc::Target::x86_64_linux;
-#else
-#    error "Unsupported target"
-#endif
-
-/// Default format
-const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
 
 static lcc::Colours C{true};
 
@@ -442,21 +431,7 @@ void visit_directory(
 }
 
 int main(int argc, char** argv) {
-    lcc::Context context{
-        default_target,
-        default_format,
-        lcc::Context::Options{
-            lcc::Context::DoNotUseColour,
-            lcc::Context::DoNotPrintStats,
-            lcc::Context::DoNotDiagBacktrace,
-            lcc::Context::DoNotPrintAST,
-            lcc::Context::DoNotStopatLex,
-            lcc::Context::DoNotStopatSyntax,
-            lcc::Context::DoNotStopatSema,
-            lcc::Context::DoNotPrintMachineIR,
-            lcc::Context::DoNotStopatMIR
-        }
-    };
+    auto context = lcc::default_context();
     TestContext test_context{context};
     visit_directory(test_context, "corpus");
 

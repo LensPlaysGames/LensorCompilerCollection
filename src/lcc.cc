@@ -8,6 +8,7 @@
 #include <glint/driver.hh>
 #include <language_c/driver.hh>
 
+#include <lcc/defaults.hh>
 #include <lcc/format.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/lcc-c.h>
@@ -21,6 +22,8 @@
 #include <lccbase/context.hh>
 #include <lccbase/diags.hh>
 #include <lccbase/platform.hh>
+
+#include <hdronly/lcc/platform.hh>
 
 #include <cstdio>  // fopen and friends
 #include <cstdlib> // system
@@ -36,34 +39,18 @@
 
 void aluminium_handler() {
 #define link "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-#if defined(LCC_PLATFORM_WINDOWS)
+#if defined(LCC_WINDOWS)
     // Windows
     std::system("start " link);
-#elif defined(__APPLE__)
+#elif defined(LCC_APPLE)
     // Apple
     std::system("open " link);
-#elif defined(__linux__) || defined(__unix__)
+#elif defined(LCC_LINUX) || defined(__unix__)
     // Linux-ish
     std::system("xdg-open " link);
 #endif
 #undef link
 }
-
-/// Default target.
-const lcc::Target* const default_target =
-#if defined(LCC_PLATFORM_WINDOWS)
-    lcc::Target::x86_64_windows;
-#elif defined(__APPLE__) or defined(__linux__)
-    lcc::Target::x86_64_linux;
-#elif defined(__wasm)
-    lcc::Target::x86_64_linux;
-#else
-#    error "Unsupported target; this is just for a silly default target, so feel free to update this"
-#endif
-
-/// Default format
-const lcc::Format* const default_format
-    = lcc::Format::gnu_as_att_assembly;
 
 [[nodiscard]]
 auto ConvertFileExtensionToOutputFormat(
@@ -507,7 +494,7 @@ auto main(int argc, const char** argv) -> int {
 
     // Get target from "-t" or "--target" command line option, falling back to
     // default.
-    auto* target = default_target;
+    auto* target = lcc::default_target;
     if (options.target == "default") {
         ;
     } else if (options.target == "x86_64_linux") {
@@ -517,7 +504,7 @@ auto main(int argc, const char** argv) -> int {
     } else LCC_ASSERT(false, "Unhandled target");
 
     // Get format from command line option, falling back to default.
-    auto* format = default_format;
+    auto* format = lcc::default_format;
     if (options.format == "default") {
         ;
     } else if (options.format == "ir" or options.format == "IR") {

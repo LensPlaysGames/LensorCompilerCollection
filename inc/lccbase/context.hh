@@ -15,11 +15,6 @@
 #include <unordered_map>
 #include <vector>
 
-// TODO: This should probably go in platform.hh or something...
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-#    define LCC_PLATFORM_WINDOWS 1
-#endif
-
 namespace lcc {
 
 class Context {

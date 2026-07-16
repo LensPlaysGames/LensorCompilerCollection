@@ -4,13 +4,7 @@
 /// *DO NOT* include any system headers (e.g. unistd.h, windows.h, ...)
 /// here!! The API below is platform-agnostic.
 
-#if defined(__linux__) && defined(__GLIBC__) && ! defined(__UCLIBC__)
-#    define LCC_LINUX_GLIBC
-#endif
-
-#if defined(_WIN32)
-#    define LCC_WINDOWS
-#endif
+#include <hdronly/lcc/platform.hh>
 
 namespace lcc::platform {
 
