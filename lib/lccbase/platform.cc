@@ -6,27 +6,18 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
-#include <cstdint>
-#include <cstdlib>
-#include <filesystem>
-#include <ranges>
-#include <span>
-#include <string>
-#include <string_view>
-#include <vector>
-
-#ifdef _WIN32
-#    ifndef NOMINMAX
-#        define NOMINMAX
-#    endif
-#    include <io.h>
-#    include <windows.h>
-#    define isatty _isatty
-#endif
-
-#ifdef __linux__
+#if defined(LCC_LINUX_GLIBC)
 #    include <execinfo.h>
 #    include <unistd.h>
+
+#    include <cstdint>
+#    include <cstdlib>
+#    include <filesystem>
+#    include <ranges>
+#    include <span>
+#    include <string>
+#    include <string_view>
+#    include <vector>
 
 static constexpr bool backtrace_addr2line = true;
 // -p  pretty print
@@ -36,10 +27,20 @@ static constexpr std::string_view backtrace_addr2line_options = "-p -C -f";
 
 static constexpr bool backtrace_llvm_symbolizer = false;
 static constexpr std::string_view backtrace_llvm_symbolizer_options = "-s -p -C -i --color --output-style=GNU";
+
+#elif defined(LCC_WINDOWS)
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#    include <io.h>
+#    include <windows.h>
+#    define isatty _isatty
+#else
+#    define isatty(...) false
 #endif
 
 void lcc::platform::PrintBacktrace() {
-#ifdef __linux__
+#ifdef LCC_LINUX_GLIBC
     /// Get the backtrace.
     static constexpr usz size = 128;
     static void* trace[size]{};
@@ -123,6 +124,7 @@ void lcc::platform::PrintBacktrace() {
     }
 
     free(trace_symbols);
+}
 #endif
 }
 
