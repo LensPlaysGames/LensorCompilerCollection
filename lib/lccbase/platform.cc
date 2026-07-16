@@ -1,6 +1,7 @@
 #include <lccbase/platform.hh>
 
 #include <hdronly/lcc/fixcompilers.hh>
+#include <hdronly/lcc/platform.hh>
 #include <hdronly/lcc/typedefs.hh>
 
 #include <fmt/format.h>
@@ -124,7 +125,6 @@ void lcc::platform::PrintBacktrace() {
     }
 
     free(trace_symbols);
-}
 #endif
 }
 
