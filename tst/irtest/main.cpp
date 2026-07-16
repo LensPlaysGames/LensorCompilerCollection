@@ -476,6 +476,7 @@ int main(int argc, char** argv) {
         print_passedfailed(test_context.results)
     );
 
+    [[maybe_unused]]
     bool any_failed{false};
     for (auto result : test_context.results) {
         if (result.passed)

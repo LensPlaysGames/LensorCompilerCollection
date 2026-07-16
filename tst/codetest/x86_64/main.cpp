@@ -1174,6 +1174,7 @@ int main(int argc, char** argv) {
     }
     to_sarif(context, command_line);
 
+    [[maybe_unused]]
     bool any_failed{false};
     for (auto& c : context.completed_tests()) {
         if (context.test_passed(c)) continue;
