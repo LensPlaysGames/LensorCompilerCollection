@@ -79,6 +79,44 @@ Options parse(int argc, char** argv) {
     return o;
 }
 
+[[nodiscard]]
+auto ConvertFileExtensionToOutputFormat(
+    const lcc::Context& context,
+    const std::string& path_string
+) -> std::string {
+    const char* replacement = "";
+    switch (context.format()->format()) {
+        case lcc::Format::INVALID:
+            LCC_UNREACHABLE();
+
+        case lcc::Format::LCC_IR:
+        case lcc::Format::LCC_SSA_IR:
+            replacement = ".lcc";
+            break;
+
+        case lcc::Format::WASM_TEXTUAL:
+            replacement = ".wat";
+            break;
+
+        case lcc::Format::LLVM_TEXTUAL_IR:
+            replacement = ".ll";
+            break;
+
+        case lcc::Format::GNU_AS_ATT_ASSEMBLY:
+            replacement = ".s";
+            break;
+
+        case lcc::Format::ELF_OBJECT:
+        case lcc::Format::COFF_OBJECT:
+            replacement = ".o";
+            break;
+    }
+
+    return std::filesystem::path{path_string}
+        .replace_extension(replacement)
+        .string();
+}
+
 int main(int argc, char** argv) {
     auto options = parse(argc, argv);
     lcc::Colours C{true};
@@ -93,40 +131,6 @@ int main(int argc, char** argv) {
     if (not options.output_path.empty() and options.input_paths.size() != 0) {
         lcc::Diag::Fatal("{}", C(Colour::Red));
     }
-
-    const auto ConvertFileExtensionToOutputFormat = [&](lcc::Context* context, const std::string& path_string) {
-        const char* replacement = "";
-        switch (context->format()->format()) {
-            case lcc::Format::INVALID:
-                LCC_UNREACHABLE();
-
-            case lcc::Format::LCC_IR:
-            case lcc::Format::LCC_SSA_IR:
-                replacement = ".lcc";
-                break;
-
-            case lcc::Format::LLVM_TEXTUAL_IR:
-                replacement = ".ll";
-                break;
-
-            case lcc::Format::WASM_TEXTUAL:
-                replacement = ".wat";
-                break;
-
-            case lcc::Format::GNU_AS_ATT_ASSEMBLY:
-                replacement = ".s";
-                break;
-
-            case lcc::Format::ELF_OBJECT:
-            case lcc::Format::COFF_OBJECT:
-                replacement = ".o";
-                break;
-        }
-
-        return std::filesystem::path{path_string}
-            .replace_extension(replacement)
-            .string();
-    };
 
     for (auto p : options.input_paths) {
         if (not std::filesystem::exists(p))
@@ -178,7 +182,7 @@ int main(int argc, char** argv) {
 
         lcc_module->lower();
 
-        lcc_module->emit(ConvertFileExtensionToOutputFormat(&context, p));
+        lcc_module->emit(ConvertFileExtensionToOutputFormat(context, p));
     }
 
     return 0;
