@@ -36,7 +36,8 @@ private:
     using handle_type = std::coroutine_handle<promise_type>;
     handle_type handle{};
 
-    Generator(handle_type handle_) noexcept : handle(handle_) {}
+    Generator(handle_type handle_) noexcept
+        : handle(handle_) {}
 
 public:
     Generator(const Generator&) = delete;
@@ -68,7 +69,7 @@ public:
         }
 
         auto unhandled_exception() noexcept -> void {
-#if __EXCEPTIONS
+#if defined(__EXCEPTIONS) && __EXCEPTIONS
             try {
                 std::rethrow_exception(std::current_exception());
             } catch (const std::runtime_error& e) {
@@ -85,7 +86,8 @@ public:
     class Iterator {
         friend Generator<T>;
         Generator& g;
-        Iterator(Generator& gen) noexcept : g(gen) {}
+        Iterator(Generator& gen) noexcept
+            : g(gen) {}
 
     public:
         /// Get the current value.
