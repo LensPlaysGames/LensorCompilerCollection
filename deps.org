@@ -63,9 +63,7 @@ Test:
        g++-mingw-w64-ucrt64
 #+end_src
 
-* Void Linux
-
-** glibc
+* Void Linux (both glibc and musl)
 
 Base:
 #+begin_src shell
@@ -87,10 +85,6 @@ Test:
        cross-x86_64-w64-mingw32ucrt \
        cross-x86_64-w64-mingw32
 #+end_src
-
-** musl
-
-not supported
 
 * Alpine Linux
 
