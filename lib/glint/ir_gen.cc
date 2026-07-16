@@ -421,7 +421,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         generate_expression(init_expr);
                         init = generated_ir[init_expr];
                     }
-                    if (not is<ArrayConstant, IntegerConstant>(init)) {
+                    if (init and not is<ArrayConstant, IntegerConstant>(init)) {
                         auto* global = new (*ir_module) GlobalVariable(
                             ir_module,
                             Convert(ctx, decl->type()),
