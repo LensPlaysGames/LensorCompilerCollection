@@ -21,7 +21,8 @@ jobs:
       - name: CMake build
         run: cmake --build bld -j $(nproc)
       - name: Setup Test suite dependencies
-        run: sudo dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel clang mingw64-gcc mingw64-gcc-c++ mingw64-libstdc++ ucrt64-gcc ucrt64-gcc-c++ ucrt64-libstdc++
+        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
+        run: sudo dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel clang mingw64-gcc mingw64-gcc-c++ mingw64-libstdc++
       - name: Configure Test suite using CMake
         if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
         working-directory: ./tst
