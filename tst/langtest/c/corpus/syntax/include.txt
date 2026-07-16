@@ -1,0 +1,37 @@
+================
+#include, missing path
+:syntax
+:syntax_error
+================
+
+#include
+
+================
+#include, path without valid separators
+:syntax
+:syntax_error
+================
+
+#include empty.txt
+
+================
+#include, double quotes
+:syntax
+================
+
+#include "empty.txt"
+
+---
+
+(block)
+
+================
+#include, angled brackets
+:syntax
+================
+
+#include <empty.txt>
+
+---
+
+(block)

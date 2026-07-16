@@ -17,6 +17,8 @@
 
 #include <hdronly/lcc/platform.hh>
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <filesystem>
 #include <string>
@@ -70,6 +72,7 @@ struct CLanguageTest : langtest::Test {
         // Parse test source as Glint
 
         auto context = lcc::default_context();
+        context.add_include_directory("corpus/include/");
         if (option_suppress)
             context.suppress_diagnostics();
 
