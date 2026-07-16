@@ -1597,7 +1597,6 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
         case TokenKind::OpShiftRightEqual:
         case TokenKind::OpCaret:
         case TokenKind::OpPipe:
-        case TokenKind::OpAmpersand:
             return Error("expected-qualified-id", "Unexpected `{}`", tok.kind);
 
         case TokenKind::KwReturn: {
@@ -1721,8 +1720,8 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
                     std::move(elements),
                     tok.location
                 );
-                // TODO: const?
                 auto* char_type = new (tu) CharType(false, tok.location);
+                char_type->flag(Type::Flag::Const, true);
                 init->_element_type = char_type;
 
                 // For side effect of declaring global (so sema lookup will resolve
@@ -1757,17 +1756,21 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
             NextToken();
         } break;
 
+        case TokenKind::KwAlignof:
+        case TokenKind::KwSizeof:
+        case TokenKind::OpAmpersand:
+        case TokenKind::OpAsterisk:
+        case TokenKind::OpExclamation:
+        case TokenKind::OpMinus:
+        case TokenKind::OpMinusMinus:
+        case TokenKind::OpPlus:
+        case TokenKind::OpPlusPlus:
+        case TokenKind::OpTilde: {
+            Diag::ICE("Unary prefix operator {} handled above...", tok.kind);
+        } break;
+
         case TokenKind::Fractional:
         case TokenKind::LeftSquareBracket:
-        case TokenKind::OpPlus:
-        case TokenKind::OpMinus:
-        case TokenKind::OpAsterisk:
-        case TokenKind::KwSizeof:
-        case TokenKind::KwAlignof:
-        case TokenKind::OpExclamation:
-        case TokenKind::OpPlusPlus:
-        case TokenKind::OpMinusMinus:
-        case TokenKind::OpTilde:
             Diag::ICE("{} is unhandled...", tok.kind);
     }
 
