@@ -3364,10 +3364,6 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                 ) {
                     if (auto fixarray_t = cast<ArrayType>(rhs_t->strip_references())) {
                         auto dimension = fixarray_t->dimension();
-                        // Don't do null terminator stuff
-                        if (is<StringLiteral>(b->rhs()))
-                            dimension -= 1;
-
                         if (not dimension) {
                             Error(
                                 b->rhs()->location(),
@@ -4604,12 +4600,6 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                   and Type::Equal(arg->type()->strip_references()->elem(), Type::Byte);
                 if (arg_is_fixed_array_of_byte) {
                     auto size = as<ArrayType>(arg->type()->strip_references())->dimension();
-
-                    // Don't print (implicit) trailing NULL byte for string literals...
-                    // NOTE: Not perfect, i.e. variables initialized from string literals...
-                    if (is<StringLiteral>(arg))
-                        size -= 1;
-
                     auto print_call = new (mod) CallExpr(
                         named_template("putchar_each"),
                         {arg,
