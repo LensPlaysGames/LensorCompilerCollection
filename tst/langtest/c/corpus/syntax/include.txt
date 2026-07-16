@@ -35,3 +35,25 @@
 ---
 
 (block)
+
+================
+#include, double quotes, junk after
+:syntax_warn
+================
+
+#include "empty.txt" foo
+
+---
+
+(block)
+
+================
+#include, angled brackets, junk after
+:syntax_warn
+================
+
+#include <empty.txt> foo
+
+---
+
+(block)
