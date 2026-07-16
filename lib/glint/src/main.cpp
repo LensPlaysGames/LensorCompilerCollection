@@ -4,27 +4,17 @@
 #include <glint/parser.hh>
 #include <glint/sema.hh>
 
-#include <lcc/file.hh>
+#include <lcc/defaults.hh>
 #include <lcc/format.hh>
-#include <lcc/opt/opt.hh>
+#include <lcc/opt.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/colours.hh>
 #include <lcc/utils/twocolumnlayouthelper.hh>
 
+#include <lccbase/file.hh>
+
 #include <fmt/format.h>
-
-/// Default target.
-const lcc::Target* default_target =
-#if defined(LCC_PLATFORM_WINDOWS)
-    lcc::Target::x86_64_windows;
-#elif defined(__APPLE__) or defined(__linux__)
-    lcc::Target::x86_64_linux;
-#else
-#    error "Unsupported target"
-#endif
-
-/// Default format
-const lcc::Format* default_format = lcc::Format::lcc_ssa_ir;
 
 struct Options {
     std::vector<std::string> input_paths{};
@@ -91,23 +81,10 @@ Options parse(int argc, char** argv) {
 
 int main(int argc, char** argv) {
     auto options = parse(argc, argv);
-    lcc::utils::Colours C{true};
-    using lcc::utils::Colour;
+    lcc::Colours C{true};
+    using lcc::Colour;
 
-    auto context = lcc::Context{
-        default_target,
-        default_format,
-        lcc::Context::Options{
-            lcc::Context::DoNotUseColour,
-            lcc::Context::DoNotPrintStats,
-            lcc::Context::DoNotPrintAST,
-            lcc::Context::DoNotStopatLex,
-            lcc::Context::DoNotStopatSyntax,
-            lcc::Context::DoNotStopatSema,
-            lcc::Context::DoNotPrintMIR,
-            lcc::Context::DoNotStopatMIR
-        }
-    };
+    auto context = lcc::default_context();
 
     if (options.input_paths.empty()) {
         lcc::Diag::Fatal("{}no input files", C(Colour::Red));

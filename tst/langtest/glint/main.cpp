@@ -5,6 +5,7 @@
 #include <glint/parser.hh>
 #include <glint/sema.hh>
 
+#include <lcc/defaults.hh>
 #include <lcc/format.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
@@ -25,19 +26,6 @@
 
 static lcc::Colours C{true};
 using lcc::Colour;
-
-/// Default target.
-const lcc::Target* default_target =
-#if defined(LCC_PLATFORM_WINDOWS)
-    lcc::Target::x86_64_windows;
-#elif defined(__APPLE__) or defined(__linux__)
-    lcc::Target::x86_64_linux;
-#else
-#    error "Unsupported target"
-#endif
-
-/// Default format
-const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
 
 bool option_print;
 bool option_suppress{true};
@@ -83,21 +71,7 @@ struct GlintTest : langtest::Test {
 
         // Parse test source as Glint
 
-        lcc::Context context{
-            default_target,
-            default_format,
-            lcc::Context::Options{
-                lcc::Context::DoNotUseColour,
-                lcc::Context::DoNotPrintStats,
-                lcc::Context::DoNotDiagBacktrace,
-                lcc::Context::DoNotPrintAST,
-                lcc::Context::DoNotStopatLex,
-                lcc::Context::DoNotStopatSyntax,
-                lcc::Context::DoNotStopatSema,
-                lcc::Context::DoNotPrintMachineIR,
-                lcc::Context::DoNotStopatMIR
-            }
-        };
+        auto context = lcc::default_context();
         if (option_suppress)
             context.suppress_diagnostics();
 
@@ -239,21 +213,7 @@ void output_ast(std::filesystem::path p) {
         contents.begin() + lcc::isz(contents.size()),
     };
 
-    lcc::Context context{
-        default_target,
-        default_format,
-        lcc::Context::Options{
-            lcc::Context::DoNotUseColour,
-            lcc::Context::DoNotPrintStats,
-            lcc::Context::DoNotDiagBacktrace,
-            lcc::Context::DoNotPrintAST,
-            lcc::Context::DoNotStopatLex,
-            lcc::Context::DoNotStopatSyntax,
-            lcc::Context::DoNotStopatSema,
-            lcc::Context::DoNotPrintMachineIR,
-            lcc::Context::DoNotStopatMIR //
-        } //
-    };
+    auto context = lcc::default_context();
 
     auto mod = lcc::glint::Parser::Parse(&context, source);
     if (context.has_error()) {
@@ -462,9 +422,9 @@ int main(int argc, const char** argv) {
             std::string_view target_string{argv[i]};
             // TODO: Exhaustive handling of lcc targets
             if (target_string == "x86_64_linux")
-                default_target = lcc::Target::x86_64_linux;
+                lcc::default_target = lcc::Target::x86_64_linux;
             else if (target_string == "x86_64_windows")
-                default_target = lcc::Target::x86_64_windows;
+                lcc::default_target = lcc::Target::x86_64_windows;
             else {
                 lcc::Diag::Fatal(
                     "Invalid argument given to --target: `{}`\n",
@@ -482,19 +442,19 @@ int main(int argc, const char** argv) {
             std::string_view format_string{argv[i]};
             // TODO: Exhaustive handling of lcc output formats
             if (format_string == "gnu-as-att")
-                default_format = lcc::Format::gnu_as_att_assembly;
+                lcc::default_format = lcc::Format::gnu_as_att_assembly;
             else if (format_string == "elf")
-                default_format = lcc::Format::elf_object;
+                lcc::default_format = lcc::Format::elf_object;
             else if (format_string == "coff")
-                default_format = lcc::Format::coff_object;
+                lcc::default_format = lcc::Format::coff_object;
             else if (format_string == "ssa_ir")
-                default_format = lcc::Format::lcc_ssa_ir;
+                lcc::default_format = lcc::Format::lcc_ssa_ir;
             else if (format_string == "ir")
-                default_format = lcc::Format::lcc_ir;
+                lcc::default_format = lcc::Format::lcc_ir;
             else if (format_string == "llvm")
-                default_format = lcc::Format::llvm_textual_ir;
+                lcc::default_format = lcc::Format::llvm_textual_ir;
             else if (format_string == "wat")
-                default_format = lcc::Format::wasm_textual;
+                lcc::default_format = lcc::Format::wasm_textual;
             else {
                 lcc::Diag::Fatal(
                     "Invalid argument given to --format: `{}`\n",
@@ -562,7 +522,7 @@ int main(int argc, const char** argv) {
 
 #ifdef LCC_TEST_NON_ZERO_EXIT_ON_FAILURE
     if (out.count_failed())
-       return 1;
+        return 1;
 #endif
     return 0;
 }

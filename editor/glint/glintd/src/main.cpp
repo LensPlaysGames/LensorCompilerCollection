@@ -3,6 +3,7 @@
 #include <glint/sema.hh>
 
 #include <lcc/context.hh>
+#include <lcc/defaults.hh>
 #include <lcc/format.hh>
 #include <lcc/location.hh>
 #include <lcc/target.hh>
@@ -17,19 +18,6 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
-
-/// Default target.
-const lcc::Target* default_target =
-#if defined(LCC_PLATFORM_WINDOWS)
-    lcc::Target::x86_64_windows;
-#elif defined(__APPLE__) or defined(__linux__)
-    lcc::Target::x86_64_linux;
-#else
-#    error "Unsupported target"
-#endif
-
-/// Default format
-const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
 
 struct PythonLocation {
     // absolute in file
@@ -103,32 +91,17 @@ struct PythonType {
     PythonLocation location{};
     bool valid{false};
 
-    PythonType() : valid(false) {}
+    PythonType()
+        : valid(false) {}
 
     PythonType(lcc::Context* context, lcc::glint::Type* type)
-        : kind(type->kind()),
-          representation(type->string()),
-          size((int) type->size_in_bytes(context)),
-          align((int) type->align(context)),
-          location(py_location(context, type->location())),
-          valid(true) {}
+        : kind(type->kind())
+        , representation(type->string())
+        , size((int) type->size_in_bytes(context))
+        , align((int) type->align(context))
+        , location(py_location(context, type->location()))
+        , valid(true) {}
 };
-
-constexpr auto default_context() {
-    return lcc::Context{
-        default_target,
-        default_format,
-        lcc::Context::Options{
-            lcc::Context::DoNotUseColour,
-            lcc::Context::DoNotPrintAST,
-            lcc::Context::DoNotStopatLex,
-            lcc::Context::DoNotStopatSyntax,
-            lcc::Context::DoNotStopatSema,
-            lcc::Context::DoNotPrintMIR,
-            lcc::Context::DoNotStopatMIR
-        }
-    };
-}
 
 constexpr auto get_analysed_module(lcc::Context& context, std::string source) -> std::optional<std::unique_ptr<lcc::glint::Module>> {
     auto& f = context.create_file(
@@ -157,7 +130,7 @@ struct PythonToken {
 };
 
 auto tokenize(std::string source) -> std::vector<PythonToken> {
-    auto context = default_context();
+    auto context = lcc::default_context();
 
     auto& f = context.create_file(
         "glintd.tmp.g",
@@ -198,11 +171,11 @@ DeclInfo findDeclImpl(lcc::glint::Module& m, lcc::Context* ctx, std::string_view
             if (maybe_type_repr) type_repr = *maybe_type_repr;
         }
         return {
-            {//
-             location,
-             decl_location,
-             type_location,
-             type_repr
+            { //
+                location,
+                decl_location,
+                type_location,
+                type_repr
             },
             e
         };
@@ -229,7 +202,7 @@ PythonDeclInfo findDecl(std::string source, std::string name) {
     if (not lcc::glint::Lexer::IsIdentStart((lcc::u32) name.at(0)))
         return {};
 
-    auto context = default_context();
+    auto context = lcc::default_context();
     auto maybe_m = get_analysed_module(context, source);
     if (not maybe_m) return {};
     auto& m = *maybe_m;
@@ -319,7 +292,7 @@ constexpr auto extract_scope_symbols(
 }
 
 std::vector<std::string> getValidSymbols(std::string source) {
-    auto context = default_context();
+    auto context = lcc::default_context();
     auto maybe_m = get_analysed_module(context, source);
     if (not maybe_m) return {};
     auto& m = *maybe_m;
@@ -342,12 +315,13 @@ struct PythonNode {
     PythonLocation location{};
     bool valid{false};
 
-    PythonNode() : valid(false) {}
+    PythonNode()
+        : valid(false) {}
 
     PythonNode(lcc::Context* ctx, lcc::glint::Expr* e)
-        : kind(e->kind()),
-          type(ctx, e->type()),
-          location(py_location(ctx, e->location())) {
+        : kind(e->kind())
+        , type(ctx, e->type())
+        , location(py_location(ctx, e->location())) {
         // Should never be null, but always good to check.
         if (not e) return;
 
@@ -359,7 +333,7 @@ struct PythonNode {
 };
 
 PythonNode getTree(std::string source) {
-    auto context = default_context();
+    auto context = lcc::default_context();
     auto maybe_m = get_analysed_module(context, source);
     if (not maybe_m) return {};
     auto& m = *maybe_m;
@@ -378,7 +352,7 @@ PythonNode getTree(std::string source) {
 }
 
 auto getScopes(std::string source) -> std::vector<std::vector<std::string>> {
-    auto context = default_context();
+    auto context = lcc::default_context();
     auto maybe_m = get_analysed_module(context, source);
     if (not maybe_m) return {};
     auto& m = *maybe_m;
@@ -394,7 +368,7 @@ auto getScopes(std::string source) -> std::vector<std::vector<std::string>> {
 auto getScopeAtPoint(std::string source, PythonLocation location) -> std::vector<std::vector<std::string>> {
     if (invalid(location)) return {};
 
-    auto context = default_context();
+    auto context = lcc::default_context();
     auto maybe_m = get_analysed_module(context, source);
     if (not maybe_m) return {};
     auto& m = *maybe_m;
@@ -415,7 +389,7 @@ auto getScopeAtPoint(std::string source, PythonLocation location) -> std::vector
 }
 
 auto getDiagnostics(std::string source) -> std::vector<PythonDiagnostic> {
-    auto context = default_context();
+    auto context = lcc::default_context();
     auto maybe_m = get_analysed_module(context, source);
 
     std::vector<PythonDiagnostic> out{};
@@ -501,7 +475,7 @@ lcc::glint::Expr* getNodeAtPoint(lcc::glint::Module& mod, lcc::Location loc) {
 PythonType getTypeAtPoint(std::string source, PythonLocation location) {
     if (invalid(location)) return {};
 
-    auto context = default_context();
+    auto context = lcc::default_context();
     auto maybe_m = get_analysed_module(context, source);
     if (not maybe_m) return {};
     auto& m = *maybe_m;
