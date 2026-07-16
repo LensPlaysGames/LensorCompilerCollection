@@ -742,6 +742,7 @@ void Lexer::NextToken() {
                         }
                     } else if (tok.kind == TokenKind::String) {
                         path = tok.text;
+                        NextToken();
                     } else {
                         Error(
                             "c/preprocessor",
