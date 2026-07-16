@@ -740,12 +740,9 @@ void Lexer::NextToken() {
                             auto e = Error(open_location, "c/preprocessor", "Expected `>` to close this `<`...");
                             e.fix_by_inserting_at(tok.location, ">");
                         }
-                    }
-                    // TODO: include string syntax
-                    // else if (tok.kind == TokenKind::String) {
-                    //     path = tok.text;
-                    // }
-                    else {
+                    } else if (tok.kind == TokenKind::String) {
+                        path = tok.text;
+                    } else {
                         Error(
                             "c/preprocessor",
                             "Expected `<` or `\"` to begin included path, but got {} instead",
@@ -795,7 +792,7 @@ void Lexer::NextToken() {
                     // After this, the next characters we fetch via the lexer API will be from
                     // the included file. This means we can't do our normal handling of "go
                     // until EOF or newline", since, er, this file's tokens are in the way.
-                    _including.push_front(File::Read(path));
+                    _including.push_front(File::Read(fullpath));
                 } else {
                     Error(
                         "c/preprocessor",
