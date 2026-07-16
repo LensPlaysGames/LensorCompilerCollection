@@ -3,7 +3,7 @@
 
 #include <hdronly/lcc/typedefs.hh>
 #include <lcc/ir/core.hh>
-#
+
 #include <fmt/format.h>
 
 #include <climits>
