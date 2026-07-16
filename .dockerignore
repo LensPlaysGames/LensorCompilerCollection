@@ -1,0 +1,55 @@
+# Build Artifacts
+*.S
+*.s
+*.o
+*.obj
+*.exe
+*.ll
+*.out
+*.sarif
+
+# CCache
+.cache
+
+# CMake
+**/bld*
+**/bldweb*
+**/bld-*
+**/build
+**/win
+**/win-*
+**/winbld
+**/winbuild
+**/mswin*
+**/lnx
+**/lin
+**/lin-*
+**/linbld
+**/linbuild
+**/lnx
+**/lnxbld
+**/lnxbuild
+**/linux
+**/linuxbld
+**/linuxbuild
+**/dbg
+**/debug
+**/rls
+**/release
+/out
+/.idea
+/tst/out.txt
+*.dot
+
+# Debuggers
+**/.gdb_history
+
+# Language Server
+**/compile_commands.json
+.Random.seed
+
+# Disallow files starting with some symbols
+**/_*
+
+# VS Code
+.vscode/
