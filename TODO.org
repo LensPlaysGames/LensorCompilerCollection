@@ -4,6 +4,10 @@
 *** Conversion between fixed arrays, dynamic arrays, and views
 Including string literals.
 
+** Register Allocation
+
+We need to pass =allocate_registers()= a context reference, so it can know what platform does what and stuff. I *wanted* to keep everything very separate and abstract, but, er, who is going to be using LCC's register allocation engine without also using LCC? There's currently some hacky stuff in there that just assumes certain architectures/system ABIs are happening without checking first.
+
 * [2026-06-27 Sat 03:24]
 
 gdb error/warning

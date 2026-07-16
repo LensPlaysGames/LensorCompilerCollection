@@ -1044,8 +1044,21 @@ auto allocate_registers(
 
                 // Skip result register (otherwise we'd clobber our function result out of
                 // existence).
-                if (r == result_register.value)
-                    continue;
+                // NOTE: Hacky fix to detect sysv multiple register result...
+                // FIXME: Once Context is available, use that to determine sysv, x86_64,
+                // return registers, etc.
+                if (
+                    r == result_register.value
+                    or (
+                        // context.is_arch_x86_64() and context.is_sysv
+                        result_register.size > x86_64::GeneralPurposeBitwidth
+                        and result_register.size <= x86_64::GeneralPurposeBitwidth * 2
+                        and rgs::contains(
+                            desc.return_registers.at((usz) result_register.category),
+                            r
+                        )
+                    )
+                ) continue;
 
                 // TODO: Is this slot okay? Should it be unique per call site?
                 auto spill_slot = r;
@@ -1072,7 +1085,8 @@ auto allocate_registers(
                 ++current_i; // inserting before moves up current instruction
                 ++inst_i;
 
-                // Don't clobber the result register out of existence by unspilling...
+                // If the result register isn't the ABI's return register, we need to move
+                // from the return register to the actual expected result register.
                 if (result_register.value) {
                     auto return_register = return_register_by_category((usz) result_register.category);
                     if (result_register.value != return_register) {
