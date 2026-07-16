@@ -555,7 +555,9 @@ void Lexer::NextChar() {
         return;
     }
     auto& in = _including.front();
-    lastc = u32(in.at(_including_offset++));
+    // NOTE: Check necessary for completely empty files.
+    if (_including_offset < in.size())
+        lastc = u32(in.at(_including_offset++));
     if (_including_offset >= in.size()) {
         _including.pop_front();
         _including_offset = 0;
