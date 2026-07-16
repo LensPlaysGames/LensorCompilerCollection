@@ -1,0 +1,7 @@
+================
+Globals Rely On Each Other (Simple)
+:fail_sema
+================
+module foo;
+export foo-foo :: foo-bar;
+export foo-bar :: foo-foo;
