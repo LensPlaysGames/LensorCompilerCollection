@@ -3,6 +3,8 @@
 
 #if defined(__linux__)
 #    define LCC_LINUX 1
+// Include stdio just to see if __GLIBC__ gets defined
+#    include <stdio.h>
 #    if defined(__GLIBC__) && ! defined(__UCLIBC__)
 #        define LCC_LINUX_GLIBC 1
 #    endif
