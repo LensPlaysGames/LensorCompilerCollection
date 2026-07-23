@@ -589,9 +589,32 @@ void Lexer::NextToken() {
     // Skip different kinds of whitespace depending on if we are preprocessing
     // or not.
     // TODO: Handle escaped newlines
-    if (preprocessing)
-        while (preprocessor_whitespace.contains((char) lastc)) NextChar();
-    else
+    if (preprocessing) {
+        while (preprocessor_whitespace.contains((char) lastc)) {
+            NextChar();
+            if (lastc == '\\') {
+                auto escape_location = Location{
+                    CurrentOffset(),
+                    1,
+                    tok.location.file_id
+                };
+                NextChar();
+                if (lastc != '\n') {
+                    Error(
+                        escape_location,
+                        "c/preprocessor",
+                        "Invalid escaped character: `{}` (0x{:04x})\n",
+                        (char) lastc,
+                        lastc
+                    );
+                    tok.kind = TokenKind::Eof;
+                    return;
+                }
+                // Preprocessor Escaped Newline
+                NextChar();
+            }
+        }
+    } else
         while (IsSpace(lastc)) NextChar();
 
     // Record start of token.
@@ -690,6 +713,7 @@ void Lexer::NextToken() {
             else if (IsIdentifierStartCharacter(lastc)) {
                 NextIdentifier();
 
+                bool was_preprocessing = preprocessing;
                 preprocessing = true;
 
                 if (tok.text == "define") {
@@ -730,6 +754,8 @@ void Lexer::NextToken() {
                 } else if (tok.text == "ifdef" or tok.text == "ifndef") {
                     ++_expected_endifs;
 
+                    auto if_location = tok.location;
+
                     bool inverted{tok.text == "ifndef"};
                     NextToken();
                     if (tok.kind != TokenKind::Identifier) {
@@ -751,12 +777,6 @@ void Lexer::NextToken() {
                         return;
                     }
 
-                    // Skip newline(s)
-                    do NextChar();
-                    while (lastc == '\n');
-
-                    NextToken();
-
                     // If the check does not pass...
                     if (inverted == _simple_defines.contains(name)) {
                         // Skip everything until #endif
@@ -765,19 +785,24 @@ void Lexer::NextToken() {
                                 NextChar();
                             NextToken();
                         }
-                        // Yeet #endif
-                        NextToken();
+                        if (tok.kind != TokenKind::PpEndif)
+                            Error(if_location, "c/preprocessor", "Expected #endif");
+                        else NextToken();
+                        --_expected_endifs;
                         return;
                     }
                     // Otherwise, go on to parse everything like normal.
+                    preprocessing = false;
                 } else if (tok.text == "endif") {
                     if (not _expected_endifs) {
                         Error("c/preprocessor", "Got #endif outside of any #if, #ifdef, or #ifndef");
                         tok.kind = TokenKind::Eof;
                         return;
                     }
-                    --_expected_endifs;
                     tok.kind = TokenKind::PpEndif;
+                    // We DO NOT return preprocessor tokens unless we are preprocessing!
+                    if (not was_preprocessing)
+                        NextToken();
                     return;
                 } else if (tok.text == "include") {
                     NextToken();

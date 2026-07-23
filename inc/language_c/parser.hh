@@ -212,6 +212,8 @@ enum class TokenKind : unsigned int {
 using Token = syntax::Token<TokenKind>;
 
 class Lexer : public syntax::Lexer<Token> {
+    friend Parser;
+
     std::list<Token> _next_tokens{};
     std::list<std::vector<char>> _including{};
     usz _including_offset{};
