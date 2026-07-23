@@ -245,6 +245,7 @@ if (VERIFY_COMPILERS)
       -DCMAKE_C_COMPILER=gcc
       -DCMAKE_CXX_COMPILER=g++
       ${COMMON_CONFIG}
+      EXCLUDE_FROM_ALL
     )
     add_dependencies(verify_compilers gnu_build)
     set_property(DIRECTORY APPEND PROPERTY
@@ -269,6 +270,7 @@ if (VERIFY_COMPILERS)
       -DCMAKE_CXX_COMPILER=clang++
       -DCMAKE_CXX_FLAGS="-stdlib=libc++"
       ${COMMON_CONFIG}
+      EXCLUDE_FROM_ALL
     )
     add_dependencies(verify_compilers llvm_build)
     set_property(DIRECTORY APPEND PROPERTY
@@ -287,6 +289,7 @@ if (VERIFY_COMPILERS)
       -DCMAKE_CXX_COMPILER=clang++
       -DCMAKE_CXX_FLAGS="-stdlib=libstdc++"
       ${COMMON_CONFIG}
+      EXCLUDE_FROM_ALL
     )
     add_dependencies(verify_compilers llvmgnu_build)
     set_property(DIRECTORY APPEND PROPERTY
@@ -309,6 +312,7 @@ if (VERIFY_COMPILERS)
       -DCMAKE_C_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-gcc
       -DCMAKE_CXX_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++
       ${COMMON_CONFIG}
+      EXCLUDE_FROM_ALL
     )
     add_dependencies(verify_compilers mingw_build)
     set_property(DIRECTORY APPEND PROPERTY
@@ -331,6 +335,7 @@ if (VERIFY_COMPILERS)
       -DCMAKE_C_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-gcc
       -DCMAKE_CXX_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++
       ${COMMON_CONFIG}
+      EXCLUDE_FROM_ALL
     )
     add_dependencies(verify_compilers ucrt_build)
     set_property(DIRECTORY APPEND PROPERTY
