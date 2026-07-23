@@ -10,6 +10,30 @@
 ()
 
 ================
+#ifdef _bar_, #endif followed by junk
+:syntax_warn
+================
+
+#ifdef _bar_
+#endif foo 32092
+
+---
+
+(block)
+
+================
+#ifdef _bar_ followed by junk, #endif
+:syntax_warn
+================
+
+#ifdef _bar_ foo 32092
+#endif
+
+---
+
+(block)
+
+================
 #ifdef _bar_ #endif
 :syntax
 ================

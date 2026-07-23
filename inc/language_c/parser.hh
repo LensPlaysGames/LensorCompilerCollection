@@ -215,11 +215,13 @@ class Lexer : public syntax::Lexer<Token> {
     friend Parser;
 
     std::list<Token> _next_tokens{};
-    std::list<std::vector<char>> _including{};
+    std::list<std::reference_wrapper<lcc::File>> _including{};
     usz _including_offset{};
     usz _expected_endifs{};
 
     StringMap<std::vector<Token>> _simple_defines{};
+
+    uint _file_id{};
 
     bool preprocessing{false};
 
@@ -232,7 +234,8 @@ class Lexer : public syntax::Lexer<Token> {
 
 public:
     Lexer(Context* c, File* f)
-        : syntax::Lexer<Token>(c, f) {}
+        : syntax::Lexer<Token>(c, f)
+        , _file_id(f->file_id()) {}
 
     void NextToken();
     void NextChar();

@@ -362,9 +362,9 @@ void Lexer::NextNumber() {
 
         tok.location.len = (u16) Location::length_from_two_offsets_exclusive(
             start_location.pos,
-            CurrentOffset()
+            (u32) _including_offset
         );
-        // CurrentOffset() can only ever be equal to the end, but the length of
+        // _including_offset can only ever be equal to the end, but the length of
         // the final token in a file will be one longer.
         if (lastc == 0)
             tok.location.len += 1;
@@ -483,11 +483,15 @@ void Lexer::NextIdentifier() {
     tok.kind = TokenKind::Identifier;
     tok.text.clear();
 
+    tok.location.pos = (u32) _including_offset;
+    // _including_offset gets next character, and we are already at one.
+    if (tok.location.pos) tok.location.pos -= 1;
+    tok.location.len = 0;
+
     // Note: Istg if anyone gets the genius idea of extracting a substring
     // instead of appending character by character, DON’T. There is a REASON
     // why NextChar() exists. Character != byte in the source file.
-    tok.location.pos = CurrentOffset();
-    auto start_position = tok.location.pos;
+    auto start_position = _including_offset;
     do {
         if (lastc > 0xff)
             Diag::ICE("Handle unicode codepoint in identifier");
@@ -496,8 +500,8 @@ void Lexer::NextIdentifier() {
     } while (IsIdentifierContinueCharacter(lastc));
 
     tok.location.len = (u16) Location::length_from_two_offsets_exclusive(
-        start_position,
-        CurrentOffset()
+        (u32) start_position,
+        (u32) _including_offset
     );
 }
 
@@ -555,15 +559,25 @@ std::unordered_map<TokenKind, TokenKind> has_trailing{
 void Lexer::NextChar() {
     if (_including.empty()) {
         syntax::Lexer<Token>::NextChar();
+        _including_offset = CurrentOffset() + 1;
         return;
     }
-    auto& in = _including.front();
+    auto& in = _including.front().get();
     // NOTE: Check necessary for completely empty files.
     if (_including_offset < in.size())
-        lastc = u32(in.at(_including_offset++));
+        lastc = u32(in.data()[_including_offset++]);
     if (_including_offset >= in.size()) {
         _including.pop_front();
-        _including_offset = 0;
+        _including_offset = _including.empty() ? CurrentOffset() : 0;
+        tok.location = {
+            (u32) _including_offset,
+            1,
+            static_cast<u16>(
+                _including.empty()
+                    ? _file_id
+                    : _including.front().get().file_id()
+            )
+        };
     }
 }
 
@@ -594,7 +608,7 @@ void Lexer::NextToken() {
             NextChar();
             if (lastc == '\\') {
                 auto escape_location = Location{
-                    CurrentOffset(),
+                    (u32) _including_offset,
                     1,
                     tok.location.file_id
                 };
@@ -618,7 +632,7 @@ void Lexer::NextToken() {
         while (IsSpace(lastc)) NextChar();
 
     // Record start of token.
-    tok.location.pos = CurrentOffset();
+    tok.location.pos = (u32) _including_offset - 1;
     auto start_location = tok.location;
 
     // Determine token starting at current offset.
@@ -759,7 +773,7 @@ void Lexer::NextToken() {
                     bool inverted{tok.text == "ifndef"};
                     NextToken();
                     if (tok.kind != TokenKind::Identifier) {
-                        Error("c/preprocessor", "Macro name missing!");
+                        Error(if_location, "c/preprocessor", "Macro name missing!");
                         tok.kind = TokenKind::Eof;
                         return;
                     }
@@ -768,13 +782,12 @@ void Lexer::NextToken() {
 
                     NextToken();
                     while (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid)) {
-                        Warning("c/preprocessor", "Junk following macro name of #ifdef directive");
+                        Warning(
+                            if_location,
+                            "c/preprocessor",
+                            "Junk following macro name of #ifdef directive"
+                        );
                         NextToken();
-                    }
-
-                    if (tok.kind == TokenKind::Eof) {
-                        Error("c/preprocessor", "#ifdef at end of file");
-                        return;
                     }
 
                     // If the check does not pass...
@@ -785,6 +798,7 @@ void Lexer::NextToken() {
                                 NextChar();
                             NextToken();
                         }
+                        preprocessing = false;
                         if (tok.kind != TokenKind::PpEndif)
                             Error(if_location, "c/preprocessor", "Expected #endif");
                         else NextToken();
@@ -792,18 +806,38 @@ void Lexer::NextToken() {
                         return;
                     }
                     // Otherwise, go on to parse everything like normal.
-                    preprocessing = false;
                 } else if (tok.text == "endif") {
+                    auto endif_location = tok.location;
+
                     if (not _expected_endifs) {
-                        Error("c/preprocessor", "Got #endif outside of any #if, #ifdef, or #ifndef");
+                        Error(
+                            "c/preprocessor",
+                            "Got #endif outside of any #if, #ifdef, or #ifndef"
+                        );
                         tok.kind = TokenKind::Eof;
                         return;
                     }
-                    tok.kind = TokenKind::PpEndif;
-                    // We DO NOT return preprocessor tokens unless we are preprocessing!
-                    if (not was_preprocessing)
+
+                    NextToken();
+                    // Expect newline
+                    while (tok.kind != TokenKind::Eof and tok.kind != TokenKind::Invalid) {
+                        Warning("c/preprocessor", "Junk following #endif directive");
                         NextToken();
-                    return;
+                    }
+
+                    if (tok.kind != TokenKind::Invalid) {
+                        Warning(
+                            endif_location,
+                            "c/preprocessor",
+                            "Expected newline directly following #endif directive"
+                        );
+                    }
+
+                    // We return preprocessor tokens when we are preprocessing!
+                    if (was_preprocessing) {
+                        tok.kind = TokenKind::PpEndif;
+                        return;
+                    }
                 } else if (tok.text == "include") {
                     NextToken();
                     std::string path{};
@@ -819,7 +853,11 @@ void Lexer::NextToken() {
                             /** (!): Above lexes '>', below yeets it */
                             NextToken();
                         } else {
-                            auto e = Error(open_location, "c/preprocessor", "Expected `>` to close this `<`...");
+                            auto e = Error(
+                                open_location,
+                                "c/preprocessor",
+                                "Expected `>` to close this `<`..."
+                            );
                             e.fix_by_inserting_at(tok.location, ">");
                         }
                     } else if (tok.kind == TokenKind::String) {
@@ -871,14 +909,26 @@ void Lexer::NextToken() {
                         tok.kind == TokenKind::Eof
                         or tok.kind == TokenKind::Invalid
                     )) {
-                        Warning("c/preprocessor", "Junk following path of #include directive `{}`", tok.kind);
+                        Warning(
+                            "c/preprocessor",
+                            "Junk following path of #include directive `{}`",
+                            tok.kind
+                        );
                         NextToken();
                     }
 
                     // After this, the next characters we fetch via the lexer API will be from
                     // the included file. This means we can't do our normal handling of "go
                     // until EOF or newline", since, er, this file's tokens are in the way.
-                    _including.push_front(File::Read(fullpath));
+                    _including.push_front(
+                        context->create_file(fullpath, File::Read(fullpath))
+                    );
+                    _including_offset = 0;
+                    tok.location = {
+                        0,
+                        1,
+                        (u16) _including.front().get().file_id()
+                    };
                 } else {
                     Error(
                         "c/preprocessor",
@@ -1021,7 +1071,7 @@ void Lexer::NextToken() {
 
     tok.location.len = (u16) Location::length_from_two_offsets_exclusive(
         start_location.pos,
-        CurrentOffset()
+        _including_offset ? (u32) _including_offset - 1 : 0
     );
     if (lastc == 0)
         tok.location.len += 1;
@@ -1363,7 +1413,11 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
         if (tok.kind == TokenKind::Semicolon)
             NextToken();
         else if (not IsFunctionDefinition(*maybe_expression)) {
-            auto e = Error("c/expected", "Expected `;` but got `{}`", ToString(tok.kind));
+            auto e = Error(
+                "c/expected",
+                "Expected `;` but got `{}`",
+                ToString(tok.kind)
+            );
             if (maybe_expression and maybe_expression->location().seekable(context)) {
                 e.fix_by_inserting_at(maybe_expression->get_past_location(), ";");
                 e.attach(
@@ -1371,8 +1425,7 @@ auto Parser::ParseExpressions(TokenKind until) -> Result<std::vector<Node*>> {
                         maybe_expression->location(),
                         "c/expected",
                         "After this"
-                    ),
-                    true
+                    )
                 );
             } else e.fix_by_inserting_at(tok.location, ";");
             return e;
