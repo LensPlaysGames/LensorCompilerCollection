@@ -106,6 +106,7 @@ Type::flag_t flag_from_keyword(TokenKind k) {
         case TokenKind::Semicolon:
         case TokenKind::Eof:
         case TokenKind::Count:
+        case TokenKind::PpEndif:
             break;
     }
     Diag::ICE("unreachable");
@@ -182,6 +183,7 @@ std::string_view ToString(TokenKind k) {
         case TokenKind::RightCurlyBrace: return "}";
         case TokenKind::Semicolon: return ";";
         case TokenKind::Eof: return "EOF";
+        case TokenKind::PpEndif: return "#endif";
         case TokenKind::Count: break;
     }
     Diag::ICE("unreachable");
@@ -267,6 +269,7 @@ Result<std::string> ToSource(Token& t) {
         case TokenKind::LeftCurlyBrace:
         case TokenKind::RightCurlyBrace:
         case TokenKind::Semicolon:
+        case TokenKind::PpEndif:
             return std::string{ToString(t.kind)};
     }
     Diag::ICE("unreachable");
@@ -724,6 +727,58 @@ void Lexer::NextToken() {
                     }
 
                     preprocessor_undefine(name);
+                } else if (tok.text == "ifdef" or tok.text == "ifndef") {
+                    ++_expected_endifs;
+
+                    bool inverted{tok.text == "ifndef"};
+                    NextToken();
+                    if (tok.kind != TokenKind::Identifier) {
+                        Error("c/preprocessor", "Macro name missing!");
+                        tok.kind = TokenKind::Eof;
+                        return;
+                    }
+
+                    std::string name = tok.text;
+
+                    NextToken();
+                    while (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid)) {
+                        Warning("c/preprocessor", "Junk following macro name of #ifdef directive");
+                        NextToken();
+                    }
+
+                    if (tok.kind == TokenKind::Eof) {
+                        Error("c/preprocessor", "#ifdef at end of file");
+                        return;
+                    }
+
+                    // Skip newline(s)
+                    do NextChar();
+                    while (lastc == '\n');
+
+                    NextToken();
+
+                    // If the check does not pass...
+                    if (inverted == _simple_defines.contains(name)) {
+                        // Skip everything until #endif
+                        while (tok.kind != TokenKind::Eof and tok.kind != TokenKind::PpEndif) {
+                            while (lastc == '\n')
+                                NextChar();
+                            NextToken();
+                        }
+                        // Yeet #endif
+                        NextToken();
+                        return;
+                    }
+                    // Otherwise, go on to parse everything like normal.
+                } else if (tok.text == "endif") {
+                    if (not _expected_endifs) {
+                        Error("c/preprocessor", "Got #endif outside of any #if, #ifdef, or #ifndef");
+                        tok.kind = TokenKind::Eof;
+                        return;
+                    }
+                    --_expected_endifs;
+                    tok.kind = TokenKind::PpEndif;
+                    return;
                 } else if (tok.text == "include") {
                     NextToken();
                     std::string path{};
@@ -802,7 +857,8 @@ void Lexer::NextToken() {
                 } else {
                     Error(
                         "c/preprocessor",
-                        "Unrecognized preprocessor statement.\nIf you believe this should be a conditionally supported directive, let the maintainers know."
+                        "Unrecognized preprocessor statement `{}`.\nIf you believe this should be a conditionally supported directive, let the maintainers know.",
+                        tok.text
                     );
                     tok.kind = TokenKind::Eof;
                     return;
@@ -961,64 +1017,7 @@ constexpr size_t unary_precedence(TokenKind kind) {
         case TokenKind::KwAlignof:
             return 2;
 
-        case TokenKind::Invalid:
-        case TokenKind::Identifier:
-        case TokenKind::Integer:
-        case TokenKind::Fractional:
-        case TokenKind::String:
-        case TokenKind::KwVoid:
-        case TokenKind::KwBool:
-        case TokenKind::KwChar:
-        case TokenKind::KwShort:
-        case TokenKind::KwInt:
-        case TokenKind::KwLong:
-        case TokenKind::KwReturn:
-        case TokenKind::KwConst:
-        case TokenKind::KwVolatile:
-        case TokenKind::KwRestrict:
-        case TokenKind::KwAtomic:
-        case TokenKind::KwConstexpr:
-        case TokenKind::KwAuto:
-        case TokenKind::KwExtern:
-        case TokenKind::KwRegister:
-        case TokenKind::KwStatic:
-        case TokenKind::OpEqual:
-        case TokenKind::OpLessThan:
-        case TokenKind::OpGreaterThan:
-        case TokenKind::OpDoublePipe:
-        case TokenKind::OpDoubleAmpersand:
-        case TokenKind::OpSlash:
-        case TokenKind::OpPercent:
-        case TokenKind::OpComma:
-        case TokenKind::OpCaret:
-        case TokenKind::OpPipe:
-        case TokenKind::OpShiftLeft:
-        case TokenKind::OpShiftRight:
-        case TokenKind::OpDoubleEqual:
-        case TokenKind::OpLessThanEqual:
-        case TokenKind::OpGreaterThanEqual:
-        case TokenKind::OpExclamationEqual:
-        case TokenKind::OpPlusEqual:
-        case TokenKind::OpMinusEqual:
-        case TokenKind::OpAsteriskEqual:
-        case TokenKind::OpSlashEqual:
-        case TokenKind::OpPercentEqual:
-        case TokenKind::OpCaretEqual:
-        case TokenKind::OpPipeEqual:
-        case TokenKind::OpAmpersandEqual:
-        case TokenKind::OpShiftLeftEqual:
-        case TokenKind::OpShiftRightEqual:
-        case TokenKind::LeftParenthesis:
-        case TokenKind::RightParenthesis:
-        case TokenKind::LeftSquareBracket:
-        case TokenKind::RightSquareBracket:
-        case TokenKind::LeftCurlyBrace:
-        case TokenKind::RightCurlyBrace:
-        case TokenKind::Semicolon:
-        case TokenKind::Eof:
-        case TokenKind::Count:
-        case TokenKind::OpDot:
-        case TokenKind::OpArrow:
+            NOT_A_UNARY_OPERATOR
             return 0;
     }
     Diag::ICE("unreachable");
@@ -1088,40 +1087,7 @@ constexpr size_t binary_precedence(TokenKind kind) {
         case TokenKind::LeftParenthesis:
             return 1;
 
-        case TokenKind::Invalid:
-        case TokenKind::Identifier:
-        case TokenKind::Integer:
-        case TokenKind::Fractional:
-        case TokenKind::String:
-        case TokenKind::KwVoid:
-        case TokenKind::KwBool:
-        case TokenKind::KwChar:
-        case TokenKind::KwShort:
-        case TokenKind::KwInt:
-        case TokenKind::KwLong:
-        case TokenKind::KwReturn:
-        case TokenKind::KwSizeof:
-        case TokenKind::KwAlignof:
-        case TokenKind::KwConst:
-        case TokenKind::KwVolatile:
-        case TokenKind::KwRestrict:
-        case TokenKind::KwAtomic:
-        case TokenKind::KwConstexpr:
-        case TokenKind::KwAuto:
-        case TokenKind::KwExtern:
-        case TokenKind::KwRegister:
-        case TokenKind::KwStatic:
-        case TokenKind::OpPlusPlus:
-        case TokenKind::OpMinusMinus:
-        case TokenKind::OpTilde:
-        case TokenKind::RightParenthesis:
-        case TokenKind::RightSquareBracket:
-        case TokenKind::LeftCurlyBrace:
-        case TokenKind::RightCurlyBrace:
-        case TokenKind::Semicolon:
-        case TokenKind::Eof:
-        case TokenKind::OpExclamation:
-        case TokenKind::Count:
+            NOT_A_BINARY_OPERATOR
             return 0;
     }
     Diag::ICE("unreachable");
@@ -1534,6 +1500,7 @@ auto Parser::ParseBaseType(Type::flag_t flags) -> Result<Type*> {
             case TokenKind::RightCurlyBrace:
             case TokenKind::Semicolon:
             case TokenKind::Eof:
+            case TokenKind::PpEndif:
             case TokenKind::Count:
                 break;
         }
@@ -1567,6 +1534,7 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
         case TokenKind::Invalid:
         case TokenKind::Count:
         case TokenKind::Eof:
+        case TokenKind::PpEndif:
             Diag::ICE("Parser encountered unexpected token kind `{}`...", tok.kind);
 
         case TokenKind::OpSlash:
@@ -1646,7 +1614,7 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
 
         case TokenKind::Semicolon: {
             NextToken();
-            return Warning("c/empty-statement", "Empty statement");
+            return Warning(start_location, "c/empty-statement", "Empty statement");
         };
 
         case TokenKind::LeftCurlyBrace: {
@@ -1881,41 +1849,7 @@ auto Parser::ParseExpression(size_t current_precedence) -> Result<Node*> {
                 NextToken();
             } break;
 
-            // These are NOT binary operators
-            case TokenKind::OpExclamation:
-            case TokenKind::Invalid:
-            case TokenKind::Identifier:
-            case TokenKind::Integer:
-            case TokenKind::Fractional:
-            case TokenKind::String:
-            case TokenKind::KwVoid:
-            case TokenKind::KwBool:
-            case TokenKind::KwChar:
-            case TokenKind::KwShort:
-            case TokenKind::KwInt:
-            case TokenKind::KwLong:
-            case TokenKind::KwReturn:
-            case TokenKind::KwConst:
-            case TokenKind::KwVolatile:
-            case TokenKind::KwRestrict:
-            case TokenKind::KwAtomic:
-            case TokenKind::KwConstexpr:
-            case TokenKind::KwAuto:
-            case TokenKind::KwExtern:
-            case TokenKind::KwRegister:
-            case TokenKind::KwStatic:
-            case TokenKind::RightParenthesis:
-            case TokenKind::RightSquareBracket:
-            case TokenKind::LeftCurlyBrace:
-            case TokenKind::RightCurlyBrace:
-            case TokenKind::Semicolon:
-            case TokenKind::Eof:
-            case TokenKind::Count:
-            case TokenKind::KwSizeof:
-            case TokenKind::KwAlignof:
-            case TokenKind::OpPlusPlus:
-            case TokenKind::OpMinusMinus:
-            case TokenKind::OpTilde:
+                NOT_A_BINARY_OPERATOR
                 Diag::ICE("Invalid binary operator");
         }
     }

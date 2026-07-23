@@ -104,8 +104,110 @@ enum class TokenKind : unsigned int {
 
     Semicolon,
     Eof,
+
+    // Preprocessor #endif
+    PpEndif,
+
     Count,
 };
+
+#define NOT_A_UNARY_OPERATOR            \
+    case TokenKind::Invalid:            \
+    case TokenKind::Identifier:         \
+    case TokenKind::Integer:            \
+    case TokenKind::Fractional:         \
+    case TokenKind::String:             \
+    case TokenKind::KwVoid:             \
+    case TokenKind::KwBool:             \
+    case TokenKind::KwChar:             \
+    case TokenKind::KwShort:            \
+    case TokenKind::KwInt:              \
+    case TokenKind::KwLong:             \
+    case TokenKind::KwReturn:           \
+    case TokenKind::KwConst:            \
+    case TokenKind::KwVolatile:         \
+    case TokenKind::KwRestrict:         \
+    case TokenKind::KwAtomic:           \
+    case TokenKind::KwConstexpr:        \
+    case TokenKind::KwAuto:             \
+    case TokenKind::KwExtern:           \
+    case TokenKind::KwRegister:         \
+    case TokenKind::KwStatic:           \
+    case TokenKind::OpEqual:            \
+    case TokenKind::OpLessThan:         \
+    case TokenKind::OpGreaterThan:      \
+    case TokenKind::OpDoublePipe:       \
+    case TokenKind::OpDoubleAmpersand:  \
+    case TokenKind::OpSlash:            \
+    case TokenKind::OpPercent:          \
+    case TokenKind::OpComma:            \
+    case TokenKind::OpDot:              \
+    case TokenKind::OpArrow:            \
+    case TokenKind::OpCaret:            \
+    case TokenKind::OpPipe:             \
+    case TokenKind::OpShiftLeft:        \
+    case TokenKind::OpShiftRight:       \
+    case TokenKind::OpDoubleEqual:      \
+    case TokenKind::OpLessThanEqual:    \
+    case TokenKind::OpGreaterThanEqual: \
+    case TokenKind::OpExclamationEqual: \
+    case TokenKind::OpPlusEqual:        \
+    case TokenKind::OpMinusEqual:       \
+    case TokenKind::OpAsteriskEqual:    \
+    case TokenKind::OpSlashEqual:       \
+    case TokenKind::OpPercentEqual:     \
+    case TokenKind::OpCaretEqual:       \
+    case TokenKind::OpPipeEqual:        \
+    case TokenKind::OpAmpersandEqual:   \
+    case TokenKind::OpShiftLeftEqual:   \
+    case TokenKind::OpShiftRightEqual:  \
+    case TokenKind::LeftParenthesis:    \
+    case TokenKind::RightParenthesis:   \
+    case TokenKind::LeftSquareBracket:  \
+    case TokenKind::RightSquareBracket: \
+    case TokenKind::LeftCurlyBrace:     \
+    case TokenKind::RightCurlyBrace:    \
+    case TokenKind::Semicolon:          \
+    case TokenKind::Eof:                \
+    case TokenKind::PpEndif:            \
+    case TokenKind::Count:
+
+#define NOT_A_BINARY_OPERATOR           \
+    case TokenKind::Invalid:            \
+    case TokenKind::Identifier:         \
+    case TokenKind::Integer:            \
+    case TokenKind::Fractional:         \
+    case TokenKind::String:             \
+    case TokenKind::KwVoid:             \
+    case TokenKind::KwBool:             \
+    case TokenKind::KwChar:             \
+    case TokenKind::KwShort:            \
+    case TokenKind::KwInt:              \
+    case TokenKind::KwLong:             \
+    case TokenKind::KwReturn:           \
+    case TokenKind::KwSizeof:           \
+    case TokenKind::KwAlignof:          \
+    case TokenKind::KwConst:            \
+    case TokenKind::KwVolatile:         \
+    case TokenKind::KwRestrict:         \
+    case TokenKind::KwAtomic:           \
+    case TokenKind::KwConstexpr:        \
+    case TokenKind::KwAuto:             \
+    case TokenKind::KwExtern:           \
+    case TokenKind::KwRegister:         \
+    case TokenKind::KwStatic:           \
+    case TokenKind::OpPlusPlus:         \
+    case TokenKind::OpMinusMinus:       \
+    case TokenKind::OpExclamation:      \
+    case TokenKind::OpTilde:            \
+    case TokenKind::RightParenthesis:   \
+    case TokenKind::RightSquareBracket: \
+    case TokenKind::LeftCurlyBrace:     \
+    case TokenKind::RightCurlyBrace:    \
+    case TokenKind::Semicolon:          \
+    case TokenKind::Eof:                \
+    case TokenKind::PpEndif:            \
+    case TokenKind::Count:
 
 using Token = syntax::Token<TokenKind>;
 
@@ -113,6 +215,7 @@ class Lexer : public syntax::Lexer<Token> {
     std::list<Token> _next_tokens{};
     std::list<std::vector<char>> _including{};
     usz _including_offset{};
+    usz _expected_endifs{};
 
     StringMap<std::vector<Token>> _simple_defines{};
 

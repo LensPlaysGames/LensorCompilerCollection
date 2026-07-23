@@ -1,0 +1,51 @@
+================
+#endif alone
+:syntax_error
+================
+
+#endif
+
+---
+
+()
+
+================
+#ifdef _bar_ #endif
+:syntax
+================
+
+#ifdef _bar_
+0;
+#endif
+
+---
+
+(block)
+
+================
+#define _bar_, #ifdef _bar_ #endif
+:syntax
+================
+
+#define _bar_
+#ifdef _bar_
+0;
+#endif
+
+---
+
+(block (integer_literal))
+
+================
+#define _bar_ 0, #ifdef _bar_ #endif
+:syntax
+================
+
+#define _bar_ 0
+#ifdef _bar_
+0;
+#endif
+
+---
+
+(block (integer_literal))

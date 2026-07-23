@@ -61,3 +61,68 @@ foo
 ---
 
 (block)
+
+================
+#define foo bar, foo
+:syntax
+:desc macro definition, simple replacement, use of defined macro
+================
+
+#define foo bar
+
+foo;
+
+---
+
+(block (name))
+
+
+================
+#define foo NEWLINE bar, foo
+:syntax
+:desc macro definition, simple replacement, use of defined macro
+================
+
+#define foo \
+  bar
+
+foo;
+
+---
+
+(block (name))
+
+
+================
+#define foo bar; NEWLINE bar, foo
+:syntax
+:desc multi-line macro definition, simple replacement, use of defined macro
+================
+
+#define foo bar; \
+  bar
+
+foo;
+
+---
+
+(block (name) (name))
+
+
+================
+#define foo NEWLINE bar; NEWLINE bar, foo
+:syntax
+:desc multi-line macro definition, simple replacement, use of defined macro
+================
+
+#define foo \
+  bar; \
+  bar
+
+foo;
+
+---
+
+(block (name) (name))
+
+

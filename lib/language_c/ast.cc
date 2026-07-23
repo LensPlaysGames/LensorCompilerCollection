@@ -259,67 +259,11 @@ auto Node::name() const -> std::string_view {
                 case TokenKind::OpPlusPlus: return "unary_increment";
                 case TokenKind::OpMinusMinus: return "unary_decrement";
                 case TokenKind::OpExclamation: return "unary_logical_not";
-
-                case TokenKind::OpSlash:
-                case TokenKind::OpPercent:
-                case TokenKind::LeftSquareBracket:
-                case TokenKind::OpEqual:
-                case TokenKind::OpLessThan:
-                case TokenKind::OpGreaterThan:
-                case TokenKind::OpDoublePipe:
-                case TokenKind::OpDoubleAmpersand:
-                case TokenKind::OpDot:
-                case TokenKind::OpArrow:
-                case TokenKind::OpCaret:
-                case TokenKind::OpPipe:
-                case TokenKind::OpShiftLeft:
-                case TokenKind::OpShiftRight:
-                case TokenKind::OpDoubleEqual:
-                case TokenKind::OpLessThanEqual:
-                case TokenKind::OpGreaterThanEqual:
-                case TokenKind::OpExclamationEqual:
-                case TokenKind::OpPlusEqual:
-                case TokenKind::OpMinusEqual:
-                case TokenKind::OpAsteriskEqual:
-                case TokenKind::OpSlashEqual:
-                case TokenKind::OpPercentEqual:
-                case TokenKind::OpCaretEqual:
-                case TokenKind::OpPipeEqual:
-                case TokenKind::OpAmpersandEqual:
-                case TokenKind::OpShiftLeftEqual:
-                case TokenKind::OpShiftRightEqual:
-                case TokenKind::Invalid:
-                case TokenKind::Identifier:
-                case TokenKind::Integer:
-                case TokenKind::Fractional:
-                case TokenKind::String:
-                case TokenKind::KwVoid:
-                case TokenKind::KwBool:
-                case TokenKind::KwChar:
-                case TokenKind::KwShort:
-                case TokenKind::KwInt:
-                case TokenKind::KwLong:
-                case TokenKind::KwReturn:
-                case TokenKind::KwSizeof:
+                case TokenKind::KwSizeof: return "sizeof";
                 case TokenKind::KwAlignof:
-                case TokenKind::KwConst:
-                case TokenKind::KwVolatile:
-                case TokenKind::KwRestrict:
-                case TokenKind::KwAtomic:
-                case TokenKind::KwConstexpr:
-                case TokenKind::KwAuto:
-                case TokenKind::KwExtern:
-                case TokenKind::KwRegister:
-                case TokenKind::KwStatic:
-                case TokenKind::OpComma:
-                case TokenKind::LeftParenthesis:
-                case TokenKind::RightParenthesis:
-                case TokenKind::RightSquareBracket:
-                case TokenKind::LeftCurlyBrace:
-                case TokenKind::RightCurlyBrace:
-                case TokenKind::Semicolon:
-                case TokenKind::Eof:
-                case TokenKind::Count:
+                    return "alignof";
+
+                    NOT_A_UNARY_OPERATOR
                     Diag::ICE("Invalid unary operator `{}`", u->unary_operator());
             }
             Diag::ICE("unreachable");
@@ -361,43 +305,11 @@ auto Node::name() const -> std::string_view {
                 case TokenKind::OpAmpersandEqual: return "binary_bit_and_assign";
                 case TokenKind::OpShiftLeftEqual: return "binary_bitshift_left_assign";
                 case TokenKind::OpShiftRightEqual: return "binary_bitshift_right_assign";
-
-                case TokenKind::Invalid:
-                case TokenKind::Identifier:
-                case TokenKind::Integer:
-                case TokenKind::Fractional:
-                case TokenKind::String:
-                case TokenKind::KwVoid:
-                case TokenKind::KwBool:
-                case TokenKind::KwChar:
-                case TokenKind::KwShort:
-                case TokenKind::KwInt:
-                case TokenKind::KwLong:
-                case TokenKind::KwReturn:
-                case TokenKind::KwSizeof:
-                case TokenKind::KwAlignof:
-                case TokenKind::KwConst:
-                case TokenKind::KwVolatile:
-                case TokenKind::KwRestrict:
-                case TokenKind::KwAtomic:
-                case TokenKind::KwConstexpr:
-                case TokenKind::KwAuto:
-                case TokenKind::KwExtern:
-                case TokenKind::KwRegister:
-                case TokenKind::KwStatic:
-                case TokenKind::OpPlusPlus:
-                case TokenKind::OpMinusMinus:
-                case TokenKind::OpComma:
-                case TokenKind::OpExclamation:
-                case TokenKind::OpTilde:
+                case TokenKind::OpComma: return "binary_comma";
                 case TokenKind::LeftParenthesis:
-                case TokenKind::RightParenthesis:
-                case TokenKind::RightSquareBracket:
-                case TokenKind::LeftCurlyBrace:
-                case TokenKind::RightCurlyBrace:
-                case TokenKind::Semicolon:
-                case TokenKind::Eof:
-                case TokenKind::Count:
+                    return "binary_call";
+
+                    NOT_A_BINARY_OPERATOR
                     Diag::ICE("Invalid binary operator `{}`", b->binary_operator());
             }
             Diag::ICE("unreachable");

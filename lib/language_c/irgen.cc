@@ -4,14 +4,14 @@
 #include <language_c/ast.hh>
 #include <language_c/parser.hh>
 
-#include <lccbase/context.hh>
 #include <lcc/core.hh>
-#include <lccbase/diags.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
 #include <lcc/utils/macros.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 
 namespace lcc::language_c {
 
@@ -359,66 +359,9 @@ void IRGen::generate_expression(const Node* n) {
                     generated_ir[n] = inst;
                 } break;
 
-                case TokenKind::Invalid:
-                case TokenKind::Identifier:
-                case TokenKind::Integer:
-                case TokenKind::Fractional:
-                case TokenKind::String:
-                case TokenKind::KwVoid:
-                case TokenKind::KwBool:
-                case TokenKind::KwChar:
-                case TokenKind::KwShort:
-                case TokenKind::KwInt:
-                case TokenKind::KwLong:
-                case TokenKind::KwReturn:
                 case TokenKind::KwSizeof:
                 case TokenKind::KwAlignof:
-                case TokenKind::KwConst:
-                case TokenKind::KwVolatile:
-                case TokenKind::KwRestrict:
-                case TokenKind::KwAtomic:
-                case TokenKind::KwConstexpr:
-                case TokenKind::KwAuto:
-                case TokenKind::KwExtern:
-                case TokenKind::KwRegister:
-                case TokenKind::KwStatic:
-                case TokenKind::OpEqual:
-                case TokenKind::OpLessThan:
-                case TokenKind::OpGreaterThan:
-                case TokenKind::OpDoublePipe:
-                case TokenKind::OpDoubleAmpersand:
-                case TokenKind::OpSlash:
-                case TokenKind::OpPercent:
-                case TokenKind::OpComma:
-                case TokenKind::OpDot:
-                case TokenKind::OpArrow:
-                case TokenKind::OpCaret:
-                case TokenKind::OpPipe:
-                case TokenKind::OpShiftLeft:
-                case TokenKind::OpShiftRight:
-                case TokenKind::OpDoubleEqual:
-                case TokenKind::OpLessThanEqual:
-                case TokenKind::OpGreaterThanEqual:
-                case TokenKind::OpExclamationEqual:
-                case TokenKind::OpPlusEqual:
-                case TokenKind::OpMinusEqual:
-                case TokenKind::OpAsteriskEqual:
-                case TokenKind::OpSlashEqual:
-                case TokenKind::OpPercentEqual:
-                case TokenKind::OpCaretEqual:
-                case TokenKind::OpPipeEqual:
-                case TokenKind::OpAmpersandEqual:
-                case TokenKind::OpShiftLeftEqual:
-                case TokenKind::OpShiftRightEqual:
-                case TokenKind::LeftParenthesis:
-                case TokenKind::RightParenthesis:
-                case TokenKind::LeftSquareBracket:
-                case TokenKind::RightSquareBracket:
-                case TokenKind::LeftCurlyBrace:
-                case TokenKind::RightCurlyBrace:
-                case TokenKind::Semicolon:
-                case TokenKind::Eof:
-                case TokenKind::Count:
+                    NOT_A_UNARY_OPERATOR
                     Diag::ICE("unreachable");
             }
             return;
@@ -473,32 +416,6 @@ void IRGen::generate_expression(const Node* n) {
                     Diag::ICE("Handle {} irgen...", b->binary_operator());
                 }
 
-                case TokenKind::Invalid:
-                case TokenKind::Identifier:
-                case TokenKind::Integer:
-                case TokenKind::Fractional:
-                case TokenKind::String:
-                case TokenKind::KwVoid:
-                case TokenKind::KwBool:
-                case TokenKind::KwChar:
-                case TokenKind::KwShort:
-                case TokenKind::KwInt:
-                case TokenKind::KwLong:
-                case TokenKind::KwReturn:
-                case TokenKind::KwConst:
-                case TokenKind::KwVolatile:
-                case TokenKind::KwRestrict:
-                case TokenKind::KwAtomic:
-                case TokenKind::KwConstexpr:
-                case TokenKind::KwAuto:
-                case TokenKind::KwExtern:
-                case TokenKind::KwRegister:
-                case TokenKind::KwStatic:
-                case TokenKind::OpPlusPlus:
-                case TokenKind::OpMinusMinus:
-                case TokenKind::OpComma:
-                case TokenKind::OpTilde:
-                case TokenKind::OpExclamation:
                 case TokenKind::OpLessThanEqual:
                 case TokenKind::OpGreaterThanEqual:
                 case TokenKind::OpExclamationEqual:
@@ -512,17 +429,10 @@ void IRGen::generate_expression(const Node* n) {
                 case TokenKind::OpAmpersandEqual:
                 case TokenKind::OpShiftLeftEqual:
                 case TokenKind::OpShiftRightEqual:
-                case TokenKind::LeftParenthesis:
-                case TokenKind::RightParenthesis:
                 case TokenKind::LeftSquareBracket:
-                case TokenKind::RightSquareBracket:
-                case TokenKind::LeftCurlyBrace:
-                case TokenKind::RightCurlyBrace:
-                case TokenKind::Semicolon:
-                case TokenKind::Eof:
-                case TokenKind::Count:
-                case TokenKind::KwSizeof:
-                case TokenKind::KwAlignof:
+                case TokenKind::OpComma:
+                case TokenKind::LeftParenthesis:
+                    NOT_A_BINARY_OPERATOR
                     Diag::ICE("unreachable");
             }
 #undef BINARY_ARGS
