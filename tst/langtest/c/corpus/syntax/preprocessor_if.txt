@@ -23,6 +23,20 @@
 (block)
 
 ================
+#ifdef _bar_ #endif, #endif
+:syntax
+================
+
+#ifdef _bar_
+0;
+#endif
+#endif
+
+---
+
+(block)
+
+================
 #define _bar_, #ifdef _bar_ #endif
 :syntax
 ================
