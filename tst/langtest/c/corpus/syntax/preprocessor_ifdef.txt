@@ -1,63 +1,8 @@
 ================
-#if 1
-:syntax
-================
-
-#if 1
-0;
-#endif
-
----
-
-(block (integer_literal))
-
-================
-#if 0
-:syntax
-================
-
-#if 0
-0;
-#endif
-
----
-
-(block)
-
-================
-#if defined(yes)
-:syntax
-================
-
-#define foo
-#if defined(foo)
-0;
-#endif
-
----
-
-(block (integer_literal))
-
-================
-#if defined(no)
-:syntax
-================
-
-#if defined(foo)
-0;
-#endif
-
----
-
-(block)
-
-================
-#if
+#endif alone
 :syntax_error
 ================
 
-#if
-0;
 #endif
 
 ---
@@ -65,24 +10,35 @@
 ()
 
 ================
-#if &&
-:syntax
+#ifdef _bar_, #endif followed by junk
+:syntax_warn
 ================
 
-#if 1 && 1
-0;
+#ifdef _bar_
+#endif foo 32092
+
+---
+
+(block)
+
+================
+#ifdef _bar_ followed by junk, #endif
+:syntax_warn
+================
+
+#ifdef _bar_ foo 32092
 #endif
 
 ---
 
-(block (integer_literal))
+(block)
 
 ================
-#if && short circuit
+#ifdef _bar_ #endif
 :syntax
 ================
 
-#if 0 && 1
+#ifdef _bar_
 0;
 #endif
 
@@ -91,11 +47,26 @@
 (block)
 
 ================
-#if ||
+#ifdef _bar_ #endif, #endif
+:syntax_error
+================
+
+#ifdef _bar_
+0;
+#endif
+#endif
+
+---
+
+(block)
+
+================
+#define _bar_, #ifdef _bar_ #endif
 :syntax
 ================
 
-#if 0 || 1
+#define _bar_
+#ifdef _bar_
 0;
 #endif
 
@@ -104,12 +75,27 @@
 (block (integer_literal))
 
 ================
-#if || short circuit
+#define _bar_ 0, #ifdef _bar_ #endif
 :syntax
 ================
 
-#if 1 || 0
+#define _bar_ 0
+#ifdef _bar_
 0;
+#endif
+
+---
+
+(block (integer_literal))
+
+================
+#define _bar_ 0, #ifdef _bar_ _bar_; #endif
+:syntax
+================
+
+#define _bar_ 0
+#ifdef _bar_
+_bar_;
 #endif
 
 ---

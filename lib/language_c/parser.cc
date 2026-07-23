@@ -444,6 +444,12 @@ void Lexer::NextNumber() {
             return;
         }
 
+        if (tok.kind == TokenKind::Integer) {
+            // TODO: We should probably care about this a little more.
+            while (lastc == 'u' or lastc == 'U' or lastc == 'l' or lastc == 'L')
+                NextChar();
+        }
+
         // If the next character is whitespace (or a delimiter), then this is just a zero.
         if (
             IsSpace(lastc)
@@ -466,6 +472,10 @@ void Lexer::NextNumber() {
 
     // Any other digit means we have a decimal number.
     ParseNumber("decimal", IsDecimalDigit, 10);
+
+    // TODO: We should probably care about this a little more.
+    while (lastc == 'u' or lastc == 'U' or lastc == 'l' or lastc == 'L')
+        NextChar();
 
     if (lastc == '.') {
         auto whole = tok.integer_value;
@@ -562,23 +572,45 @@ void Lexer::NextChar() {
         _including_offset = CurrentOffset() + 1;
         return;
     }
-    auto& in = _including.front().get();
+    auto& in = _including.front().file;
     // NOTE: Check necessary for completely empty files.
     if (_including_offset < in.size())
         lastc = u32(in.data()[_including_offset++]);
     if (_including_offset >= in.size()) {
         _including.pop_front();
-        _including_offset = _including.empty() ? CurrentOffset() : 0;
+        _including_offset = _including.empty()
+                              ? CurrentOffset()
+                              : _including.front().offset;
         tok.location = {
             (u32) _including_offset,
             1,
             static_cast<u16>(
                 _including.empty()
                     ? _file_id
-                    : _including.front().get().file_id()
+                    : _including.front().file.file_id()
             )
         };
     }
+}
+
+void Lexer::skip_past_expected_endif(Location connected_directive) {
+    // Don't process #define/#undef, or process anything at all for that
+    // matter.
+    skipping = true;
+    preprocessing = true;
+
+    // Skip everything until #endif
+    while (tok.kind != TokenKind::Eof and tok.kind != TokenKind::PpEndif) {
+        while (lastc == '\n')
+            NextChar();
+        NextToken();
+    }
+
+    skipping = false;
+    if (tok.kind != TokenKind::PpEndif)
+        Error(connected_directive, "c/preprocessor", "Expected #endif; got {}", tok.kind);
+    else NextToken();
+    --_expected_endifs;
 }
 
 void Lexer::NextToken() {
@@ -721,6 +753,11 @@ void Lexer::NextToken() {
         case '#': {
             NextChar();
 
+            // Skip non-newline whitespace...
+            // #   define
+            while (preprocessor_whitespace.contains((char) lastc))
+                NextChar();
+
             if (lastc == '#')
                 Diag::ICE("TODO: pp Concatenation");
 
@@ -729,6 +766,14 @@ void Lexer::NextToken() {
 
                 bool was_preprocessing = preprocessing;
                 preprocessing = true;
+
+                if (skipping and tok.text != "endif") {
+                    while (not (tok.kind == TokenKind::Eof or tok.kind == TokenKind::Invalid))
+                        NextToken();
+
+                    NextToken();
+                    return;
+                }
 
                 if (tok.text == "define") {
                     NextToken();
@@ -765,6 +810,90 @@ void Lexer::NextToken() {
                     }
 
                     preprocessor_undefine(name);
+                } else if (tok.text == "if") {
+                    ++_expected_endifs;
+                    auto if_location = tok.location;
+                    NextToken();
+
+                    if (tok.kind == TokenKind::Invalid or tok.kind == TokenKind::Eof) {
+                        Error("c/preprocessor", "#if directive requires a condition");
+                        tok.kind = TokenKind::Eof;
+                        return;
+                    }
+
+                    int value{false};
+                    bool flip_next{false};
+
+                    while (tok.kind != TokenKind::Invalid and tok.kind != TokenKind::Eof) {
+                        if (tok.kind == TokenKind::Identifier) {
+                            if (tok.text == "defined") {
+                                NextToken();
+
+                                if (tok.kind != TokenKind::LeftParenthesis) {
+                                    Error("c/preprocessor", "Expected `(` following `defined`");
+                                    tok.kind = TokenKind::Eof;
+                                    return;
+                                }
+                                NextToken();
+
+                                if (tok.kind != TokenKind::Identifier) {
+                                    Error("c/preprocessor", "Expected macro name following `defined(`");
+                                    tok.kind = TokenKind::Eof;
+                                    return;
+                                }
+                                std::string name = tok.text;
+                                NextToken();
+
+                                if (tok.kind != TokenKind::RightParenthesis) {
+                                    Error("c/preprocessor", "Expected `)` following macro name of `defined()`");
+                                    tok.kind = TokenKind::Eof;
+                                    return;
+                                }
+
+                                tok.kind = TokenKind::Integer;
+                                tok.integer_value = _simple_defines.contains(name)
+                                                      ? 1
+                                                      : 0;
+                                continue;
+                            } else {
+                                // TODO: Expand known macros to their definitions, expand unknown macros
+                                // to zero.
+                                if (_simple_defines.contains(tok.text)) {
+                                    Diag::ICE("TODO: Expand known macro {} within #if", tok.text);
+                                } else {
+                                    tok.kind = TokenKind::Integer;
+                                    tok.integer_value = 0;
+                                    continue;
+                                }
+                            }
+                        } else if (tok.kind == TokenKind::OpDoubleAmpersand) {
+                            // Short Circuit Evaluation
+                            if (not value) break;
+                        } else if (tok.kind == TokenKind::OpDoublePipe) {
+                            // Short Circuit Evaluation
+                            if (value) break;
+                        } else if (tok.kind == TokenKind::Integer) {
+                            value = (int) tok.integer_value;
+                        } else if (tok.kind == TokenKind::OpExclamation) {
+                            flip_next = true;
+                        } else {
+                            { Note("c/unhandled", "Here"); }
+                            Diag::ICE("Unhandled token in #if directive {}", tok.kind);
+                        }
+                        if (flip_next) {
+                            value = ! value;
+                            flip_next = false;
+                        }
+                        NextToken();
+                    }
+
+                    // Skip to end of line...
+                    while (tok.kind != TokenKind::Invalid and tok.kind != TokenKind::Eof)
+                        NextToken();
+
+                    if (not value)
+                        skip_past_expected_endif(if_location);
+
                 } else if (tok.text == "ifdef" or tok.text == "ifndef") {
                     ++_expected_endifs;
 
@@ -791,20 +920,8 @@ void Lexer::NextToken() {
                     }
 
                     // If the check does not pass...
-                    if (inverted == _simple_defines.contains(name)) {
-                        // Skip everything until #endif
-                        while (tok.kind != TokenKind::Eof and tok.kind != TokenKind::PpEndif) {
-                            while (lastc == '\n')
-                                NextChar();
-                            NextToken();
-                        }
-                        preprocessing = false;
-                        if (tok.kind != TokenKind::PpEndif)
-                            Error(if_location, "c/preprocessor", "Expected #endif");
-                        else NextToken();
-                        --_expected_endifs;
-                        return;
-                    }
+                    if (inverted == _simple_defines.contains(name))
+                        skip_past_expected_endif(if_location);
                     // Otherwise, go on to parse everything like normal.
                 } else if (tok.text == "endif") {
                     auto endif_location = tok.location;
@@ -920,14 +1037,17 @@ void Lexer::NextToken() {
                     // After this, the next characters we fetch via the lexer API will be from
                     // the included file. This means we can't do our normal handling of "go
                     // until EOF or newline", since, er, this file's tokens are in the way.
+                    if (not _including.empty())
+                        _including.front().offset = _including_offset;
                     _including.push_front(
-                        context->create_file(fullpath, File::Read(fullpath))
+                        {context->create_file(fullpath, File::Read(fullpath)),
+                         0}
                     );
                     _including_offset = 0;
                     tok.location = {
                         0,
                         1,
-                        (u16) _including.front().get().file_id()
+                        (u16) _including.front().file.file_id()
                     };
                 } else {
                     Error(
@@ -1031,7 +1151,9 @@ void Lexer::NextToken() {
                 if (IsAlpha(lastc)) {
                     Error(
                         "c/invalid-literal",
-                        "Invalid integer literal---the character after a number must not be an alpha character"
+                        "Invalid integer literal---the character after a number must not be an alpha character (got `{}` (0x{:04x}))",
+                        (char) lastc,
+                        lastc
                     );
                 }
                 break;

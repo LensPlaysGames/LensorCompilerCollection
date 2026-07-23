@@ -211,11 +211,16 @@ enum class TokenKind : unsigned int {
 
 using Token = syntax::Token<TokenKind>;
 
+struct IncludedFileReference {
+    lcc::File& file;
+    usz offset{};
+};
+
 class Lexer : public syntax::Lexer<Token> {
     friend Parser;
 
     std::list<Token> _next_tokens{};
-    std::list<std::reference_wrapper<lcc::File>> _including{};
+    std::list<IncludedFileReference> _including{};
     usz _including_offset{};
     usz _expected_endifs{};
 
@@ -224,10 +229,16 @@ class Lexer : public syntax::Lexer<Token> {
     uint _file_id{};
 
     bool preprocessing{false};
+    // Whether or not preprocessing directives should be processed when
+    // encountered. When skipping, lines beginning with # are skipped
+    // entirely. Used for body of `#if 0`, for example.
+    bool skipping{false};
 
     static constexpr std::string_view preprocessor_whitespace{" \t\f"};
     Result<void> preprocessor_define(std::string_view name, std::vector<Token> contents);
     void preprocessor_undefine(std::string_view name);
+
+    void skip_past_expected_endif(Location connected_directive);
 
     void NextNumber();
     void NextIdentifier();
