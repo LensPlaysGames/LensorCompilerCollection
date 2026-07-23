@@ -602,7 +602,6 @@ void Lexer::NextToken() {
 
     // Skip different kinds of whitespace depending on if we are preprocessing
     // or not.
-    // TODO: Handle escaped newlines
     if (preprocessing) {
         while (preprocessor_whitespace.contains((char) lastc)) {
             NextChar();
@@ -645,7 +644,8 @@ void Lexer::NextToken() {
         case '[':
         case ']':
         case '{':
-        case '}': {
+        case '}':
+        case '.': {
             tok.kind = easy_tokens.at(lastc);
             NextChar();
         } break;
@@ -1065,7 +1065,12 @@ void Lexer::NextToken() {
                 break;
             }
 
-            Error("c/expected", "Unknown: `{}`", lastc);
+            tok.location.len = (u16) Location::length_from_two_offsets_exclusive(
+                start_location.pos,
+                (u32) _including_offset
+            );
+            Error("c/expected", "Unknown: `{}` (0x{:04x})", (char) lastc, lastc);
+            NextChar();
         } break;
     }
 
