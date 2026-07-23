@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.28)
-project(LCC VERSION 4.20.0 LANGUAGES C CXX)
+project(
+  lcc
+  VERSION 4.20.0
+  LANGUAGES C CXX
+  HOMEPAGE_URL https://codeberg.org/LensPlaysGames/LensorCompilerCollection
+)
 
 # User Option(s)
 set(
@@ -46,6 +51,12 @@ set(
   TIME_TRACE FALSE
   CACHE BOOL
   "Whether or not to generate compile duration data via -ftime-trace."
+)
+
+set(
+  PACKAGING FALSE
+  CACHE BOOL
+  "Whether or not to include CPack configuration."
 )
 
 set(
@@ -681,6 +692,123 @@ if (EMSCRIPTEN)
       COMMENT "Copying generated files for gh-pages..."
     )
   endif()
+endif()
+
+if (PACKAGING)
+  include(GNUInstallDirs)
+
+  install(
+    TARGETS lcc
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    COMPONENT lcc
+  )
+  install(
+    TARGETS
+    liblccbase liblccjson object libclink liblcc glint languagec
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    COMPONENT lcc-devel
+  )
+  install(
+    DIRECTORY inc/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    COMPONENT lcc-devel
+  )
+  install(
+    DIRECTORY documentation/
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}
+    COMPONENT lcc-docs
+  )
+  set(CPACK_COMPONENTS_ALL lcc lcc-devel lcc-docs)
+
+  # YOU MUST CHANGE THIS IF YOU ARE NOT, YA KNOW, "ME"
+  set(CPACK_PACKAGE_VENDOR Lensor)
+
+  set(CPACK_PACKAGE_NAME lcc)
+  set(
+    CPACK_PACKAGE_DESCRIPTION
+    "Lensor Compiler Collection (${CPACK_PACKAGE_VENDOR} LCC): "
+    ${CMAKE_PROJECT_VERSION} " " ${BUILD_DATE} "\n"
+    "A dependency-free, modern, hackable compiler collection"
+  )
+  set(
+    CPACK_PACKAGE_DESCRIPTION_SUMMARY
+    "${CPACK_PACKAGE_VENDOR} LCC " ${CMAKE_PROJECT_VERSION}
+  )
+
+  set(CPACK_SOURCE_PACKAGE_FILE_NAME "lcc-${CMAKE_PROJECT_VERSION}-source")
+
+  set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_LIST_DIR}/LICENSE")
+  # Typically describes some detail the purpose of the project during the
+  # installation.
+  # set(CPACK_RESOURCE_FILE_README README)
+  # set(CPACK_RESOURCE_FILE_WELCOME WELCOME)
+
+  set(CPACK_PACKAGE_EXECUTABLES "lcc;lcc")
+
+  set(CPACK_PACKAGE_VERSION_MAJOR ${CMAKE_PROJECT_VERSION_MAJOR})
+  set(CPACK_PACKAGE_VERSION_MINOR ${CMAKE_PROJECT_VERSION_MINOR})
+  set(CPACK_PACKAGE_VERSION_PATCH ${CMAKE_PROJECT_VERSION_PATCH})
+  set(CPACK_PACKAGE_CONTACT "Lens <lensplaysgames@gmail.com>")
+  set(CPACK_PACKAGE_DIRECTORY pkg)
+
+  # Debian (Ubuntu)
+  set(CPACK_DEBIAN_PACKAGE_SECTION devel)
+  set(CPACK_DEBIAN_PACKAGE_PRIORITY optional)
+
+  # Red Hat (Fedora)
+  set(CPACK_RPM_PACKAGE_LICENSE MIT)
+
+  # Architecture
+  set(TARGET_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
+  # Fallback to host architecture if not explicitly cross-compiling
+  if(NOT TARGET_ARCH)
+    set(TARGET_ARCH "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+  endif()
+
+  if(TARGET_ARCH MATCHES "x86_64|amd64|AMD64")
+    set(TARGET_ARCH "x86_64")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
+    set(CPACK_RPM_PACKAGE_ARCHITECTURE "x86_64")
+    set(CPACK_NSIS_INSTALLER_ARCHITECTURE "x64")
+  elseif(TARGET_ARCH MATCHES "aarch64|arm64|ARM64")
+    set(TARGET_ARCH "aarch64")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "arm64")
+    set(CPACK_RPM_PACKAGE_ARCHITECTURE "aarch64")
+    set(CPACK_NSIS_INSTALLER_ARCHITECTURE "arm64")
+  else()
+    message(
+      WARNING
+      "CPack: Unknown target architecture '${TARGET_ARCH}'. Package metadata may be generic."
+    )
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${TARGET_ARCH}")
+    set(CPACK_RPM_PACKAGE_ARCHITECTURE "${TARGET_ARCH}")
+  endif()
+
+  # System
+  set(TARGET_OS_RAW "${CMAKE_SYSTEM_NAME}")
+  # Fallback to host system if not explicitly cross-compiling
+  if(NOT TARGET_OS_RAW)
+    set(TARGET_OS_RAW "${CMAKE_HOST_SYSTEM_NAME}")
+  endif()
+  string(TOLOWER "${TARGET_OS_RAW}" TARGET_OS)
+
+  if(TARGET_OS MATCHES "linux")
+    # Generate both Debian and Red Hat packages automatically for Linux targets
+    set(CPACK_GENERATOR "DEB;RPM;TGZ")
+  elseif(TARGET_OS MATCHES "windows")
+    # Generate both an installer wizard and a portable ZIP for Windows targets
+    set(CPACK_GENERATOR "NSIS;ZIP")
+  elseif(TARGET_OS MATCHES "darwin")
+    # Generate macOS native installers
+    set(CPACK_GENERATOR "DragNDrop;TGZ")
+  endif()
+
+  set(
+    CPACK_PACKAGE_FILE_NAME
+    "${CPACK_PACKAGE_NAME}-${CMAKE_PROJECT_VERSION}-${TARGET_OS}-${TARGET_ARCH}"
+  )
+
+  include(CPack)
 endif()
 
 if (BUILD_TESTING)
