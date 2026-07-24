@@ -16,22 +16,22 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install dependencies
         run: sudo dnf install -y cmake gcc gcc-c++ git libstdc++-devel make
-      - name: CMake configure
+      - name: CMake Configure
         run: cmake -B bld -DUSE_LTO=OFF
-      - name: CMake build
+      - name: CMake Build
         run: cmake --build bld -j $(nproc)
-      - name: Setup Test suite dependencies
+      - name: Setup Test Suite Dependencies
         if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
         run: sudo dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel clang mingw64-gcc mingw64-gcc-c++ mingw64-libstdc++
-      - name: Configure Test suite using CMake
+      - name: CMake Configure Test Suite
         if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
         working-directory: ./tst
         run: cmake -B bld -DUSE_LTO=OFF -DLCC_TEST_NON_ZERO_EXIT_ON_FAILURE=ON
-      - name: Build Test suite
+      - name: CMake Build Test Suite
         if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
         working-directory: ./tst
         run: cmake --build bld
-      - name: Test
+      - name: Invoke Tests
         if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') && contains(github.event.head_commit.message, '[ci-run-tests]') }}
         working-directory: ./tst
         run: cmake --build bld -t test
@@ -43,7 +43,7 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v7
-      - name: CMake configure
+      - name: CMake Configure
         run: cmake -G Ninja -B bld -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DFMT_MODULE=OFF -DUSE_LTO=OFF
-      - name: CMake build
+      - name: CMake Build
         run: cmake --build bld -j $(nproc)
