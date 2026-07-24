@@ -28,6 +28,14 @@ jobs:
       - name: CPack
         working-directory: bld
         run: cpack -C Release
+      - name: Print NSIS Error Log on Failure
+        if: failure()
+        run: |
+          if (Test-Path "bld/pkg/_CPack_Packages/win64/NSIS/NSISOutput.log") {
+            Get-Content "bld/pkg/_CPack_Packages/win64/NSIS/NSISOutput.log"
+          } else {
+            echo "NSISOutput.log not found at expected path."
+          }
       - name: Upload Package Artifacts
         uses: actions/upload-artifact@v7
         with:
