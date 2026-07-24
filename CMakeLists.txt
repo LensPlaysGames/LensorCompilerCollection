@@ -443,8 +443,8 @@ target_link_libraries(liblccbase PRIVATE options)
 # Generic object library (convertible to ELF and COFF, currently)
 add_library(
   object
-  inc/object/coff.h
-  inc/object/elf.h
+  inc/hdronly/object/coff.h
+  inc/hdronly/object/elf.h
   inc/object/elf.hh
   inc/object/generic.hh
   lib/object/elf.cc

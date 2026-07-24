@@ -17,8 +17,6 @@
 
 #include <lccbase/context.hh>
 
-#include <object/coff.h>
-
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 

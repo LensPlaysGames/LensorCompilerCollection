@@ -2,7 +2,7 @@
 
 #include <hdronly/lcc/fixcompilers.hh>
 
-#include <object/elf.h>
+#include <hdronly/object/elf.h>
 #include <object/elf.hh>
 #include <object/generic.hh>
 

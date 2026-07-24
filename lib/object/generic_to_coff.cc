@@ -1,4 +1,4 @@
-#include <object/coff.h>
+#include <hdronly/object/coff.h>
 #include <object/generic.hh>
 
 #include <hdronly/lcc/fixcompilers.hh>

@@ -1,7 +1,7 @@
 #ifndef LOFF_ELF_HH
 #define LOFF_ELF_HH
 
-#include <object/elf.h>
+#include <hdronly/object/elf.h>
 #include <object/generic.hh>
 
 #include <lcc/utils.hh>

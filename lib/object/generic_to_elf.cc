@@ -1,4 +1,4 @@
-#include <object/elf.h>
+#include <hdronly/object/elf.h>
 #include <object/generic.hh>
 
 #include <hdronly/lcc/fixcompilers.hh>
