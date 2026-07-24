@@ -31,7 +31,7 @@ auto lcc::glint::Sema::ConvertImpl(
 
     // Cannot convert if any of the types contain errors or are unknown.
     if (
-        from->is_unknown() or from->sema_errored()
+        (not from) or from->is_unknown() or from->sema_errored()
         or to->is_unknown() or to->sema_errored()
     ) return TypesContainErrors;
 
@@ -254,6 +254,9 @@ auto lcc::glint::Sema::ConvertImpl(
         (from->is_integer() and to->is_bool())
         or (from->is_bool() and to->is_integer())
     ) {
+        // Truncation
+        if (from->size(context) > to->size(context))
+            ++score;
         if constexpr (PerformConversion)
             InsertImplicitCast(expr_ptr, to);
         return Score(1);
@@ -318,6 +321,11 @@ auto lcc::glint::Sema::ConvertImpl(
         if (from->size(context) <= to->size(context)) {
             if constexpr (PerformConversion)
                 InsertImplicitCast(expr_ptr, to);
+
+            // Sign conversion adds to score...
+            if (from->is_signed_int(context) != to->is_signed_int(context))
+                ++score;
+
             return Score(1);
         }
 
