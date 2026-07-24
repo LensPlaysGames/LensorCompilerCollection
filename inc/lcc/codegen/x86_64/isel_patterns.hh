@@ -237,6 +237,11 @@ using and_reg_imm = Pattern<
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::And), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+using and_imm_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::And), Immediate<>, Register<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::And), o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using or_reg_reg = binary_commutative_reg_reg<usz(MKind::Or), usz(Opcode::Or)>;
 using or_reg_imm = Pattern<
@@ -244,6 +249,11 @@ using or_reg_imm = Pattern<
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Or), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+using or_imm_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Or), Immediate<>, Register<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Or), o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 // A global is actually an lvalue (ptr to global). When adding to a
 // global, we are actually trying to do ptr arithmetic; we use `lea` for
@@ -717,9 +727,11 @@ using AllPatterns = PatternList<
 
     and_reg_reg,
     and_reg_imm,
+    and_imm_reg,
 
     or_reg_reg,
     or_reg_imm,
+    or_imm_reg,
 
     add_reg_reg,
     add_imm_reg,
