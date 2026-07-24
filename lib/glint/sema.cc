@@ -2226,9 +2226,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 break;
             }
 
-            for (auto*& child : block->children()) {
-                const bool last = &child == block->last_expr();
-                if (not Analyse(&child, last ? expected_type : nullptr)) {
+            for (auto** child : block->children_ref()) {
+                const bool last = child == block->last_expr();
+                if (not Analyse(child, last ? expected_type : nullptr)) {
                     block->set_sema_errored();
                     // NOTE: If, for some ungodly reason, we want to continue semantic
                     // analysis within a block after an expression within that block has
@@ -2238,7 +2238,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 // The value of the block expression is the value of the last expression;
                 // the results of the preceding expressions (if any), are unused, and can
                 // therefore be discarded.
-                if (not last and child->ok()) Discard(&child);
+                if (not last and (*child)->ok()) Discard(child);
             }
 
             if (not block->sema_errored()) {
@@ -2326,7 +2326,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 // Obviously, we can only perform top-down type inference if we're not
                 // already performing bottom-up inference. If the type is known, make sure
                 // that we use a type that is legal in a declaration for inference.
-                const bool infer_type = v->type()->is_unknown();
+                const bool infer_type = (not v->type()) or v->type()->is_unknown();
 
                 if (
                     not Analyse(
@@ -4297,6 +4297,18 @@ auto lcc::glint::Sema::AnalyseOverload(OverloadSet* expr, std::vector<Expr*> arg
     // their corresponding P_i's. Also collect unresolved function references.
 
     // For candidate C in O,
+
+    // TODO: We could probably cache score in FuncDecl itself... unless a
+    // single function declaration may appear in different overload sets...
+    struct ScoredCandidates {
+        decltype(ConversionStatus::score) score;
+        FuncDecl* candidate;
+    };
+    decltype(ConversionStatus::score) lowest_score{
+        std::numeric_limits<decltype(ConversionStatus::score)>::max()
+    };
+    std::vector<ScoredCandidates> scored_candidates{};
+
     for (auto* C : O) {
         // let P_... be the parameters of C.
         for (auto* P : C->param_types()) {
@@ -4304,9 +4316,10 @@ auto lcc::glint::Sema::AnalyseOverload(OverloadSet* expr, std::vector<Expr*> arg
             for (auto*& A : args) {
                 // check if it is convertible to P_i.
                 auto conversion_score = TryConvert(&A, P);
-                // TODO: Record score to choose lowest if multiple in overload set at the
-                // end. Currently approximated via type equal check.
-                if (not conversion_score.possible()) {
+                if (conversion_score.score < lowest_score)
+                    lowest_score = conversion_score.score;
+                scored_candidates.emplace_back(conversion_score.score, C);
+                if (not conversion_score.possible() or conversion_score.score > lowest_score) {
                     // Note(
                     //     A->location(),
                     //     "Argument type {} is not convertible to parameter type {}\n",
@@ -4358,6 +4371,11 @@ auto lcc::glint::Sema::AnalyseOverload(OverloadSet* expr, std::vector<Expr*> arg
     //
     // Remove from O all functions except those with the least number of
     // implicit conversions as per step 2d.
+    for (auto [score, C] : scored_candidates) {
+        if (score > lowest_score) invalid.emplace_back(C);
+    }
+    for (auto* f : invalid) std::erase(O, f);
+    invalid.clear();
 
     // *** 3
     //
@@ -4453,17 +4471,25 @@ auto lcc::glint::Sema::AnalyseOverload(OverloadSet* expr, std::vector<Expr*> arg
                     ", "
                 )
             );
-            expr->set_sema_errored();
+            if (not expr->sema_done_or_errored())
+                expr->set_sema_errored();
         } else {
             e = Error(
                 expr->location(),
                 "Unresolved function overload: ambiguous, here are the possible candidates"
             );
-            expr->set_sema_errored();
+            if (not expr->sema_done_or_errored())
+                expr->set_sema_errored();
         }
 
-        for (auto* C : O_unchanged)
-            e.attach(Note(C->location(), "Candidate defined here"));
+        for (auto* C : O_unchanged) {
+            if (C->location().seekable(context))
+                e.attach(Note(C->location(), "Candidate defined here"));
+            else if (C->function_type())
+                e.attach(Note(C->location(), "Candidate {} : {}", C->name(), *(Type*) C->function_type()));
+            else if (C->type())
+                e.attach(Note(C->location(), "Candidate {} : {}", C->name(), *C->type()));
+        }
 
         return e;
     }
