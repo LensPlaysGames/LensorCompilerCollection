@@ -19,9 +19,9 @@ jobs:
         run: cmake -B bld -DCMAKE_BUILD_TYPE=Release -DNATIVE_OPT=OFF -DPACKAGING=ON
       - name: CMake Configure (Windows)
         if: matrix.os == 'windows-latest'
-        run: cmake -B bld -DCMAKE_BUILD_TYPE=Release -DNATIVE_OPT=OFF -DPACKAGING=ON  -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DFMT_MODULE=OFF -DUSE_LTO=OFF
+        run: cmake -G Ninja -B bld -DCMAKE_BUILD_TYPE=Release -DNATIVE_OPT=OFF -DPACKAGING=ON -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DFMT_MODULE=OFF -DUSE_LTO=OFF
       - name: CMake Build
-        run: cmake --build bld --config Release
+        run: cmake --build bld --config Release --parallel
       - name: CPack
         working-directory: bld
         run: cpack -C Release

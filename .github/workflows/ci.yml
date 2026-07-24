@@ -19,7 +19,7 @@ jobs:
       - name: CMake Configure
         run: cmake -B bld -DUSE_LTO=OFF
       - name: CMake Build
-        run: cmake --build bld -j $(nproc)
+        run: cmake --build bld --parallel
       - name: Setup Test Suite Dependencies
         if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
         run: sudo dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel clang mingw64-gcc mingw64-gcc-c++ mingw64-libstdc++
@@ -30,7 +30,7 @@ jobs:
       - name: CMake Build Test Suite
         if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
         working-directory: ./tst
-        run: cmake --build bld
+        run: cmake --build bld --parallel
       - name: Invoke Tests
         if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') && contains(github.event.head_commit.message, '[ci-run-tests]') }}
         working-directory: ./tst
@@ -46,4 +46,4 @@ jobs:
       - name: CMake Configure
         run: cmake -G Ninja -B bld -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DFMT_MODULE=OFF -DUSE_LTO=OFF
       - name: CMake Build
-        run: cmake --build bld -j $(nproc)
+        run: cmake --build bld --parallel
