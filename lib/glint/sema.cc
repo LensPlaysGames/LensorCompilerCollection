@@ -5651,8 +5651,10 @@ void lcc::glint::Sema::AnalyseUnary(Expr** expr_ptr, UnaryExpr* u) {
         case TokenKind::BitNOT: {
             LValueToRValue(&u->operand());
             if (
-                not operand_type->is_integer()
-                or not Convert(&u->operand(), Type::Int)
+                not (
+                    operand_type->is_integer()
+                    or Convert(&u->operand(), Type::Int)
+                )
             ) {
                 Error(
                     u->location(),
