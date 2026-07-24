@@ -80,7 +80,8 @@ void lcc::platform::PrintBacktrace() {
             std::filesystem::canonical("/proc/self/exe").native(),
             fmt::join(trace_view, " ")
         );
-        std::system(command.data());
+        [[maybe_unused]]
+        auto rc = std::system(command.data());
     }
     // GROSS LLVM USAGE
     else if constexpr (backtrace_llvm_symbolizer) {
