@@ -33,6 +33,12 @@ Test:
        ucrt64-libstdc++
 #+end_src
 
+Package:
+#+begin_src shell
+  sudo dnf install \
+       rpmbuild
+#+end_src
+
 * Debian
 
 NOTE: it is possible to build LCC on Ubuntu (and maybe other Debian-based distros)

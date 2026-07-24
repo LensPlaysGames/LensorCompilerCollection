@@ -798,17 +798,44 @@ if (PACKAGING)
   if(TARGET_OS MATCHES "linux")
     # Generate both Debian and Red Hat packages automatically for Linux targets
     set(CPACK_GENERATOR "DEB;RPM;TGZ")
+    set(CPACK_SOURCE_GENERATOR "TGZ;TXZ")
   elseif(TARGET_OS MATCHES "windows")
     # Generate both an installer wizard and a portable ZIP for Windows targets
     set(CPACK_GENERATOR "NSIS;ZIP")
+    set(CPACK_SOURCE_GENERATOR "ZIP")
   elseif(TARGET_OS MATCHES "darwin")
     # Generate macOS native installers
     set(CPACK_GENERATOR "DragNDrop;TGZ")
+    set(CPACK_SOURCE_GENERATOR "TGZ")
   endif()
 
   set(
     CPACK_PACKAGE_FILE_NAME
     "${CPACK_PACKAGE_NAME}-${CMAKE_PROJECT_VERSION}-${TARGET_OS}-${TARGET_ARCH}"
+  )
+
+  set(
+    CPACK_SOURCE_IGNORE_FILES
+    # 1. Build and Debug Directories
+    "/bld.*/"
+    "/dbg.*/"
+    "/_CPack_Packages/"
+    "/CMakeFiles/"
+    "/CMakeCache\\\\.txt"
+
+    # 2. Version Control and CI/CD
+    "/\\\\.git/"
+    "/\\\\.github/"
+
+    # 3. Local Cache and Tooling Artifacts
+    "/\\\\.cache/"
+    "/compile_commands\\\\.json$"
+    "/.*\\\\.g$"
+
+    # 4. IDE and Editor Settings (e.g., VS Code or Vim leftovers)
+    "/\\\\.vscode/"
+    "\\\\.swp$"
+    "\\\\.DS_Store"
   )
 
   include(CPack)
