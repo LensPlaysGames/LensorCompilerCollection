@@ -700,6 +700,27 @@ endif()
 if (PACKAGING)
   include(GNUInstallDirs)
 
+  include(CPackComponent)
+
+  cpack_configure_component(
+    lcc
+    DISPLAY_NAME "Lensor Compiler Collection"
+    DESCRIPTION "The compiler itself."
+    REQUIRED
+  )
+  cpack_configure_component(
+    lccdevel
+    DISPLAY_NAME "Development Files"
+    DESCRIPTION "Header files and static libraries for development."
+    DEPENDS lcc
+  )
+  cpack_configure_component(
+    lccdocs
+    DISPLAY_NAME "Documentation"
+    DESCRIPTION "Comprehensive documentation."
+  )
+
+  # NOTE: COMPONENT names are limited by NSIS to [a-z][A-Z][0-9], '.' and '_'
   install(
     TARGETS lcc
     DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -709,19 +730,19 @@ if (PACKAGING)
     TARGETS
     liblccbase liblccjson object libclink liblcc glint languagec
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    COMPONENT lcc-devel
+    COMPONENT lccdevel
   )
   install(
     DIRECTORY inc/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    COMPONENT lcc-devel
+    COMPONENT lccdevel
   )
   install(
     DIRECTORY documentation/
     DESTINATION ${CMAKE_INSTALL_DOCDIR}
-    COMPONENT lcc-docs
+    COMPONENT lccdocs
   )
-  set(CPACK_COMPONENTS_ALL lcc lcc-devel lcc-docs)
+  set(CPACK_COMPONENTS_ALL lcc lccdevel lccdocs)
 
   # YOU MUST CHANGE THIS IF YOU ARE NOT, YA KNOW, "ME"
   set(CPACK_PACKAGE_VENDOR Lensor)
