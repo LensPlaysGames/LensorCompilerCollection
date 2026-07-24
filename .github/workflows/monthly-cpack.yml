@@ -1,0 +1,58 @@
+name: Monthly Distributed Binaries
+
+on:
+  schedule:
+    - cron: '17 2 1 * *'
+  workflow_dispatch:
+
+jobs:
+  build-and-package:
+    name: CPack ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-26.04, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: CMake Configure
+        run: cmake -B bld -DCMAKE_BUILD_TYPE=Release -DNATIVE_OPT=OFF -DPACKAGING=ON
+      - name: CMake Build
+        run: cmake --build bld --config Release
+      - name: CPack
+        working-directory: bld
+        run: cpack -C Release
+      - name: Upload Package Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-${{ matrix.os }}
+          path: bld/pkg/*.{zip,tar.gz,msi,dmg,tar.xz,pkg,exe}
+
+  create-release:
+    name: Publish Production Release
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate Dynamic Version Tag
+        id: version
+        run: echo "TAG_NAME=v$(date +'0.420.%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.TAG_NAME }}
+          name: Monthly Release ${{ steps.version.outputs.TAG_NAME }}
+          body: |
+            ## Automated Monthly Build
+            Distributed binaries packaged via CPack thanks to GitHub Actions Runners.
+          draft: false
+          prerelease: false
+          files: release-assets/*
+
