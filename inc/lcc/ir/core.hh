@@ -1699,7 +1699,7 @@ class XorInst : public BinaryInst {
 
 public:
     explicit XorInst(Value* lhs, Value* rhs, Location location = {})
-        : BinaryInst(Kind::Or, lhs, rhs, lhs->type(), location) {
+        : BinaryInst(Kind::Xor, lhs, rhs, lhs->type(), location) {
         AssertSameType(lhs, rhs);
     }
 
