@@ -29,7 +29,7 @@ auto lcc::glint::Sema::ConvertImpl(
     // never-cache solution while still providing a nice name
 #define from ((*expr_ptr)->type())
 
-    // Cannot convert if the any of types contain errors or are unknown.
+    // Cannot convert if any of the types contain errors or are unknown.
     if (
         from->is_unknown() or from->sema_errored()
         or to->is_unknown() or to->sema_errored()

@@ -54,9 +54,10 @@ auto lcc::glint::Sema::Deproceduring(Expr** expr_ptr) -> bool {
     auto* ty = expr->type();
     LCC_ASSERT(ty);
 
-    if (not ty->is_function()
-        and (not ty->is_pointer() or not ty->elem()->is_function()))
-        return false;
+    if (
+        not ty->is_function()
+        and (not ty->is_pointer() or not ty->elem()->is_function())
+    ) return false;
 
     /// Declarations are never deprocedured automatically.
     if (is<Decl>(expr)) return false;
@@ -82,7 +83,7 @@ void lcc::glint::Sema::Discard(Expr** expr_ptr) {
     LCC_ASSERT(expr);
 
     /// If the expression returns void, or has an error, ignore it.
-    if (not expr->ok() or expr->type()->is_void()) return;
+    if ((not expr->ok()) or expr->type()->is_void()) return;
 
     /// If the expression is a call to a function not marked
     /// as discardable, issue an error.
@@ -2154,7 +2155,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 return false;
             };
 
-            if (not i->then()->ok() or (i->otherwise() and not i->otherwise()->ok()))
+            if ((not i->then()->ok()) or (i->otherwise() and not i->otherwise()->ok()))
                 i->set_sema_errored();
 
             // If both branches exist, and both branches are convertible to a common
