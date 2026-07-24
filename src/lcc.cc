@@ -39,15 +39,14 @@
 
 void aluminium_handler() {
 #define link "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    [[maybe_unused]] auto rc =
 #if defined(LCC_WINDOWS)
-    // Windows
-    std::system("start " link);
+        std::system("start " link);
 #elif defined(LCC_APPLE)
-    // Apple
-    std::system("open " link);
+        std::system("open " link);
 #elif defined(LCC_LINUX) || defined(__unix__)
-    // Linux-ish
-    std::system("xdg-open " link);
+        // Linux-ish
+        std::system("xdg-open " link);
 #endif
 #undef link
 }
