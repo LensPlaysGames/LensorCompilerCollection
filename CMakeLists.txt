@@ -840,26 +840,6 @@ if (PACKAGING)
   )
 
   include(CPack)
-
-  include(CPackComponent)
-  cpack_configure_component(
-    lcc
-    DISPLAY_NAME "Lensor Compiler Collection"
-    DESCRIPTION "The compiler itself."
-    REQUIRED
-  )
-  cpack_configure_component(
-    lccdevel
-    DISPLAY_NAME "Development Files"
-    DESCRIPTION "Header files and static libraries for development."
-    DEPENDS lcc
-  )
-  cpack_configure_component(
-    lccdocs
-    DISPLAY_NAME "Documentation"
-    DESCRIPTION "Comprehensive documentation."
-  )
-
 endif()
 
 if (BUILD_TESTING)
