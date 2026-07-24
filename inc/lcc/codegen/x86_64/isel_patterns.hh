@@ -6,6 +6,9 @@
 #include <lcc/codegen/x86_64/x86_64.hh>
 
 namespace lcc::isel::x86_64 {
+
+namespace {
+
 // Just a NOTE: I don't like having lcc::x86_64 /and/ lcc::isel::x86_64,
 // but I don't like having isel split up across all the arch namespaces
 // either.
@@ -253,6 +256,18 @@ using or_imm_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Or), Immediate<>, Register<>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Or), o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
+using xor_reg_reg = binary_commutative_reg_reg<usz(MKind::Xor), usz(Opcode::Xor)>;
+using xor_reg_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Xor), Register<>, Immediate<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Xor), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+using xor_imm_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Xor), Immediate<>, Register<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Xor), o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 // A global is actually an lvalue (ptr to global). When adding to a
@@ -677,6 +692,8 @@ using collapse_local_reg_move_reg = Pattern<
     >
 >;
 
+} // namespace
+
 // clang-format on
 
 using AllPatterns = PatternList<
@@ -732,6 +749,10 @@ using AllPatterns = PatternList<
     or_reg_reg,
     or_reg_imm,
     or_imm_reg,
+
+    xor_reg_reg,
+    xor_reg_imm,
+    xor_imm_reg,
 
     add_reg_reg,
     add_imm_reg,
