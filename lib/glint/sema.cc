@@ -2167,12 +2167,6 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 and not i->otherwise()->type()->is_void()
             ) {
                 if (ConvertToCommonType(&i->then(), &i->otherwise())) {
-                    // fmt::print("THEN\n");
-                    // i->then()->print(true);
-                    // fmt::print("OTHERWISE\n");
-                    // i->otherwise()->print(true);
-                    // fmt::print("Common type: {}\n", *i->then()->type());
-
                     i->type(i->then()->type());
                     // Do LValueToRValue conversion iff one branch is an lvalue.
                     // Otherwise, match lvalue-ness.
@@ -2569,11 +2563,6 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             bool compound_literal_type_known = not ((not c->type()) or c->type()->is_unknown());
             if (not compound_literal_type_known and not expected_type) {
-                // fmt::print("c->type():{}\n", fmt::ptr(c->type()));
-                // if (c->type()) fmt::print("*c->type():{}\n", *c->type());
-                // fmt::print("expected_type:{}\n", fmt::ptr(expected_type));
-                // if (expected_type) fmt::print("*expected_type:{}\n", *expected_type);
-
                 if (c->values().size() == 1) {
                     // Set type of compound literal to type of singular subexpression.
                     // "bubble up"
@@ -4219,16 +4208,6 @@ void lcc::glint::Sema::AnalyseCall_Template(Expr** expr_ptr, CallExpr* expr) {
 
     // Replace template parameters with template arguments.
     detail::expand_template_parameter_references(t, expr->args(), &body);
-
-    // for (auto* s : mod.scopes) {
-    //     fmt::print("{}", s->chain_string());
-    //     for (auto sym : s->all_symbols()) {
-    //         fmt::print(", {}", sym->name());
-    //     }
-    //     fmt::print("\n");
-    // }
-
-    // TODO: ffs, we have issues with declarations *again*.
 
     // Now that the body has been expanded, it's location is actually the
     // location of the call expression that it expanded from (not the template
