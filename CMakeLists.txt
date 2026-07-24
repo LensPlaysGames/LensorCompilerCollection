@@ -798,7 +798,7 @@ if (PACKAGING)
 
   if(TARGET_OS MATCHES "linux")
     # Generate both Debian and Red Hat packages automatically for Linux targets
-    set(CPACK_GENERATOR "DEB;RPM;TGZ")
+    set(CPACK_GENERATOR "DEB;RPM;TGZ;TXZ;STGZ")
     set(CPACK_SOURCE_GENERATOR "TGZ;TXZ")
   elseif(TARGET_OS MATCHES "windows")
     # Generate both an installer wizard and a portable ZIP for Windows targets
@@ -806,7 +806,7 @@ if (PACKAGING)
     set(CPACK_SOURCE_GENERATOR "ZIP")
   elseif(TARGET_OS MATCHES "darwin")
     # Generate macOS native installers
-    set(CPACK_GENERATOR "DragNDrop;TGZ")
+    set(CPACK_GENERATOR "productbuild;DragNDrop;TGZ")
     set(CPACK_SOURCE_GENERATOR "TGZ")
   endif()
 

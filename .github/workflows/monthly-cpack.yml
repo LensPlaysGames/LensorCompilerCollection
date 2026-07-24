@@ -41,11 +41,13 @@ jobs:
         with:
           name: package-${{ matrix.os }}
           path: |
-            bld/pkg/*.sh
+            bld/pkg/*.deb
             bld/pkg/*.dmg
             bld/pkg/*.exe
             bld/pkg/*.msi
             bld/pkg/*.pkg
+            bld/pkg/*.rpm
+            bld/pkg/*.sh
             bld/pkg/*.tar.gz
             bld/pkg/*.tar.xz
             bld/pkg/*.zip
