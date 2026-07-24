@@ -368,25 +368,28 @@ if (WIN32)
 endif()
 
 # ============================================================================
-#  Dependencies
+# Temporary Dependency
 # ============================================================================
 # Find libfmt.
-include(FetchContent)
-set(FETCHCONTENT_QUIET OFF)
-set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
-message(STATUS "Checking dependencies ...")
-# NOTE: If you don't like cloning every time you configure a new build
-# tree, you can specify `fmtlib_SOURCE_DIR` as pointing to the cloned
-# repo.
-FetchContent_Declare(
-  fmtlib
-  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG 12.2.0
-  SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
-  EXCLUDE_FROM_ALL
-)
-FetchContent_MakeAvailable(fmtlib)
-target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
+find_package(fmt QUIET CONFIG)
+if (fmt_FOUND)
+  message(STATUS "Found fmt ${fmt_VERSION}")
+else()
+  include(FetchContent)
+  set(FETCHCONTENT_QUIET OFF)
+  set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+  FetchContent_Declare(
+    fmtlib
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+    GIT_TAG 12.2.0
+    EXCLUDE_FROM_ALL
+  )
+  set(FMT_DOC OFF CACHE INTERNAL "")
+  set(FMT_TEST OFF CACHE INTERNAL "")
+  set(FMT_INSTALL ON CACHE INTERNAL "")
+  FetchContent_MakeAvailable(fmtlib)
+  target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
+endif()
 
 # Link against libfmt.
 target_link_libraries(options INTERFACE fmt::fmt)
