@@ -14,6 +14,9 @@ jobs:
         os: [ubuntu-26.04, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v7
+      - name: NSIS (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install nsis -y
       - name: CMake Configure
         if: matrix.os != 'windows-latest'
         run: cmake -B bld -DCMAKE_BUILD_TYPE=Release -DNATIVE_OPT=OFF -DPACKAGING=ON
@@ -30,14 +33,15 @@ jobs:
         with:
           name: package-${{ matrix.os }}
           path: |
-            bld/*.dmg
-            bld/*.exe
-            bld/*.msi
-            bld/*.pkg
-            bld/*.tar.gz
-            bld/*.tar.xz
-            bld/*.zip
-          if-no-files-found: error
+            bld/pkg/*.sh
+            bld/pkg/*.dmg
+            bld/pkg/*.exe
+            bld/pkg/*.msi
+            bld/pkg/*.pkg
+            bld/pkg/*.tar.gz
+            bld/pkg/*.tar.xz
+            bld/pkg/*.zip
+
   create-release:
     name: Publish Production Release
     needs: build-and-package
