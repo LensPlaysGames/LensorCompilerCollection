@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2026-07-24 Fri 18:34 -->
+<!-- 2026-07-24 Fri 18:40 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Programming in Lensor Glint</title>
@@ -221,7 +221,7 @@ For now, you just need to learn about something called <i>memory</i>. A computer
 A computer's memory may be implemented in the real world in all sorts of ways with differing amounts of limitations (i.e. size, speed, etc.), but the most important takeaway is that, while a computer's memory is made up of binary <i>bits</i> (values that may only be on or off), it is addressed via <i>bytes</i>. In hardware, a byte (the minimum addressable unit in memory) is <i>usually</i> eight bits.
 </p>
 
-<pre class="example" id="org357d554">
+<pre class="example" id="org8163f43">
 MEMORY
 | off on  off off off on  off on | ...
 | BYTE 0                         | BYTE 1
@@ -557,11 +557,11 @@ An escape-able string accepts the "escape" syntax that byte literals also accept
 </p>
 
 <p>
-For historical reasons, and compatibility with other languages and tooling, Glint strings have a NUL byte (value of zero) appended. So, the empty string literal <code>''</code> contains the bytes <code>[0]</code>, and is of type <code>[byte 1]</code>.
+For historical reasons, and compatibility with other languages and tooling, Glint strings have a NUL byte (value of zero) appended.
 </p>
 
 <p>
-String literals are always a fixed array of <code>byte</code>, with the length set long enough to store the string and the implicit NUL byte.
+<b>String literals are always a fixed array of <code>byte</code></b>, with the length set long enough to store the contents of the string, <i>but not the NUL byte</i>. The NUL byte is guaranteed to be there, but, <i>it is not encoded in the type</i>. This means you do not have to add NUL checks to every loop; they are effectively not there, from the Glint side of things.
 </p>
 </div>
 </div>
@@ -663,7 +663,7 @@ y; <span class="org-comment">;; Error! Unknown symbol y'</span>
 <p>
 The scope structure of the above program might look something like the following. (NOTE: Simplification for explanation purposes: leaves out global and top level scope).
 </p>
-<pre class="example" id="orga840f01">
+<pre class="example" id="org2441e99">
 root
 |-- x
 `-- block

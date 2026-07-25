@@ -335,9 +335,9 @@ An escape-able string accepts the "escape" syntax that byte literals also accept
 
 ="foo\﻿n"= -> [102, 111, 111, 10, 0]
 
-For historical reasons, and compatibility with other languages and tooling, Glint strings have a NUL byte (value of zero) appended. So, the empty string literal =''= contains the bytes =[0]=, and is of type =[byte 1]=.
+For historical reasons, and compatibility with other languages and tooling, Glint strings have a NUL byte (value of zero) appended.
 
-String literals are always a fixed array of =byte=, with the length set long enough to store the string and the implicit NUL byte.
+*String literals are always a fixed array of =byte=*, with the length set long enough to store the contents of the string, /but not the NUL byte/. The NUL byte is guaranteed to be there, but, /it is not encoded in the type/. This means you do not have to add NUL checks to every loop; they are effectively not there, from the Glint side of things.
 
 ** Variables
 
