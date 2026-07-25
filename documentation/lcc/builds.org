@@ -91,3 +91,23 @@ Used to configure how to handle sources (extension based) for library and progra
     )
   )
 #+end_src
+
+* Outline/Overview
+
+A human writes a =Build Description=; this is just the /what/ of their program or library.
+
+The =Build System= reads the =Build Description=, and attempts to resolve dependencies using it's built-in resolvers (i.e. urls for known dependencies); it will generate a =Build Lockfile= with the versions and urls it found.
+
+A human may need to modify the =Build Lockfile= at this stage to include urls that the =Build System= doesn't resolve automatically (like a custom third party library, or a local project).
+
+Once the =Build Lockfile= has resolutions for all dependencies, the =Build System= may read the =Build Description= and =Build Lockfile=, utilizing source transformers, in order to form a =Build Cache=.
+
+The =Build Cache= has the expanded recipes for all the programs and libraries necessary; it's like the =compile_commands.json=, has everything all filled in and verbose, ready to just iterate and execute.
+
+Then, the =Build System= can invoke the =Build Cache=, and the program or library described by the =Build Description= will have been built successfully.
+
+The reason the =Build Cache= and =Build Lockfile= are separate is because the =Build Lockfile= can be committed to version control and shared, whereas the =Build Cache= is specific to each system/machine it runs on.
+
+The reason the =Build Description= and =Build Lockfile= are separate is because the =Build Lockfile= can often be generated automatically, and contains more verbose information that not every human needs to interact with.
+
+Rather than having a =Build Description= written by a human that is also modified by the =Build System=, the =Build System= takes a clean input, the =Build Description=, and produces an output, the Build Lockfile.
