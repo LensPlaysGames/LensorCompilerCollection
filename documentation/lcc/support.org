@@ -1,0 +1,44 @@
+* Lensor Compiler Collection Supported Lists
+
+OFFICIAL lists of supported items.
+
+** Architectures
+
+LCC *will* have backends that support each of these architectures.
+
+- x86_64 (v3)
+- aarch64/arm64
+- wasm
+
+** Formats
+
+LCC *will* have backends that support each of these formats---ideally for each supported architecture, and possibly more.
+
+- Executable and Linkable Format (ELF)
+- GNU Assembly
+- Textual WASM
+
+Secondary: LCC *may* have backends that support each of these formats.
+
+- COFF/PE32+
+- Textual LLVM IR
+
+NOTE: LCC IR is and always will be supported, of course.
+
+* Development Support
+
+** Languages
+
+- C++23
+- C23
+
+** Compilers
+
+LCC *will* build on these compilers.
+
+- GNU Compiler Collection (at least 14/15)
+- LLVM's Clang (at least 18/19)
+
+LCC *may* build on these "compilers".
+
+- MSVC
