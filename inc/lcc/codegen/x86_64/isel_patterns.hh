@@ -71,6 +71,14 @@ using store_local_local = Pattern<
         Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceLHS), o<0>, v<0, 1>>,
         Inst<Clobbers<>, usz(Opcode::MoveDereferenceRHS), v<0, 1>, o<1>>>>;
 
+// Store address of global into local
+using store_global_local = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Store), Global<>, Local<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, v<0, 1>>,
+        Inst<Clobbers<>, usz(Opcode::MoveDereferenceRHS), v<0, 1>, o<1>>>>;
+
+// Store address of global into another global
 using store_global_global = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Store), Global<>, Global<>>>,
     InstList<
@@ -710,6 +718,7 @@ using AllPatterns = PatternList<
     store_reg_local,
     store_imm_local,
     store_local_local,
+    store_global_local,
     store_global_global,
     store_imm_reg,
     store_imm_global,
