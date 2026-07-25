@@ -146,8 +146,11 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
 
             EvalResult res;
             if (a->size()->evaluate(context, res, false)) {
-                if (res.as_int().slt(1)) {
-                    Error(a->location(), "Array size must be greater than 0");
+                if (res.as_int().slt(0)) {
+                    Error(
+                        a->location(),
+                        "Array size must not be negative"
+                    );
                     a->set_sema_errored();
                     return false;
                 }
