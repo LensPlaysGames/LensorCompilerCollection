@@ -907,8 +907,9 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 } break;
                 case TokenKind::Shr: {
                     // Bitwise Shift Right
-                    // FIXME: SAR or SHL?
-                    generated_ir[expr] = new (*ir_module) SarInst(lhs, rhs, expr->location());
+                    if (lhs_expr->type()->is_signed_int(ctx) or rhs_expr->type()->is_signed_int(ctx))
+                        generated_ir[expr] = new (*ir_module) SarInst(lhs, rhs, expr->location());
+                    else generated_ir[expr] = new (*ir_module) ShrInst(lhs, rhs, expr->location());
                 } break;
 
                 // NOT binary operator tokens.
