@@ -1,0 +1,10 @@
+================
+Empty String
+================
+
+"";
+
+---
+
+(block (string_literal)
+ (return (integer_literal)))
