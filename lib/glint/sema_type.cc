@@ -154,11 +154,11 @@ auto lcc::glint::Sema::Analyse(Type** type_ptr) -> bool {
 
                 size = (usz) res.as_int().value();
                 a->size() = new (mod) ConstantExpr(a->size(), EvalResult(size));
-            } else {
-                // Should be an ICE
-                Error(a->location(), "Array with variable size should have been made a dynamic array by the parser");
-                Diag::ICE("");
-            }
+            } else Diag::ICE(
+                context,
+                a->location(),
+                "Array with variable size should have been made a dynamic array by the parser"
+            );
         } break;
 
         // Apply decltype decay to the element type, prohibit arrays of
