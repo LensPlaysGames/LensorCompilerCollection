@@ -357,6 +357,14 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   )
 endif()
 
+# Additional flags for MSVC.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  target_compile_options(options INTERFACE
+    # C/C++ Conformant Preprocessor
+    /Zc:preprocessor
+  )
+endif()
+
 # When targeting Windows, don’t suggest the _s nonsense functions.
 if (WIN32)
   target_compile_definitions(
