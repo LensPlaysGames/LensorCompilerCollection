@@ -1,0 +1,40 @@
+* CRC32
+
+#+NAME: source
+#+begin_src glint
+  import crc32;
+
+  data :: "123456789";
+  result :: crc32-c data[0], (typeof data).elem.bytes;
+  print "crc32 \"", data, "\": ", result, "\n";
+#+end_src
+
+#+NAME: source
+#+begin_src glint
+  module crc32;
+
+  export crc32-c : u32(data : byte.ptr, length : uint) {
+    if not data or not length, return 0;
+    crc : u32 0xffffffff;
+    cfor i :: 0; i < length; i += 1; {
+      datum :: @data[i];
+      crc := crc bit^ datum;
+      cfor j :: 0; j < 8; j += 1; {
+        if crc bit& 1,
+          crc := (crc >> 1) bit^ 0xedb88320
+        else crc := crc >> 1;
+      };
+    };
+    crc bit^ 0xffffffff;
+  };
+#+end_src
+
+#+NAME: status
+#+begin_example
+0
+#+end_example
+
+#+NAME: output
+#+begin_example
+crc32 "123456789": 3421780262
+#+end_example
