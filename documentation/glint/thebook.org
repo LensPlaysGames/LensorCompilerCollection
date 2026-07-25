@@ -81,8 +81,7 @@
       (kill-buffer (get-file-buffer "thebook.export.org"))
       (delete-file "thebook.export.org")
 
-      (rename-file "thebook.export.html" "thebook.html" t)
-      (copy-file "thebook.html" "../../docs/thebook.html" t))
+      (rename-file "thebook.export.html" "thebook.html" t))
     (org-latex-export-to-pdf)
     (org-ascii-export-to-ascii))
 #+end_src
@@ -550,7 +549,11 @@ Pointers are convertible to =void.ptr=.
 
 *** Explicit Casting
 
-To treat a variable's memory as if it were of another type, you can explicitly cast a value. To do this, simply invoke the type with a single argument of the type you'd like to cast.
+To convert a value of some type to some other type, you can explicitly cast a value.
+
+To do this, simply invoke the type with a single argument of the type you'd like to cast.
+
+Note that, in doing the conversion, the value may be altered in some way.
 
 To cast integer =42= to =byte=:
 #+begin_src glint
@@ -581,6 +584,7 @@ In =Glint=, the =print= keyword acts as a pseudo-function, and inserts code for 
 - =byte= arguments get printed immediately using =putchar= or similar.
 - =[byte]=, =[byte view]=, and fixed =byte= arrays (i.e. =[byte 4]=) arguments get each byte printed using =putchar= or similar.
 - =enum= arguments get converted to a fixed =byte= array representing their name.
+- =type= arguments get stringified, embedded into the program, and printed.
 - Otherwise, a call to =format=, a function that returns =[byte]= is inserted, the contents of that returned dynamic byte array are printed, and then the dynamic array is freed.
 
 Since byte literals are of =byte= type, they get printed "verbatim". The following Glint program would print =420= and then a newline (line feed character).
@@ -614,7 +618,7 @@ A fixed array has the amount of elements known at compile-time. This is like arr
 
 A dynamic array has the amount of elements known at runtime. This is like vectors in the C++ language.
 
-An array view is a non-owning view of a contiguous collection of elements of a given type.
+An array view is a non-owning view of a contiguous collection of elements of a given type. This is like spans in the C++ language.
 
 *** Fixed Arrays
 
@@ -726,6 +730,8 @@ You can think of a view type as a shorthand for defining the following struct, w
     size : uint;
   };
 #+end_src
+
+# TODO: Array View Initialization
 
 A view is meant to act as the minimal representation of a contiguous set of elements of a given type; it contains a pointer to the contiguous memory where all the elements are stored, as well as a value denoting how many elements are stored there.
 
@@ -1092,7 +1098,7 @@ A /pointer/ is simply a memory address; an index into that linear set of bytes t
 
 # Glint subscript doesn't dereference.
 
-In Glint, subscripting is the act of offsetting a pointer by some multiple of the size of a given type. So, to continue with our last example, subscripting a value of type =int.ptr= by one would increase the value by eight, since that is the size in bytes of an integer. The idea is, the first subscript of a pointer gets the address where the next element in contiguous memory would be, if there were one. This applies to every value, not just the first, so the zero-eth subscript leaves the pointer unchanged, while the second subscript increases the pointer by the size of two elements (sixteen bytes in the case of =int.ptr=).
+In Glint, subscripting is the act of offsetting a pointer by some multiple of the size of a given type. So, to continue with our last example, subscripting a value of type =int.ptr= by one would increase the value by eight, since that is the size, in bytes (the minimum /addressable/ unit), of an integer. The idea is, the first subscript of a pointer gets the address where the next element in contiguous memory would be, if there were one. This applies to every value, not just the first, so the zero-eth subscript leaves the pointer unchanged, while the second subscript increases the pointer by the size of two elements (sixteen bytes in the case of =int.ptr=).
 
 Do keep in mind that, unlike most other languages, Glint's subscript does *NOT* dereference. That is, the act of subscripting does not load any values in Glint; it simply calculates the memory address. In order to load a value from a memory address, you have to dereference it. In Glint, that is done via the unary prefix operator =@= (i.e. get the value "at" the given memory address).
 
@@ -1389,8 +1395,10 @@ Pointers may be loaded from, which yields the underlying type.
 #+begin_src glint
   value : int
     69;
+  ;; Unary & Operator Yields A Pointer
   pointer : int.ptr
     &value;
+  ;; Unary @ Operator Requires A Pointer, Returns Pointer's Element Type
   loaded_value : int
     @pointer;
 #+end_src
@@ -1426,7 +1434,7 @@ Like a pointer, a reference doesn't store the underlying value, but a location w
     69;
 
   reference : int.ref
-    &value;
+    value;
 
   reference -= 27;
 
