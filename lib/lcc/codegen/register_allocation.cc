@@ -486,6 +486,7 @@ void collect_interferences_from_block(
         parent_name != end;
         ++parent_name
     ) {
+        // FIXME (performance/optimisation): yeah...
         auto* parent = function.block_by_name(*parent_name);
         // Only recurse into this block if we haven't visited it (enough) already.
         if (block_already_visited(parent, visited))
@@ -508,6 +509,15 @@ void collect_interferences(
     AdjacencyMatrix& matrix,
     MFunction& function
 ) {
+    // TODO (performance/optimisation):
+    // There is no need to repeatedly search for blocks by name; we should
+    // cache all lookups ahead of time, once, and then use that data
+    // throughout the entire function walk.
+    //
+    //   MBlock::predecessors() -> MBlock::predecessor_ids()
+    //   MFunction::block_by_name() -> MFunction::block_by_id()
+    //   ...
+
     std::vector<MBlock*> exits{};
     for (auto& block : function.blocks()) {
         if (block.successors().empty())
