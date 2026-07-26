@@ -392,9 +392,6 @@ else()
     GIT_TAG 12.2.0
     EXCLUDE_FROM_ALL
   )
-  set(FMT_DOC OFF CACHE INTERNAL "")
-  set(FMT_TEST OFF CACHE INTERNAL "")
-  set(FMT_INSTALL ON CACHE INTERNAL "")
   FetchContent_MakeAvailable(fmtlib)
   target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
 endif()
@@ -826,8 +823,12 @@ if (PACKAGING)
   set(
     CPACK_SOURCE_IGNORE_FILES
     # 1. Build and Debug Directories
+    "/build/"
     "/bld.*/"
+    "/debug/"
     "/dbg.*/"
+    "/release/"
+    "/rls.*/"
     "/_CPack_Packages/"
     "/CMakeFiles/"
     "/CMakeCache\\\\.txt"
