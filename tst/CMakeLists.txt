@@ -231,25 +231,48 @@ if (VERIFY_COMPILERS)
   add_custom_target(verify_compilers)
   add_dependencies(test verify_compilers)
 
+  function(add_nested_build TARGET_NAME C_COMPILER CXX_COMPILER CUSTOM_CONFIG)
+    set(BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}")
+    if (C_COMPILER MATCHES "mingw")
+      set(OUTPUT_BIN "${BINARY_DIR}/lcc.exe")
+    else()
+      set(OUTPUT_BIN "${BINARY_DIR}/lcc")
+    endif()
+
+    add_custom_command(
+      OUTPUT "${OUTPUT_BIN}"
+      COMMAND ${CMAKE_COMMAND}
+      -S "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.."
+      -B "${BINARY_DIR}"
+      -DCMAKE_C_COMPILER=${C_COMPILER}
+      -DCMAKE_CXX_COMPILER=${CXX_COMPILER}
+      ${COMMON_CONFIG}
+      ${CUSTOM_CONFIG}
+      COMMAND ${CMAKE_COMMAND} --build "${BINARY_DIR}" --target lcc
+      COMMENT
+      "VERIFY_COMPILERS: ${TARGET_NAME} | C:${C_COMPILER}  CXX:${CXX_COMPILER}"
+      VERBATIM
+    )
+
+    add_custom_target(
+      ${TARGET_NAME}
+      DEPENDS "${OUTPUT_BIN}"
+    )
+    set_property(
+      DIRECTORY APPEND PROPERTY
+      ADDITIONAL_CLEAN_FILES "${BINARY_DIR}"
+    )
+    add_dependencies(verify_compilers ${TARGET_NAME})
+  endfunction()
+
   find_program(GCC_PROGRAM gcc)
   find_program(GXX_PROGRAM g++)
   if (GCC_PROGRAM AND GXX_PROGRAM)
-    ExternalProject_Add(
-      gnu_build
-      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
-      BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thegnubuild
-      DOWNLOAD_COMMAND ""
-      UPDATE_COMMAND ""
-      INSTALL_COMMAND ""
-      CMAKE_ARGS
-      -DCMAKE_C_COMPILER=gcc
-      -DCMAKE_CXX_COMPILER=g++
-      ${COMMON_CONFIG}
-      EXCLUDE_FROM_ALL
-    )
-    add_dependencies(verify_compilers gnu_build)
-    set_property(DIRECTORY APPEND PROPERTY
-      ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/thegnubuild"
+    add_nested_build(
+      thegnubuild
+      ${GCC_PROGRAM}
+      ${GXX_PROGRAM}
+      ""
     )
   else()
     message(STATUS "VERIFY_COMPILERS: GNU compiler verification is not available; gcc, g++ not found")
@@ -258,42 +281,19 @@ if (VERIFY_COMPILERS)
   find_program(CLANG_PROGRAM clang)
   find_program(CLANGXX_PROGRAM clang++)
   if (CLANG_PROGRAM AND CLANGXX_PROGRAM)
-    ExternalProject_Add(
-      llvm_build
-      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
-      BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thellvmbuild
-      DOWNLOAD_COMMAND ""
-      UPDATE_COMMAND ""
-      INSTALL_COMMAND ""
-      CMAKE_ARGS
-      -DCMAKE_C_COMPILER=clang
-      -DCMAKE_CXX_COMPILER=clang++
-      -DCMAKE_CXX_FLAGS="-stdlib=libc++"
-      ${COMMON_CONFIG}
-      EXCLUDE_FROM_ALL
-    )
-    add_dependencies(verify_compilers llvm_build)
-    set_property(DIRECTORY APPEND PROPERTY
-      ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/thellvmbuild"
+    # LLVM Compiler, LLVM Standard Library
+    add_nested_build(
+      thellvmbuild
+      ${CLANG_PROGRAM}
+      ${CLANGXX_PROGRAM}
+      ""
     )
     # LLVM Compiler, GNU Standard Library
-    ExternalProject_Add(
-      llvmgnu_build
-      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
-      BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thellvmgnubuild
-      DOWNLOAD_COMMAND ""
-      UPDATE_COMMAND ""
-      INSTALL_COMMAND ""
-      CMAKE_ARGS
-      -DCMAKE_C_COMPILER=clang
-      -DCMAKE_CXX_COMPILER=clang++
+    add_nested_build(
+      thellvmgnubuild
+      ${CLANG_PROGRAM}
+      ${CLANGXX_PROGRAM}
       -DCMAKE_CXX_FLAGS="-stdlib=libstdc++"
-      ${COMMON_CONFIG}
-      EXCLUDE_FROM_ALL
-    )
-    add_dependencies(verify_compilers llvmgnu_build)
-    set_property(DIRECTORY APPEND PROPERTY
-      ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/thellvmgnubuild"
     )
   else()
     message(STATUS "VERIFY_COMPILERS: LLVM compiler verification is not available; clang, clang++ not found")
@@ -301,22 +301,11 @@ if (VERIFY_COMPILERS)
 
   find_program(MINGW_CXX NAMES ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++)
   if (MINGW_CXX)
-    ExternalProject_Add(
-      mingw_build
-      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
-      BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/themingwbuild
-      DOWNLOAD_COMMAND ""
-      UPDATE_COMMAND ""
-      INSTALL_COMMAND ""
-      CMAKE_ARGS
-      -DCMAKE_C_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-gcc
-      -DCMAKE_CXX_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++
-      ${COMMON_CONFIG}
-      EXCLUDE_FROM_ALL
-    )
-    add_dependencies(verify_compilers mingw_build)
-    set_property(DIRECTORY APPEND PROPERTY
-      ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/themingwbuild"
+    add_nested_build(
+      themingwbuild
+      ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-gcc
+      ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++
+      ""
     )
   else()
     message(STATUS "VERIFY_COMPILERS: mingw compiler verification is not available; ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32-g++ not found")
@@ -324,22 +313,11 @@ if (VERIFY_COMPILERS)
 
   find_program(UCRT_CXX NAMES ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++)
   if (UCRT_CXX)
-    ExternalProject_Add(
-      ucrt_build
-      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
-      BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/theucrtbuild
-      DOWNLOAD_COMMAND ""
-      UPDATE_COMMAND ""
-      INSTALL_COMMAND ""
-      CMAKE_ARGS
-      -DCMAKE_C_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-gcc
-      -DCMAKE_CXX_COMPILER=${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++
-      ${COMMON_CONFIG}
-      EXCLUDE_FROM_ALL
-    )
-    add_dependencies(verify_compilers ucrt_build)
-    set_property(DIRECTORY APPEND PROPERTY
-      ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/theucrtbuild"
+    add_nested_build(
+      theucrtbuild
+      ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-gcc
+      ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++
+      ""
     )
   else()
     message(STATUS "VERIFY_COMPILERS: ucrt compiler verification is not available; ${CMAKE_SYSTEM_PROCESSOR}-w64-mingw32ucrt-g++ not found")
