@@ -13,7 +13,7 @@ jobs:
     container:
       image: fedora:latest
     env:
-      TESTS_SKIP: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
+      TESTS_SKIP: ${{ contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
       TESTS_RUN: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') && contains(github.event.head_commit.message, '[ci-run-tests]') }}
     steps:
       - uses: actions/checkout@v7
