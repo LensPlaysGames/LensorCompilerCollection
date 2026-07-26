@@ -424,16 +424,16 @@ endif()
 
 # Simple JSON Library (freestanding)
 add_library(
-  liblccjson
+  lccjson
   inc/lccjson/lccjson.hh
   lib/lccjson/lccjson.cc
 )
-target_include_directories(liblccjson PUBLIC inc)
-target_link_libraries(liblccjson PRIVATE options)
+target_include_directories(lccjson PUBLIC inc)
+target_link_libraries(lccjson PRIVATE options)
 
 # LCC Base Library (freestanding)
 add_library(
-  liblccbase
+  lccbase
   inc/lccbase/assert.hh
   inc/lccbase/context.hh
   inc/lccbase/diags.hh
@@ -447,8 +447,8 @@ add_library(
   lib/lccbase/location.cc
   lib/lccbase/platform.cc
 )
-target_include_directories(liblccbase PUBLIC inc)
-target_link_libraries(liblccbase PRIVATE options)
+target_include_directories(lccbase PUBLIC inc)
+target_link_libraries(lccbase PRIVATE options)
 
 # Generic object library (convertible to ELF and COFF, currently)
 add_library(
@@ -465,7 +465,7 @@ add_library(
 target_include_directories(object PUBLIC inc)
 target_link_libraries(
   object PRIVATE
-  options liblccbase
+  options lccbase
 )
 
 # Add the main lcc library.
@@ -553,7 +553,7 @@ target_link_libraries(liblcc PRIVATE options)
 # Link main lcc library with generic object library.
 target_link_libraries(
   liblcc PUBLIC
-  liblccbase object
+  lccbase object
 )
 
 # C language library
@@ -615,7 +615,7 @@ target_link_libraries(
 
 # Custom Linker Library
 add_library(
-  libclink
+  clink
   inc/clink/clink.hh
   inc/clink/layout.hh
   inc/clink/link_elf.hh
@@ -629,11 +629,11 @@ add_library(
   lib/clink/merge.cc
   lib/clink/relocate.cc
 )
-target_include_directories(libclink PUBLIC inc)
-target_link_libraries(libclink PRIVATE options)
+target_include_directories(clink PUBLIC inc)
+target_link_libraries(clink PRIVATE options)
 
 # link main lcc library with custom linker library
-target_link_libraries(liblcc PUBLIC libclink)
+target_link_libraries(liblcc PUBLIC clink)
 
 # Add the driver.
 add_executable(
@@ -657,7 +657,7 @@ target_include_directories(liblcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(lcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 # Link lcc driver with simple json library.
-target_link_libraries(lcc PRIVATE liblccjson)
+target_link_libraries(lcc PRIVATE lccjson)
 
 # Link lcc driver with main lcc library.
 target_link_libraries(lcc PRIVATE liblcc)
@@ -722,7 +722,7 @@ if (PACKAGING)
   )
   install(
     TARGETS
-    liblccbase liblccjson object libclink liblcc glint languagec
+    lccbase lccjson object clink liblcc glint languagec
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
     COMPONENT lccdevel
   )
