@@ -541,6 +541,17 @@ add_library(
 )
 target_include_directories(liblcc PUBLIC inc)
 set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
+# TODO Separate instruction selection into it's own target
+if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  # Instruction Selection utilises *heavy* use of templates...
+  # We hit:
+  #   lib\lcc\codegen\isel.cc(1,1): error C1128: number of sections exceeded
+  #   object file format limit: compile with /bigobj
+  target_compile_options(
+    liblcc PRIVATE
+    /bigobj
+  )
+endif()
 
 if(LCC_USE_DEBUG_ITERATORS)
   target_compile_definitions(liblcc PRIVATE LCC_DEBUG_ITERATORS)
