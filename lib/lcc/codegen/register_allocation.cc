@@ -439,12 +439,10 @@ bool block_already_visited(MBlock* block, const std::vector<MBlock*>& visited) {
 void collect_interferences_from_block(
     AdjacencyMatrix& matrix,
     MFunction& function,
-    std::vector<usz> live_values,
-    std::vector<MBlock*> visited,
+    std::vector<usz>& live_values,
+    std::vector<MBlock*>& visited,
     MBlock* block
 ) {
-    bool keep_going{false};
-
     // I -> LOOP IN
     // H -> LOOP HEADER
     // B -> LOOP BODY
@@ -459,59 +457,51 @@ void collect_interferences_from_block(
     // O -> H -> B -> H -> I
     // O -> H -> I
 
-    do {
-        // Don't visit the same block more than necessary.
-        if (block_already_visited(block, visited))
-            return;
-        else visited.emplace_back(block);
+    // Don't visit the same block more than necessary.
+    if (block_already_visited(block, visited))
+        return;
+    else visited.emplace_back(block);
 
-        // fmt::print("Have not visited {}\n", block->name());
+    // fmt::print("Have not visited {}\n", block->name());
 
-        // Basically, walk over the instructions of the block backwards, keeping
-        // track of all virtual registers that have been encountered but not
-        // their defining use, as these are our "live values".
-        for (auto& inst : vws::reverse(block->instructions())) {
-            collect_interferences_from_instruction(
-                matrix,
-                live_values,
-                inst
-            );
-        }
+    // Basically, walk over the instructions of the block backwards, keeping
+    // track of all virtual registers that have been encountered but not
+    // their defining use, as these are our "live values".
+    for (auto& inst : vws::reverse(block->instructions())) {
+        collect_interferences_from_instruction(
+            matrix,
+            live_values,
+            inst
+        );
+    }
 
-        // Walk CFG backwards (follow predecessors)
+    // Walk CFG backwards (follow predecessors)
 
-        // For all except one predecessor, recurse.
-        // This allows proper copying of live_values, visited, etc, while not
-        // recursing for the last case where we can just update the block and keep
-        // using our current resources.
-        if (block->predecessors().size() > 1) {
-            for (
-                auto parent_name = block->predecessors().cbegin(),
-                     end = std::prev(block->predecessors().cend());
-                parent_name != end;
-                ++parent_name
-            ) {
-                auto* parent = function.block_by_name(*parent_name);
-                // Only recurse into this block if we haven't visited it (enough) already.
-                if (block_already_visited(parent, visited))
-                    continue;
-                collect_interferences_from_block(
-                    matrix,
-                    function,
-                    live_values,
-                    visited,
-                    parent
-                );
-            }
-        }
+    auto visited_checkpoint = visited.size();
+    auto live_values_checkpoint = live_values.size();
 
-        // For blocks with one predecessor, do not recurse. Just update block and
-        // keep going.
-        keep_going = block->predecessors().size();
-        if (keep_going)
-            block = function.block_by_name(block->predecessors().back());
+    for (
+        auto parent_name = block->predecessors().cbegin(),
+             end = block->predecessors().cend();
+        parent_name != end;
+        ++parent_name
+    ) {
+        auto* parent = function.block_by_name(*parent_name);
+        // Only recurse into this block if we haven't visited it (enough) already.
+        if (block_already_visited(parent, visited))
+            continue;
 
-    } while (keep_going);
+        collect_interferences_from_block(
+            matrix,
+            function,
+            live_values,
+            visited,
+            parent
+        );
+
+        live_values.resize(live_values_checkpoint);
+    }
+    visited.resize(visited_checkpoint);
 }
 
 void collect_interferences(
@@ -538,14 +528,18 @@ void collect_interferences(
 
     // From each exit block (collected above), follow control flow to the
     // root of the function (entry block), or to a block already visited.
+    std::vector<usz> live_values{};
+    std::vector<MBlock*> visited{};
     for (auto* exit : exits) {
         collect_interferences_from_block(
             matrix,
             function,
-            {},
-            {},
+            live_values,
+            visited,
             exit
         );
+        live_values.resize(0);
+        visited.resize(0);
     }
 }
 
