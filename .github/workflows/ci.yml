@@ -12,29 +12,29 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: fedora:latest
+    env:
+      TESTS_SKIP: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
+      TESTS_RUN: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') && contains(github.event.head_commit.message, '[ci-run-tests]') }}
     steps:
       - uses: actions/checkout@v7
       - name: Install dependencies
-        run: sudo dnf install -y cmake gcc gcc-c++ git libstdc++-devel make
-      - name: CMake Configure
-        run: cmake -B bld -DUSE_LTO=OFF
-      - name: CMake Build
-        run: cmake --build bld --parallel
-      - name: Setup Test Suite Dependencies
-        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
-        run: sudo dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel clang mingw64-gcc mingw64-gcc-c++ mingw64-libstdc++
-      - name: CMake Configure Test Suite
-        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
-        working-directory: ./tst
-        run: cmake -B bld -DUSE_LTO=OFF -DLCC_TEST_NON_ZERO_EXIT_ON_FAILURE=ON
-      - name: CMake Build Test Suite
-        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') }}
-        working-directory: ./tst
-        run: cmake --build bld --parallel
-      - name: Invoke Tests
-        if: ${{ !contains(github.event.head_commit.message, '[ci-skip-test-driver]') && contains(github.event.head_commit.message, '[ci-run-tests]') }}
-        working-directory: ./tst
-        run: cmake --build bld -t test
+        run: dnf install -y cmake gcc gcc-c++ git libstdc++-devel make
+      - name: Build It
+        run: |
+          cmake -B bld -DUSE_LTO=OFF
+          cmake --build bld --parallel
+      - name: Build Test Suite
+        if: ${{ env.TESTS_SKIP == 'false' }}
+        run: |
+          dnf install -y emacs-nw libcxx libcxx-devel libcxxabi libcxxabi-devel clang mingw64-gcc mingw64-gcc-c++ mingw64-libstdc++
+          cmake -S tst -B bldtst -DUSE_LTO=OFF -DLCC_TEST_NON_ZERO_EXIT_ON_FAILURE=ON
+          cmake --build bldtst --parallel
+      - name: Invoke Test Suite
+        if: ${{ env.TESTS_RUN == 'true' }}
+        run: cmake --build bldtst --target test --parallel
+      - name: Verify Compilers
+        if: ${{ env.TESTS_SKIP == 'false' }}
+        run: cmake --build bldtst --target verify_compilers --parallel
   build-windows:
     if: ${{ !contains(github.event.head_commit.message, '[skip-ci]') }}
     runs-on: windows-latest
@@ -43,7 +43,11 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v7
-      - name: CMake Configure
-        run: cmake -G Ninja -B bld -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DFMT_MODULE=OFF -DUSE_LTO=OFF
-      - name: CMake Build
-        run: cmake --build bld --parallel
+      - name: Build It (clang)
+        run: |
+          cmake -G Ninja -B bldclang -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DFMT_MODULE=OFF -DUSE_LTO=OFF
+          cmake --build bldclang --parallel
+      - name: Build It (MSVC)
+        run: |
+          cmake -B bldmsvc -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DFMT_MODULE=OFF -DUSE_LTO=OFF
+          cmake --build bldmsvc --parallel
