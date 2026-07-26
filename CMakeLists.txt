@@ -712,6 +712,10 @@ if (PACKAGING)
     COMPONENT lcc
   )
   install(
+    FILES README.org LICENSE
+    COMPONENT lcc
+  )
+  install(
     TARGETS
     liblccbase liblccjson object libclink liblcc glint languagec
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -720,6 +724,10 @@ if (PACKAGING)
   install(
     DIRECTORY inc/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    COMPONENT lccdevel
+  )
+  install(
+    FILES deps.org
     COMPONENT lccdevel
   )
   install(
@@ -804,7 +812,7 @@ if (PACKAGING)
   if(TARGET_OS MATCHES "linux")
     # Generate both Debian and Red Hat packages automatically for Linux targets
     set(CPACK_GENERATOR "DEB;RPM;TGZ;TXZ;STGZ")
-    set(CPACK_SOURCE_GENERATOR "TGZ;TXZ")
+    set(CPACK_SOURCE_GENERATOR "TGZ;TXZ;ZIP")
   elseif(TARGET_OS MATCHES "windows")
     # Generate both an installer wizard and a portable ZIP for Windows targets
     set(CPACK_GENERATOR "NSIS;ZIP")

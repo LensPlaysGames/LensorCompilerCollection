@@ -26,8 +26,10 @@ jobs:
       - name: CMake Build
         run: cmake --build bld --config Release --parallel
       - name: CPack
-        working-directory: bld
-        run: cpack -C Release
+        run: cmake --build bld --config Release --target package --parallel
+      - name: CPack Source
+        if: matrix.os == 'ubuntu-26.04'
+        run: cmake --build bld --config Release --target package_source --parallel
       - name: Print NSIS Error Log on Failure
         if: failure()
         run: |
