@@ -11,7 +11,7 @@ endif()
 add_executable(lccctests main.cpp)
 target_link_libraries(lccctests options)
 target_link_libraries(lccctests liblcc)
-target_link_libraries(lccctests liblccjson)
+target_link_libraries(lccctests lccjson)
 target_link_libraries(lccctests languagec)
 
 target_compile_definitions(
