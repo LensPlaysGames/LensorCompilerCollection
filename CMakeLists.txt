@@ -258,6 +258,11 @@ if (CXX_COMPILER_IS_GNULIKE)
     )
   endif()
 
+  target_compile_options(
+    options INTERFACE
+    $<$<CONFIG:DEBUG>:-Og>
+  )
+
   # backtrace/backtrace_symbols needs -rdynamic to print function names
   # instead of addresses.
   # NOTE: clang spits out "unused argument -rdynamic" when compiling object
