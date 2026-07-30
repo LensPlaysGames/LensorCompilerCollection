@@ -308,14 +308,14 @@ if (
     -Wconversion      # Implicit conversions.
     -Wsign-conversion # Implicit sign conversions.
     -Werror=shadow    # No shadowing!
-    -Wformat=2        # Stricter format checking.
 
-    # Disabled warnings.
-    -Wno-unused-function
-    -Wno-unused-local-typedefs
-    -Wno-unused-parameter
+    # Stricter format checking.
+    -Wformat=2
+    -Wformat-overflow=2
+    -Wformat-truncation=2
 
     # NULL Errors.
+    -Werror=null-dereference
     -Werror=nonnull # Passing NULL to nonnull parameter.
 
     # Memory Errors.
@@ -323,22 +323,24 @@ if (
     -Werror=init-self            # Initialization of a variable with itself.
     -Werror=uninitialized
 
-    # Return type.
-    -Werror=return-type
-
     # C/C++.
+    -Werror=return-type
     -Werror=implicit-fallthrough
     -Werror=missing-include-dirs # User-specified include dir does not exist.
     -Werror=pointer-arith        # Disallow void* and function pointer arithmetic.
     -Werror=string-compare       # Nonsensical string comparisons.
     -Werror=switch               # Missing switch cases.
-    # -Werror=switch-enum          # Switch on enum (even if there is a default case).
     -Werror=write-strings        # Strings in C should be const char*.
 
     # C++.
     -Werror=missing-field-initializers
     -Werror=non-virtual-dtor
     -Werror=pessimizing-move
+
+    # Disabled warnings.
+    -Wno-unused-function
+    -Wno-unused-local-typedefs
+    -Wno-unused-parameter
   )
 endif()
 
@@ -350,6 +352,18 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     -Werror=maybe-uninitialized
     -Werror=missing-requires
     -Werror=return-local-addr
+    -Werror=trampolines
+    -Wuse-after-free=3
+    -Wdangling-pointer=2
+    -Wstringop-overflow=4
+    -Warray-bounds=2
+    -Wstrict-overflow=5
+    -Wshift-overflow=2
+    -Werror=duplicated-cond
+    -Werror=duplicated-branches
+    -ftrivial-auto-var-init=pattern
+    -Werror=trivial-auto-var-init
+    -Werror=format-signedness
   )
 endif()
 
