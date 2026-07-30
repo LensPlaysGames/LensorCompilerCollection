@@ -253,6 +253,56 @@ int run_command(std::string_view s) {
     return rc;
 }
 
+void link_with_clink(
+    lcc::Context& context,
+    std::vector<std::string> input_paths,
+    std::string_view output_path
+) {
+    if (context.format()->format() != lcc::Format::ELF_OBJECT) {
+        lcc::Diag::Fatal(
+            "clink: Only ELF is supported for now, sorry. We plan to support COFF and MachO\n"
+            "  try `-f elf`"
+        );
+        return;
+    }
+
+    // TODO: If producing an executable vs object/shared
+#ifndef LCC_CRT_DIRECTORY
+#    define LCC_CRT_DIRECTORY "/usr/x86_64-linux-musl/lib64/"
+#endif
+    std::array<std::string, 4> c_libraries{
+        "crt1.o",
+        "crti.o",
+        "crtn.o",
+        "libc.a"
+    };
+
+    for (auto& s : c_libraries)
+        s = (lcc::fs::path(context.crt_directory()) / s).string();
+    input_paths.insert(input_paths.begin(), c_libraries.begin(), c_libraries.end());
+
+    if (context.has_option("verbose")) {
+        fmt::print(
+            "Using interal linker: clink: {} -> `{}`\n",
+            input_paths,
+            output_path
+        );
+    }
+    auto link_success = clink::link(
+        context,
+        input_paths,
+        output_path
+    );
+    if (not link_success)
+        lcc::Diag::Fatal("link: Failed");
+    else if (context.has_option("verbose")) {
+        fmt::print(
+            "Successfully generated output at `{}`\n",
+            output_path
+        );
+    }
+}
+
 void do_link(
     lcc::Context& context,
     std::vector<std::string> input_paths,
@@ -264,49 +314,7 @@ void do_link(
         lcc::Diag::ICE("link: Empty output path");
 
     if (context.has_option("clink")) {
-        if (context.format()->format() != lcc::Format::ELF_OBJECT) {
-            lcc::Diag::Fatal(
-                "clink: Only ELF is supported for now, sorry. We plan to support COFF and MachO\n"
-                "  try `-f elf`"
-            );
-            return;
-        }
-
-        // TODO: If producing an executable vs object/shared
-#ifndef LCC_CRT_DIRECTORY
-#    define LCC_CRT_DIRECTORY "/usr/x86_64-linux-musl/lib64/"
-#endif
-        std::array<std::string, 4> c_libraries{
-            "crt1.o",
-            "crti.o",
-            "crtn.o",
-            "libc.a"
-        };
-
-        for (auto& s : c_libraries)
-            s = (lcc::fs::path(context.crt_directory()) / s).string();
-        input_paths.insert(input_paths.begin(), c_libraries.begin(), c_libraries.end());
-
-        if (context.has_option("verbose")) {
-            fmt::print(
-                "Using interal linker: clink: {} -> `{}`\n",
-                input_paths,
-                output_path
-            );
-        }
-        auto link_success = clink::link(
-            context,
-            input_paths,
-            output_path
-        );
-        if (not link_success)
-            lcc::Diag::Fatal("link: Failed");
-        else if (context.has_option("verbose")) {
-            fmt::print(
-                "Successfully generated output at `{}`\n",
-                output_path
-            );
-        }
+        link_with_clink(context, input_paths, output_path);
         return;
     }
 
