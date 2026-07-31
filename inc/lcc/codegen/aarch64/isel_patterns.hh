@@ -65,26 +65,35 @@ using copy_mem_op = Pattern<
 using copy_global = copy_mem_op<Global<>>;
 using copy_local = copy_mem_op<Local<>>;
 
-using add_imm_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<0>>, usz(Opcode::Move), i<0>, o<0>>,
-        Inst<Clobbers<c<0>>, usz(Opcode::Add), i<0>, i<0>, o<1>>>>;
+template <usz in_op, usz out_op>
+struct binary_patterns {
+    using imm_imm = Pattern<
+        InstList<Inst<Clobbers<>, in_op, Immediate<>, Immediate<>>>,
+        InstList<
+            Inst<Clobbers<c<0>>, usz(Opcode::Move), i<0>, o<0>>,
+            Inst<Clobbers<c<0>>, out_op, i<0>, i<0>, o<1>>>>;
 
-using add_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Register<>>>,
-    InstList<
-        Inst<Clobbers<c<0>>, usz(Opcode::Add), i<0>, o<1>, o<0>>>>;
+    using imm_reg = Pattern<
+        InstList<Inst<Clobbers<>, in_op, Immediate<>, Register<>>>,
+        InstList<
+            Inst<Clobbers<c<0>>, out_op, i<0>, o<1>, o<0>>>>;
 
-using add_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Register<>, Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<0>>, usz(Opcode::Add), i<0>, o<0>, o<1>>>>;
+    using reg_imm = Pattern<
+        InstList<Inst<Clobbers<>, in_op, Register<>, Immediate<>>>,
+        InstList<
+            Inst<Clobbers<c<0>>, out_op, i<0>, o<0>, o<1>>>>;
 
-using add_reg_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Register<>, Register<>>>,
-    InstList<
-        Inst<Clobbers<c<0>>, usz(Opcode::Add), i<0>, o<0>, o<1>>>>;
+    using reg_reg = Pattern<
+        InstList<Inst<Clobbers<>, in_op, Register<>, Register<>>>,
+        InstList<
+            Inst<Clobbers<c<0>>, out_op, i<0>, o<0>, o<1>>>>;
+};
+
+using add = binary_patterns<usz(MKind::Add), usz(Opcode::Add)>;
+using sub = binary_patterns<usz(MKind::Sub), usz(Opcode::Sub)>;
+using mul = binary_patterns<usz(MKind::Mul), usz(Opcode::Multiply)>;
+using div_s = binary_patterns<usz(MKind::SDiv), usz(Opcode::SignedDivide)>;
+using div_u = binary_patterns<usz(MKind::UDiv), usz(Opcode::UnsignedDivide)>;
 
 } // namespace
 
@@ -101,9 +110,30 @@ using AllPatterns = PatternList<
     copy_local,
     copy_reg,
 
-    add_imm_imm,
-    add_imm_reg,
-    add_reg_imm,
+    add::imm_imm,
+    add::imm_reg,
+    add::reg_imm,
+    add::reg_reg,
+
+    sub::imm_imm,
+    sub::imm_reg,
+    sub::reg_imm,
+    sub::reg_reg,
+
+    mul::imm_imm,
+    mul::imm_reg,
+    mul::reg_imm,
+    mul::reg_reg,
+
+    div_s::imm_imm,
+    div_s::imm_reg,
+    div_s::reg_imm,
+    div_s::reg_reg,
+
+    div_u::imm_imm,
+    div_u::imm_reg,
+    div_u::reg_imm,
+    div_u::reg_reg,
 
     ret_imm,
     ret_reg,
