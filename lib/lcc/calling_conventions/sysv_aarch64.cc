@@ -1,4 +1,4 @@
-#include <lcc/calling_conventions/sysv_x86_64.hh>
+#include <lcc/calling_conventions/sysv_aarch64.hh>
 #include <lcc/ir/core.hh>
 #include <lcc/ir/type.hh>
 
@@ -8,7 +8,7 @@
 
 namespace lcc {
 
-auto cconv::sysv::parameter_description(
+auto cconv::sysv_aarch64::parameter_description(
     std::vector<Type*>& parameter_types
 ) -> ParameterDescription {
     // If we super-cared or measured this function as being really slow or
@@ -35,12 +35,12 @@ auto cconv::sysv::parameter_description(
             ++working_param.arg_scalars;
 
         else if (
-            t->bytes() <= x86_64::GeneralPurposeBytewidth
+            t->bytes() <= aarch64::GeneralPurposeBytewidth
             and working_param.arg_regs_used < arg_regs.size()
         ) ++working_param.arg_regs;
 
         else if (
-            t->bytes() <= 2 * x86_64::GeneralPurposeBytewidth
+            t->bytes() <= 2 * aarch64::GeneralPurposeBytewidth
             and working_param.arg_regs_used < arg_regs.size() - 1
         ) working_param.arg_regs += 2;
 
@@ -58,7 +58,7 @@ auto cconv::sysv::parameter_description(
     return out;
 };
 
-auto cconv::sysv::parameter_description(
+auto cconv::sysv_aarch64::parameter_description(
     Function* function
 ) -> ParameterDescription {
     std::vector<Type*> parameter_types{};

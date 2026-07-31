@@ -42,6 +42,7 @@ enum struct Opcode : u32 {
 
     Compare,                      // cmp
     Branch,                       // b, bal
+    BranchWithLink,               // bl ("call")
     BranchIfEqual,                // beq
     BranchIfNotEqual,             // bne
     BranchIfGreaterThan,          // bgt (signed)
@@ -106,6 +107,9 @@ enum struct RegisterId : u32 {
 };
 
 constexpr std::string StringifyEnum(Opcode op) {
+    if (+op < +MInst::Kind::ArchStart)
+        Diag::ICE("Virtual opcode, can't stringify via aarch64");
+
     switch (op) {
         case Opcode::Poison: return "aarch64.POISON";
 
@@ -137,6 +141,7 @@ constexpr std::string StringifyEnum(Opcode op) {
 
         case Opcode::Compare: return "cmp";
         case Opcode::Branch: return "b";
+        case Opcode::BranchWithLink: return "bl";
         case Opcode::BranchIfEqual: return "beq";
         case Opcode::BranchIfNotEqual: return "bne";
         case Opcode::BranchIfGreaterThan: return "bgt";
@@ -155,6 +160,7 @@ constexpr std::string StringifyEnum(Opcode op) {
         case Opcode::System: return "svc";
         case Opcode::Max: std::unreachable();
     }
+    std::unreachable();
 }
 
 constexpr std::string StringifyEnum(RegisterId id) {
@@ -197,6 +203,7 @@ constexpr std::string StringifyEnum(RegisterId id) {
         case RegisterId::R30: return "r30";
         case RegisterId::R31: return "r31";
     }
+    std::unreachable();
 }
 
 constexpr std::string ToString(RegisterId id, usz size) {

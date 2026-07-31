@@ -1,68 +1,45 @@
-#ifndef LCC_CALLING_CONVENTION_SYSV_X86_64_HH
-#define LCC_CALLING_CONVENTION_SYSV_X86_64_HH
+#ifndef LCC_CALLING_CONVENTION_SYSV_AARCH64_HH
+#define LCC_CALLING_CONVENTION_SYSV_AARCH64_HH
 
-#include <lcc/codegen/x86_64/x86_64.hh>
+#include <lcc/codegen/aarch64/aarch64.hh>
 
 #include <array>
 #include <vector>
 
-namespace lcc::cconv::sysv {
+namespace lcc::cconv::sysv_aarch64 {
 
-constexpr x86_64::RegisterId return_register = x86_64::RegisterId::RAX;
+constexpr aarch64::RegisterId return_register = aarch64::RegisterId::R0;
 
 /// If you don't like the long signature, use like
 ///     `constexpr auto arg_regs = lcc::cconv::args_regs;`
-constexpr const std::array<x86_64::RegisterId, 6> arg_regs = {
-    x86_64::RegisterId::RDI,
-    x86_64::RegisterId::RSI,
-    x86_64::RegisterId::RDX,
-    x86_64::RegisterId::RCX,
-    x86_64::RegisterId::R8,
-    x86_64::RegisterId::R9
+constexpr const std::array<aarch64::RegisterId, 8> arg_regs = {
+    aarch64::RegisterId::R0,
+    aarch64::RegisterId::R1,
+    aarch64::RegisterId::R2,
+    aarch64::RegisterId::R3,
+    aarch64::RegisterId::R4,
+    aarch64::RegisterId::R5,
+    aarch64::RegisterId::R6,
+    aarch64::RegisterId::R7,
 };
 
-constexpr const std::array<x86_64::RegisterId, 9> volatile_regs = {
-    x86_64::RegisterId::RAX,
-    x86_64::RegisterId::RCX,
-    x86_64::RegisterId::RDX,
-    x86_64::RegisterId::RSI,
-    x86_64::RegisterId::RDI,
-    x86_64::RegisterId::R8,
-    x86_64::RegisterId::R9,
-    x86_64::RegisterId::R10,
-    x86_64::RegisterId::R11
-};
-
-// Both the argument and volatile scalar registers
-constexpr const std::array<x86_64::RegisterId, 8> scalar_regs = {
-    x86_64::RegisterId::XMM0,
-    x86_64::RegisterId::XMM1,
-    x86_64::RegisterId::XMM2,
-    x86_64::RegisterId::XMM3,
-    x86_64::RegisterId::XMM4,
-    x86_64::RegisterId::XMM5,
-    x86_64::RegisterId::XMM6,
-    x86_64::RegisterId::XMM7
-};
-
-constexpr const std::array<x86_64::RegisterId, 17> all_volatile_regs = {
-    x86_64::RegisterId::RAX,
-    x86_64::RegisterId::RCX,
-    x86_64::RegisterId::RDX,
-    x86_64::RegisterId::RSI,
-    x86_64::RegisterId::RDI,
-    x86_64::RegisterId::R8,
-    x86_64::RegisterId::R9,
-    x86_64::RegisterId::R10,
-    x86_64::RegisterId::R11,
-    x86_64::RegisterId::XMM0,
-    x86_64::RegisterId::XMM1,
-    x86_64::RegisterId::XMM2,
-    x86_64::RegisterId::XMM3,
-    x86_64::RegisterId::XMM4,
-    x86_64::RegisterId::XMM5,
-    x86_64::RegisterId::XMM6,
-    x86_64::RegisterId::XMM7
+constexpr const std::array<aarch64::RegisterId, 16> volatile_regs = {
+    aarch64::RegisterId::R0,
+    aarch64::RegisterId::R1,
+    aarch64::RegisterId::R2,
+    aarch64::RegisterId::R3,
+    aarch64::RegisterId::R4,
+    aarch64::RegisterId::R5,
+    aarch64::RegisterId::R6,
+    aarch64::RegisterId::R7,
+    aarch64::RegisterId::R8,
+    aarch64::RegisterId::R9,
+    aarch64::RegisterId::R10,
+    aarch64::RegisterId::R11,
+    aarch64::RegisterId::R12,
+    aarch64::RegisterId::R13,
+    aarch64::RegisterId::R14,
+    aarch64::RegisterId::R15,
 };
 
 enum class ParameterClass {
@@ -151,6 +128,6 @@ auto parameter_description(std::vector<Type*>& parameter_types)
 auto parameter_description(Function* function)
     -> ParameterDescription;
 
-} // namespace lcc::cconv::sysv
+} // namespace lcc::cconv::sysv_aarch64
 
-#endif /* LCC_CALLING_CONVENTION_SYSV_X86_64_HH */
+#endif /* LCC_CALLING_CONVENTION_SYSV_AARCH64_HH */

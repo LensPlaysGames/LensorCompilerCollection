@@ -35,16 +35,24 @@ using ret_reg = ret_some_op<Register<>, Opcode::Move>;
 template <typename load_op>
 using load_some_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Load), load_op>>,
-    InstList<Inst<Clobbers<c<1>>, usz(Opcode::Load), o<0>, i<0>>>>;
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::Load), i<0>, o<0>>>>;
 
 using load_global = load_some_op<Global<>>;
 using load_local = load_some_op<Local<>>;
 using load_reg = load_some_op<Register<>>;
 
+template <typename store_op>
+using store_some_op_local = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Store), store_op, Local<>>>,
+    InstList<Inst<Clobbers<>, usz(Opcode::Store), o<0>, o<1>>>>;
+
+using store_reg_local = store_some_op_local<Register<>>;
+using store_imm_local = store_some_op_local<Immediate<>>;
+
 template <typename copy_op>
 using copy_some_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Copy), copy_op>>,
-    InstList<Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::Move), i<0>, o<0>>>>;
 
 using copy_reg = copy_some_op<Register<>>;
 using copy_imm = copy_some_op<Immediate<>>;
@@ -52,10 +60,16 @@ using copy_imm = copy_some_op<Immediate<>>;
 template <typename copy_op>
 using copy_mem_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Copy), copy_op>>,
-    InstList<Inst<Clobbers<c<1>>, usz(Opcode::Address), o<0>, i<0>>>>;
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::Address), i<0>, o<0>>>>;
 
 using copy_global = copy_mem_op<Global<>>;
 using copy_local = copy_mem_op<Local<>>;
+
+using add_imm_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Immediate<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), i<0>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Add), i<0>, i<0>, o<1>>>>;
 
 } // namespace
 
@@ -64,13 +78,18 @@ using AllPatterns = PatternList<
     load_local,
     load_reg,
 
-    copy_reg,
-    copy_imm,
-    copy_global,
-    copy_local,
+    store_imm_local,
+    store_reg_local,
 
-    ret_reg,
+    copy_global,
+    copy_imm,
+    copy_local,
+    copy_reg,
+
+    add_imm_imm,
+
     ret_imm,
+    ret_reg,
 
     ret>;
 

@@ -3,6 +3,7 @@
 #include <hdronly/lcc/fixcompilers.hh>
 
 #include <lcc/calling_conventions/ms_x64.hh>
+#include <lcc/calling_conventions/sysv_aarch64.hh>
 #include <lcc/calling_conventions/sysv_x86_64.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
@@ -251,6 +252,190 @@ auto MIRBuildContext::minst_by_virtual_register(usz virtual_register) -> MInst* 
     return nullptr;
 }
 
+[[nodiscard]]
+auto x86_64_parameter_sysv(Function* f_ir, Parameter& param) -> MOperand {
+    auto params_desc = cconv::sysv::parameter_description(f_ir);
+    auto param_info = params_desc.info.at(param.index());
+    switch (param_info.kind()) {
+        using Kinds = cconv::sysv::ParameterDescription::Parameter::Kinds;
+        case Kinds::SingleRegister:
+            return MOperandRegister(
+                +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
+                uint(param.type()->bits())
+            );
+
+        case Kinds::Scalar:
+            return MOperandRegister(
+                +cconv::sysv::scalar_regs.at(param_info.arg_scalars_used),
+                uint(param.type()->bits()),
+                Register::Category::FLOAT
+            );
+
+        case Kinds::DoubleRegister:
+            LCC_ASSERT(
+                false,
+                "Cannot handle multiple register parameter in this way."
+                " IIRC you have to lower that out further up the chain in passes on LCC IR, or something."
+            );
+
+        case Kinds::Memory: {
+            // Return Local with positive offset into parent stack frame.
+            // To get the actual offset, we need to know how many memory parameters
+            // come before this parameter, as well as their size (and alignment, I'd
+            // think).
+            // FIXME: Magic number. Why 2 registers wide? I believe this is to get
+            // past the stack frame, if present (i.e. saved base pointer), but I don't
+            // remember exactly.
+            i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
+            // FIXME: I'm not sure if this should be stack_byte_offset (including size
+            // of current parameter), or if it should be stack_byte_offset_used
+            // (before the current parameter's size has been added).
+            offset += (decltype(offset)) param_info.stack_byte_offset_used;
+            return MOperandLocal(
+                MOperandLocal::absolute_index,
+                offset
+            );
+        }
+    }
+    std::unreachable();
+}
+
+[[nodiscard]]
+auto x86_64_parameter_ms(Function* f_ir, Parameter& param) -> MOperand {
+    auto params_desc = cconv::msx64::parameter_description(f_ir);
+    auto param_info = params_desc.info.at(param.index());
+    switch (param_info.kind()) {
+        case cconv::msx64::ParameterDescription::Parameter::Kinds::Float: {
+            return MOperandRegister(
+                +cconv::msx64::float_regs.at(param_info.arg_reg_index()),
+                uint(param.type()->bits()),
+                Register::Category::FLOAT
+            );
+        }
+
+        case cconv::msx64::ParameterDescription::Parameter::Kinds::SingleRegister:
+        // FIXME: Is this how PointerInRegister parameter is handled (here)?
+        // This may be the perfect spot to insert a dereference, if possible.
+        case cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister: {
+            // FIXME: Magic number. Why 2 registers wide? I believe this is to get
+            // past the stack frame, if present (i.e. saved base pointer), but I don't
+            // remember exactly.
+            i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
+
+            // Return Local with positive offset into parent stack frame.
+            return MOperandLocal(
+                MOperandLocal::absolute_index,
+                offset + (8 * lcc::i32(param.index()))
+            );
+        }
+
+        case cconv::msx64::ParameterDescription::Parameter::Kinds::Stack: {
+            // Return Local with positive offset into parent stack frame.
+            // To get the actual offset, we need to know how many memory parameters
+            // come before this parameter, as well as their size (and alignment, I'd
+            // think).
+
+            // FIXME: Magic number. Why 2 registers wide? I believe this is to get
+            // past the stack frame, if present (i.e. saved base pointer), but I don't
+            // remember exactly.
+            i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
+
+            // x64 calling convention requires caller to designate 32 bytes on the
+            // stack to save parameter registers into.
+            constexpr decltype(offset) shadow_stack_size = 32;
+            offset += shadow_stack_size;
+
+            // FIXME: I'm not sure if this should be stack_byte_offset (including size
+            // of current parameter), or if it should be stack_byte_offset_used
+            // (before the current parameter's size has been added).
+            offset += (decltype(offset)) param_info.stack_byte_offset_used;
+            return MOperandLocal(
+                MOperandLocal::absolute_index,
+                offset
+            );
+        }
+    }
+    std::unreachable();
+}
+
+[[nodiscard]]
+auto x86_64_parameter(
+    const Target* target,
+    Function* f_ir,
+    Parameter& param
+) -> MOperand {
+    if (target->is_cconv_sysv())
+        return x86_64_parameter_sysv(f_ir, param);
+
+    if (target->is_platform_windows())
+        return x86_64_parameter_ms(f_ir, param);
+
+    Diag::ICE("Unhandled calling convention for x86_64 parameter lowering");
+}
+
+[[nodiscard]]
+auto aarch64_parameter_sysv(Function* f_ir, Parameter& param) -> MOperand {
+    auto params_desc = cconv::sysv_aarch64::parameter_description(f_ir);
+    auto param_info = params_desc.info.at(param.index());
+    switch (param_info.kind()) {
+        using Kinds = cconv::sysv_aarch64::ParameterDescription::Parameter::Kinds;
+        case Kinds::SingleRegister:
+            return MOperandRegister(
+                +cconv::sysv_aarch64::arg_regs.at(param_info.arg_regs_used),
+                uint(param.type()->bits())
+            );
+
+        case Kinds::Scalar:
+            Diag::ICE("TODO: aarch64 floating point parameter lowering");
+
+        case Kinds::DoubleRegister:
+            Diag::ICE(
+                "Cannot handle multiple register parameter in this way."
+                " IIRC you have to lower that out further up the chain in passes on LCC IR, or something."
+            );
+
+        case Kinds::Memory: {
+            // Return Local with positive offset into parent stack frame.
+            // To get the actual offset, we need to know how many memory parameters
+            // come before this parameter, as well as their size (and alignment, I'd
+            // think).
+            // FIXME: Magic number. Why 2 registers wide? I believe this is to get
+            // past the stack frame, if present (i.e. saved base pointer), but I don't
+            // remember exactly.
+            i32 offset = 2 * aarch64::GeneralPurposeBytewidth;
+            // FIXME: I'm not sure if this should be stack_byte_offset (including size
+            // of current parameter), or if it should be stack_byte_offset_used
+            // (before the current parameter's size has been added).
+            offset += (decltype(offset)) param_info.stack_byte_offset_used;
+            return MOperandLocal(
+                MOperandLocal::absolute_index,
+                offset
+            );
+        }
+    }
+    std::unreachable();
+}
+
+[[nodiscard]]
+auto aarch64_parameter_ms(Function* f_ir, Parameter& param) -> MOperand {
+    Diag::ICE("TODO: Implement windows aarch64 parameter lowering");
+}
+
+[[nodiscard]]
+auto aarch64_parameter(
+    const Target* target,
+    Function* f_ir,
+    Parameter& param
+) -> MOperand {
+    if (target->is_cconv_sysv())
+        return aarch64_parameter_sysv(f_ir, param);
+
+    if (target->is_platform_windows())
+        return aarch64_parameter_ms(f_ir, param);
+
+    Diag::ICE("Unhandled calling convention for x86_64 parameter lowering");
+}
+
 auto MIRBuildContext::moperand_value_reference(
     Function* f_ir,
     MFunction& f,
@@ -280,113 +465,11 @@ auto MIRBuildContext::moperand_value_reference(
             // Otherwise, this will handle the general case of single-register
             // parameters and memory parameters being referenced.
             // TODO: Exhaustive handling of targets
-            if (mod.context()->target()->is_arch_x86_64()) {
-                if (mod.context()->target()->is_platform_windows()) {
-                    auto params_desc = cconv::msx64::parameter_description(f_ir);
-                    auto param_info = params_desc.info.at(param->index());
-                    switch (param_info.kind()) {
-                        case cconv::msx64::ParameterDescription::Parameter::Kinds::Float: {
-                            return MOperandRegister(
-                                +cconv::msx64::float_regs.at(param_info.arg_reg_index()),
-                                uint(param->type()->bits()),
-                                Register::Category::FLOAT
-                            );
-                        }
+            if (mod.context()->target()->is_arch_x86_64())
+                return x86_64_parameter(mod.context()->target(), f_ir, *param);
+            else if (mod.context()->target()->is_arch_aarch64())
+                return aarch64_parameter(mod.context()->target(), f_ir, *param);
 
-                        case cconv::msx64::ParameterDescription::Parameter::Kinds::SingleRegister:
-                        // FIXME: Is this how PointerInRegister parameter is handled (here)?
-                        // This may be the perfect spot to insert a dereference, if possible.
-                        case cconv::msx64::ParameterDescription::Parameter::Kinds::PointerInRegister: {
-                            // FIXME: Magic number. Why 2 registers wide? I believe this is to get
-                            // past the stack frame, if present (i.e. saved base pointer), but I don't
-                            // remember exactly.
-                            i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
-
-                            // Return Local with positive offset into parent stack frame.
-                            return MOperandLocal(
-                                MOperandLocal::absolute_index,
-                                offset + (8 * lcc::i32(param->index()))
-                            );
-                        }
-
-                        case cconv::msx64::ParameterDescription::Parameter::Kinds::Stack: {
-                            // Return Local with positive offset into parent stack frame.
-                            // To get the actual offset, we need to know how many memory parameters
-                            // come before this parameter, as well as their size (and alignment, I'd
-                            // think).
-
-                            // FIXME: Magic number. Why 2 registers wide? I believe this is to get
-                            // past the stack frame, if present (i.e. saved base pointer), but I don't
-                            // remember exactly.
-                            i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
-
-                            // x64 calling convention requires caller to designate 32 bytes on the
-                            // stack to save parameter registers into.
-                            constexpr decltype(offset) shadow_stack_size = 32;
-                            offset += shadow_stack_size;
-
-                            // FIXME: I'm not sure if this should be stack_byte_offset (including size
-                            // of current parameter), or if it should be stack_byte_offset_used
-                            // (before the current parameter's size has been added).
-                            offset += (decltype(offset)) param_info.stack_byte_offset_used;
-                            return MOperandLocal(
-                                MOperandLocal::absolute_index,
-                                offset
-                            );
-                        }
-                    }
-                } else if (mod.context()->target()->is_cconv_sysv()) {
-                    auto params_desc = cconv::sysv::parameter_description(f_ir);
-                    auto param_info = params_desc.info.at(param->index());
-                    switch (param_info.kind()) {
-                        using Kinds = cconv::sysv::ParameterDescription::Parameter::Kinds;
-                        case Kinds::SingleRegister:
-                            return MOperandRegister(
-                                +cconv::sysv::arg_regs.at(param_info.arg_regs_used),
-                                uint(param->type()->bits())
-                            );
-
-                        case Kinds::Scalar:
-                            return MOperandRegister(
-                                +cconv::sysv::scalar_regs.at(param_info.arg_scalars_used),
-                                uint(param->type()->bits()),
-                                Register::Category::FLOAT
-                            );
-
-                        case Kinds::DoubleRegister:
-                            LCC_ASSERT(
-                                false,
-                                "Cannot handle multiple register parameter in this way."
-                                " IIRC you have to lower that out further up the chain in passes on LCC IR, or something."
-                            );
-
-                        case Kinds::Memory: {
-                            // Return Local with positive offset into parent stack frame.
-                            // To get the actual offset, we need to know how many memory parameters
-                            // come before this parameter, as well as their size (and alignment, I'd
-                            // think).
-                            // FIXME: Magic number. Why 2 registers wide? I believe this is to get
-                            // past the stack frame, if present (i.e. saved base pointer), but I don't
-                            // remember exactly.
-                            i32 offset = 2 * x86_64::GeneralPurposeBytewidth;
-                            // FIXME: I'm not sure if this should be stack_byte_offset (including size
-                            // of current parameter), or if it should be stack_byte_offset_used
-                            // (before the current parameter's size has been added).
-                            offset += (decltype(offset)) param_info.stack_byte_offset_used;
-                            return MOperandLocal(
-                                MOperandLocal::absolute_index,
-                                offset
-                            );
-                        }
-                    }
-                }
-            } else if (mod.context()->target()->is_arch_aarch64()) {
-                if (mod.context()->target()->is_cconv_sysv()) {
-                    // TODO: aarch64 SysV parameter lowering
-                } else if (mod.context()->target()->is_cconv_ms()) {
-                    // TODO: aarch64 windows parameter lowering
-                }
-            }
             Diag::ICE("It appears we haven't handled the target properly, sorry");
         } break;
 

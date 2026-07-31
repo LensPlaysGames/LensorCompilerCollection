@@ -7,6 +7,8 @@
 #include <lcc/calling_convention.hh>
 #include <lcc/calling_conventions/ms_x64.hh>
 #include <lcc/calling_conventions/sysv_x86_64.hh>
+#include <lcc/codegen/aarch64/aarch64.hh>
+#include <lcc/codegen/aarch64/assembly.hh>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
@@ -857,6 +859,8 @@ void Module::emit(std::filesystem::path output_file_path) {
             if (_ctx->format()->format() == Format::GNU_AS_ATT_ASSEMBLY) {
                 if (_ctx->target()->is_arch_x86_64())
                     x86_64::emit_gnu_att_assembly(output_file_path, this, desc, machine_ir);
+                else if (_ctx->target()->is_arch_aarch64())
+                    aarch64::emit_gnu_assembly(output_file_path, this, desc, machine_ir);
                 else Diag::ICE("Unhandled code emission target, sorry");
             } else if (
                 _ctx->format()->format() == Format::ELF_OBJECT

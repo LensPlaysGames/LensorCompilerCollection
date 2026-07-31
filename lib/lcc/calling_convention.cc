@@ -1,12 +1,15 @@
 #include <lcc/calling_convention.hh>
 
 #include <lcc/calling_conventions/ms_x64.hh>
+#include <lcc/calling_conventions/sysv_aarch64.hh>
 #include <lcc/calling_conventions/sysv_x86_64.hh>
+#include <lcc/codegen/aarch64/aarch64.hh>
 #include <lcc/codegen/register_allocation.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
+#include <lcc/target.hh>
+
 #include <lccbase/context.hh>
 #include <lccbase/diags.hh>
-#include <lcc/target.hh>
 
 #include <algorithm>
 #include <iterator>
@@ -90,6 +93,42 @@ auto machine_description(Context* context) -> MachineDescription {
             +x86_64::Opcode::Call
         );
 
+    } else if (context->target()->is_arch_aarch64()) {
+        desc.return_register_to_replace = +aarch64::RegisterId::RETURN;
+        desc.return_registers[+Register::Category::DEFAULT]
+            = {+aarch64::RegisterId::R0, +aarch64::RegisterId::R1};
+
+        std::vector<usz> jeep_registers{};
+        std::vector<usz> volatile_registers{};
+        // TODO: FLOAT category registers (vector/scalar/float)...
+
+        if (context->target()->is_cconv_ms()) {
+            Diag::ICE("aarch64 windows machine description");
+        } else if (context->target()->is_cconv_sysv()) {
+            // Just the volatile registers
+            rgs::transform(
+                cconv::sysv_aarch64::volatile_regs,
+                std::back_inserter(jeep_registers),
+                [](auto r) { return +r; }
+            );
+            // All volatile registers
+            lcc::rgs::transform(
+                lcc::cconv::sysv_aarch64::volatile_regs,
+                std::back_inserter(volatile_registers),
+                [](auto r) { return lcc::operator+(r); }
+            );
+        } else Diag::ICE("Sorry, unhandled aarch64 calling convention");
+
+        LCC_ASSERT(
+            jeep_registers.size(),
+            "Must populate general purpose register list"
+        );
+        desc.registers[+Register::Category::DEFAULT]
+            = std::move(jeep_registers);
+        desc.volatile_registers = std::move(volatile_registers);
+        desc.preserve_volatile_opcodes.emplace_back(
+            +aarch64::Opcode::BranchWithLink
+        );
     } else Diag::ICE("Sorry, unhandled target architecture");
 
     return desc;
