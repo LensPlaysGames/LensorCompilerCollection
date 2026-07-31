@@ -1,12 +1,14 @@
+#include <lcc/codegen/aarch64/aarch64.hh>
+#include <lcc/codegen/aarch64/isel_patterns.hh>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/mir_utils.hh>
 #include <lcc/codegen/x86_64/isel_patterns.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lccbase/context.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
+#include <lccbase/context.hh>
 #include <variant>
 
 namespace lcc {
@@ -201,6 +203,8 @@ void select_instructions(Module* mod, MFunction& function) {
                 );
             }
         }
+    } else if (mod->context()->target()->is_arch_aarch64()) {
+        function = lcc::isel::aarch64::AllPatterns::rewrite(mod, function);
     } else LCC_ASSERT(false, "Unhandled architecture in instruction selection");
 
     calculate_defining_uses(function);

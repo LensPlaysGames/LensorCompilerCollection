@@ -2,12 +2,12 @@
 #define LCC_CODEGEN_INSTRUCTION_SELECTION_HH
 
 #include <lcc/codegen/mir.hh>
-#include <lccbase/context.hh>
-#include <lccbase/diags.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/result.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 
 #include <unordered_map>
 #include <variant>
@@ -693,7 +693,10 @@ struct PatternList {
                 longest_pattern_length = pattern_length;
         });
 
-        LCC_ASSERT(longest_pattern_length, "Cannot do instruction selection with no input patterns to match");
+        LCC_ASSERT(
+            longest_pattern_length,
+            "Cannot do instruction selection with no input patterns to match"
+        );
 
         // NOTE: If you modify block.instructions() in any way, you are going to
         // have a bad time.

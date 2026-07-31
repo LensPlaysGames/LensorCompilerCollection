@@ -13,8 +13,6 @@
 #include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/codegen/x86_64/object.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>
-#include <lccbase/context.hh>
-#include <lccbase/diags.hh>
 #include <lcc/format.hh>
 #include <lcc/fractionals.hh>
 #include <lcc/ir/core.hh>
@@ -23,6 +21,8 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/version.hh>
+#include <lccbase/context.hh>
+#include <lccbase/diags.hh>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -753,6 +753,9 @@ void Module::lower() {
             _x86_64_msx64_lower_parameters();
             _x86_64_msx64_lower_overlarge();
         } else Diag::ICE("Unhandled calling convention in x86_64 IR lowering");
+
+    } else if (context()->target()->is_arch_aarch64()) {
+        // TODO: aarch64 lowering
     } else {
         LCC_TODO("Lowering of specified arch is not yet supported");
     }

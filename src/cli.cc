@@ -82,7 +82,7 @@ void help() {
         {"  -x", "What language to parse input code as (default: extension based)\n"},
         {"", "    glint, c, ir\n"},
         {"  -t", "What format to emit code in (default: matches building system)\n"},
-        {"", "    x86_64_linux, x86_64_windows\n"},
+        {"", "    x86_64_linux, x86_64_windows, aarch64_linux, aarch64_windows\n"},
         {"  -f", "What format to emit code in (default: asm)\n"},
         // Basically, the name on the left of the colon will pick a default from
         // one on the right of the colon based on the system the compiler was
@@ -209,7 +209,10 @@ auto parse(int argc, const char** argv) -> Options {
         } else if (arg == "-t" or arg == "--target") {
             // What format to emit code in
             auto target = next_arg();
-            if (target != "x86_64_linux" and target != "x86_64_windows") {
+            if (
+                target != "x86_64_linux" and target != "x86_64_windows"
+                and target != "aarch64_linux" and target != "aarch64_windows"
+            ) {
                 fmt::print("CLI ERROR: Invalid target \"{}\"\n", target);
                 std::exit(1);
             }

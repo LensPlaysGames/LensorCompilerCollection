@@ -508,6 +508,10 @@ auto main(int argc, const char** argv) -> int {
         target = lcc::Target::x86_64_linux;
     } else if (options.target == "x86_64_windows") {
         target = lcc::Target::x86_64_windows;
+    } else if (options.target == "aarch64_linux") {
+        target = lcc::Target::aarch64_linux;
+    } else if (options.target == "aarch64_windows") {
+        target = lcc::Target::aarch64_windows;
     } else LCC_ASSERT(false, "Unhandled target");
 
     // Get format from command line option, falling back to default.

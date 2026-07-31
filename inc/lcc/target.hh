@@ -31,6 +31,8 @@ public:
     /// Available targets.
     static const Target* const x86_64_linux;
     static const Target* const x86_64_windows;
+    static const Target* const aarch64_linux;
+    static const Target* const aarch64_windows;
 
     struct {
         usz size_of_bool;
@@ -64,29 +66,39 @@ public:
     usz align_of_pointer;
 
     [[nodiscard]]
-    auto is_platform_linux() const -> bool {
-        return this == x86_64_linux;
+    constexpr auto is_platform_linux() const -> bool {
+        return this == x86_64_linux
+            or this == aarch64_linux;
     }
 
     [[nodiscard]]
-    auto is_platform_windows() const -> bool {
-        return this == x86_64_windows;
+    constexpr auto is_platform_windows() const -> bool {
+        return this == x86_64_windows
+            or this == aarch64_windows;
     }
 
     [[nodiscard]]
-    auto is_arch_x86_64() const -> bool {
+    constexpr auto is_arch_x86_64() const -> bool {
         return this == x86_64_windows
             or this == x86_64_linux;
     }
 
     [[nodiscard]]
-    auto is_cconv_sysv() const -> bool {
-        return this == x86_64_linux;
+    constexpr auto is_arch_aarch64() const -> bool {
+        return this == aarch64_windows
+            or this == aarch64_linux;
     }
 
     [[nodiscard]]
-    auto is_cconv_ms() const -> bool {
-        return this == x86_64_windows;
+    constexpr auto is_cconv_sysv() const -> bool {
+        return this == x86_64_linux
+            or this == aarch64_linux;
+    }
+
+    [[nodiscard]]
+    constexpr auto is_cconv_ms() const -> bool {
+        return this == x86_64_windows
+            or this == aarch64_windows;
     }
 };
 
@@ -129,9 +141,16 @@ struct Targets {
         return t;
     }();
 
+    static constexpr Target aarch64_linux = x86_64_linux.with([](Target t) {
+        return t;
+    });
+
     static constexpr Target x86_64_windows = x86_64_linux.with([](Target t) {
         t.ffi.size_of_long = 32;
         t.ffi.align_of_long = 32;
+        return t;
+    });
+    static constexpr Target aarch64_windows = x86_64_windows.with([](Target t) {
         return t;
     });
 };
@@ -139,6 +158,8 @@ struct Targets {
 
 constinit inline const Target* const Target::x86_64_linux = &detail::Targets::x86_64_linux;
 constinit inline const Target* const Target::x86_64_windows = &detail::Targets::x86_64_windows;
+constinit inline const Target* const Target::aarch64_linux = &detail::Targets::aarch64_linux;
+constinit inline const Target* const Target::aarch64_windows = &detail::Targets::aarch64_windows;
 
 } // namespace lcc
 

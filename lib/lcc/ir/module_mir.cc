@@ -279,6 +279,7 @@ auto MIRBuildContext::moperand_value_reference(
             // specific cases where we want to handle over-large values, we will.
             // Otherwise, this will handle the general case of single-register
             // parameters and memory parameters being referenced.
+            // TODO: Exhaustive handling of targets
             if (mod.context()->target()->is_arch_x86_64()) {
                 if (mod.context()->target()->is_platform_windows()) {
                     auto params_desc = cconv::msx64::parameter_description(f_ir);
@@ -378,6 +379,12 @@ auto MIRBuildContext::moperand_value_reference(
                             );
                         }
                     }
+                }
+            } else if (mod.context()->target()->is_arch_aarch64()) {
+                if (mod.context()->target()->is_cconv_sysv()) {
+                    // TODO: aarch64 SysV parameter lowering
+                } else if (mod.context()->target()->is_cconv_ms()) {
+                    // TODO: aarch64 windows parameter lowering
                 }
             }
             Diag::ICE("It appears we haven't handled the target properly, sorry");
@@ -499,6 +506,7 @@ auto Module::mir() -> std::vector<MFunction> {
             auto& f = build_ctx.funcs.at(usz(f_index));
             if (f.blocks().empty()) continue;
 
+            // TODO: Different parameter description for aarch64
             auto param_desc = cconv::msx64::parameter_description(function.get());
             auto& params = as<FunctionType>(function->type())->params();
             for (size_t param_i{0}; param_i < params.size(); ++param_i) {
