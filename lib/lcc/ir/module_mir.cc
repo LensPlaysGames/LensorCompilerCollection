@@ -852,6 +852,12 @@ auto Module::mir() -> std::vector<MFunction> {
                                     }
                                 }
                             }
+                        } else if (_ctx->target()->is_arch_aarch64()) {
+                            if (_ctx->target()->is_cconv_sysv()) {
+                                Diag::ICE("TODO: aarch64 sysv argument lowering");
+                            } else if (_ctx->target()->is_cconv_ms()) {
+                                Diag::ICE("TODO: aarch64 windows argument lowering");
+                            }
                         } else Diag::ICE("Unhandled architecture in gMIR generation from IR call");
 
                         auto call = MInst(
@@ -891,25 +897,40 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto intrinsic = as<IntrinsicInst>(instruction);
                         switch (intrinsic->intrinsic_kind()) {
                             case IntrinsicKind::MemCopy: {
-                                LCC_ASSERT(intrinsic->operands().size() == 3, "Invalid number of operands to memcpy intrinsic");
+                                LCC_ASSERT(
+                                    intrinsic->operands().size() == 3,
+                                    "Invalid number of operands to memcpy intrinsic"
+                                );
 
                                 std::vector<usz> arg_regs{};
                                 // TODO: Static assert for handling of targets.
-                                if (_ctx->target()->is_platform_windows()) {
-                                    rgs::transform(
-                                        cconv::msx64::arg_regs,
-                                        std::back_inserter(arg_regs),
-                                        [](auto r) { return +r; }
+                                if (_ctx->target()->is_arch_x86_64()) {
+                                    if (_ctx->target()->is_platform_windows()) {
+                                        rgs::transform(
+                                            cconv::msx64::arg_regs,
+                                            std::back_inserter(arg_regs),
+                                            [](auto r) { return +r; }
+                                        );
+                                    } else if (_ctx->target()->is_cconv_sysv()) {
+                                        rgs::transform(
+                                            cconv::sysv::arg_regs,
+                                            std::back_inserter(arg_regs),
+                                            [](auto r) { return +r; }
+                                        );
+                                    } else Diag::ICE(
+                                        "Unhandled x86_64 calling convention in argument lowering for memcpy intrinsic"
                                     );
-                                } else if (_ctx->target()->is_cconv_sysv()) {
-                                    rgs::transform(
-                                        cconv::sysv::arg_regs,
-                                        std::back_inserter(arg_regs),
-                                        [](auto r) { return +r; }
-                                    );
-                                } else {
-                                    Diag::ICE("Unhandled target in argument lowering for memcpy intrinsic");
-                                }
+                                } else if (_ctx->target()->is_arch_aarch64()) {
+                                    if (_ctx->target()->is_cconv_sysv()) {
+                                        Diag::ICE("TODO: aarch64 sysv memcpy intrinsic argument lowering");
+                                    } else if (_ctx->target()->is_cconv_ms()) {
+                                        Diag::ICE("TODO: aarch64 windows memcpy intrinsic argument lowering");
+                                    } else {
+                                        Diag::ICE("Unhandled aarch64 calling convention in argument lowering for memcpy intrinsic");
+                                    }
+                                } else Diag::ICE(
+                                    "Unhandled target in argument lowering for memcpy intrinsic"
+                                );
 
                                 usz arg_regs_used = 0;
                                 for (auto op : intrinsic->operands()) {
