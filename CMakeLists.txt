@@ -308,11 +308,7 @@ if (
     -Wconversion      # Implicit conversions.
     -Wsign-conversion # Implicit sign conversions.
     -Werror=shadow    # No shadowing!
-
-    # Stricter format checking.
-    -Wformat=2
-    -Wformat-overflow=2
-    -Wformat-truncation=2
+    -Wformat=2 # Stricter format checking.
 
     # NULL Errors.
     -Werror=null-dereference
@@ -347,23 +343,25 @@ endif()
 # Additional flags for GCC (not GNU-like compilers, GCC only).
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(options INTERFACE
-    -Wlogical-op      # Duplicate or unintended logical operators.
+    -Warray-bounds=2
+    -Wdangling-pointer=2
+    -Werror=duplicated-branches
+    -Werror=duplicated-cond
+    -Werror=format-signedness
     -Werror=invalid-memory-model # For atomics.
     -Werror=maybe-uninitialized
     -Werror=missing-requires
     -Werror=return-local-addr
     -Werror=trampolines
-    -Wuse-after-free=3
-    -Wdangling-pointer=2
-    -Wstringop-overflow=4
-    -Warray-bounds=2
-    -Wstrict-overflow=5
-    -Wshift-overflow=2
-    -Werror=duplicated-cond
-    -Werror=duplicated-branches
-    -ftrivial-auto-var-init=pattern
     -Werror=trivial-auto-var-init
-    -Werror=format-signedness
+    -Wformat-overflow=2
+    -Wformat-truncation=2
+    -Wlogical-op      # Duplicate or unintended logical operators.
+    -Wshift-overflow=2
+    -Wstrict-overflow=5
+    -Wstringop-overflow=4
+    -Wuse-after-free=3
+    -ftrivial-auto-var-init=pattern
   )
 endif()
 
