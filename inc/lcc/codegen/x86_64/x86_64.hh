@@ -1,8 +1,8 @@
 #ifndef LCC_CODEGEN_X86_64_HH
 #define LCC_CODEGEN_X86_64_HH
 
+#include <hdronly/lcc/typedefs.hh>
 #include <lcc/codegen/mir.hh>
-#include <lcc/utils.hh>
 
 #include <string>
 
