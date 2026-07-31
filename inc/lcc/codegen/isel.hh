@@ -6,6 +6,7 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/result.hh>
+
 #include <lccbase/context.hh>
 #include <lccbase/diags.hh>
 
@@ -35,6 +36,8 @@ constexpr void Foreach(auto&& lambda) {
 
 enum struct OperandKind {
     Immediate,
+    // Matches an immediate that fits within the given bitwidth.
+    SizeRestrictedImmediate,
     // Eventually an immediate operand; takes an input operand index and gets
     // the size from it IN BITS. BITS. I'll say it a third time, IN BITS.
     Sizeof,
@@ -65,13 +68,12 @@ enum struct OperandKind {
     // Resolves to a Register
     InputInstructionReference,
     InputOperandReference,
-
-    // TODO: The operand kinds
 };
 
 static inline std::string StringifyEnum(OperandKind k) {
     switch (k) {
         case OperandKind::Immediate: return "immediate";
+        case OperandKind::SizeRestrictedImmediate: return "size_restricted_immediate";
         case OperandKind::Sizeof: return "sizeof_operand";
         case OperandKind::SizeofInstruction: return "sizeof_instruction";
         case OperandKind::Register: return "register";
@@ -98,6 +100,20 @@ struct Immediate {
     using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Immediate;
     static constexpr i64 immediate = imm;
+    static constexpr usz index = 0;
+    static constexpr usz value = 0;
+    static constexpr usz size = _size;
+    static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
+};
+
+template <u64 _size>
+struct SizeRestrictedImmediate {
+    using sz = Immediate<>;
+    using offset = Immediate<>;
+    static constexpr OperandKind kind = OperandKind::SizeRestrictedImmediate;
+    static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
     static constexpr usz value = 0;
     static constexpr usz size = _size;
@@ -373,6 +389,9 @@ public:
             case OperandKind::Immediate:
                 return MOperandImmediate(operand::immediate);
 
+            case OperandKind::SizeRestrictedImmediate:
+                return MOperandImmediate(0, operand::size);
+
             case OperandKind::SizeofInstruction: {
                 auto instreg = input_instruction_by_index(operand::index);
                 LCC_ASSERT(
@@ -596,6 +615,9 @@ public:
                 case OperandKind::InputOperandReference:
                     out += fmt::format(":i{},size{}", op::immediate, op::size);
                     break;
+                case OperandKind::SizeRestrictedImmediate:
+                    out += fmt::format(":size_restricted_i{}", op::size);
+                    break;
                 case OperandKind::Sizeof:
                     out += fmt::format(":op{}", op::index);
                     break;
@@ -768,7 +790,9 @@ struct PatternList {
                                     "Exhaustive handling of MOperand alternatives in instruction selection"
                                 );
                                 if (std::holds_alternative<MOperandImmediate>(operand)) {
-                                    operands_match = op::kind == OperandKind::Immediate;
+                                    if (op::kind == OperandKind::SizeRestrictedImmediate)
+                                        operands_match = op::size >= std::get<MOperandImmediate>(operand).size;
+                                    else operands_match = op::kind == OperandKind::Immediate;
                                 } else if (std::holds_alternative<MOperandRegister>(operand)) {
                                     auto r = std::get<MOperandRegister>(operand);
                                     operands_match = (op::kind == OperandKind::Register

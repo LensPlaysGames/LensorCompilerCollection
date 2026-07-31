@@ -195,9 +195,8 @@ using shl_imm_reg = Pattern<
         Inst<Clobbers<c<1>>, usz(Opcode::ShiftLeft), Register<usz(RegId::RCX), Immediate<8>>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
-// FIXME: If immediate's value doesn't fit into 8 bits, we can't encode it like this.
 using sar_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Sar), Register<>, Immediate<>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Sar), Register<>, SizeRestrictedImmediate<8>>>,
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::ShiftRightArithmetic), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
