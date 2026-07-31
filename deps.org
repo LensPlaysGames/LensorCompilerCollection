@@ -39,6 +39,13 @@ Package:
        rpmbuild
 #+end_src
 
+Compile/Run =aarch64= target on =x86_64= host:
+#+begin_src shell
+  sudo dnf install qemu-user-static-aarch64
+  sudo dnf copr enable lantw44/aarch64-linux-gnu-toolchain
+  sudo dnf install aarch64-linux-gnu-gcc
+#+end_src
+
 * Debian
 
 NOTE: it is possible to build LCC on Ubuntu (and maybe other Debian-based distros)
