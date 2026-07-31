@@ -300,11 +300,8 @@ using add_global_reg = Pattern<
 
 using add_local_imm_1 = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
-    InstList<Inst<
-        Clobbers<c<1>>,
-        usz(Opcode::LoadEffectiveAddress),
-        OffsetLocal<o<0>, o<1>>,
-        i<0>>>>;
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), OffsetLocal<o<0>, o<1>>, i<0>>>>;
 
 using add_local_imm_2 = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
@@ -364,81 +361,52 @@ using sub_reg_imm = Pattern<
         Inst<Clobbers<c<1>>, usz(Opcode::Sub), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
-using sdiv_imm_imm = Pattern<
-    InstList<
-        Inst<Clobbers<>, usz(MKind::SDiv), Immediate<>, Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
-        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+template <Opcode div_op, bool remainder>
+using divrem = InstList<
+    Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
+    Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
+    Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
+    Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(div_op), v<0, 1>>,
+    Inst<
+        Clobbers<c<1>>,
+        usz(Opcode::Move),
+        std::conditional_t<
+            remainder,
+            Register<usz(RegId::RDX), Sizeof<0>>,
+            Register<usz(RegId::RAX), Sizeof<0>>>,
+        i<0>>>;
 
-using sdiv_reg_reg = Pattern<
-    InstList<
-        Inst<
-            Clobbers<>,
-            usz(MKind::SDiv),
-            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
-            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
-        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+template <Opcode div_op>
+using div = divrem<div_op, false>;
 
-using sdiv_reg_imm = Pattern<
-    InstList<
-        Inst<
-            Clobbers<>,
-            usz(MKind::SDiv),
-            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
-            Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
-        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::SignedDivide), v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+template <MKind in_op, Opcode div_op>
+struct divide {
+    using imm_imm = Pattern<
+        InstList<
+            Inst<Clobbers<>, usz(in_op), Immediate<>, Immediate<>>>,
+        div<div_op>>;
 
-using udiv_imm_imm = Pattern<
-    InstList<
-        Inst<Clobbers<>, usz(MKind::UDiv), Immediate<>, Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
-        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::UnsignedDivide), v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+    using reg_reg = Pattern<
+        InstList<
+            Inst<
+                Clobbers<>,
+                usz(in_op),
+                RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
+                RegisterOfCategory<+::lcc::Register::Category::DEFAULT>>>,
+        div<div_op>>;
 
-using udiv_reg_reg = Pattern<
-    InstList<
-        Inst<
-            Clobbers<>,
-            usz(MKind::UDiv),
-            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
-            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
-        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::UnsignedDivide), v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+    using reg_imm = Pattern<
+        InstList<
+            Inst<
+                Clobbers<>,
+                usz(in_op),
+                RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
+                Immediate<>>>,
+        div<div_op>>;
+};
 
-using udiv_reg_imm = Pattern<
-    InstList<
-        Inst<
-            Clobbers<>,
-            usz(MKind::UDiv),
-            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
-            Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
-        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, usz(Opcode::UnsignedDivide), v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RAX), Sizeof<0>>, i<0>>>>;
+using sdiv = divide<MKind::SDiv, Opcode::SignedDivide>;
+using udiv = divide<MKind::UDiv, Opcode::UnsignedDivide>;
 
 template <usz in, usz op>
 using float_reg_reg = Pattern<
@@ -530,41 +498,32 @@ using float_ret_reg = Pattern<
                 Sizeof<0>>>,
         Inst<Clobbers<>, usz(Opcode::Return)>>>;
 
-template <usz in, usz op>
-using rem_reg_reg = Pattern<
-    InstList<
-        Inst<
-            Clobbers<>,
-            in,
-            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
-            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
-        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, op, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RDX), Sizeof<0>>, i<0>>>>;
+template <Opcode div_op>
+using rem = divrem<div_op, true>;
 
-using srem_reg_reg = rem_reg_reg<usz(MKind::SRem), usz(x86_64::Opcode::SignedDivide)>;
-using urem_reg_reg = rem_reg_reg<usz(MKind::URem), usz(x86_64::Opcode::UnsignedDivide)>;
+template <MKind in, Opcode op>
+struct remainder {
+    using reg_reg = Pattern<
+        InstList<
+            Inst<
+                Clobbers<>,
+                usz(in),
+                RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
+                RegisterOfCategory<+::lcc::Register::Category::DEFAULT>>>,
+        rem<op>>;
 
-template <usz in, usz op>
-using rem_reg_imm = Pattern<
-    InstList<
-        Inst<
-            Clobbers<>,
-            in,
-            RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
-            Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RAX), Sizeof<0>>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Xor), Register<usz(RegId::RDX), Immediate<32>>, Register<usz(RegId::RDX), Immediate<32>>>,
-        Inst<Clobbers<r<usz(RegId::RAX)>, r<usz(RegId::RDX)>>, op, v<0, 1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), Register<usz(RegId::RDX), Sizeof<0>>, i<0>>>>;
+    using reg_imm = Pattern<
+        InstList<
+            Inst<
+                Clobbers<>,
+                usz(in),
+                RegisterOfCategory<+::lcc::Register::Category::DEFAULT>,
+                Immediate<>>>,
+        rem<op>>;
+};
 
-using srem_reg_imm = rem_reg_imm<usz(MKind::SRem), usz(x86_64::Opcode::SignedDivide)>;
-using urem_reg_imm = rem_reg_imm<usz(MKind::URem), usz(x86_64::Opcode::UnsignedDivide)>;
+using srem = remainder<MKind::SRem, x86_64::Opcode::SignedDivide>;
+using urem = remainder<MKind::URem, x86_64::Opcode::UnsignedDivide>;
 
 using cond_branch_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::CondBranch), Register<>, Block<>, Block<>>>,
@@ -581,88 +540,54 @@ using cond_branch_imm = Pattern<
         Inst<Clobbers<>, usz(Opcode::JumpIfZeroFlag), o<2>>,
         Inst<Clobbers<>, usz(Opcode::Jump), o<1>>>>;
 
-// Optional: Inst<Clobbers<c<1>>, usz(Opcode::Xor), i<0>, i<0>> instead of Move Immediate<0> i<0>
 template <MKind kind, Opcode set_opcode>
-using cmp_reg_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(kind), Register<>, Register<>>>,
-    InstList<
-        // NOTE: GNU ordering of operands
-        Inst<Clobbers<>, usz(Opcode::Compare), o<1>, o<0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
-        Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
+struct cmp {
+    // Optional: Inst<Clobbers<c<1>>, usz(Opcode::Xor), i<0>, i<0>> instead of Move Immediate<0> i<0>
+    using reg_reg = Pattern<
+        InstList<Inst<Clobbers<>, usz(kind), Register<>, Register<>>>,
+        InstList<
+            // NOTE: GNU ordering of operands
+            Inst<Clobbers<>, usz(Opcode::Compare), o<1>, o<0>>,
+            Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
+            Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
-using u_lt_reg_reg = cmp_reg_reg<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
-using s_lt_reg_reg = cmp_reg_reg<MKind::SLt, Opcode::SetByteIfLessSigned>;
-using u_lt_eq_reg_reg = cmp_reg_reg<MKind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
-using s_lt_eq_reg_reg = cmp_reg_reg<MKind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
-using u_gt_reg_reg = cmp_reg_reg<MKind::UGt, Opcode::SetByteIfGreaterUnsigned>;
-using s_gt_reg_reg = cmp_reg_reg<MKind::SGt, Opcode::SetByteIfGreaterSigned>;
-using u_gt_eq_reg_reg = cmp_reg_reg<MKind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
-using s_gt_eq_reg_reg = cmp_reg_reg<MKind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
-using eq_reg_reg = cmp_reg_reg<MKind::Eq, Opcode::SetByteIfEqual>;
-using ne_reg_reg = cmp_reg_reg<MKind::Ne, Opcode::SetByteIfNotEqual>;
+    using reg_imm = Pattern<
+        InstList<Inst<Clobbers<>, usz(kind), Register<>, Immediate<>>>,
+        InstList<
+            // NOTE: GNU ordering of operands
+            Inst<Clobbers<>, usz(Opcode::Compare), o<1>, o<0>>,
+            Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
+            Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
-template <MKind kind, Opcode set_opcode>
-using cmp_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(kind), Register<>, Immediate<>>>,
-    InstList<
-        // NOTE: GNU ordering of operands
-        Inst<Clobbers<>, usz(Opcode::Compare), o<1>, o<0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
-        Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
+    using imm_reg = Pattern<
+        InstList<Inst<Clobbers<>, usz(kind), Immediate<>, Register<>>>,
+        InstList<
+            // NOTE: GNU ordering of operands
+            Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+            Inst<Clobbers<>, usz(Opcode::Compare), o<1>, v<0, 0>>,
+            Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
+            Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
-using u_lt_reg_imm = cmp_reg_imm<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
-using s_lt_reg_imm = cmp_reg_imm<MKind::SLt, Opcode::SetByteIfLessSigned>;
-using u_lt_eq_reg_imm = cmp_reg_imm<MKind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
-using s_lt_eq_reg_imm = cmp_reg_imm<MKind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
-using u_gt_reg_imm = cmp_reg_imm<MKind::UGt, Opcode::SetByteIfGreaterUnsigned>;
-using s_gt_reg_imm = cmp_reg_imm<MKind::SGt, Opcode::SetByteIfGreaterSigned>;
-using u_gt_eq_reg_imm = cmp_reg_imm<MKind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
-using s_gt_eq_reg_imm = cmp_reg_imm<MKind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
-using eq_reg_imm = cmp_reg_imm<MKind::Eq, Opcode::SetByteIfEqual>;
-using ne_reg_imm = cmp_reg_imm<MKind::Ne, Opcode::SetByteIfNotEqual>;
+    using imm_imm = Pattern<
+        InstList<Inst<Clobbers<>, usz(kind), Immediate<>, Immediate<>>>,
+        InstList<
+            // NOTE: GNU ordering of operands
+            Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+            Inst<Clobbers<>, usz(Opcode::Compare), o<1>, v<0, 0>>,
+            Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
+            Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
+};
 
-template <MKind kind, Opcode set_opcode>
-using cmp_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(kind), Immediate<>, Register<>>>,
-    InstList<
-        // NOTE: GNU ordering of operands
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Compare), o<1>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
-        Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
-
-using u_lt_imm_reg = cmp_imm_reg<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
-using s_lt_imm_reg = cmp_imm_reg<MKind::SLt, Opcode::SetByteIfLessSigned>;
-using u_lt_eq_imm_reg = cmp_imm_reg<MKind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
-using s_lt_eq_imm_reg = cmp_imm_reg<MKind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
-using u_gt_imm_reg = cmp_imm_reg<MKind::UGt, Opcode::SetByteIfGreaterUnsigned>;
-using s_gt_imm_reg = cmp_imm_reg<MKind::SGt, Opcode::SetByteIfGreaterSigned>;
-using u_gt_eq_imm_reg = cmp_imm_reg<MKind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
-using s_gt_eq_imm_reg = cmp_imm_reg<MKind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
-using eq_imm_reg = cmp_imm_reg<MKind::Eq, Opcode::SetByteIfEqual>;
-using ne_imm_reg = cmp_imm_reg<MKind::Ne, Opcode::SetByteIfNotEqual>;
-
-template <MKind kind, Opcode set_opcode>
-using cmp_imm_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(kind), Immediate<>, Immediate<>>>,
-    InstList<
-        // NOTE: GNU ordering of operands
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Compare), o<1>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
-        Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
-
-using u_lt_imm_imm = cmp_imm_imm<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
-using s_lt_imm_imm = cmp_imm_imm<MKind::SLt, Opcode::SetByteIfLessSigned>;
-using u_lt_eq_imm_imm = cmp_imm_imm<MKind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
-using s_lt_eq_imm_imm = cmp_imm_imm<MKind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
-using u_gt_imm_imm = cmp_imm_imm<MKind::UGt, Opcode::SetByteIfGreaterUnsigned>;
-using s_gt_imm_imm = cmp_imm_imm<MKind::SGt, Opcode::SetByteIfGreaterSigned>;
-using u_gt_eq_imm_imm = cmp_imm_imm<MKind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
-using s_gt_eq_imm_imm = cmp_imm_imm<MKind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
-using eq_imm_imm = cmp_imm_imm<MKind::Eq, Opcode::SetByteIfEqual>;
-using ne_imm_imm = cmp_imm_imm<MKind::Ne, Opcode::SetByteIfNotEqual>;
+using u_lt = cmp<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
+using s_lt = cmp<MKind::SLt, Opcode::SetByteIfLessSigned>;
+using u_lt_eq = cmp<MKind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
+using s_lt_eq = cmp<MKind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
+using u_gt = cmp<MKind::UGt, Opcode::SetByteIfGreaterUnsigned>;
+using s_gt = cmp<MKind::SGt, Opcode::SetByteIfGreaterSigned>;
+using u_gt_eq = cmp<MKind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
+using s_gt_eq = cmp<MKind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
+using eq = cmp<MKind::Eq, Opcode::SetByteIfEqual>;
+using ne = cmp<MKind::Ne, Opcode::SetByteIfNotEqual>;
 
 using z_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::ZExt), Register<>>>,
@@ -780,19 +705,19 @@ using AllPatterns = PatternList<
     sub_reg_reg,
     sub_reg_imm,
 
-    sdiv_imm_imm,
-    sdiv_reg_imm,
-    sdiv_reg_reg,
+    sdiv::imm_imm,
+    sdiv::reg_imm,
+    sdiv::reg_reg,
 
-    srem_reg_reg,
-    srem_reg_imm,
+    srem::reg_reg,
+    srem::reg_imm,
 
-    udiv_imm_imm,
-    udiv_reg_imm,
-    udiv_reg_reg,
+    udiv::imm_imm,
+    udiv::reg_imm,
+    udiv::reg_reg,
 
-    urem_reg_reg,
-    urem_reg_imm,
+    urem::reg_reg,
+    urem::reg_imm,
 
     float_add_reg_reg,
     float_copy_reg,
@@ -814,49 +739,49 @@ using AllPatterns = PatternList<
     cond_branch_reg,
     cond_branch_imm,
 
-    u_lt_reg_reg,
-    s_lt_reg_reg,
-    u_lt_eq_reg_reg,
-    s_lt_eq_reg_reg,
-    u_gt_reg_reg,
-    s_gt_reg_reg,
-    u_gt_eq_reg_reg,
-    s_gt_eq_reg_reg,
-    eq_reg_reg,
-    ne_reg_reg,
+    u_lt::reg_reg,
+    s_lt::reg_reg,
+    u_lt_eq::reg_reg,
+    s_lt_eq::reg_reg,
+    u_gt::reg_reg,
+    s_gt::reg_reg,
+    u_gt_eq::reg_reg,
+    s_gt_eq::reg_reg,
+    eq::reg_reg,
+    ne::reg_reg,
 
-    u_lt_reg_imm,
-    s_lt_reg_imm,
-    u_lt_eq_reg_imm,
-    s_lt_eq_reg_imm,
-    u_gt_reg_imm,
-    s_gt_reg_imm,
-    u_gt_eq_reg_imm,
-    s_gt_eq_reg_imm,
-    eq_reg_imm,
-    ne_reg_imm,
+    u_lt::reg_imm,
+    s_lt::reg_imm,
+    u_lt_eq::reg_imm,
+    s_lt_eq::reg_imm,
+    u_gt::reg_imm,
+    s_gt::reg_imm,
+    u_gt_eq::reg_imm,
+    s_gt_eq::reg_imm,
+    eq::reg_imm,
+    ne::reg_imm,
 
-    u_lt_imm_reg,
-    s_lt_imm_reg,
-    u_lt_eq_imm_reg,
-    s_lt_eq_imm_reg,
-    u_gt_imm_reg,
-    s_gt_imm_reg,
-    u_gt_eq_imm_reg,
-    s_gt_eq_imm_reg,
-    eq_imm_reg,
-    ne_imm_reg,
+    u_lt::imm_reg,
+    s_lt::imm_reg,
+    u_lt_eq::imm_reg,
+    s_lt_eq::imm_reg,
+    u_gt::imm_reg,
+    s_gt::imm_reg,
+    u_gt_eq::imm_reg,
+    s_gt_eq::imm_reg,
+    eq::imm_reg,
+    ne::imm_reg,
 
-    u_lt_imm_imm,
-    s_lt_imm_imm,
-    u_lt_eq_imm_imm,
-    s_lt_eq_imm_imm,
-    u_gt_imm_imm,
-    s_gt_imm_imm,
-    u_gt_eq_imm_imm,
-    s_gt_eq_imm_imm,
-    eq_imm_imm,
-    ne_imm_imm,
+    u_lt::imm_imm,
+    s_lt::imm_imm,
+    u_lt_eq::imm_imm,
+    s_lt_eq::imm_imm,
+    u_gt::imm_imm,
+    s_gt::imm_imm,
+    u_gt_eq::imm_imm,
+    s_gt_eq::imm_imm,
+    eq::imm_imm,
+    ne::imm_imm,
 
     neg_reg,
     neg_imm>;
