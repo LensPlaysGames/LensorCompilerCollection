@@ -493,6 +493,8 @@ add_library(
   inc/lcc/calling_convention.hh
   inc/lcc/calling_conventions/ms_x64.hh
   inc/lcc/calling_conventions/sysv_x86_64.hh
+  inc/lcc/codegen/aarch64/aarch64.hh
+  inc/lcc/codegen/aarch64/isel_patterns.hh
   inc/lcc/codegen/gnu_as_att_assembly.hh
   inc/lcc/codegen/isel.hh
   inc/lcc/codegen/mir.hh
@@ -533,6 +535,7 @@ add_library(
   lib/lcc/calling_convention.cc
   lib/lcc/calling_conventions/ms_x64.cc
   lib/lcc/calling_conventions/sysv_x86_64.cc
+  lib/lcc/codegen/aarch64/assembly.cc
   lib/lcc/codegen/isel.cc
   lib/lcc/codegen/mir.cc
   lib/lcc/codegen/register_allocation.cc
