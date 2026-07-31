@@ -31,7 +31,7 @@ set(CMAKE_INCLUDE_FLAG_Glint "-I ")
 if(NOT CMAKE_Glint_COMPILE_OBJECT)
   set(
     CMAKE_Glint_COMPILE_OBJECT
-    "<CMAKE_Glint_COMPILER> <DEFINES> <INCLUDES> <FLAGS> -f asm -o <OBJECT> <SOURCE>"
+    "<CMAKE_Glint_COMPILER> <INCLUDES> <FLAGS> -f asm -o <OBJECT> <SOURCE>"
   )
 endif()
 
