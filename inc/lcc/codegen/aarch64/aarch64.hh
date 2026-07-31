@@ -102,6 +102,41 @@ enum struct RegisterId : u32 {
     R31,
     GeneralPurposeFENCEEnd,
 
+    ScalarFENCEBegin,
+    V0,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5,
+    V6,
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
+    V18,
+    V19,
+    V20,
+    V21,
+    V22,
+    V23,
+    V24,
+    V25,
+    V26,
+    V27,
+    V28,
+    V29,
+    V30,
+    V31,
+    ScalarFENCEEnd,
+
     // The function value return register.
     RETURN = 0x210,
 };
@@ -167,6 +202,8 @@ constexpr std::string StringifyEnum(RegisterId id) {
     switch (id) {
         case RegisterId::GeneralPurposeFENCEBegin:
         case RegisterId::GeneralPurposeFENCEEnd:
+        case RegisterId::ScalarFENCEBegin:
+        case RegisterId::ScalarFENCEEnd:
             std::unreachable();
         case RegisterId::INVALID: return "aarch64.INVALID";
         case RegisterId::RETURN: return "aarch64.RETURN";
@@ -202,6 +239,38 @@ constexpr std::string StringifyEnum(RegisterId id) {
         case RegisterId::R29: return "r29";
         case RegisterId::R30: return "r30";
         case RegisterId::R31: return "r31";
+        case RegisterId::V0: return "v0";
+        case RegisterId::V1: return "v1";
+        case RegisterId::V2: return "v2";
+        case RegisterId::V3: return "v3";
+        case RegisterId::V4: return "v4";
+        case RegisterId::V5: return "v5";
+        case RegisterId::V6: return "v6";
+        case RegisterId::V7: return "v7";
+        case RegisterId::V8: return "v8";
+        case RegisterId::V9: return "v9";
+        case RegisterId::V10: return "v10";
+        case RegisterId::V11: return "v11";
+        case RegisterId::V12: return "v12";
+        case RegisterId::V13: return "v13";
+        case RegisterId::V14: return "v14";
+        case RegisterId::V15: return "v15";
+        case RegisterId::V16: return "v16";
+        case RegisterId::V17: return "v17";
+        case RegisterId::V18: return "v18";
+        case RegisterId::V19: return "v19";
+        case RegisterId::V20: return "v20";
+        case RegisterId::V21: return "v21";
+        case RegisterId::V22: return "v22";
+        case RegisterId::V23: return "v23";
+        case RegisterId::V24: return "v24";
+        case RegisterId::V25: return "v25";
+        case RegisterId::V26: return "v26";
+        case RegisterId::V27: return "v27";
+        case RegisterId::V28: return "v28";
+        case RegisterId::V29: return "v29";
+        case RegisterId::V30: return "v30";
+        case RegisterId::V31: return "v31";
     }
     std::unreachable();
 }
@@ -210,9 +279,27 @@ constexpr std::string ToString(RegisterId id, usz size) {
     auto out = StringifyEnum(id);
     LCC_ASSERT(out.size());
 
-    if (size <= 32)
-        out[0] = 'w';
-    else out[0] = 'x';
+    if (
+        +id > +RegisterId::GeneralPurposeFENCEBegin
+        and +id < +RegisterId::GeneralPurposeFENCEEnd
+    ) {
+        if (size <= 32)
+            out[0] = 'w';
+        else out[0] = 'x';
+    } else if (
+        +id > +RegisterId::GeneralPurposeFENCEBegin
+        and +id < +RegisterId::GeneralPurposeFENCEEnd
+    ) {
+        if (size <= 8)
+            out[0] = 'b';
+        else if (size <= 16)
+            out[0] = 'h';
+        else if (size <= 32)
+            out[0] = 's';
+        else if (size <= 64)
+            out[0] = 'd';
+        else out[0] = 'q';
+    } else Diag::ICE("Invalid aarch64 register ID");
 
     return out;
 }

@@ -386,7 +386,11 @@ auto aarch64_parameter_sysv(Function* f_ir, Parameter& param) -> MOperand {
             );
 
         case Kinds::Scalar:
-            Diag::ICE("TODO: aarch64 floating point parameter lowering");
+            return MOperandRegister(
+                +cconv::sysv_aarch64::scalar_arg_regs.at(param_info.arg_scalars_used),
+                uint(param.type()->bits()),
+                Register::Category::FLOAT
+            );
 
         case Kinds::DoubleRegister:
             Diag::ICE(

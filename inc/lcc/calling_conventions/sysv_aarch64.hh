@@ -20,7 +20,7 @@ constexpr const std::array<aarch64::RegisterId, 8> arg_regs = {
     aarch64::RegisterId::R4,
     aarch64::RegisterId::R5,
     aarch64::RegisterId::R6,
-    aarch64::RegisterId::R7,
+    aarch64::RegisterId::R7
 };
 
 constexpr const std::array<aarch64::RegisterId, 16> volatile_regs = {
@@ -39,7 +39,54 @@ constexpr const std::array<aarch64::RegisterId, 16> volatile_regs = {
     aarch64::RegisterId::R12,
     aarch64::RegisterId::R13,
     aarch64::RegisterId::R14,
-    aarch64::RegisterId::R15,
+    aarch64::RegisterId::R15
+};
+
+// All scalar regs are volatile
+constexpr const std::array<aarch64::RegisterId, 32> scalar_regs = {
+    aarch64::RegisterId::V0,
+    aarch64::RegisterId::V1,
+    aarch64::RegisterId::V2,
+    aarch64::RegisterId::V3,
+    aarch64::RegisterId::V4,
+    aarch64::RegisterId::V5,
+    aarch64::RegisterId::V6,
+    aarch64::RegisterId::V7,
+    aarch64::RegisterId::V8,
+    aarch64::RegisterId::V9,
+    aarch64::RegisterId::V10,
+    aarch64::RegisterId::V11,
+    aarch64::RegisterId::V12,
+    aarch64::RegisterId::V13,
+    aarch64::RegisterId::V14,
+    aarch64::RegisterId::V15,
+    aarch64::RegisterId::V16,
+    aarch64::RegisterId::V17,
+    aarch64::RegisterId::V18,
+    aarch64::RegisterId::V19,
+    aarch64::RegisterId::V20,
+    aarch64::RegisterId::V21,
+    aarch64::RegisterId::V22,
+    aarch64::RegisterId::V23,
+    aarch64::RegisterId::V24,
+    aarch64::RegisterId::V25,
+    aarch64::RegisterId::V26,
+    aarch64::RegisterId::V27,
+    aarch64::RegisterId::V28,
+    aarch64::RegisterId::V29,
+    aarch64::RegisterId::V30,
+    aarch64::RegisterId::V31
+};
+
+constexpr const std::array<aarch64::RegisterId, 8> scalar_arg_regs = {
+    aarch64::RegisterId::V0,
+    aarch64::RegisterId::V1,
+    aarch64::RegisterId::V2,
+    aarch64::RegisterId::V3,
+    aarch64::RegisterId::V4,
+    aarch64::RegisterId::V5,
+    aarch64::RegisterId::V6,
+    aarch64::RegisterId::V7
 };
 
 enum class ParameterClass {

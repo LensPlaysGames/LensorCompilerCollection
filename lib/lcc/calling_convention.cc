@@ -97,10 +97,15 @@ auto machine_description(Context* context) -> MachineDescription {
         desc.return_register_to_replace = +aarch64::RegisterId::RETURN;
         desc.return_registers[+Register::Category::DEFAULT]
             = {+aarch64::RegisterId::R0, +aarch64::RegisterId::R1};
+        desc.return_registers[+Register::Category::FLOAT]
+            = {+aarch64::RegisterId::V0};
+        desc.preserve_volatile_opcodes.emplace_back(
+            +aarch64::Opcode::BranchWithLink
+        );
 
         std::vector<usz> jeep_registers{};
+        std::vector<usz> scalar_registers{};
         std::vector<usz> volatile_registers{};
-        // TODO: FLOAT category registers (vector/scalar/float)...
 
         if (context->target()->is_cconv_ms()) {
             Diag::ICE("aarch64 windows machine description");
@@ -111,11 +116,21 @@ auto machine_description(Context* context) -> MachineDescription {
                 std::back_inserter(jeep_registers),
                 [](auto r) { return +r; }
             );
+            lcc::rgs::transform(
+                lcc::cconv::sysv_aarch64::scalar_regs,
+                std::back_inserter(scalar_registers),
+                [](auto r) { return +r; }
+            );
             // All volatile registers
             lcc::rgs::transform(
                 lcc::cconv::sysv_aarch64::volatile_regs,
                 std::back_inserter(volatile_registers),
-                [](auto r) { return lcc::operator+(r); }
+                [](auto r) { return +r; }
+            );
+            lcc::rgs::transform(
+                lcc::cconv::sysv_aarch64::scalar_regs,
+                std::back_inserter(volatile_registers),
+                [](auto r) { return +r; }
             );
         } else Diag::ICE("Sorry, unhandled aarch64 calling convention");
 
@@ -125,10 +140,10 @@ auto machine_description(Context* context) -> MachineDescription {
         );
         desc.registers[+Register::Category::DEFAULT]
             = std::move(jeep_registers);
+        desc.registers[+Register::Category::FLOAT]
+            = std::move(scalar_registers);
         desc.volatile_registers = std::move(volatile_registers);
-        desc.preserve_volatile_opcodes.emplace_back(
-            +aarch64::Opcode::BranchWithLink
-        );
+
     } else Diag::ICE("Sorry, unhandled target architecture");
 
     return desc;
