@@ -2357,14 +2357,14 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
             /// its type is well-formed; it's just the initialiser that has
             /// a problem.
             if (v->init()) {
+                auto* c = cast<CompoundLiteral>(v->init());
                 // An untyped compound literal initialiser is allowed for typed
                 // declarations.
-                auto* c = cast<CompoundLiteral>(v->init());
-
-                // Set the type of the compound literal from the type of the declaration,
-                // if the compound literal's type isn't already explicitly declared.
-                if (c and c->type()->is_unknown()) {
-                    *c->type_ref() = v->type();
+                if (c) {
+                    // Set the type of the compound literal from the type of the declaration,
+                    // if the compound literal's type isn't already explicitly declared.
+                    if (not c->type() or c->type()->is_unknown())
+                        *c->type_ref() = v->type();
 
                     // TODO: This should be handled via CompoundType. Since we're still
                     // waiting on that, this makes sure invalid code isn't produced silently.
@@ -2424,7 +2424,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 // convertible to a CompoundType with members byte and byte.
                 // If all types of a compound type are (convertible to) the element type
                 // of an array, then it can be converted to an array of the same size (or
-                // a dynamic array, or array view).
+                // a dynamic array, or array view). Kind of like a tuple.
 
                 // TODO: I know the compound literal is *supposed* to be v->type() up
                 // above, and that's why we set it. But, what if it isn't? What if the

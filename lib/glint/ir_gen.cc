@@ -319,7 +319,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                                     "Glint:IRGen: Compound literal initialiser for struct type has invalid amount of members"
                                 );
                                 for (usz i = 0; i < c->values().size(); ++i) {
-                                    auto member = c->values().at(i);
+                                    auto& member = c->values().at(i);
                                     // Confidence check on member name
                                     if (not member.name.empty() and s->members().at(i).name != member.name) {
                                         Diag::ICE(
