@@ -47,13 +47,13 @@ auto lcc::glint::Sema::Deproceduring(Expr** expr_ptr) -> bool {
 
     // fmt::print("Possibly Deproceduring:\n{}", (*expr_ptr)->string(true));
 
-    /// This conversion only applies to functions and function pointers.
     auto* expr = *expr_ptr;
     LCC_ASSERT(expr);
 
     auto* ty = expr->type();
     LCC_ASSERT(ty);
 
+    /// This conversion only applies to functions and function pointers.
     if (
         not ty->is_function()
         and (not ty->is_pointer() or not ty->elem()->is_function())
@@ -61,6 +61,7 @@ auto lcc::glint::Sema::Deproceduring(Expr** expr_ptr) -> bool {
 
     /// Declarations are never deprocedured automatically.
     if (is<Decl>(expr)) return false;
+
     /// Block expressions are never deprocedured automatically.
     if (is<BlockExpr>(expr)) return false;
 
@@ -70,9 +71,11 @@ auto lcc::glint::Sema::Deproceduring(Expr** expr_ptr) -> bool {
 
     /// Otherwise, insert a call.
     *expr_ptr = new (mod) CallExpr(expr, {}, expr->location());
+
     // Whether or not the inserted call is valid, we did insert it, so we
     // return true either way.
     (void) Analyse(expr_ptr);
+
     return true;
 }
 
@@ -2238,6 +2241,12 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                 // The value of the block expression is the value of the last expression;
                 // the results of the preceding expressions (if any), are unused, and can
                 // therefore be discarded.
+                if ((*child)->ok()) {
+                    // Attempt to deprocedure last child in block; for the rest, Discard
+                    // handles it.
+                    if (last) (void) Deproceduring(child);
+                    else Discard(child);
+                }
                 if (not last and (*child)->ok()) Discard(child);
             }
 
