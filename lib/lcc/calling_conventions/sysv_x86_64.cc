@@ -30,8 +30,21 @@ auto cconv::sysv::parameter_description(
         working_param.arg_regs = 0;
         working_param.arg_scalars = 0;
 
+        bool scalar{true};
+        if (
+            auto* s = cast<StructType>(t);
+            s and t->bytes() <= x86_64::GeneralPurposeBytewidth
+        ) {
+            for (const auto& m : s->members()) {
+                if (not is<FractionalType>(m)) {
+                    scalar = false;
+                    break;
+                }
+            }
+        } else scalar = is<FractionalType>(t);
+
         // first eight floats go in scalar registers (xmm0-xmm7)
-        if (is<FractionalType>(t))
+        if (scalar)
             ++working_param.arg_scalars;
 
         else if (

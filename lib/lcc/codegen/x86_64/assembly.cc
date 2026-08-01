@@ -596,6 +596,37 @@ void emit_gnu_att_assembly(
                     }
                 }
 
+                else if (
+                    instruction.opcode() == +x86_64::Opcode::Move
+                ) {
+                    auto lhs = instruction.get_operand(0);
+                    auto rhs = instruction.get_operand(1);
+                    if (
+                        std::holds_alternative<MOperandRegister>(lhs)
+                        and std::holds_alternative<MOperandRegister>(rhs)
+                    ) {
+                        auto [src, dst] = extract_reg_reg(instruction);
+                        if (
+                            dst.category == Register::Category::FLOAT
+                            and src.category != dst.category
+                        ) {
+                            usz bitwidth = 0;
+                            if (src.category == Register::Category::FLOAT)
+                                bitwidth = src.size;
+                            else bitwidth = dst.size;
+                            LCC_ASSERT(bitwidth);
+                            switch (bitwidth) {
+                                default:
+                                    Diag::ICE(
+                                        "Float bitwidths must be 64 or 32 on x86_64..."
+                                    );
+                                case 64: out += 'q'; break;
+                                case 32: out += 'd'; break;
+                            }
+                        }
+                    }
+                }
+
                 // FLOAT: "ss" or "sd" suffix
                 else if (
                     (instruction.opcode() > +x86_64::Opcode::ScalarFloatFENCEBegin

@@ -109,6 +109,22 @@ using copy_some_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Copy), copy_op>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
+using copy_float_to_reg = Pattern<
+    InstList<InstOfCategory<
+        +::lcc::Register::Category::DEFAULT,
+        Clobbers<>,
+        usz(MKind::Copy),
+        RegisterOfCategory<+::lcc::Register::Category::FLOAT>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+
+using copy_reg_to_float = Pattern<
+    InstList<InstOfCategory<
+        +::lcc::Register::Category::FLOAT,
+        Clobbers<>,
+        usz(MKind::Copy),
+        RegisterOfCategory<+::lcc::Register::Category::DEFAULT>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+
 using copy_reg = copy_some_op<Register<>>;
 using copy_imm = copy_some_op<Immediate<>>;
 
@@ -717,6 +733,9 @@ using AllPatterns = PatternList<
 
     urem::reg_reg,
     urem::reg_imm,
+
+    copy_float_to_reg,
+    copy_reg_to_float,
 
     float_add_reg_reg,
     float_copy_reg,
