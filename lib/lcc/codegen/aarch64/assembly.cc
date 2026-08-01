@@ -10,6 +10,8 @@
 #include <lccbase/context.hh>
 #include <lccbase/file.hh>
 
+#include <hdronly/lcc/fixcompilers.hh>
+
 #include <filesystem>
 #include <vector>
 
