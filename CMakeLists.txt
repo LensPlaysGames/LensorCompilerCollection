@@ -747,6 +747,7 @@ if (PACKAGING)
   )
   install(
     FILES README.org LICENSE
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}
     COMPONENT lcc
   )
   install(
@@ -762,6 +763,7 @@ if (PACKAGING)
   )
   install(
     FILES deps.org
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}
     COMPONENT lccdevel
   )
   install(
