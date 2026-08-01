@@ -10,10 +10,11 @@
 #include <lccbase/context.hh>
 #include <lccbase/file.hh>
 
-#include <hdronly/lcc/fixcompilers.hh>
-
 #include <filesystem>
+#include <ranges>
 #include <vector>
+
+#include <hdronly/lcc/fixcompilers.hh>
 
 namespace lcc::aarch64 {
 
