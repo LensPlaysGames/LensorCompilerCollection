@@ -410,7 +410,7 @@ auto lcc::glint::Parser::ParseExpressionsUntil(lcc::glint::TokenKind until) -> R
 
 auto lcc::glint::Parser::ParseExpressionList() -> Result<std::vector<Expr*>> {
     std::vector<Expr*> exprs;
-    while (not At(Tk::Semicolon, Tk::Eof)) {
+    while (not At(Tk::Semicolon, Tk::Eof, Tk::Else)) {
         if (+ConsumeExpressionSeparator(ExpressionSeparator::Soft)) continue;
 
         auto expr = ParseExpr();
