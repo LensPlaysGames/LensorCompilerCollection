@@ -1033,7 +1033,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
             lcc::Type* t_from{nullptr};
             if (cast->operand()->is_lvalue())
                 t_from = lcc::Type::PtrTy;
-            else t_from = generated_ir[cast->operand()]->type();
+            else {
+                LCC_ASSERT(generated_ir[cast->operand()]);
+                t_from = generated_ir[cast->operand()]->type();
+            }
 
             /// No-op.
             if (cast->is_ref_to_lvalue() or cast->is_lvalue_to_ref()) {
