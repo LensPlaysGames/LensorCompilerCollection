@@ -1809,14 +1809,10 @@ auto lcc::glint::Parser::ParseFuncBody(bool is_external)
         return {};
     }
 
-    /// Function body is in a new scope. Note that the scope of a function
-    /// is a child of the global scope if we’re at the top level rather than
-    /// of the top level scope.
+    /// Function body is in a new scope.
     ScopeRAII sc{
         this,
-        CurrScope() == TopLevelScope()
-            ? GlobalScope()
-            : CurrScope()
+        DeclScope()
     };
     sc.scope->set_function_scope();
 
@@ -2809,12 +2805,14 @@ void lcc::glint::Parser::ParseTopLevel() {
                 );
                 w.fix_by_inserting_at(l, ";");
             } else if (expr) {
-                Warning(
+                auto w = Warning(
                     GetRightmostLocation(*expr),
                     ErrorId::Expected,
                     "Expected hard expression separator"
-                )
-                    .attach(Note("Before this"));
+                );
+
+                if (tok.location.seekable(context))
+                    w.attach(Note("Before this"));
             }
         }
         if (expr)
