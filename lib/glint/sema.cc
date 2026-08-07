@@ -5434,6 +5434,26 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
             ));
         }
 
+        // Glint semantics may be confusing to programmers used to a C-like
+        // global/top-level scope semantics model.
+        // Basically, declarations at the top level in Glint are not globals (by
+        // default), they go within `main`. So, referencing a local variable from
+        // a function is a bit of an odd conundrum that should be avoided (hence
+        // it isn't allowed), yet, it is familiar syntax for C folk.
+        if (not scope->scope_chain_contains(mod.top_level_scope())) {
+            if (auto v = mod.top_level_scope()->find(expr->name()); v.size()) {
+                auto n = Warning(
+                    expr->location(),
+                    "Variables defined at the top level are not accessible within functions (since they are local variables to the `main` function)\n"
+                    "You could pass it as a parameter down from main"
+                );
+                const auto& d = v.at(0);
+                if (d->location().seekable(context))
+                    n.attach(Note(d->location(), "Defined here"));
+                err.attach(std::move(n));
+            }
+        }
+
         // The distance between a short name only has a few possibilities, so we
         // lower the maximum distance.
         constexpr usz short_name_distance_max = 1;

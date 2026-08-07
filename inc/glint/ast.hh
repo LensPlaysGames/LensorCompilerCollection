@@ -474,6 +474,14 @@ public:
         }
     }
 
+    bool scope_chain_contains(Scope* s) {
+        if (this == s)
+            return true;
+        if (_parent)
+            return _parent->scope_chain_contains(s);
+        return false;
+    }
+
     /// Disallow creating scopes without a module reference.
     void* operator new(size_t) = delete;
     [[nodiscard]]
