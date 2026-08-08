@@ -134,6 +134,7 @@ void lcc::glint::Lexer::NextToken() {
 
     /// Reset the token.
     tok.artificial = false;
+    tok.from_macro = false;
     tok.kind = TokenKind::Invalid;
 
     /// Keep returning EOF if we’re at EOF.
