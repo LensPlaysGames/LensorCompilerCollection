@@ -90,7 +90,7 @@ void lcc::glint::Module::scope_walk(
         case Expr::Kind::Block: {
             // A block defines a new scope, and all child expressions are within that
             // scope.
-            auto block_scope = new (*this) Scope(current_scope);
+            auto block_scope = new (*this) Scope(current_scope, "block");
             // fmt::print("Created scope for `block`: {}\n", scope_string(block_scope));
             auto* b = as<BlockExpr>(e);
             b->created_scope() = block_scope;
@@ -131,7 +131,7 @@ void lcc::glint::Module::scope_walk(
         case Expr::Kind::While: {
             // A while defines a new scope, and all child expressions are within that
             // scope.
-            auto while_scope = new (*this) Scope(current_scope);
+            auto while_scope = new (*this) Scope(current_scope, "while");
 
             auto* w = as<WhileExpr>(e);
             w->created_scope() = while_scope;
@@ -142,7 +142,7 @@ void lcc::glint::Module::scope_walk(
         } break;
 
         case Expr::Kind::For: {
-            auto for_scope = new (*this) Scope(current_scope);
+            auto for_scope = new (*this) Scope(current_scope, "for");
             // fmt::print("Created scope for `for`: {}\n", scope_string(for_scope));
 
             auto f = as<ForExpr>(e);
@@ -155,7 +155,7 @@ void lcc::glint::Module::scope_walk(
         } break;
 
         case Expr::Kind::If: {
-            auto if_scope = new (*this) Scope(current_scope);
+            auto if_scope = new (*this) Scope(current_scope, "if");
             // fmt::print("Created scope for `if`: {}\n", scope_string(if_scope));
 
             auto i = as<IfExpr>(e);
@@ -872,7 +872,7 @@ auto lcc::glint::Module::deserialise(
         // may seem useful for things like making the module consumer define
         // option variables, but, there are better ways to do that imo).
         auto the_global_scope = global_scope();
-        Scope* module_scope = new (*this) Scope(the_global_scope);
+        Scope* module_scope = new (*this) Scope(the_global_scope, "module");
 
         std::unordered_set<Expr*> visited{};
         for (auto e : vws::reverse(exprs)) {
@@ -1184,7 +1184,7 @@ auto lcc::glint::Module::deserialise(
                 }
 
                 // FIXME: What should parent scope of sum type scope be?
-                auto scope = new (*this) Scope(nullptr);
+                auto scope = new (*this) Scope(nullptr, "sum_type");
 
                 // Declare members in scope
                 for (auto& m : members) {
@@ -1252,7 +1252,7 @@ auto lcc::glint::Module::deserialise(
                 }
 
                 // FIXME: What should parent of imported enum scope be?
-                auto scope = new (*this) Scope(nullptr);
+                auto scope = new (*this) Scope(nullptr, "enum_type");
                 std::vector<EnumeratorDecl*> enumerator_decls{};
 
                 for (unsigned i = 0; i < enum_names.size(); ++i) {
@@ -1337,7 +1337,7 @@ auto lcc::glint::Module::deserialise(
                 }
 
                 // FIXME: What should parent scope of struct type scope be?
-                auto scope = new (*this) Scope(nullptr);
+                auto scope = new (*this) Scope(nullptr, "struct_type");
 
                 // Declare members in scope
                 for (auto& m : members) {
@@ -1406,8 +1406,8 @@ auto lcc::glint::Module::deserialise(
                     ++member_i;
                 }
 
-                // FIXME: What should parent scope of struct type scope be?
-                auto scope = new (*this) Scope(nullptr);
+                // FIXME: What should parent scope of union type scope be?
+                auto scope = new (*this) Scope(nullptr, "union_type");
 
                 // Declare members in scope
                 for (auto& m : members) {

@@ -659,7 +659,7 @@ auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
     // The body is optional (not an ill-formed program, just doesn't do
     // anything meaningful).
     if (not At(Tk::LBrace)) return new (*mod) EnumType(
-        new (*mod) Scope(CurrScope()),
+        new (*mod) Scope(CurrScope(), "enum_type", loc),
         underlying,
         {},
         loc
@@ -2756,8 +2756,8 @@ void lcc::glint::Parser::ParseTopLevel() {
     /// Create the global and top-level scope. The top-level scope is a bit of
     /// a weird one because it only contains the local variables of the top-level
     /// functions. Everything else at the top-level goes in the global scope.
-    auto* global = new (*mod) Scope(nullptr);
-    auto* top_level = new (*mod) Scope(global);
+    auto* global = new (*mod) Scope(nullptr, "root", tok.location);
+    auto* top_level = new (*mod) Scope(global, "top_level", tok.location);
 
     /// Set up the rest of the parser state.
     scope_stack.push_back(global);

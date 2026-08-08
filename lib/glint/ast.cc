@@ -634,7 +634,10 @@ auto lcc::glint::Expr::CloneIntoImpl(
             if (scope_fixes.contains(cloned_scope_parent))
                 cloned_scope_parent = scope_fixes.at(cloned_scope_parent);
 
-            auto cloned_scope = new (m) Scope(cloned_scope_parent);
+            auto cloned_scope = new (m) Scope(
+                cloned_scope_parent,
+                fmt::format("clone::{}", scope->name())
+            );
             scope_fixes.emplace(scope, cloned_scope);
         }
         return scope_fixes.at(scope);
@@ -651,7 +654,7 @@ auto lcc::glint::Expr::CloneIntoImpl(
         case Kind::While: {
             auto w = as<WhileExpr>(expr);
 
-            current_scope = new (mod) Scope(current_scope);
+            current_scope = new (mod) Scope(current_scope, "while");
             scope_fixups.emplace(w->created_scope(), current_scope);
 
             return new (mod) WhileExpr(
@@ -664,7 +667,7 @@ auto lcc::glint::Expr::CloneIntoImpl(
         case Kind::For: {
             auto f = as<ForExpr>(expr);
 
-            current_scope = new (mod) Scope(current_scope);
+            current_scope = new (mod) Scope(current_scope, "for");
             scope_fixups.emplace(f->created_scope(), current_scope);
 
             // Ensure we clone init before the rest, so that declarations get fixed up
@@ -682,7 +685,7 @@ auto lcc::glint::Expr::CloneIntoImpl(
         case Kind::If: {
             auto i = as<IfExpr>(expr);
 
-            current_scope = new (mod) Scope(current_scope);
+            current_scope = new (mod) Scope(current_scope, "if");
             scope_fixups.emplace(i->created_scope(), current_scope);
 
             return new (mod) IfExpr(
@@ -799,7 +802,7 @@ auto lcc::glint::Expr::CloneIntoImpl(
         case Kind::Block: {
             auto b = as<BlockExpr>(expr);
 
-            current_scope = new (mod) Scope(current_scope);
+            current_scope = new (mod) Scope(current_scope, "block");
             scope_fixups.emplace(b->created_scope(), current_scope);
 
             return new (mod) BlockExpr(
@@ -949,7 +952,7 @@ auto lcc::glint::Expr::CloneIntoImpl(
         case Kind::FuncDecl: {
             auto f = as<FuncDecl>(expr);
 
-            current_scope = new (mod) Scope(current_scope);
+            current_scope = new (mod) Scope(current_scope, "function");
             scope_fixups.emplace(f->scope(), current_scope);
 
             return new (mod) FuncDecl(
@@ -966,7 +969,7 @@ auto lcc::glint::Expr::CloneIntoImpl(
         case Kind::TemplatedFuncDecl: {
             auto f = as<TemplatedFuncDecl>(expr);
 
-            current_scope = new (mod) Scope(current_scope);
+            current_scope = new (mod) Scope(current_scope, "templated_function");
             scope_fixups.emplace(f->scope(), current_scope);
 
             return new (mod) TemplatedFuncDecl(
@@ -1108,7 +1111,7 @@ auto lcc::glint::Expr::FullClone(
         mod,
         context,
         expr,
-        new (mod) Scope(nullptr)
+        new (mod) Scope(nullptr, "root")
     );
 }
 
@@ -2764,7 +2767,11 @@ auto lcc::glint::TemplatedFuncDecl::make_instantiation(
     // NameRefExpr's to parameters will have their scope fixed up to the newly
     // generated function's actual, unique scope.
     std::unordered_map<Scope*, Scope*> scope_fixups{
-        {scope(), new (mod) Scope{scope()->parent()}}
+        {scope(),
+         new (mod) Scope{
+             scope()->parent(),
+             fmt::format("clone::{}", scope()->name())
+         }}
     };
     auto expanded_body = Expr::CloneIntoImpl(
         mod,

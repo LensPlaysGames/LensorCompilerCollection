@@ -434,7 +434,7 @@ bool deserialise_from_metadata_blob(
     // only* via prefixing with the module name, i.e. module-name.var.
     //
     // imported_mod->scopes.emplace_back(
-    //     new (*imported_mod) Scope(nullptr)
+    //     new (*imported_mod) Scope(nullptr, "module")
     // );
 
     return imported_mod->deserialise(context, metadata_blob);
@@ -1626,6 +1626,11 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
     expr->set_sema_in_progress();
 
+    // if (not expr->location().seekable(context)) {
+    //     fmt::print("\nInvalid location:\n");
+    //     expr->print(true);
+    // }
+
     /// Analyse the type if there is one.
     if (auto* tc = cast<TypedExpr>(expr)) {
         if (not Analyse(tc->type_ref()))
@@ -1955,7 +1960,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     otherwise_expr,
                     // NOTE: Not ideal, but we *know* nothing will be declared anywhere in
                     // this if.
-                    new (mod) Scope(_decl_scope),
+                    new (mod) Scope(_decl_scope, "if_hacky"),
                     match->location()
                 );
                 if (not Analyse(&if_expr)) {
@@ -2073,7 +2078,7 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
                     otherwise_expr,
                     // NOTE: Not ideal, but we *know* nothing will be declared anywhere in
                     // this if.
-                    new (mod) Scope(_decl_scope),
+                    new (mod) Scope(_decl_scope, "if_hacky"),
                     sw->location()
                 );
                 if (not Analyse(&if_expr)) {
@@ -3595,7 +3600,7 @@ void lcc::glint::Sema::AnalyseBinary(Expr** expr_ptr, BinaryExpr* b) {
                     nullptr,
                     // NOTE: Not ideal, but we *know* nothing will be declared anywhere in
                     // this if.
-                    new (mod) Scope(_decl_scope),
+                    new (mod) Scope(_decl_scope, "if_hacky"),
                     {}
                 );
 
@@ -4781,7 +4786,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
                             otherwise,
                             // NOTE: Not ideal, but we *know* nothing will be declared anywhere in
                             // this if.
-                            new (mod) Scope(_decl_scope),
+                            new (mod) Scope(_decl_scope, "if_hacky"),
                             {}
                         );
 
@@ -5417,21 +5422,27 @@ void lcc::glint::Sema::AnalyseNameRef(NameRefExpr* expr) {
 
         auto err = Error(
             expr->location(),
-            "Unknown symbol '{}' in scope at {}",
-            expr->name(),
-            scope->chain_string()
+            "Unknown symbol '{}'",
+            expr->name()
         );
 
-        for (auto s = expr->scope(); s; s = s->parent()) {
-            std::vector<std::string_view> symbol_names{};
-            for (auto sym : s->all_symbols())
-                symbol_names.emplace_back(sym->name());
+        if (context->has_option("scopes")) {
             err.attach(Note(
-                s->location(),
-                "Searched this scope ({})... {}",
-                fmt::ptr(s),
-                fmt::join(symbol_names, ", ")
+                expr->location(),
+                "In scope {}",
+                scope->chain_string()
             ));
+            for (auto s = scope; s; s = s->parent()) {
+                std::vector<std::string_view> symbol_names{};
+                for (auto sym : s->all_symbols())
+                    symbol_names.emplace_back(sym->name());
+                err.attach(Note(
+                    s->location(),
+                    "Searched this scope ({})... {}",
+                    s->name_or_ptr(),
+                    fmt::join(symbol_names, ", ")
+                ));
+            }
         }
 
         // Glint semantics may be confusing to programmers used to a C-like

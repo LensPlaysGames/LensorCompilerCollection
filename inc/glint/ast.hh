@@ -456,13 +456,19 @@ class Scope {
     // name yet resolving to different declarations.
     std::unordered_multimap<std::string, Decl*, detail::StringHash, std::equal_to<>>
         symbols;
-    bool is_function_scope = false;
+
+    std::string _name{};
 
     Location _location;
 
+    bool is_function_scope = false;
+
 public:
-    explicit Scope(Scope* parent)
-        : _parent(parent) {
+    // NOTE: moves name parameter
+    explicit Scope(Scope* parent, std::string name, Location location = {})
+        : _parent(parent)
+        , _name(std::move(name))
+        , _location{location} {
         // Assert no recursive scopes.
         auto p = parent;
         while (p) {
@@ -500,12 +506,18 @@ public:
     /// Get the location.
     auto location() -> Location& { return _location; }
 
+    auto name_or_ptr() -> std::string {
+        if (name().empty())
+            return fmt::format("{}", fmt::ptr(this));
+        return fmt::format("{}@{:x}", name(), ((ptrdiff_t) this & 0xfff));
+    }
+
     auto chain_string() -> std::string {
-        std::string out{
-            fmt::format("{}", fmt::ptr(this))
-        };
-        for (auto s = this->parent(); s; s = s->parent())
-            out += fmt::format("->{}", fmt::ptr(s));
+        std::string out{name_or_ptr()};
+        if (parent()) {
+            out += "->";
+            out += parent()->chain_string();
+        }
         return out;
     };
 
@@ -570,6 +582,9 @@ public:
         }
         return out;
     }
+
+    auto name() const -> std::string { return _name; }
+    auto name() -> std::string& { return _name; }
 
     /// Mark this scope as a function scope.
     void set_function_scope() { is_function_scope = true; }

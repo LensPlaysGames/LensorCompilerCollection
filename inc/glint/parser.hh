@@ -81,11 +81,14 @@ private:
         Parser* parser;
         Scope* scope;
 
-        explicit ScopeRAII(Parser* parser_, Scope* parent = nullptr)
+        explicit ScopeRAII(Parser* parser_, Scope* parent = nullptr, std::string name = "")
             : parser(parser_)
-            , scope(new (*parser->mod) Scope(
-                  parent ? parent : parser->CurrScope()
-              )) {
+            , scope(
+                  new (*parser->mod) Scope(
+                      parent ? parent : parser->CurrScope(),
+                      std::move(name)
+                  )
+              ) {
             LCC_ASSERT(parser);
             LCC_ASSERT(scope);
             parser->scope_stack.push_back(scope);
