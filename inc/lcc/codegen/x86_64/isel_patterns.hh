@@ -293,55 +293,68 @@ using xor_imm_reg = Pattern<
         Inst<Clobbers<c<1>>, usz(Opcode::Xor), o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
-// A global is actually an lvalue (ptr to global). When adding to a
-// global, we are actually trying to do ptr arithmetic; we use `lea` for
-// that.
-using add_global_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Global<>, Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
+struct addition {
+    // A global is actually an lvalue (ptr to global). When adding to a
+    // global, we are actually trying to do ptr arithmetic; we use `lea` for
+    // that.
+    using global_imm = Pattern<
+        InstList<Inst<Clobbers<>, usz(MKind::Add), Global<>, Immediate<>>>,
+        InstList<
+            Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
+            Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
 
-// NOTE: We cannot use i<0> (output register of first instruction) to
-// store the LEA intermediate result, because the input register operand
-// may be the output register of the first instruction, and we need that
-// unclobbered for the later add.
-using add_global_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Global<>, Register<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, v<0, 0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, v<0, 0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
+    // NOTE: We cannot use i<0> (output register of first instruction) to
+    // store the LEA intermediate result, because the input register operand
+    // may be the output register of the first instruction, and we need that
+    // unclobbered for the later add.
+    using global_reg = Pattern<
+        InstList<Inst<Clobbers<>, usz(MKind::Add), Global<>, Register<>>>,
+        InstList<
+            Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, v<0, 1>>,
+            Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, v<0, 1>>,
+            Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 1>, i<0>>>>;
 
-using add_local_imm_1 = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), OffsetLocal<o<0>, o<1>>, i<0>>>>;
+    // NOTE: We cannot use i<0> (output register of first instruction) to
+    // store the LEA intermediate result, because the input register operand
+    // may be the output register of the first instruction, and we need that
+    // unclobbered for the later add.
+    using local_reg = Pattern<
+        InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Register<>>>,
+        InstList<
+            Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, v<0, 1>>,
+            Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, v<0, 1>>,
+            Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 1>, i<0>>>>;
 
-using add_local_imm_2 = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
+    using local_imm_1 = Pattern<
+        InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
+        InstList<
+            Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), OffsetLocal<o<0>, o<1>>, i<0>>>>;
 
-using add_reg_reg = binary_commutative_reg_reg<usz(MKind::Add), usz(Opcode::Add)>;
-using add_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Register<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Add), o<0>, i<0>>>>;
+    using local_imm_2 = Pattern<
+        InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
+        InstList<
+            Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
+            Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
 
-using add_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Register<>, Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
+    using reg_reg = binary_commutative_reg_reg<usz(MKind::Add), usz(Opcode::Add)>;
+    using imm_reg = Pattern<
+        InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Register<>>>,
+        InstList<
+            Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>,
+            Inst<Clobbers<c<1>>, usz(Opcode::Add), o<0>, i<0>>>>;
 
-using add_imm_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Immediate<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
+    using reg_imm = Pattern<
+        InstList<Inst<Clobbers<>, usz(MKind::Add), Register<>, Immediate<>>>,
+        InstList<
+            Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
+            Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
+
+    using imm_imm = Pattern<
+        InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<>, Immediate<>>>,
+        InstList<
+            Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
+            Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
+};
 
 using mul_reg_reg = binary_commutative_reg_reg<usz(MKind::Mul), usz(Opcode::Multiply)>;
 
@@ -375,6 +388,12 @@ using sub_reg_imm = Pattern<
     InstList<
         Inst<Clobbers<c<1>>, usz(Opcode::Sub), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+
+using sub_imm_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Sub), Immediate<>, Immediate<>>>,
+    InstList<
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Sub), o<1>, i<0>>>>;
 
 template <Opcode div_op, bool remainder>
 using divrem = InstList<
@@ -703,14 +722,15 @@ using AllPatterns = PatternList<
     xor_reg_imm,
     xor_imm_reg,
 
-    add_reg_reg,
-    add_imm_reg,
-    add_global_reg,
-    add_reg_imm,
-    add_imm_imm,
-    add_local_imm_1,
-    // add_local_imm_2,
-    add_global_imm,
+    addition::reg_reg,
+    addition::imm_reg,
+    addition::global_reg,
+    addition::reg_imm,
+    addition::imm_imm,
+    addition::global_imm,
+    addition::local_reg,
+    addition::local_imm_1,
+    // addition::local_imm_2,
 
     mul_reg_reg,
     mul_imm_reg,
@@ -719,6 +739,7 @@ using AllPatterns = PatternList<
 
     sub_reg_reg,
     sub_reg_imm,
+    sub_imm_imm,
 
     sdiv::imm_imm,
     sdiv::reg_imm,
