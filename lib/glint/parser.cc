@@ -379,7 +379,7 @@ auto lcc::glint::Parser::AtStartOfExpression() -> bool {
 
 /// Creates a new scope and parses a block in that scope.
 auto lcc::glint::Parser::ParseBlock() -> Result<BlockExpr*> {
-    return ParseBlock(ScopeRAII{this});
+    return ParseBlock(ScopeRAII{this, "block"});
 }
 
 auto lcc::glint::Parser::ParseExpressionsUntil(lcc::glint::TokenKind until) -> Result<std::vector<Expr*>> {
@@ -666,7 +666,7 @@ auto lcc::glint::Parser::ParseEnumType() -> Result<EnumType*> {
     );
 
     // Parse enum body (list of enumerator declarations).
-    ScopeRAII sc{this};
+    ScopeRAII sc{this, "enum_type"};
     std::vector<EnumeratorDecl*> enumerators;
     NextToken();
     while (At(Tk::Ident)) {
@@ -1540,7 +1540,7 @@ auto lcc::glint::Parser::ParseExpr(isz current_precedence) -> ExprResult {
 }
 
 auto lcc::glint::Parser::ParseExprInNewScope() -> ExprResult {
-    ScopeRAII sc{this};
+    ScopeRAII sc{this, ""};
     return ParseExpr();
 }
 
@@ -1552,7 +1552,7 @@ auto lcc::glint::Parser::ParseForExpr() -> Result<ForExpr*> {
     ConsumeExpressionSeparator();
 
     /// Parse init, cond, increment, and body.
-    ScopeRAII sc{this};
+    ScopeRAII sc{this, "cfor"};
 
     auto init = ParseExpr();
     if (not init) return init.diag();
@@ -1588,7 +1588,7 @@ auto lcc::glint::Parser::ParseRangedForExpr() -> Result<ForExpr*> {
     LCC_ASSERT(Consume(Tk::RangedFor), "ParseRangedForExpr called while not at 'for'");
 
     /// Parse loop variable identifier, container expression, and body.
-    ScopeRAII sc{this};
+    ScopeRAII sc{this, "for"};
     auto scope = sc.scope;
 
     if (not At(Tk::Ident))
@@ -1812,6 +1812,7 @@ auto lcc::glint::Parser::ParseFuncBody(bool is_external)
     /// Function body is in a new scope.
     ScopeRAII sc{
         this,
+        "function",
         DeclScope()
     };
     sc.scope->set_function_scope();
@@ -1944,7 +1945,7 @@ auto lcc::glint::Parser::ParseIfExpr() -> Result<IfExpr*> {
     /// Yeet "if".
     LCC_ASSERT(Consume(Tk::If), "ParseIf called while not at 'if'");
 
-    ScopeRAII sc{this};
+    ScopeRAII sc{this, "if"};
 
     /// Parse condition, then, and else.
     auto cond = ParseExpr();
@@ -2225,7 +2226,7 @@ auto lcc::glint::Parser::ParseStructType() -> Result<std::variant<StructType*, T
         auto parameters = ParseTemplateParameters();
         if (not parameters) return parameters.diag();
 
-        ScopeRAII sc{this};
+        ScopeRAII sc{this, "struct_type"};
         auto members = ParseStructMembers();
         if (not members) return members.diag();
 
@@ -2247,7 +2248,7 @@ auto lcc::glint::Parser::ParseStructType() -> Result<std::variant<StructType*, T
         );
     }
 
-    ScopeRAII sc{this};
+    ScopeRAII sc{this, "struct_type"};
     auto members = ParseStructMembers();
     if (not members) return members.diag();
 
@@ -2274,7 +2275,7 @@ auto lcc::glint::Parser::ParseUnionType() -> Result<UnionType*> {
     }
 
     /// Parse the union body.
-    ScopeRAII sc{this};
+    ScopeRAII sc{this, "union_type"};
     std::vector<UnionType::Member> members;
     while (not At(Tk::RBrace)) {
         /// Name.
@@ -2332,7 +2333,7 @@ auto lcc::glint::Parser::ParseSumType() -> Result<SumType*> {
     }
 
     /// Parse the sum type body.
-    ScopeRAII sc{this};
+    ScopeRAII sc{this, "sum_type"};
     std::vector<SumType::Member> members;
     while (not At(Tk::RBrace)) {
         // Name
@@ -2666,7 +2667,7 @@ auto lcc::glint::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
     LCC_ASSERT(Consume(Tk::While), "ParseWhile called while not at 'while'");
 
     /// Parse condition and body.
-    ScopeRAII sc{this};
+    ScopeRAII sc{this, "while"};
     auto cond = ParseExpr();
     auto body = ParseExpr();
     if (IsError(cond, body)) return GetDiag(cond, body).diag();

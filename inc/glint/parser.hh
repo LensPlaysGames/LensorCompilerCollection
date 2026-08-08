@@ -81,7 +81,7 @@ private:
         Parser* parser;
         Scope* scope;
 
-        explicit ScopeRAII(Parser* parser_, Scope* parent = nullptr, std::string name = "")
+        explicit ScopeRAII(Parser* parser_, std::string name, Scope* parent = nullptr)
             : parser(parser_)
             , scope(
                   new (*parser->mod) Scope(
