@@ -2751,9 +2751,9 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             aint value{};
             if (auto* e_type = cast<TypeExpr>(sizeof_expr->expr()))
-                value = e_type->contained_type()->size(context);
+                value = e_type->contained_type()->strip_references()->size(context);
             else if (auto* typed_expr = cast<TypedExpr>(sizeof_expr->expr()))
-                value = typed_expr->type()->size(context);
+                value = typed_expr->type()->strip_references()->size(context);
             else {
                 Error(sizeof_expr->location(), "Unhandled expression in sizeof");
                 expr->set_sema_errored();
@@ -2769,10 +2769,14 @@ auto lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) -> bool {
 
             aint value{};
             if (auto* e_type = cast<TypeExpr>(alignof_expr->expr()))
-                value = e_type->contained_type()->size(context);
+                value = e_type->contained_type()->strip_references()->align(context);
             else if (auto* typed_expr = cast<TypedExpr>(alignof_expr->expr()))
-                value = typed_expr->type()->align(context);
-            else Error(alignof_expr->location(), "Unhandled expression in alignof");
+                value = typed_expr->type()->strip_references()->align(context);
+            else {
+                Error(alignof_expr->location(), "Unhandled expression in alignof");
+                expr->set_sema_errored();
+                break;
+            }
 
             *expr_ptr = new (mod) IntegerLiteral(value, expr->location());
         } break;
