@@ -2906,6 +2906,19 @@ void lcc::glint::Sema::AnalyseMemberAccess(Expr** expr_ptr, MemberAccessExpr* ex
         return;
     }
 
+    /// FIXED ARRAY ".size" accessor to get dimension
+    if (
+        auto array = cast<ArrayType>(resolved_object->type()->strip_references());
+        array and expr->name() == "size"
+    ) {
+        *expr_ptr = new (mod) IntegerLiteral(
+            array->dimension(),
+            expr->location()
+        );
+        (*expr_ptr)->set_sema_done();
+        return;
+    }
+
     /// Accessing type information on types.
 
     // Helper to get the type referenced by any expression that references a
