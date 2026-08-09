@@ -2908,14 +2908,33 @@ void lcc::glint::Sema::AnalyseMemberAccess(Expr** expr_ptr, MemberAccessExpr* ex
 
     /// FIXED ARRAY ".size" accessor to get dimension
     if (
-        auto array = cast<ArrayType>(resolved_object->type()->strip_references());
-        array and expr->name() == "size"
+        auto array = cast<ArrayType>(
+            resolved_object->type()->strip_references()
+        );
+        array and (expr->name() == "size" or expr->name() == "capacity")
     ) {
         *expr_ptr = new (mod) IntegerLiteral(
             array->dimension(),
             expr->location()
         );
         (*expr_ptr)->set_sema_done();
+        return;
+    }
+    /// FIXED ARRAY ".data" accessor to get base address
+    if (
+        auto array = cast<ArrayType>(
+            resolved_object->type()->strip_references()
+        );
+        array and expr->name() == "data"
+    ) {
+        auto b = new (mod) BinaryExpr(
+            TokenKind::Subscript,
+            resolved_object,
+            new (mod) IntegerLiteral(0, expr->location()),
+            expr->location()
+        );
+        *expr_ptr = b;
+        AnalyseBinary(expr_ptr, b);
         return;
     }
 
