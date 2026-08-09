@@ -1,0 +1,16 @@
+* Get Dimension of Fixed Array via size Member Access
+
+#+NAME: source
+#+begin_src glint
+  foo : [byte 17];
+  foo.size;
+#+end_src
+
+#+NAME: status
+#+begin_example
+17
+#+end_example
+
+#+NAME: output
+#+begin_example
+#+end_example
